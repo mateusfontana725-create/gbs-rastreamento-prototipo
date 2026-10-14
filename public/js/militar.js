@@ -223,6 +223,8 @@
     est.camposNova = window.Cadastro.camposOperacao(null, { obrigatorio: true, agoraPadrao: true, prefixo: 'nova' });
     $('nova-cadastro').appendChild(est.camposNova.elemento);
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
+    $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
+    $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
     $('menu-vitimas').addEventListener('click', function () {
       if (est.op) window.Cadastro.abrirVitimas(est.op, { editavel: !est.op.dados_apagados_em, limparArquivos: limparArquivosPendentes });
     });
@@ -470,6 +472,10 @@
       if (!op.dados_apagados_em) {
         acoes.appendChild(UI.el('a', { classe: 'btn ' + (op.status === 'ativa' ? 'btn-escuro' : ''), href: '#op=' + op.id, texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver dados' }));
       }
+      if (window.Relatorio) {
+        acoes.appendChild(UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', 'data-diario': op.id, onclick: function () { window.Relatorio.abrirDiario(op); } }));
+        acoes.appendChild(UI.el('button', { classe: 'btn', type: 'button', texto: 'Relatório', 'data-relatorio': op.id, onclick: function () { window.Relatorio.abrirRelatorio(op); } }));
+      }
       if (op.status !== 'ativa' && !op.dados_apagados_em) {
         acoes.appendChild(UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Apagar dados agora', onclick: function () { apagarDados(op); } }));
       }
@@ -557,12 +563,13 @@
     });
   }
 
-  async function apagarDados(op) {
+  async function apagarDados(op, jaOfereceu) {
     if (!op) return;
+    if (jaOfereceu !== true && !(await oferecerRelatorio(op, 'Apagar os dados remove participantes, trilhas, mensagens e fotos.', function () { apagarDados(op, true); }))) return;
     var r = await UI.confirmar({
       titulo: 'Apagar os dados agora?',
       texto: 'Serão apagados definitivamente todos os participantes, posições, trilhas e mensagens da operação "' +
-        op.codigo + '". Esta ação não pode ser desfeita.',
+        op.codigo + '". Esta ação não pode ser desfeita. O diário e os relatórios gerados continuam guardados.',
       ok: 'Apagar definitivamente',
       perigo: true,
     });
@@ -655,6 +662,7 @@
         UI.el('li', { texto: 'equipe de responsáveis da operação e os links/QR Codes de convite (inclusive os dos grupos), que deixam de funcionar na hora.' }),
       ]),
       UI.el('p', { classe: 'ajuda', texto: 'Quem ainda estiver com o link aberto deixa de enviar localização, mensagens e fotos. Outras operações não são afetadas.' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Só operações sem atividade (criadas por engano) podem ser excluídas. Com atividade no diário, a exclusão é recusada: o diário e os relatórios são o documento da operação.' }),
       UI.el('div', { classe: 'grupo' }, [
         UI.el('label', { classe: 'rotulo', for: 'excluir-codigo', texto: 'Para confirmar, digite o nome da operação' }),
         UI.el('p', { classe: 'ajuda mono', id: 'excluir-ajuda', texto: op.codigo }),
@@ -2471,9 +2479,35 @@
   /* ------------------------------------------------------------------ */
   /* Encerramento                                                         */
   /* ------------------------------------------------------------------ */
-  async function encerrarOperacao() {
+  // Antes de encerrar ou apagar: se ainda não há relatório, oferece gerar agora
+  // (depois da retenção ele sai sem pessoas, trilhas e fotos).
+  // Devolve true para seguir com a ação, false se o responsável foi gerar o relatório.
+  async function oferecerRelatorio(op, acao, aposRelatorio) {
+    if (!window.Relatorio) return true;
+    var n = await window.Relatorio.quantosRelatorios(op.id);
+    if (n !== 0) return true;
+    var r = await UI.confirmar({
+      titulo: 'Gerar o relatório final antes?',
+      texto: 'Esta operação ainda não tem relatório final. ' + acao +
+        ' Depois disso o relatório sai só com o cadastro, o diário e o resultado (sem pessoas, trilhas e fotos).',
+      ok: 'Gerar relatório agora',
+      cancelar: 'Continuar sem relatório',
+    });
+    if (!r) return true;
+    window.Relatorio.abrirRelatorio(op, {
+      aviso: 'Gere o relatório e depois feche esta janela para continuar.',
+      textoFechar: 'Fechar e continuar',
+      aoFechar: function () { setTimeout(aposRelatorio, 50); },
+    });
+    return false;
+  }
+
+  async function encerrarOperacao(jaOfereceu) {
     var op = est.op;
     if (!op || op.status !== 'ativa') return;
+    if (jaOfereceu !== true && !(await oferecerRelatorio(op, op.retencao_horas
+      ? 'Os dados pessoais serão apagados ' + textoRetencao(op.retencao_horas).replace('dados apagados ', '') + ' após o encerramento.'
+      : 'Com retenção de 0 h, participantes, trilhas, mensagens e fotos são APAGADOS NO ENCERRAMENTO.', function () { encerrarOperacao(true); }))) return;
     var ret = op.retencao_horas
       ? 'As posições, trilhas e mensagens ficarão disponíveis para consulta e serão apagadas automaticamente ' + textoRetencao(op.retencao_horas).replace('dados apagados ', '') + '.'
       : 'Todas as posições, trilhas e mensagens serão APAGADAS IMEDIATAMENTE.';

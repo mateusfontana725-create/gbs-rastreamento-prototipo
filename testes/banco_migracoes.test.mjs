@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–011) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–012) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -249,6 +249,60 @@ chk(/permission denied/.test(await erroDe(como(null, `select public.participante
 const pubV = (await db.query(`select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'vitima_localizacoes'`)).rows;
 chk(pubV.length === 1, 'vitima_localizacoes publicada no Realtime');
 
+console.log('Diário da operação');
+const tipos = async () => (await como(resp1, `select tipo from public.diario where operacao_id = $1`, [op.id])).rows.map((r) => r.tipo);
+let td = await tipos();
+chk(['operacao_criada', 'acionamento', 'pessoa_entrou', 'grupo_criado', 'ficha_vitima', 'missao_enviada', 'alerta_chegou_setor',
+  'alerta_retorno_atrasado', 'alerta_chegou_base', 'alerta_ciente', 'vitima_localizada', 'setor_criado'].every((t) => td.includes(t)),
+  'eventos automáticos chegam dos outros módulos (operação, pessoas, grupos, deslocamento, chegadas, alertas, vítima, setores)', td);
+const vtx = (await como(resp1, `select titulo, nivel from public.diario where tipo = 'vitima_localizada'`)).rows[0];
+chk(vtx && /MORTA/.test(vtx.titulo) && vtx.nivel === 'critico', 'vítima localizada no diário com a condição (só responsáveis leem)', vtx);
+const setD = await rpc(resp1, 'salvar_setor', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'Diario S', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 300 }) });
+await rpc(resp1, 'salvar_setor', { p_operacao: op.id, p_id: setD.id, p_dados: JSON.stringify({ status: 'andamento' }) });
+await rpc(resp1, 'salvar_setor', { p_operacao: op.id, p_id: setD.id, p_dados: JSON.stringify({ status: 'concluido' }) });
+td = await tipos();
+chk(td.includes('setor_iniciado') && td.includes('setor_concluido'), 'início e fim da varredura do setor registrados pelo banco');
+chk((await como(anA, `select count(*)::int n from public.diario`)).rows[0].n === 0, 'participante de campo NÃO lê o diário (RLS)');
+chk((await como(resp2, `select count(*)::int n from public.diario where operacao_id = $1`, [op.id])).rows[0].n === 0, 'responsável de outra operação NÃO lê o diário');
+const ob = await rpc(resp1, 'diario_adicionar', { p_operacao: op.id, p_ocorrido_em: new Date(Date.now() - 2 * 3600e3).toISOString(), p_texto: 'Chuva forte, buscas na encosta suspensas por 30 min.' });
+chk(ob.origem === 'manual' && ob.autor_nome === 'Sgt Um' && Date.parse(ob.ocorrido_em) < Date.now() - 3600e3, 'responsável adiciona observação com data e hora no passado');
+chk(/data_invalida/.test(await erroDe(rpc(resp1, 'diario_adicionar', { p_operacao: op.id, p_ocorrido_em: new Date(Date.now() + 3600e3).toISOString(), p_texto: 'x' }))), 'observação com data no futuro: recusada');
+chk(/sem_permissao/.test(await erroDe(rpc(anA, 'diario_adicionar', { p_operacao: op.id, p_ocorrido_em: new Date().toISOString(), p_texto: 'x' }))), 'participante não escreve no diário');
+await rpc(resp1, 'adicionar_responsavel', { p_operacao: op.id, p_email: 'r2@cbm' }).catch(() => db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2)`, [op.id, resp2]));
+const ed = await rpc(resp2, 'diario_editar', { p_id: ob.id, p_ocorrido_em: ob.ocorrido_em, p_texto: 'Chuva forte: buscas na encosta suspensas por 40 min.' });
+chk(ed.versao === 2 && ed.editado_por_nome === 'Sgt Dois' && ed.autor_nome === 'Sgt Um', 'outro responsável da operação edita a observação (autor original mantido)', ed);
+const vers = (await como(resp1, `select versao, detalhe, autor_nome, substituida_por_nome from public.diario_versoes where diario_id = $1`, [ob.id])).rows;
+chk(vers.length === 1 && /30 min/.test(vers[0].detalhe) && vers[0].substituida_por_nome === 'Sgt Dois', 'versão anterior guardada no histórico', vers);
+const idAuto = (await como(resp1, `select id from public.diario where tipo = 'operacao_criada' and operacao_id = $1`, [op.id])).rows[0].id;
+chk(/diario_evento_automatico/.test(await erroDe(rpc(resp1, 'diario_editar', { p_id: idAuto, p_ocorrido_em: new Date().toISOString(), p_texto: 'alterado' }))), 'evento automático não é editável');
+chk(/permission denied|row-level/.test(await erroDe(como(resp1, `delete from public.diario where id = $1`, [ob.id]))), 'responsável não apaga observação direto na tabela');
+chk(/diario_nao_apaga/.test(await erroDe(db.query(`delete from public.diario where id = $1`, [ob.id]))), 'nem o banco apaga linha do diário fora da exclusão da operação');
+chk(/diario_somente_funcao|diario_evento_automatico/.test(await erroDe(db.query(`update public.diario set detalhe = 'x' where id = $1`, [idAuto]))), 'nem o banco altera evento automático');
+
+console.log('Resultado e relatório final');
+chk(/texto_obrigatorio/.test(await erroDe(rpc(resp1, 'definir_resultado', { p_operacao: op.id, p_resultado: 'outro', p_texto: '' }))), 'resultado "outro" exige texto');
+const res = await rpc(resp1, 'definir_resultado', { p_operacao: op.id, p_resultado: 'localizada_obito', p_texto: 'Corpo localizado na encosta norte.' });
+chk(res.resultado === 'localizada_obito' && res.resultado_por_nome === 'Sgt Um' && (await tipos()).includes('resultado'), 'resultado registrado e lançado no diário');
+const relat = await rpc(resp1, 'relatorio_operacao', { p_operacao: op.id });
+chk(relat.operacao.codigo === 'OP TESTE' && relat.operacao.resultado === 'localizada_obito' && relat.diario.length > 10 && relat.setores.length >= 1,
+  'relatorio_operacao reúne cadastro, resultado, setores e diário', { d: relat.diario.length, s: relat.setores.length });
+const sd = relat.setores.find((s) => s.nome === 'Diario S');
+chk(sd && sd.inicio_em && sd.fim_em, 'setor no relatório com início e fim da varredura', sd);
+chk(relat.participantes.every((p) => !p.cpf || /^\*\*\*\.\d{3}\.\d{3}-\*\*$/.test(p.cpf)), 'CPF mascarado no relatório', relat.participantes.map((p) => p.cpf));
+chk(/sem_permissao/.test(await erroDe(rpc(anA, 'relatorio_operacao', { p_operacao: op.id }))), 'participante NÃO gera relatório');
+const opR2 = await rpc(resp2, 'criar_operacao', { p_codigo: 'OP R2', p_retencao_horas: 0 });
+chk(/sem_permissao/.test(await erroDe(rpc(resp1, 'relatorio_operacao', { p_operacao: opR2.id }))), 'responsável de outra operação NÃO gera relatório');
+const pdfCam = op.id + '/44444444-4444-4444-8444-444444444444.pdf';
+chk(/arquivo_nao_enviado/.test(await erroDe(rpc(resp1, 'registrar_relatorio', { p_operacao: op.id, p_caminho: pdfCam, p_paginas: 12, p_bytes: 1000, p_sha256: 'a'.repeat(64) }))), 'registrar relatório sem o PDF no Storage: recusado');
+chk(/row-level security/.test(await erroDe(como(anA, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [pdfCam]))), 'participante não envia PDF ao bucket relatorios');
+await como(resp1, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [pdfCam]);
+const rr = await rpc(resp1, 'registrar_relatorio', { p_operacao: op.id, p_caminho: pdfCam, p_paginas: 12, p_bytes: 1000, p_sha256: 'a'.repeat(64) });
+chk(rr.gerado_por_nome === 'Sgt Um' && (await tipos()).includes('relatorio_gerado'), 'relatório registrado e lançado no diário');
+chk((await como(anA, `select count(*)::int n from storage.objects where bucket_id = 'relatorios'`)).rows[0].n === 0, 'participante não vê o PDF');
+chk(/permission denied|row-level/.test(await erroDe(como(resp1, `delete from storage.objects where bucket_id = 'relatorios'`).then((r) => { if (!r.affectedRows) throw new Error('row-level: nada apagado'); }))), 'PDF do relatório não pode ser apagado pelo app');
+chk(/relatorio_nao_apaga/.test(await erroDe(db.query(`delete from public.relatorios where id = $1`, [rr.id]))), 'registro do relatório não pode ser apagado');
+chk(/operacao_com_registros/.test(await erroDe(rpc(resp1, 'excluir_operacao', { p_operacao: op.id }))), 'operação com atividade não pode ser excluída');
+
 console.log('Retenção e exclusão');
 await rpc(resp1, 'encerrar_operacao', { p_operacao: op.id });
 await rpc(resp1, 'apagar_dados_operacao', { p_operacao: op.id });
@@ -257,6 +311,11 @@ const cont = (await db.query(`select (select count(*) from public.vitimas where 
   (select count(*) from public.arquivos_pendentes where bucket='vitimas')::int f, (select codigo from public.operacoes where id=$1) c, (select tipo from public.operacoes where id=$1) t`, [op.id])).rows[0];
 chk(cont.v === 0 && cont.g === 0 && cont.m === 0 && cont.a === 0, 'dados apagados: fichas, grupos, deslocamentos e alertas apagados', cont);
 chk((await db.query(`select count(*)::int n from public.vitima_localizacoes where operacao_id = $1`, [op.id])).rows[0].n === 0, 'dados apagados: registros de vítima localizada apagados');
+const diarioDepois = (await db.query(`select count(*)::int n, bool_or(tipo = 'dados_apagados') apagados, bool_or(tipo = 'observacao') obs from public.diario where operacao_id = $1`, [op.id])).rows[0];
+chk(diarioDepois.n > 10 && diarioDepois.apagados && diarioDepois.obs, 'dados apagados: o diário continua (com o registro da retenção)', diarioDepois);
+chk((await db.query(`select count(*)::int n from public.relatorios where operacao_id = $1`, [op.id])).rows[0].n === 1, 'dados apagados: o relatório continua');
+const relDepois = await rpc(resp1, 'relatorio_operacao', { p_operacao: op.id });
+chk(relDepois.participantes.length === 0 && relDepois.diario.length > 10 && relDepois.operacao.resultado === 'localizada_obito', 'depois da retenção o relatório ainda sai com cadastro, resultado e diário');
 chk(cont.f === 1,'a foto da vítima entrou na fila de remoção do Storage (bucket vitimas)');
 chk(cont.c === 'OP TESTE' && cont.t === 'outras', 'o cadastro da operação continua (como o nome já continuava)');
 const pend = await rpc(resp1, 'meus_arquivos_pendentes_v2', {});
@@ -265,5 +324,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–011 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–012 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

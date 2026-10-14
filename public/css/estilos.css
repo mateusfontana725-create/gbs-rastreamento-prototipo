@@ -1750,3 +1750,61 @@ body:not(.lateral-oculta) .faixa-filtro { left: calc((100% - var(--larg-lateral)
   .faixa-filtro, body:not(.lateral-oculta) .faixa-filtro { left: 50%; width: calc(100% - 24px); top: 56px; }
   .grupo-duplo-largo { grid-template-columns: 1fr 110px; }
 }
+
+/* =====================================================================
+ * DIÁRIO DA OPERAÇÃO E RELATÓRIO FINAL
+ * ===================================================================== */
+.modal:has(.modal-diario), .modal:has(.modal-relatorio) { width: min(760px, 100%); }
+.diario-topo { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.diario-topo h2 { margin-bottom: 2px; }
+.diario-resumo { margin: 0; font-size: .85rem; }
+.diario-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.diario-filtros { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 6px; }
+.diario-filtros .btn { min-height: 34px; text-transform: none; letter-spacing: 0; font-family: var(--fonte); font-weight: 700; }
+.diario-lista { display: grid; gap: 4px; }
+.diario-dia {
+  position: sticky; top: -20px; z-index: 1; margin: 10px 0 2px; padding: 6px 0;
+  background: var(--superficie); border-bottom: 1px solid var(--borda);
+  font-family: var(--fonte-titulo); font-size: .95rem; letter-spacing: .04em; text-transform: uppercase; color: var(--acento);
+}
+.diario-itens { list-style: none; margin: 0; padding: 0; display: grid; }
+.diario-item {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; padding: 9px 8px 9px 6px;
+  border-bottom: 1px solid var(--borda); border-left: 3px solid transparent;
+}
+.diario-item.critico { border-left-color: var(--perigo); background: var(--perigo-claro); }
+.diario-item.manual { border-left-color: var(--responsavel); background: var(--responsavel-claro); }
+.diario-hora { font-family: var(--mono); font-weight: 800; font-size: .95rem; color: var(--texto); padding-top: 1px; }
+.diario-corpo { min-width: 0; display: grid; gap: 3px; }
+.diario-cabeca { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.diario-cabeca strong { overflow-wrap: anywhere; }
+.diario-cat { font-size: .7rem; color: var(--texto-2); background: var(--neutro-claro); }
+.diario-item.cat-encontro .diario-cat { color: #fdba74; background: rgba(249, 115, 22, .15); }
+.diario-item.cat-setor .diario-cat { color: #93c5fd; background: rgba(59, 130, 246, .15); }
+.diario-item.cat-chegada .diario-cat, .diario-item.cat-deslocamento .diario-cat { color: var(--ok-texto); background: var(--ok-claro); }
+.diario-item.cat-alerta .diario-cat { color: var(--perigo-texto); background: var(--perigo-claro); }
+.diario-item.manual .diario-cat { color: var(--responsavel-texto); background: var(--responsavel-claro); }
+.diario-detalhe { margin: 0; color: var(--texto-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.diario-item.manual .diario-detalhe { color: var(--texto); }
+.diario-item-acoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.diario-nota { margin-top: 12px; }
+.diario-versoes { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.diario-versao { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; background: var(--superficie-2); }
+.diario-versao.atual { border-color: var(--responsavel); }
+.diario-versao p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.form-observacao textarea { min-height: 120px; }
+
+.rel-bloco { border-top: 1px solid var(--borda); padding-top: 12px; margin-top: 14px; }
+.rel-bloco h3 { font-family: var(--fonte-titulo); font-size: 1rem; letter-spacing: .04em; text-transform: uppercase; margin: 0 0 10px; color: var(--texto-2); }
+.rel-check { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; font-weight: 600; }
+.rel-check input { width: 20px; height: 20px; accent-color: var(--primaria); }
+.rel-progresso { margin: 0 0 10px; padding: 8px 10px; border-radius: var(--raio); background: var(--alerta-claro); color: var(--alerta-texto); font-weight: 700; }
+.rel-aviso { padding: 8px 10px; border-radius: var(--raio); background: var(--perigo-claro); color: var(--perigo-texto); font-weight: 700; }
+.rel-salvos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rel-salvos li { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--borda); }
+.rel-salvos li span { font-family: var(--mono); font-size: .85rem; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  .diario-item { grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
+  .diario-acoes { width: 100%; }
+  .diario-acoes .btn { flex: 1 1 auto; }
+}

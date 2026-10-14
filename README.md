@@ -498,8 +498,51 @@ se for necessário: (1) gerar e hospedar os próprios ladrilhos/arquivo PMTiles 
 OSM e do IBGE) ou (2) contratar um provedor que permita cache offline (ex.: MapTiler, Thunderforest, com
 chave própria).
 
+### Vítima localizada ("Encontrei a vítima")
+
+- No celular de campo, **ENCONTREI ALGO → Encontrei a vítima** (em destaque): escolhe **Viva** ou **Morta**,
+  confirma e envia com a localização. Depois do envio o celular mostra apenas **"Localizada, ver protocolo"**.
+- A condição fica só na tabela `vitima_localizacoes`, que **só os responsáveis da operação** leem (RLS, também
+  no tempo real). A mensagem e o alerta que o participante consegue ver são neutros. A condição vai no corpo
+  da chamada, nunca na URL, e não aparece em notificações.
+- No painel: faixa de alerta própria (magenta; roxo escuro para óbito) com alarme, selo com a condição no
+  relato, na ficha, na central e nos alertas, e marcador no mapa.
+
+### Diário da operação
+
+- **Ferramentas → Diário da operação** (ou **Diário** na lista de operações): registro cronológico agrupado
+  por dia, com filtros (setores, deslocamentos e chegadas, encontros, alertas, pessoas, observações, operação).
+- **Eventos automáticos** são gravados pelo **próprio banco** (gatilhos) a partir dos outros módulos: criação e
+  acionamento, início e fim da varredura de cada setor (mudança de situação), deslocamentos, chegadas ao setor
+  e à base, busca finalizada, retorno atrasado, relatos de campo, pedidos de ajuda, vítima localizada (com a
+  condição), pontos de interesse, entrada/saída/remoção de pessoas, grupos, encerramento, resultado e
+  relatórios gerados. Não podem ser editados nem apagados.
+- **+ Observação**: o responsável escreve uma observação livre com **data e hora do fato**. Qualquer responsável
+  da operação pode **editar**; ninguém exclui. Cada edição guarda a versão anterior (**Histórico**).
+- Só responsáveis da operação leem o diário. Ele **não é apagado** pela retenção nem pelo app.
+
+### Relatório final (PDF)
+
+- **Ferramentas → Relatório final (PDF)** (ou **Relatório** na lista de operações). Só responsáveis da operação
+  (o banco confere em `relatorio_operacao`).
+- Registre o **resultado** (vítima localizada com vida / em óbito / não localizada / outro, com descrição).
+- **Gerar PDF** monta, no navegador: capa com resultado e números, sumário, dados do cadastro e fichas das
+  vítimas, pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
+  setor, início, fim, duração, área, deslocamentos e fotos tiradas dentro do setor), pontos e encontros,
+  diário consolidado por dia e resultado com campos de assinatura. Cabeçalho e rodapé em todas as páginas
+  ("DOCUMENTO RESTRITO", página X de Y).
+- O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios` (sem exclusão pelo app); a lista
+  **Relatórios já gerados** permite baixar de novo.
+- Ao **encerrar** a operação ou **apagar os dados**, se ainda não houver relatório, o painel oferece gerar antes
+  (depois da retenção o relatório sai só com cadastro, diário e resultado).
+- Biblioteca: **pdfmake 0.2.23** (`public/vendor/pdfmake/`, licença MIT), carregada só ao gerar. Os mapas são
+  desenhados em canvas com o OpenStreetMap de fundo; sem acesso ao fundo, o mapa sai sem ele (com escala).
+
 ### Excluir uma operação
 
+- Só operações **sem atividade registrada** (criadas por engano) podem ser excluídas. Com atividade no diário
+  (pessoas, setores iniciados, deslocamentos, relatos, observações, resultado ou relatório), o banco recusa:
+  o diário e os relatórios são o documento da operação, e os dados pessoais saem pela retenção.
 - Disponível para **quem criou a operação** e para **administradores** que façam parte dela: na lista de
   operações (botão **Excluir operação**) e em **Ferramentas → Excluir operação**. Os demais nem veem o
   botão, e o banco recusa a exclusão se alguém tentar por fora. Participantes nunca podem excluir.
@@ -549,8 +592,11 @@ rastreamento-sar/
 │       ├── ferramentas.js      ferramentas de mapa do painel (medir, ir para coordenada, estatísticas…)
 │       ├── trilha-local.js     fila offline dos pontos (IndexedDB) e envio com confirmação por ponto
 │       ├── cadastro.js         cadastro da operação, escolha de ponto no mapa e fichas das vítimas
+│       ├── relatorio.js        diário da operação, resultado, mapas em canvas e geração do relatório final
+│       ├── relatorio-pdf.js    monta o documento do relatório final (pdfmake), sem rede nem tela
 │       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
 │       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
+│   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
 ├── api/
 │   ├── config.js               entrega ao navegador só a URL e a chave PÚBLICA (de variáveis de ambiente)
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
@@ -566,7 +612,9 @@ rastreamento-sar/
 │       ├── 007_cadastro_operacao_vitimas.sql  cadastro completo da operação e fichas das vítimas
 │       ├── 008_grupos.sql                     grupos, membros, papéis e link por grupo
 │       ├── 009_trilha_offline.sql             envio em lote com confirmação e intervalo do GPS
-│       └── 010_missoes_alertas.sql            destino para grupos, alertas e controle de retorno
+│       ├── 010_missoes_alertas.sql            destino para grupos, alertas e controle de retorno
+│       ├── 011_vitima_localizada.sql          "Encontrei a vítima" (condição só para responsáveis)
+│       └── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 ├── testes/
 │   ├── filtro_gps.test.js      teste do filtro de GPS e do desenho das falhas (node, sem dependências)
 │   ├── coords.test.js          teste das conversões de coordenadas (UTM, MGRS, GMS, rumo, sol)
@@ -631,12 +679,18 @@ rastreamento-sar/
      `destinos.missao_id`, `enviar_destino_grupo`, `finalizar_busca`, `prorrogar_retorno`, `encerrar_missao`,
      `verificar_retornos`, `reconhecer_alerta`; avaliação dos eventos pela trilha GPS no servidor; agenda o
      `pg_cron` se ele estiver ativo.
+   - **011** (`011_vitima_localizada.sql`): `vitima_localizacoes` (RLS: só responsáveis), `participante_registrar_vitima`,
+     categoria `VITIMA` e alerta `vitima_localizada`;
+   - **012** (`012_diario_relatorio.sql`): `diario`, `diario_versoes`, `relatorios` (sem exclusão), gatilhos que
+     alimentam o diário, `diario_adicionar`, `diario_editar`, `definir_resultado`, `relatorio_operacao`,
+     `registrar_relatorio`, bucket privado **`relatorios`** (PDF; sem regra de exclusão) e `excluir_operacao`
+     só para operações sem atividade; preenche o diário das operações existentes.
    - **Alerta de retorno atrasado sem painel aberto**: ative **Database → Extensions → pg_cron** e rode a
      migração 010 (ou o `schema.sql`) de novo — ela agenda `select public.verificar_retornos()` a cada minuto
      (job `gbs-verificar-retornos`). Sem `pg_cron`, o alerta só é verificado com algum painel aberto.
    O painel e a página do participante funcionam com o banco ainda sem essas migrações (as funções novas
    ficam indisponíveis, com aviso).
-   O `schema.sql` completo já inclui da 003 à 010 (seções 10 a 17).
+   O `schema.sql` completo já inclui da 003 à 012 (seções 10 a 19).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

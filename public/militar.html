@@ -66,32 +66,12 @@
       </div>
     </header>
     <div class="conteudo">
-      <form class="cartao secao" id="form-nova" novalidate>
-        <h2>Nova operação</h2>
-        <div class="grupo">
-          <label class="rotulo" for="nova-codigo">Nome ou código da operação *</label>
-          <input class="campo" id="nova-codigo" maxlength="80" required placeholder="Ex.: BUSCA SERRA AZUL 09/10">
-        </div>
-        <!-- tipo, acionamento, local e descrição (cadastro.js) -->
-        <div id="nova-cadastro"></div>
-        <div class="linha-form linha-form-fim">
-          <div class="grupo">
-            <label class="rotulo" for="nova-retencao">Apagar dados</label>
-            <select class="campo" id="nova-retencao">
-              <option value="0">Ao encerrar</option>
-              <option value="24">24 h após encerrar</option>
-              <option value="72" selected>3 dias após encerrar</option>
-              <option value="168">7 dias após encerrar</option>
-              <option value="720">30 dias após encerrar</option>
-            </select>
-          </div>
-          <button class="btn btn-primario" type="submit" id="btn-criar">CRIAR OPERAÇÃO</button>
-        </div>
-        <p class="erro-form" id="nova-erro" role="alert" hidden></p>
-      </form>
-
       <div class="cartao secao">
-        <h2>Minhas operações</h2>
+        <div class="ops-topo">
+          <h2>Minhas operações</h2>
+          <!-- o cadastro abre num modal (militar.js: abrirNovaOperacao) -->
+          <button class="btn btn-primario" type="button" id="btn-nova-op">+ Nova operação</button>
+        </div>
         <ul class="lista-ops" id="lista-ops"></ul>
         <p class="muted" id="ops-vazio" hidden>Nenhuma operação criada ainda.</p>
       </div>
@@ -476,9 +456,9 @@
   <script src="js/coords.js"></script>
   <script src="js/arquivos.js"></script>
   <script src="js/cadastro.js"></script>
-  <script src="js/militar.js"></script>
-  <script src="js/ferramentas.js"></script>
   <script src="js/relatorio-pdf.js"></script>
   <script src="js/relatorio.js"></script>
+  <script src="js/militar.js"></script>
+  <script src="js/ferramentas.js"></script>
 </body>
 </html>

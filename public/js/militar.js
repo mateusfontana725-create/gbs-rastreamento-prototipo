@@ -155,7 +155,6 @@
     centralVoltar: false,
     assinaturaConversa: '',
     // cadastro da operação
-    camposNova: null,           // campos do cadastro no formulário "Nova operação"
     marcaLocal: null,           // marcador do local da operação no mapa
     // grupos
     grupos: new Map(),          // id → grupo
@@ -218,10 +217,8 @@
   async function iniciar() {
     document.querySelectorAll('[data-acao="sair"]').forEach(function (b) { b.addEventListener('click', sair); });
     $('form-login').addEventListener('submit', entrar);
-    $('form-nova').addEventListener('submit', criarOperacao);
+    $('btn-nova-op').addEventListener('click', abrirNovaOperacao);
     // Cadastro completo da operação nova: tipo, acionamento, local e descrição
-    est.camposNova = window.Cadastro.camposOperacao(null, { obrigatorio: true, agoraPadrao: true, prefixo: 'nova' });
-    $('nova-cadastro').appendChild(est.camposNova.elemento);
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
     $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
     $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
@@ -502,27 +499,58 @@
     });
   }
 
-  async function criarOperacao(ev) {
+  // "+ Nova operação": o cadastro abre num modal (a lista de operações fica limpa).
+  function abrirNovaOperacao() {
+    var codigo = UI.el('input', { classe: 'campo', id: 'nova-codigo', maxlength: '80', required: true, autocomplete: 'off', placeholder: 'Ex.: BUSCA SERRA AZUL 09/10' });
+    var campos = window.Cadastro.camposOperacao(null, { obrigatorio: true, agoraPadrao: true, prefixo: 'nova' });
+    var retencao = UI.el('select', { classe: 'campo', id: 'nova-retencao' }, [
+      ['0', 'Ao encerrar'], ['24', '24 h após encerrar'], ['72', '3 dias após encerrar'], ['168', '7 dias após encerrar'], ['720', '30 dias após encerrar'],
+    ].map(function (o) { return UI.el('option', { value: o[0], selected: o[0] === '72' ? true : null, texto: o[1] }); }));
+    var erro = UI.el('p', { classe: 'erro-form', id: 'nova-erro', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'btn-criar', texto: 'Criar operação' });
+    var form = UI.el('form', { classe: 'form-nova-op', id: 'form-nova', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),
+      UI.el('p', { classe: 'muted', texto: 'Campos com * são obrigatórios. O restante pode ser completado depois em Ferramentas → Dados da operação.' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'nova-codigo', texto: 'Nome ou código da operação *' }), codigo]),
+      campos.elemento,
+      UI.el('div', { classe: 'grupo' }, [
+        UI.el('label', { classe: 'rotulo', for: 'nova-retencao', texto: 'Apagar dados pessoais' }),
+        retencao,
+        UI.el('small', { classe: 'muted', texto: 'Participantes, trilhas, mensagens e fotos. O diário e os relatórios ficam guardados.' }),
+      ]),
+      erro,
+      UI.el('div', { classe: 'modal-acoes' }, [
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        btn,
+      ]),
+    ]);
+    form.addEventListener('submit', function (ev) { criarOperacao(ev, { codigo: codigo, campos: campos, retencao: retencao, erro: erro, btn: btn, fechar: function () { fechar(true); } }); });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    setTimeout(function () { codigo.focus(); }, 40);
+  }
+
+  async function criarOperacao(ev, f) {
     ev.preventDefault();
-    var erro = $('nova-erro');
+    var erro = f.erro;
     erro.hidden = true;
-    var codigo = $('nova-codigo').value.trim();
+    var codigo = f.codigo.value.trim();
     if (codigo.length < 2) {
       erro.textContent = 'Informe o nome ou código da operação.';
       erro.hidden = false;
+      f.codigo.focus();
       return;
     }
     var dados;
     try {
-      dados = est.camposNova.ler();
+      dados = f.campos.ler();
     } catch (e) {
       erro.textContent = e.message;
       erro.hidden = false;
       return;
     }
-    var btn = $('btn-criar');
+    var btn = f.btn;
     btn.disabled = true;
-    var args = { p_codigo: codigo, p_retencao_horas: Number($('nova-retencao').value), p_dados: dados };
+    var args = { p_codigo: codigo, p_retencao_horas: Number(f.retencao.value), p_dados: dados };
     try {
       var op;
       try {
@@ -534,8 +562,7 @@
         op = await C.rpc('criar_operacao', args);
         UI.aviso('Operação criada só com o nome: o servidor ainda não tem o cadastro completo (migração 007).', 'erro', 9000);
       }
-      $('nova-codigo').value = '';
-      est.camposNova.limpar();
+      f.fechar();
       est.abrirConvite = true;
       location.hash = '#op=' + op.id;
     } catch (e) {

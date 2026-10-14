@@ -31,12 +31,14 @@
     setTimeout(function () { if (a.parentNode) a.parentNode.removeChild(a); }, ms || (tipo === 'erro' ? 6000 : 3500));
   }
 
-  var modalAtual = null;
+  // Pilha de modais: normalmente só um aberto; opcoes.empilhar abre por cima
+  // (ex.: escolher um ponto no mapa sem perder o formulário que está embaixo).
+  var pilha = [];
 
   // Abre um modal genérico. "conteudo" é um nó DOM. Devolve função para fechar.
   function abrirModal(conteudo, opcoes) {
     opcoes = opcoes || {};
-    fecharModal();
+    if (!opcoes.empilhar) fecharTodos();
     var anterior = document.activeElement;
     var caixa = el('div', { classe: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [conteudo]);
     var fundo = el('div', { classe: 'modal-fundo' }, [caixa]);
@@ -44,7 +46,8 @@
       if (ev.target === fundo && opcoes.fecharNoFundo !== false) fechar(null);
     });
     function tecla(ev) {
-      if (ev.key === 'Escape') { ev.preventDefault(); fechar(null); }
+      // Esc fecha só o modal de cima
+      if (ev.key === 'Escape' && pilha.length && pilha[pilha.length - 1].fechar === fechar) { ev.preventDefault(); fechar(null); }
     }
     document.addEventListener('keydown', tecla);
     document.body.appendChild(fundo);
@@ -55,16 +58,25 @@
       if (!fundo.parentNode) return;
       document.removeEventListener('keydown', tecla);
       fundo.parentNode.removeChild(fundo);
-      if (modalAtual && modalAtual.fechar === fechar) modalAtual = null;
+      pilha = pilha.filter(function (m) { return m.fechar !== fechar; });
       if (anterior && anterior.focus) { try { anterior.focus(); } catch (e) { /* ignora */ } }
       if (opcoes.aoFechar) opcoes.aoFechar(valor);
     }
-    modalAtual = { fechar: fechar };
+    pilha.push({ fechar: fechar });
     return fechar;
   }
 
+  // Fecha o modal de cima
   function fecharModal() {
-    if (modalAtual) modalAtual.fechar(null);
+    if (pilha.length) pilha[pilha.length - 1].fechar(null);
+  }
+
+  function fecharTodos() {
+    while (pilha.length) {
+      var antes = pilha.length;
+      pilha[pilha.length - 1].fechar(null);
+      if (pilha.length === antes) pilha.pop();   // salvaguarda
+    }
   }
 
   /*

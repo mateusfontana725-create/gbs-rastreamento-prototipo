@@ -145,10 +145,11 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 
 ### Cadastro completo da operação
 
-- **Nova operação**: nome (obrigatório), **tipo** (Aquática, Terrestre, Aérea ou Outras — em "Outras" um
+- **+ Nova operação** (no topo de "Minhas operações") abre o cadastro num modal: nome (obrigatório), **tipo** (Aquática, Terrestre, Aérea ou Outras — em "Outras" um
   campo "Qual?" com texto livre) e **data e hora do acionamento** (já vem com a hora atual; não pode estar
   no futuro) são obrigatórios. **Endereço**, **ponto no mapa** (📍 Escolher no mapa, Usar minha posição ou
   digitar a coordenada em qualquer formato) e **descrição** são opcionais e podem ser completados depois.
+  O mapa para escolher o ponto abre por cima do formulário, sem perder o que já foi preenchido.
 - **Ferramentas → Dados da operação**: ver e editar tudo (inclusive o nome) e o **intervalo do GPS** (ver
   "Trilhas GPS"). O local aparece no mapa como **◎ laranja** ("Local da operação", camada própria em
   **Camadas do mapa**); tocar nele abre os dados.

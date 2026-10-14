@@ -78,6 +78,7 @@
         ]),
       ]), {
         fecharNoFundo: false,
+        empilhar: true,   // abre por cima do formulário, sem perder o que já foi preenchido
         aoFechar: function () {
           if (mapa) { try { mapa.remove(); } catch (e) { /* ignora */ } }
           if (!resolvido) { resolvido = true; resolve(null); }

@@ -649,7 +649,7 @@
         listaSalvos,
       ]),
       UI.el('div', { classe: 'modal-acoes' }, [
-        UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário da operação', onclick: function () { fechar(); abrirDiario(op); } }),
+        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário da operação', onclick: function () { fechar(); abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { fecharNoFundo: false, aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });

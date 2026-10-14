@@ -1613,7 +1613,9 @@ body.conversa-aberta { overflow: hidden; }
 /* =====================================================================
  * Cadastro da operação e fichas de vítimas
  * ===================================================================== */
-.linha-form-fim { grid-template-columns: 220px auto; justify-content: start; margin-top: 4px; }
+.ops-topo { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
+.ops-topo h2 { margin: 0; }
+.modal:has(.form-nova-op) { width: min(640px, 100%); }
 .campos-cadastro { display: grid; gap: 0; }
 .linha-ponto { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; color: var(--texto-2); }
 .campos-cadastro .acoes-linha { margin-bottom: 6px; }
@@ -1746,7 +1748,7 @@ body:not(.lateral-oculta) .faixa-filtro { left: calc((100% - var(--larg-lateral)
 .nav-missao { margin: -4px 0 8px; font-weight: 800; color: var(--acento); }
 #nav-finalizar { flex-basis: 100%; }
 @media (max-width: 600px) {
-  .linha-form-fim { grid-template-columns: 1fr; }
+  .ops-topo .btn { flex: 1 1 100%; }
   .faixa-filtro, body:not(.lateral-oculta) .faixa-filtro { left: 50%; width: calc(100% - 24px); top: 56px; }
   .grupo-duplo-largo { grid-template-columns: 1fr 110px; }
 }

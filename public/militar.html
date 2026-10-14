@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#06080a">
   <meta name="robots" content="noindex, nofollow">
+  <meta name="gbs-versao" content="2026-10-12.3">
   <title>Rastreamento GBS — Painel do Responsável</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
   <link rel="stylesheet" href="css/estilos.css">
 </head>
 <body>
@@ -43,7 +45,7 @@
   <!-- Usuário sem autorização -->
   <section id="tela-sem-permissao" class="tela-centro" hidden>
     <div class="cartao cartao-login">
-      <h1 style="font-size:1.2rem;margin-bottom:10px">Acesso não autorizado</h1>
+      <h1 class="titulo-aviso">Acesso não autorizado</h1>
       <p>Este usuário não está cadastrado como responsável. Peça ao administrador do sistema para autorizar o seu acesso.</p>
       <button class="btn btn-escuro btn-gigante" type="button" data-acao="sair">SAIR</button>
     </div>
@@ -57,7 +59,11 @@
         <div><h1>Operações de busca</h1><small id="usuario-nome"></small></div>
       </div>
       <div class="barra-espaco"></div>
-      <button class="btn btn-barra btn-pequeno" type="button" data-acao="sair">Sair</button>
+      <div class="barra-acoes">
+        <a class="btn btn-barra btn-pequeno" href="#responsaveis" id="btn-responsaveis" hidden>Responsáveis</a>
+        <button class="btn btn-barra btn-pequeno" type="button" id="btn-minha-conta">Minha conta</button>
+        <button class="btn btn-barra btn-pequeno" type="button" data-acao="sair">Sair</button>
+      </div>
     </header>
     <div class="conteudo">
       <form class="cartao secao" id="form-nova" novalidate>
@@ -77,7 +83,7 @@
               <option value="720">30 dias após encerrar</option>
             </select>
           </div>
-          <button class="btn btn-primario" type="submit" id="btn-criar" style="min-height:52px">CRIAR OPERAÇÃO</button>
+          <button class="btn btn-primario" type="submit" id="btn-criar">CRIAR OPERAÇÃO</button>
         </div>
         <p class="erro-form" id="nova-erro" role="alert" hidden></p>
       </form>
@@ -86,6 +92,60 @@
         <h2>Minhas operações</h2>
         <ul class="lista-ops" id="lista-ops"></ul>
         <p class="muted" id="ops-vazio" hidden>Nenhuma operação criada ainda.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Administração dos responsáveis (somente administradores) -->
+  <section id="tela-responsaveis" hidden>
+    <header class="barra-topo">
+      <a class="btn btn-barra btn-pequeno" href="#" title="Voltar para as operações" aria-label="Voltar para as operações">◀</a>
+      <div class="marca">
+        <div class="marca-icone" aria-hidden="true">GBS</div>
+        <div><h1>Responsáveis</h1><small>Quem pode acessar o painel</small></div>
+      </div>
+      <div class="barra-espaco"></div>
+      <button class="btn btn-barra btn-pequeno" type="button" data-acao="sair">Sair</button>
+    </header>
+    <div class="conteudo">
+      <form class="cartao secao" id="form-resp" novalidate>
+        <h2>Cadastrar responsável</h2>
+        <div class="grade-resp">
+          <div class="grupo">
+            <label class="rotulo" for="resp-nome">Nome / posto e graduação</label>
+            <input class="campo" id="resp-nome" maxlength="60" autocomplete="off" placeholder="Ex.: Sgt BM Fulano de Tal">
+          </div>
+          <div class="grupo">
+            <label class="rotulo" for="resp-email">E-mail (será o login)</label>
+            <input class="campo" id="resp-email" type="email" maxlength="200" autocomplete="off" placeholder="fulano@cbm…">
+          </div>
+          <div class="grupo">
+            <label class="rotulo" for="resp-senha">Senha provisória</label>
+            <div class="link-caixa">
+              <input class="campo mono" id="resp-senha" type="text" maxlength="72" autocomplete="new-password" spellcheck="false">
+              <button class="btn" type="button" id="resp-gerar">Gerar</button>
+            </div>
+          </div>
+          <label class="linha-opcao"><input type="checkbox" id="resp-admin"> Também é administrador (pode cadastrar outros responsáveis)</label>
+        </div>
+        <button class="btn btn-primario" type="submit" id="resp-cadastrar">CADASTRAR</button>
+        <p class="erro-form" id="resp-erro" role="alert" hidden></p>
+        <p class="ajuda">O login é criado na hora, sem e-mail de confirmação. Passe o endereço do painel, o e-mail e a senha provisória ao colega; ele pode trocar a senha em "Minha conta".</p>
+      </form>
+
+      <div class="cartao secao credenciais" id="resp-credenciais" hidden>
+        <h2>Acesso criado</h2>
+        <pre class="mono" id="resp-cred-texto"></pre>
+        <div class="acoes-linha">
+          <button class="btn btn-escuro" type="button" id="resp-cred-copiar">Copiar dados de acesso</button>
+          <button class="btn" type="button" id="resp-cred-fechar">Fechar</button>
+        </div>
+        <p class="nota">Por segurança, esta senha não será mostrada de novo. Se for perdida, use "Redefinir senha".</p>
+      </div>
+
+      <div class="cartao secao">
+        <h2>Responsáveis cadastrados</h2>
+        <ul class="lista-resp" id="lista-resp"></ul>
       </div>
     </div>
   </section>
@@ -100,24 +160,137 @@
       </div>
       <span class="pilula-conexao" id="pilula" role="status"><span class="ponto ponto-aguardando"></span><span>Conectando…</span></span>
       <div class="painel-acoes">
-        <button class="btn btn-barra btn-pequeno" type="button" id="btn-convite">Convidar<span class="rotulo-longo">&nbsp;participantes</span></button>
-        <button class="btn btn-primario btn-pequeno" type="button" id="btn-encerrar">Encerrar<span class="rotulo-longo">&nbsp;operação</span></button>
+        <button class="btn btn-barra btn-pequeno btn-msgs" type="button" id="btn-mensagens" aria-label="Mensagens, relatos e fotos" aria-controls="central" aria-expanded="false" title="Mensagens, relatos e fotos dos participantes">
+          <span class="ico-msg" aria-hidden="true"></span><span class="rotulo-longo">Mensagens</span>
+          <span class="contador" id="contador-msgs" hidden>0</span>
+        </button>
+        <div class="ferramentas" id="ferramentas">
+          <button class="btn btn-barra btn-pequeno btn-ferramentas" type="button" id="btn-ferramentas" aria-label="Ferramentas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-ferramentas" title="Ferramentas da operação e do mapa">
+            <span class="ico-menu" aria-hidden="true"></span><span class="rotulo-longo">Ferramentas</span>
+            <span class="indicador-pos" aria-hidden="true"></span>
+          </button>
+          <div class="menu-ferramentas" id="menu-ferramentas" role="region" aria-label="Ferramentas" hidden>
+            <div class="menu-cabeca">
+              <strong>Ferramentas</strong>
+              <button class="btn btn-pequeno" type="button" id="menu-fechar" aria-label="Fechar o menu de ferramentas">Fechar</button>
+            </div>
+            <section class="menu-grupo" aria-labelledby="mg-op">
+              <h3 id="mg-op">Operação</h3>
+              <button class="menu-item btn-minha-pos" type="button" id="btn-minha-pos" aria-pressed="false" title="Compartilhar sua posição com os outros responsáveis desta operação">
+                <span class="ico-pos" aria-hidden="true"></span><span>Minha posição</span><small class="menu-estado" id="minha-pos-estado">desligada</small>
+              </button>
+              <p class="menu-nota" id="minha-pos-nota">Liga sozinha ao abrir a operação (se o navegador permitir). Funciona com o painel aberto e a tela ligada: em segundo plano ou com a tela bloqueada o celular pode pausar o envio.</p>
+              <button class="menu-item" type="button" id="btn-registrar-foto"><span class="ico-camera" aria-hidden="true"></span><span>Registrar foto</span></button>
+              <button class="menu-item" type="button" id="btn-convite"><span class="ico-item" aria-hidden="true">＋</span><span>Convidar participantes</span></button>
+              <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
+              <button class="menu-item" type="button" id="menu-central"><span class="ico-msg" aria-hidden="true"></span><span>Mensagens, relatos e fotos</span></button>
+              <p class="menu-sol" id="menu-sol" hidden></p>
+              <button class="menu-item" type="button" id="menu-diag-gps"><span class="ico-item" aria-hidden="true">⌖</span><span>Diagnóstico do GPS</span></button>
+            </section>
+            <section class="menu-grupo" aria-labelledby="mg-areas">
+              <h3 id="mg-areas">Áreas e pontos</h3>
+              <button class="menu-item" type="button" id="menu-setor-raio"><span class="ico-item" aria-hidden="true">◯</span><span>Novo setor por raio</span></button>
+              <button class="menu-item" type="button" id="menu-setor-poligono"><span class="ico-item" aria-hidden="true">⬠</span><span>Novo setor desenhando a área</span></button>
+              <button class="menu-item" type="button" id="menu-ponto"><span class="ico-item" aria-hidden="true">⚑</span><span>Marcar ponto de interesse</span></button>
+              <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">🧭</span><span>Enviar destino a participantes</span></button>
+              <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">☰</span><span>Lista de setores e pontos</span></button>
+            </section>
+            <section class="menu-grupo" aria-labelledby="mg-camadas">
+              <h3 id="mg-camadas">Camadas do mapa</h3>
+              <div role="radiogroup" aria-label="Mapa de fundo">
+                <button class="menu-item menu-radio" type="button" role="radio" data-camada="osm" aria-checked="true"><span class="marca-opcao" aria-hidden="true"></span><span>Mapa (OpenStreetMap)</span></button>
+                <button class="menu-item menu-radio" type="button" role="radio" data-camada="topo" aria-checked="false"><span class="marca-opcao" aria-hidden="true"></span><span>Topográfico (curvas de nível)</span></button>
+                <button class="menu-item menu-radio" type="button" role="radio" data-camada="satelite" aria-checked="false"><span class="marca-opcao" aria-hidden="true"></span><span>Satélite (Esri)</span></button>
+              </div>
+              <button class="menu-item menu-check" type="button" id="opt-setores" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Setores de busca</span></button>
+              <button class="menu-item menu-check" type="button" id="opt-pontos" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Pontos de interesse</span></button>
+              <button class="menu-item menu-check" type="button" id="opt-fotos" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Fotos no mapa</span></button>
+              <button class="menu-item menu-check" type="button" id="opt-relatos" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Relatos no mapa</span></button>
+              <button class="menu-item menu-check" type="button" id="opt-trilhas" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Trilhas de todos</span></button>
+            </section>
+            <section class="menu-grupo" aria-labelledby="mg-vis">
+              <h3 id="mg-vis">Visualização</h3>
+              <button class="menu-item" type="button" id="menu-3d"><span class="ico-item" aria-hidden="true">⛰</span><span>Relevo em 3D</span></button>
+              <button class="menu-item" type="button" id="menu-enquadrar"><span class="ico-item" aria-hidden="true">⤢</span><span>Enquadrar todos no mapa</span></button>
+              <button class="menu-item menu-check" type="button" id="opt-nomes" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Nomes no mapa</span></button>
+            </section>
+            <section class="menu-grupo" aria-labelledby="mg-dados">
+              <h3 id="mg-dados">Ferramentas de mapa</h3>
+              <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">⌖</span><span>Ir para coordenada</span></button>
+              <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">📏</span><span>Medir distância e área</span></button>
+              <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar (GPX, KML, GeoJSON, CSV)</span></button>
+              <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo (GPX, KML, KMZ…)</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
+              <label class="menu-item menu-select" for="opt-coord"><span class="ico-item" aria-hidden="true">#</span><span>Coordenadas</span>
+                <select id="opt-coord" class="campo campo-pequeno" aria-label="Formato das coordenadas">
+                  <option value="dec">Graus decimais</option><option value="gms">Graus, min, seg</option><option value="gmd">Graus e min decimais</option>
+                  <option value="utm">UTM</option><option value="mgrs">MGRS</option>
+                </select></label>
+              <p class="menu-nota">Toque longo (ou clique com o botão direito) no mapa mostra as coordenadas e a altitude do ponto.</p>
+            </section>
+            <!-- Ações que não podem ser desfeitas: sempre no fim, separadas, com confirmação -->
+            <section class="menu-grupo menu-zona-perigo" id="menu-zona-perigo" aria-labelledby="mg-perigo">
+              <h3 id="mg-perigo">Encerrar ou excluir</h3>
+              <button class="menu-item menu-perigo" type="button" id="btn-encerrar"><span class="ico-item" aria-hidden="true">■</span><span>Encerrar operação</span><small class="menu-estado">pede confirmação</small></button>
+              <div class="menu-separador-perigo" aria-hidden="true"></div>
+              <button class="menu-item menu-perigo menu-excluir" type="button" id="btn-excluir-op" hidden><span class="ico-item" aria-hidden="true">✕</span><span>Excluir operação</span><small class="menu-estado">definitivo · digite o nome para confirmar</small></button>
+            </section>
+          </div>
+        </div>
       </div>
     </header>
 
     <div class="faixa-encerrada" id="faixa-encerrada" hidden>
       <span id="faixa-encerrada-texto"></span>
-      <button class="btn btn-pequeno btn-perigo" type="button" id="btn-apagar-faixa" style="margin-left:8px">Apagar dados agora</button>
+      <button class="btn btn-pequeno btn-perigo" type="button" id="btn-apagar-faixa">Apagar dados agora</button>
     </div>
 
-    <div class="painel-corpo">
+    <div class="painel-corpo" id="painel-corpo">
       <div id="mapa" role="region" aria-label="Mapa dos participantes"></div>
+
+      <!-- Barra do modo de desenho (setores, pontos, destino) -->
+      <div class="barra-desenho" id="barra-desenho" role="status" hidden>
+        <span class="barra-desenho-texto" id="barra-desenho-texto"></span>
+        <span class="barra-desenho-extra" id="barra-desenho-extra"></span>
+        <span class="barra-desenho-botoes" id="barra-desenho-botoes"></span>
+      </div>
+
+      <!-- Setores de busca e pontos de interesse -->
+      <aside class="central painel-areas" id="painel-areas" hidden aria-labelledby="areas-titulo" role="dialog">
+        <div class="ficha-cabeca central-cabeca">
+          <h2 id="areas-titulo">Setores e pontos</h2>
+          <button class="btn btn-pequeno" type="button" id="areas-fechar" aria-label="Fechar setores e pontos">Fechar</button>
+        </div>
+        <div class="ficha-corpo">
+          <div class="ficha-bloco">
+            <h3>Setores de busca (<span id="qtd-setores">0</span>)</h3>
+            <div class="acoes-linha">
+              <button class="btn btn-pequeno" type="button" id="areas-novo-raio">＋ Por raio</button>
+              <button class="btn btn-pequeno" type="button" id="areas-novo-poligono">＋ Desenhar área</button>
+            </div>
+            <ul class="lista-areas" id="lista-setores"></ul>
+            <p class="muted" id="setores-vazio">Nenhum setor ainda.</p>
+          </div>
+          <div class="ficha-bloco">
+            <h3>Pontos de interesse (<span id="qtd-pontos-int">0</span>)</h3>
+            <div class="acoes-linha">
+              <button class="btn btn-pequeno" type="button" id="areas-novo-ponto">＋ Marcar ponto</button>
+            </div>
+            <ul class="lista-areas" id="lista-pontos-int"></ul>
+            <p class="muted" id="pontos-int-vazio">Nenhum ponto marcado ainda.</p>
+          </div>
+        </div>
+      </aside>
+
+      <button class="btn btn-pequeno btn-reabrir" type="button" id="btn-mostrar-lateral" aria-controls="lateral" hidden title="Mostrar a lista de participantes">
+        <span aria-hidden="true">«</span> Participantes <span class="contador-mini" id="reabrir-qtd">0</span><span class="ponto-alerta" id="reabrir-alerta" hidden></span>
+      </button>
 
       <aside class="lateral" id="lateral" aria-label="Participantes">
         <div class="lateral-cabeca">
           <div class="linha">
             <h2>Participantes (<span id="qtd-part">0</span>)</h2>
             <button class="btn btn-pequeno btn-recolher" type="button" id="btn-recolher" aria-expanded="true">Recolher</button>
+            <button class="btn btn-pequeno btn-ocultar" type="button" id="btn-ocultar-lateral" aria-controls="lateral" title="Ocultar a lista e usar o mapa inteiro"><span aria-hidden="true">»</span> Ocultar</button>
           </div>
           <div class="resumo" id="resumo"></div>
           <div class="lateral-ferramentas">
@@ -128,61 +301,143 @@
         </div>
         <ul class="lista-participantes" id="lista-part"></ul>
         <p class="lista-vazia" id="lista-vazia">Nenhum participante ainda. Toque em <b>Convidar</b> para compartilhar o link ou o QR Code.</p>
+        <!-- Removidos e saídas liberadas: o cadastro e a trilha continuam; o responsável pode reincluir -->
+        <details class="grupo-removidos" id="grupo-removidos" hidden>
+          <summary>Fora da operação (<span id="qtd-removidos">0</span>) <small class="muted">— removidos ou com saída liberada; podem ser reincluídos</small></summary>
+          <ul class="lista-participantes lista-removidos" id="lista-removidos"></ul>
+        </details>
+      </aside>
+
+      <!-- Central de comunicação: mensagens, relatos e fotos -->
+      <aside class="central" id="central" hidden aria-labelledby="central-titulo" role="dialog">
+        <div class="ficha-cabeca central-cabeca">
+          <h2 id="central-titulo">Comunicação</h2>
+          <button class="btn btn-pequeno" type="button" id="central-fechar" aria-label="Fechar comunicação">Fechar</button>
+        </div>
+        <div class="abas central-abas" role="tablist">
+          <button class="btn btn-pequeno btn-ativo" type="button" role="tab" id="aba-msgs" aria-selected="true" aria-controls="painel-msgs">Mensagens e relatos</button>
+          <button class="btn btn-pequeno" type="button" role="tab" id="aba-fotos" aria-selected="false" aria-controls="painel-fotos"><span>Fotos (<span id="qtd-fotos">0</span>)</span></button>
+        </div>
+        <div class="ficha-corpo central-corpo">
+          <div id="painel-msgs" role="tabpanel" aria-labelledby="aba-msgs">
+            <div class="filtros" role="group" aria-label="Filtrar">
+              <button class="btn btn-pequeno btn-ativo" type="button" data-filtro="todas">Todas</button>
+              <button class="btn btn-pequeno" type="button" data-filtro="relatos">Relatos</button>
+              <button class="btn btn-pequeno" type="button" data-filtro="mensagens">Mensagens</button>
+            </div>
+            <ul class="feed" id="feed-msgs"></ul>
+            <p class="muted" id="feed-vazio">Nenhuma mensagem dos participantes ainda. Quando alguém escrever ou relatar algo pelo link, aparece aqui.</p>
+          </div>
+          <div id="painel-fotos" role="tabpanel" aria-labelledby="aba-fotos" hidden>
+            <div class="nota" id="minhas-fotos-fila" hidden></div>
+            <ul class="galeria" id="galeria"></ul>
+            <p class="muted" id="galeria-vazia">Nenhuma foto registrada ainda.</p>
+          </div>
+        </div>
       </aside>
 
       <!-- Ficha do participante -->
       <aside class="ficha" id="ficha" hidden aria-labelledby="ficha-nome" role="dialog">
         <div class="ficha-cabeca">
           <span id="ficha-simbolo"></span>
-          <h2 id="ficha-nome"></h2>
+          <div class="ficha-titulo">
+            <h2 id="ficha-nome"></h2>
+            <div class="ficha-resumo" id="ficha-resumo"></div>
+          </div>
           <button class="btn btn-pequeno" type="button" id="ficha-fechar" aria-label="Fechar ficha">Fechar</button>
         </div>
         <div class="ficha-corpo">
-          <div class="ficha-bloco">
-            <dl class="dados" id="ficha-dados"></dl>
-          </div>
-          <div class="ficha-bloco">
+          <div class="ficha-bloco" id="ficha-alerta" hidden></div>
+          <div class="ficha-bloco" id="ficha-saida" hidden></div>
+          <div class="ficha-bloco ficha-situacao" id="ficha-situacao" hidden></div>
+          <div class="ficha-bloco ficha-rapido">
+            <p class="ficha-pos" id="ficha-pos"></p>
+            <p class="ficha-destino" id="ficha-destino" hidden></p>
             <div class="acoes-linha">
-              <button class="btn" type="button" id="ficha-centralizar">Centralizar no mapa</button>
+              <button class="btn" type="button" id="ficha-centralizar">Ver no mapa</button>
+              <button class="btn" type="button" id="ficha-enviar-destino" title="Enviar um destino para este participante navegar até lá">🧭 Destino</button>
               <button class="btn btn-trilha" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
+              <a class="btn btn-ok" id="ficha-ligar" href="#" hidden>Ligar</a>
             </div>
           </div>
-          <div class="ficha-bloco" id="ficha-alerta" hidden></div>
-          <div class="ficha-bloco">
-            <h3>Enviar orientação</h3>
-            <div class="comandos" id="ficha-comandos"></div>
+          <!-- Mensagens: histórico, orientações rápidas e envio, num só lugar -->
+          <div class="ficha-bloco ficha-mensagens" id="ficha-conversa">
+            <h3 id="ficha-msgs-titulo">Mensagens</h3>
+            <ul class="msgs conversa" id="ficha-msgs" aria-live="polite"></ul>
+            <div class="cmd-rapidos" id="ficha-cmd-rapidos">
+              <span class="cmd-rapidos-rotulo" id="ficha-cmd-titulo">Orientação rápida</span>
+              <div class="comandos comandos-compactos" id="ficha-comandos" role="group" aria-labelledby="ficha-cmd-titulo"></div>
+            </div>
+            <form class="resposta-rapida" id="form-resposta" novalidate>
+              <label class="sr-only" for="resposta-texto">Mensagem</label>
+              <textarea class="campo" id="resposta-texto" rows="2" maxlength="500" placeholder="Escrever mensagem…"></textarea>
+              <button class="btn btn-escuro" type="submit" id="btn-responder">Enviar</button>
+            </form>
             <p class="ajuda" id="ficha-cmd-aviso" hidden></p>
           </div>
-          <div class="ficha-bloco">
-            <h3>Mensagens enviadas</h3>
-            <ul class="msgs" id="ficha-msgs"></ul>
+          <div class="ficha-bloco" id="ficha-fotos-bloco" hidden>
+            <h3>Fotos (<span id="ficha-qtd-fotos">0</span>)</h3>
+            <ul class="galeria galeria-mini" id="ficha-fotos"></ul>
           </div>
-          <div class="ficha-bloco">
+          <details class="ficha-bloco ficha-mais" id="ficha-mais">
+            <summary>Mais detalhes <span class="muted">— CPF, coordenadas, histórico de posições</span></summary>
+            <dl class="dados" id="ficha-dados"></dl>
             <h3>Histórico de posições (<span id="ficha-qtd-pontos">0</span> pontos)</h3>
-            <div style="max-height:260px;overflow:auto">
+            <div class="hist-rolagem">
               <table class="tabela-hist">
-                <thead><tr><th>Horário</th><th>Latitude</th><th>Longitude</th><th>Precisão</th></tr></thead>
+                <thead><tr><th>Horário</th><th>Latitude</th><th>Longitude</th><th>Precisão</th><th title="Tempo entre a captura pelo GPS e a chegada ao servidor">Chegou</th></tr></thead>
                 <tbody id="ficha-hist"></tbody>
               </table>
             </div>
-          </div>
-          <div class="ficha-bloco">
+            <button class="btn btn-pequeno" type="button" id="ficha-estatisticas">📈 Estatísticas e perfil de altitude da trilha</button>
+            <button class="btn btn-pequeno" type="button" id="ficha-exportar">⤓ Exportar trilha (GPX/KML)</button>
             <button class="btn btn-perigo btn-pequeno" type="button" id="ficha-remover">Remover participante da operação</button>
-          </div>
+          </details>
         </div>
       </aside>
     </div>
   </section>
 
+  <!-- Mensagem recebida de outro responsável -->
+  <div id="alerta-cmd" class="alerta-msg alerta-painel" hidden role="alertdialog" aria-modal="false" aria-labelledby="alerta-cmd-tit" aria-describedby="alerta-cmd-texto">
+    <div class="alerta-cabeca">
+      <div class="tit" id="alerta-cmd-tit"></div>
+      <div class="sub">MENSAGEM DE OUTRO RESPONSÁVEL</div>
+    </div>
+    <div class="alerta-corpo">
+      <div class="alerta-texto" id="alerta-cmd-texto"></div>
+      <div class="alerta-meta" id="alerta-cmd-meta"></div>
+      <div class="alerta-botoes" id="alerta-cmd-botoes"></div>
+      <div class="alerta-fila" id="alerta-cmd-fila"></div>
+    </div>
+  </div>
+
+  <!-- Relevo em 3D (MapLibre GL + modelo digital de terreno), carregado só quando aberto -->
+  <section class="visao-3d" id="visao-3d" hidden role="dialog" aria-modal="true" aria-labelledby="visao-3d-titulo">
+    <header class="visao-3d-cabeca">
+      <button class="btn btn-pequeno" type="button" id="visao-3d-fechar">◀ Voltar ao mapa</button>
+      <h2 id="visao-3d-titulo">Relevo em 3D</h2>
+      <button class="btn btn-pequeno" type="button" id="visao-3d-atualizar">Atualizar posições</button>
+    </header>
+    <div class="visao-3d-mapa" id="visao-3d-mapa"></div>
+    <p class="visao-3d-nota" id="visao-3d-nota"></p>
+  </section>
 
   <div id="avisos" aria-live="polite"></div>
 
   <script src="/api/config"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js" integrity="sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k" crossorigin="anonymous"></script>
   <script src="js/comunicacao.js"></script>
   <script src="js/interface.js"></script>
+  <script src="js/fotos.js"></script>
+  <script src="js/gps.js"></script>
+  <script src="js/rotas.js"></script>
+  <script src="js/coords.js"></script>
+  <script src="js/arquivos.js"></script>
   <script src="js/militar.js"></script>
+  <script src="js/ferramentas.js"></script>
 </body>
 </html>

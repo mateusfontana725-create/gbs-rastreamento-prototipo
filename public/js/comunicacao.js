@@ -43,6 +43,19 @@
     lote_invalido: 'Dados inválidos enviados ao servidor.',
     operacao_ativa: 'Encerre a operação antes de apagar os dados.',
     muitas_mensagens: 'Muitas mensagens enviadas no último minuto. Aguarde um pouco.',
+    cpf_invalido: 'CPF inválido. Confira os 11 números.',
+    telefone_invalido: 'Celular inválido. Informe o DDD e o número.',
+    participante_liberado: 'Sua saída desta operação já foi liberada pelo responsável.',
+    nao_pode_alterar_a_si: 'Você não pode desativar nem tirar o próprio acesso de administrador. Peça a outro administrador.',
+    ultimo_admin: 'É preciso manter pelo menos um administrador ativo.',
+    area_invalida: 'Área inválida: confira o raio (5 m a 50 km) ou desenhe pelo menos 3 pontos.',
+    dados_invalidos: 'Dados inválidos. Confira os campos e tente de novo.',
+    posicao_invalida: 'Coordenadas inválidas.',
+    setor_nao_encontrado: 'Este setor não existe mais (pode ter sido excluído por outro responsável).',
+    ponto_nao_encontrado: 'Este ponto não existe mais (pode ter sido excluído por outro responsável).',
+    participante_ativo: 'Este participante já está ativo na operação.',
+    funcao_ausente: 'O servidor ainda não foi atualizado (falta executar a migração mais recente do banco no Supabase). Avise o responsável técnico.',
+    responsavel_nao_encontrado: 'Nenhum responsável cadastrado com esse e-mail. Peça ao administrador para autorizá-lo primeiro.',
     'Invalid login credentials': 'E-mail ou senha incorretos.',
     'Email not confirmed': 'E-mail ainda não confirmado no Supabase.',
     'Anonymous sign-ins are disabled': 'O ingresso de participantes está desativado no servidor (login anônimo). Avise o responsável.',
@@ -61,6 +74,8 @@
 
   function codigoDoErro(err) {
     var t = textoDoErro(err);
+    // PostgREST: função inexistente no banco (migração não aplicada ou cache de esquema desatualizado)
+    if (err && (err.code === 'PGRST202' || /Could not find the function/i.test(t))) return 'funcao_ausente';
     for (var k in ERROS) {
       if (t.indexOf(k) !== -1) return k;
     }

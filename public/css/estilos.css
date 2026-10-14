@@ -1053,6 +1053,7 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
 .mk-relato > span { transform: rotate(45deg); line-height: 1; }
 .mk-relato.cat-MENSAGEM { background: #e2e8f0; }
 .mk-relato.cat-OBSTACULO { background: #fbbf24; }
+.mk-relato.cat-VITIMA { background: #d946ef; color: #fff; width: 34px; height: 34px; font-size: 16px; }
 .leaflet-marker-icon.destaque .mk-foto, .leaflet-marker-icon.destaque .mk-relato { animation: destaque-mk .7s ease-in-out 5; }
 @keyframes destaque-mk { 50% { box-shadow: 0 0 0 6px var(--acento), 0 0 22px 8px rgba(245, 158, 11, .8); } }
 .cluster {
@@ -1223,6 +1224,13 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
 .opcao-encontrei:hover, .opcao-encontrei:focus-visible { border-color: #f97316; outline: none; }
 .encontrei-botoes { display: grid; gap: 10px; margin-top: 12px; }
 #encontrei-texto { min-height: 72px; }
+/* "Encontrei a vítima": em destaque, separado das outras opções */
+.opcao-vitima { min-height: 72px; margin-bottom: 12px; border-color: var(--perigo); background: var(--perigo-claro); }
+.opcao-vitima strong { color: var(--perigo-texto); font-size: 1.25rem; }
+.opcao-vitima:hover, .opcao-vitima:focus-visible { border-color: var(--perigo-texto); }
+.opcao-condicao { min-height: 72px; justify-content: center; align-items: center; text-align: center; }
+.opcao-condicao strong { color: var(--texto); font-size: 1.35rem; }
+.confirma-condicao { font-family: var(--fonte-titulo); font-size: 1.4rem; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; margin: 6px 0 10px; }
 
 @media (max-width: 340px) {
   .acoes-civil { grid-template-columns: 1fr; }
@@ -1701,6 +1709,18 @@ body:not(.lateral-oculta) .faixa-filtro { left: calc((100% - var(--larg-lateral)
 .item-alerta.alerta-critico { border-left-color: #ef4444; background: rgba(127, 29, 29, .35); }
 .item-alerta.reconhecido { opacity: .7; }
 .item-alerta-cabeca { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+
+/* Vítima localizada: faixa própria (magenta), diferente do alerta de equipe perdida.
+   A condição só aparece no painel, que só os responsáveis abrem. */
+.faixa-alerta.faixa-vitima { background: #86198f; border-bottom-color: #f0abfc; animation-name: alerta-vitima; }
+.faixa-alerta.faixa-vitima .faixa-alerta-textos strong { font-size: 1.3rem; }
+.faixa-alerta.faixa-vitima .faixa-alerta-textos small { color: #fae8ff; }
+.faixa-alerta.faixa-vitima-obito { background: #3b0764; animation: none; }
+@keyframes alerta-vitima { from { background: #86198f; } to { background: #a21caf; } }
+.item-alerta.alerta-vitima { border-left-color: #d946ef; background: rgba(134, 25, 143, .3); }
+.selo-condicao { justify-self: start; font-weight: 800; letter-spacing: .04em; color: #fae8ff; background: rgba(217, 70, 239, .25); border: 1px solid #d946ef; }
+.selo-condicao.condicao-viva { color: #fff; background: #a21caf; }
+.selo-condicao.condicao-obito { color: #fff; background: #3b0764; border-color: #a855f7; }
 
 /* Deslocamentos de grupos */
 .bloco-destino-grupo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; margin-bottom: 10px; }

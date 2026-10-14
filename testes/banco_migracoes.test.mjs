@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–010) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–011) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -216,6 +216,39 @@ const poli = await rpc(resp1, 'salvar_setor', { p_operacao: op.id, p_id: null, p
 const dentro = (await db.query(`select public.ponto_no_setor(s, -22.75, -43.2) d, public.ponto_no_setor(s, -22.85, -43.2) f from public.setores s where id = $1`, [poli.id])).rows[0];
 chk(dentro.d === true && dentro.f === false, 'ponto dentro/fora de setor desenhado (polígono)');
 
+console.log('Encontrei a vítima (condição só para os responsáveis)');
+const anM = await usuario(null, true);
+const pM = await rpc(anM, 'ingressar', { p_token: op.token_militar, p_nome: 'Cb Militar', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+const cidV = '33333333-3333-4333-8333-333333333333';
+const neutra = await rpc(anM, 'participante_registrar_vitima', { p_participante: pM.participante_id, p_condicao: 'obito',
+  p_lat: -22.91, p_lng: -43.21, p_precisao: 8, p_posicao_em: new Date().toISOString(), p_client_id: cidV });
+chk(neutra.categoria === 'VITIMA' && neutra.texto === 'Localizada, ver protocolo' && !/obito|viva|morta/i.test(JSON.stringify(neutra)),
+  'registro devolve só a mensagem neutra (sem a condição)', neutra);
+const neutra2 = await rpc(anM, 'participante_registrar_vitima', { p_participante: pM.participante_id, p_condicao: 'viva', p_client_id: cidV });
+chk(neutra2.id === neutra.id && (await db.query(`select count(*)::int n from public.vitima_localizacoes`)).rows[0].n === 1, 'reenvio com o mesmo client_id não duplica');
+const reg = (await como(resp1, `select condicao, registrado_por_nome, registrado_por_tipo, lat, registrado_em from public.vitima_localizacoes`)).rows;
+chk(reg.length === 1 && reg[0].condicao === 'obito' && reg[0].registrado_por_nome === 'Cb Militar' && reg[0].registrado_por_tipo === 'militar' && reg[0].lat === -22.91 && reg[0].registrado_em,
+  'responsável da operação lê condição, local, data/hora e quem registrou', reg);
+chk((await como(anM, `select count(*)::int n from public.vitima_localizacoes`)).rows[0].n === 0, 'quem registrou NÃO lê a condição (RLS)');
+chk((await como(anA, `select count(*)::int n from public.vitima_localizacoes`)).rows[0].n === 0, 'outro participante de campo NÃO lê a condição (RLS)');
+chk((await como(resp2, `select count(*)::int n from public.vitima_localizacoes`)).rows[0].n === 0, 'responsável de outra operação NÃO lê a condição');
+chk(/permission denied/.test(await erroDe(como(null, `select * from public.vitima_localizacoes`, [], 'anon'))), 'anon não tem acesso à tabela');
+chk(/permission denied|row-level security/.test(await erroDe(como(anM, `insert into public.vitima_localizacoes (operacao_id, participante_id, mensagem_id, condicao, registrado_por, registrado_por_nome, registrado_por_tipo)
+  values ($1, $2, $3, 'viva', $4, 'x', 'civil')`, [op.id, pM.participante_id, neutra.id, anM]))), 'participante não grava direto na tabela');
+const minhas = (await como(anM, `select texto, categoria from public.mensagens where direcao = 'entrada'`)).rows;
+chk(minhas.length === 1 && minhas[0].texto === 'Localizada, ver protocolo', 'quem registrou vê na conversa só o termo neutro', minhas);
+chk((await como(anA, `select count(*)::int n from public.mensagens where categoria = 'VITIMA'`)).rows[0].n === 0, 'outro participante não vê o registro');
+const alV = (await como(resp1, `select nivel, titulo, texto, lat from public.alertas where tipo = 'vitima_localizada'`)).rows;
+chk(alV.length === 1 && alV[0].nivel === 'critico' && alV[0].lat === -22.91 && !/obito|óbito|viva|morta/i.test(alV[0].titulo + alV[0].texto),
+  'alerta crítico ao responsável, com texto neutro', alV);
+chk(/tipo_invalido/.test(await erroDe(rpc(anA, 'participante_enviar_mensagem', { p_participante: pA.participante_id, p_categoria: 'VITIMA', p_texto: 'morta' }))),
+  'categoria VITIMA com texto livre: recusada');
+chk(/dados_invalidos/.test(await erroDe(rpc(anA, 'participante_registrar_vitima', { p_participante: pA.participante_id, p_condicao: 'ferida' }))), 'condição inválida: recusada');
+chk(/participante_invalido/.test(await erroDe(rpc(anA, 'participante_registrar_vitima', { p_participante: pM.participante_id, p_condicao: 'viva' }))), 'não registra em nome de outro participante');
+chk(/permission denied/.test(await erroDe(como(null, `select public.participante_registrar_vitima($1, 'viva')`, [pM.participante_id], 'anon'))), 'anon não chama a função');
+const pubV = (await db.query(`select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'vitima_localizacoes'`)).rows;
+chk(pubV.length === 1, 'vitima_localizacoes publicada no Realtime');
+
 console.log('Retenção e exclusão');
 await rpc(resp1, 'encerrar_operacao', { p_operacao: op.id });
 await rpc(resp1, 'apagar_dados_operacao', { p_operacao: op.id });
@@ -223,7 +256,8 @@ const cont = (await db.query(`select (select count(*) from public.vitimas where 
   (select count(*) from public.missoes where operacao_id=$1)::int m, (select count(*) from public.alertas where operacao_id=$1)::int a,
   (select count(*) from public.arquivos_pendentes where bucket='vitimas')::int f, (select codigo from public.operacoes where id=$1) c, (select tipo from public.operacoes where id=$1) t`, [op.id])).rows[0];
 chk(cont.v === 0 && cont.g === 0 && cont.m === 0 && cont.a === 0, 'dados apagados: fichas, grupos, deslocamentos e alertas apagados', cont);
-chk(cont.f === 1, 'a foto da vítima entrou na fila de remoção do Storage (bucket vitimas)');
+chk((await db.query(`select count(*)::int n from public.vitima_localizacoes where operacao_id = $1`, [op.id])).rows[0].n === 0, 'dados apagados: registros de vítima localizada apagados');
+chk(cont.f === 1,'a foto da vítima entrou na fila de remoção do Storage (bucket vitimas)');
 chk(cont.c === 'OP TESTE' && cont.t === 'outras', 'o cadastro da operação continua (como o nome já continuava)');
 const pend = await rpc(resp1, 'meus_arquivos_pendentes_v2', {});
 chk(pend.length === 1 && pend[0].bucket === 'vitimas', 'meus_arquivos_pendentes_v2 informa o bucket', pend);
@@ -231,5 +265,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–010 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–011 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

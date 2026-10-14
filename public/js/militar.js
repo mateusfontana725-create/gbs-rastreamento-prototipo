@@ -56,7 +56,11 @@
     OBSTACULO: { rotulo: 'Obstáculo', letra: '!' },
     OUTRO: { rotulo: 'Outro', letra: '?' },
     AJUDA: { rotulo: 'PEDIDO DE AJUDA', letra: 'SOS' },
+    VITIMA: { rotulo: 'Vítima localizada', letra: '✚' },
   };
+  // Condição da vítima localizada. Vem só da tabela vitima_localizacoes, que o
+  // servidor (RLS) entrega apenas aos responsáveis da operação.
+  var CONDICAO_VITIMA = { viva: 'VIVA', obito: 'MORTA' };
   var ORIGEM_FOTO = { gps: 'GPS do aparelho no momento do registro', exif: 'gravada na própria foto (EXIF)', nenhuma: 'sem localização' };
 
   var est = {
@@ -172,6 +176,9 @@
     timerRetornos: null,
     timerAlarmeCritico: null,
     alertaFaixa: null,
+    // "Encontrei a vítima": registros com a condição (só responsáveis leem)
+    vitimasLoc: new Map(),      // mensagem_id → registro
+    semVitimaLoc: false,        // banco sem a migração 011
   };
 
   /* ------------------------------------------------------------------ */
@@ -802,6 +809,8 @@
     est.alertas = new Map();
     est.alertasCarregados = false;
     est.alertaFaixa = null;
+    est.vitimasLoc = new Map();
+    est.semVitimaLoc = false;
     $('faixa-alerta').hidden = true;
     clearInterval(est.timerRetornos);
     clearInterval(est.timerAlarmeCritico);
@@ -864,6 +873,7 @@
     est.missoes = new Map();
     est.missaoMembros = new Map();
     est.alertas = new Map();
+    est.vitimasLoc = new Map();
     est.filtroGrupo = null;   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
     $('faixa-filtro').hidden = true;
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
@@ -1239,6 +1249,8 @@
       if (!est.op || est.op.id !== opId) return;
       await carregarGrupos();
       if (!est.op || est.op.id !== opId) return;
+      await carregarVitimasLoc();
+      if (!est.op || est.op.id !== opId) return;
       await carregarMissoes(true);
       if (!est.op || est.op.id !== opId) return;
 
@@ -1306,6 +1318,8 @@
       await carregarAreas();
       if (!est.op || est.op.id !== opId) return;
       await carregarGrupos();
+      if (!est.op || est.op.id !== opId) return;
+      await carregarVitimasLoc();
       if (!est.op || est.op.id !== opId) return;
       await carregarMissoes(false);
       if (!est.op || est.op.id !== opId) return;
@@ -1402,6 +1416,9 @@
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grupo_membros', filter: filtro }, agendarGrupos)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'missoes', filter: filtro }, agendarMissoes)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'missao_membros', filter: filtro }, agendarMissoes)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vitima_localizacoes', filter: filtro }, function (ev) {
+          if (ev.new && ev.new.id) receberVitimasLoc([ev.new]);
+        })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alertas', filter: filtro }, function (ev) {
           if (ev.new && ev.new.id) receberAlerta(ev.new, false);
         })
@@ -2784,6 +2801,7 @@
     linha('Leitura', m.lida_em ? 'Lida por ' + (m.lida_por_nome || 'responsável') + ' às ' + C.hora(m.lida_em, false) : 'Lida agora por você');
     var fechar = UI.abrirModal(UI.el('div', { classe: 'visor-relato' }, [
       UI.el('h2', { id: 'modal-titulo', texto: m.categoria && m.categoria !== 'MENSAGEM' ? 'Relato: ' + cat.rotulo : 'Mensagem com localização' }),
+      m.categoria === 'VITIMA' ? seloCondicao(m) : null,
       UI.el('p', { classe: 'relato-texto', texto: m.texto }),
       dl,
       UI.el('div', { classe: 'modal-acoes' }, [
@@ -2802,7 +2820,8 @@
     msgs.sort(function (a, b) { return C.paraMs(a.criada_em) - C.paraMs(b.criada_em); });
     var cod = estadoDe(p).cod;
     var assinatura = p.id + '|' + cod + '|' + msgs.map(function (m) {
-      return m.id + ':' + (m.entregue_em || '') + (m.confirmada_em || '') + (m.resposta || '') + (jaLida(m) ? 'L' : '') + (m.lida_por_nome || '');
+      return m.id + ':' + (m.entregue_em || '') + (m.confirmada_em || '') + (m.resposta || '') + (jaLida(m) ? 'L' : '') + (m.lida_por_nome || '') +
+        (est.vitimasLoc.has(m.id) ? 'V' : '');
     }).join(',');
     if (assinatura === est.assinaturaConversa) return;
     var primeira = est.assinaturaConversa.split('|')[0] !== p.id;
@@ -2820,6 +2839,7 @@
             UI.el('span', { texto: relato ? 'RELATO · ' + cat.rotulo : nomeDoParticipante(m.participante_id, m.remetente_nome) }),
             UI.el('span', { classe: 'muted num', texto: C.hora(m.criada_em) }),
           ]),
+          m.categoria === 'VITIMA' ? seloCondicao(m) : null,
           UI.el('div', { classe: 'msg-texto', texto: m.texto }),
           UI.el('div', { classe: 'msg-estado' }, [
             m.lat != null
@@ -2976,6 +2996,7 @@
       ]);
       ul.appendChild(UI.el('li', { classe: 'feed-item' + (relato ? ' relato' : '') + (est.destaqueNovas.has(m.id) || !jaLida(m) ? ' nova' : ''), 'data-id': m.id }, [
         topo,
+        m.categoria === 'VITIMA' ? seloCondicao(m) : null,
         UI.el('div', { classe: 'feed-texto', texto: m.texto }),
         UI.el('div', { classe: 'feed-meta', texto:
           (m.lat != null ? 'Com localização (' + C.precisao(m.precisao) + ')' : 'Sem localização') + ' · ' + C.idade(m.criada_em) +
@@ -4199,11 +4220,13 @@
 
   // Relato de um participante vira ponto de interesse (fica registrado quem relatou).
   function pontoDoRelato(m) {
-    var mapa = { PISTA: 'VESTIGIO', VESTIGIO: 'VESTIGIO', OBJETO: 'VESTIGIO', OBSTACULO: 'RISCO', AJUDA: 'POSSIVEL_LOCALIZACAO' };
+    var mapa = { PISTA: 'VESTIGIO', VESTIGIO: 'VESTIGIO', OBJETO: 'VESTIGIO', OBSTACULO: 'RISCO', AJUDA: 'POSSIVEL_LOCALIZACAO', VITIMA: 'VITIMA_ENCONTRADA' };
+    // Vítima: título e descrição neutros (pontos de interesse podem aparecer no mapa dos participantes).
+    var vitima = m.categoria === 'VITIMA';
     abrirFormPontoInt({
       categoria: mapa[m.categoria] || 'OUTRO',
-      titulo: resumir(m.texto, 80),
-      descricao: m.texto,
+      titulo: vitima ? 'Vítima localizada' : resumir(m.texto, 80),
+      descricao: vitima ? '' : m.texto,
       lat: m.lat, lng: m.lng,
       mensagem_id: m.id,
       relatado_por_nome: nomeDoParticipante(m.participante_id, m.remetente_nome),
@@ -6133,6 +6156,60 @@
     C.rpc('verificar_retornos', { p_operacao: est.op.id }, 15000).then(function (n) { if (n) agendarMissoes(); }).catch(function () { /* tenta no próximo ciclo */ });
   }
 
+  /* ---------- "Encontrei a vítima" (condição só para os responsáveis) ---------- */
+  async function carregarVitimasLoc() {
+    if (!est.op || est.semVitimaLoc) return;
+    var opId = est.op.id;
+    try {
+      var r = await C.consultar(C.cliente.from('vitima_localizacoes').select('*').eq('operacao_id', opId).order('registrado_em').limit(500));
+      if (!est.op || est.op.id !== opId) return;
+      receberVitimasLoc(r || []);
+    } catch (e) {
+      if (ehTabelaAusente(e)) est.semVitimaLoc = true;
+    }
+  }
+
+  function receberVitimasLoc(lista) {
+    var mudou = false;
+    lista.forEach(function (r) {
+      if (!est.op || r.operacao_id !== est.op.id) return;
+      if (!est.vitimasLoc.has(r.mensagem_id)) mudou = true;
+      est.vitimasLoc.set(r.mensagem_id, r);
+    });
+    if (!mudou) return;
+    mostrarFaixaAlerta();
+    if (!$('central').hidden) {
+      if (est.centralAba === 'alertas') renderizarAlertas();
+      else if (est.centralAba === 'msgs') renderizarFeed();
+    }
+    if (est.selecionado && !$('ficha').hidden) atualizarFicha();
+  }
+
+  // O alerta guarda só o texto neutro; a chave "vitima:<id>" liga ao registro com a condição.
+  function registroDoAlerta(a) {
+    if (!a || a.tipo !== 'vitima_localizada' || !a.chave) return null;
+    var id = a.chave.slice('vitima:'.length);
+    var achado = null;
+    est.vitimasLoc.forEach(function (r) { if (r.id === id) achado = r; });
+    return achado;
+  }
+
+  function textoRegistroVitima(r) {
+    return 'Condição: ' + CONDICAO_VITIMA[r.condicao] + ' · registrado por ' + r.registrado_por_nome +
+      ' (' + r.registrado_por_tipo + ') em ' + C.hora(r.registrado_em) +
+      (r.lat != null ? ' · ' + C.coord(r.lat) + ', ' + C.coord(r.lng) + ' (' + C.precisao(r.precisao) + ')' : ' · sem localização do GPS');
+  }
+
+  function seloCondicaoReg(r) {
+    return UI.el('span', { classe: 'selo selo-condicao condicao-' + r.condicao, texto: 'Condição: ' + CONDICAO_VITIMA[r.condicao] });
+  }
+
+  function seloCondicao(m) {
+    var r = est.vitimasLoc.get(m.id);
+    if (r) return seloCondicaoReg(r);
+    return UI.el('span', { classe: 'selo selo-condicao', texto: est.semVitimaLoc ? 'Condição indisponível (migração 011)' : 'Carregando condição…' });
+  }
+
   // a: linha de "alertas". silencioso: sem som (carga inicial / atualização). deCarga: veio da consulta periódica.
   function receberAlerta(a, silencioso, deCarga) {
     var antigo = est.alertas.get(a.id);
@@ -6165,8 +6242,11 @@
       est.timerAlarmeCritico = null;
       return;
     }
-    $('faixa-alerta-titulo').textContent = '⚠ ' + a.titulo;
-    $('faixa-alerta-texto').textContent = a.texto;
+    var reg = registroDoAlerta(a);
+    faixa.classList.toggle('faixa-vitima', a.tipo === 'vitima_localizada');
+    faixa.classList.toggle('faixa-vitima-obito', Boolean(reg && reg.condicao === 'obito'));
+    $('faixa-alerta-titulo').textContent = '⚠ ' + a.titulo + (reg ? ' — ' + CONDICAO_VITIMA[reg.condicao] : '');
+    $('faixa-alerta-texto').textContent = reg ? textoRegistroVitima(reg) : a.texto;
     $('faixa-alerta-meta').textContent = 'Alerta às ' + C.hora(a.criado_em, false) + (a.posicao_em ? ' · última posição às ' + C.hora(a.posicao_em, false) : '') +
       (criticos.length > 1 ? ' · mais ' + (criticos.length - 1) + ' alerta(s) crítico(s)' : '');
     $('faixa-alerta-mapa').hidden = a.lat == null && !a.grupo_id;
@@ -6212,12 +6292,14 @@
     $('alertas-vazio').hidden = lista.length > 0;
     ul.innerHTML = '';
     lista.forEach(function (a) {
-      ul.appendChild(UI.el('li', { classe: 'item-alerta alerta-' + a.nivel + (a.reconhecido_em ? ' reconhecido' : '') }, [
+      var reg = registroDoAlerta(a);
+      ul.appendChild(UI.el('li', { classe: 'item-alerta alerta-' + a.nivel + (a.tipo === 'vitima_localizada' ? ' alerta-vitima' : '') + (a.reconhecido_em ? ' reconhecido' : '') }, [
         UI.el('div', { classe: 'item-alerta-cabeca' }, [
           UI.el('strong', { texto: a.titulo }),
           UI.el('small', { classe: 'muted', texto: C.hora(a.criado_em) }),
         ]),
-        UI.el('p', { texto: a.texto }),
+        reg ? seloCondicaoReg(reg) : null,
+        UI.el('p', { texto: reg ? textoRegistroVitima(reg) : a.texto }),
         UI.el('small', { classe: 'muted', texto: (a.posicao_em ? 'Pela trilha GPS: ' + C.hora(a.posicao_em) + '. ' : '') +
           (a.reconhecido_em ? 'Ciente: ' + (a.reconhecido_por_nome || '') + ' às ' + C.hora(a.reconhecido_em, false) + '.' : '') }),
         UI.el('div', { classe: 'acoes-linha' }, [

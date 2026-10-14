@@ -971,7 +971,11 @@
   var CATEGORIAS = {
     MENSAGEM: 'Mensagem', PISTA: 'Possível pista', VESTIGIO: 'Vestígio',
     OBJETO: 'Objeto', OBSTACULO: 'Obstáculo', OUTRO: 'Outra coisa', AJUDA: 'Pedido de ajuda',
+    VITIMA: 'Vítima',
   };
+  // Termo neutro mostrado no celular. A condição (viva/óbito) só aparece no painel
+  // dos responsáveis: o servidor nunca a devolve ao participante (RLS).
+  var TEXTO_VITIMA = 'Localizada, ver protocolo';
 
   // Conversa: o que os bombeiros enviaram (à esquerda) e o que eu enviei (à direita).
   // Só o essencial: quem, o texto e a hora.
@@ -1012,7 +1016,7 @@
     var meta = m ? C.hora(m.criada_em, false) : (local.erro ? 'Não enviada' : 'Esperando internet…');
     var li = UI.el('li', { classe: 'bolha bolha-minha' + (m ? '' : ' na-fila') + (cat !== 'MENSAGEM' ? ' relato' : '') + (cat === 'AJUDA' ? ' sos' : '') }, [
       cat !== 'MENSAGEM' ? UI.el('div', { classe: 'bolha-topo', texto: CATEGORIAS[cat] || cat }) : null,
-      UI.el('div', { classe: 'bolha-texto', texto: d.texto }),
+      UI.el('div', { classe: 'bolha-texto', texto: cat === 'VITIMA' ? TEXTO_VITIMA : d.texto }),
       UI.el('div', { classe: 'bolha-meta', texto: meta }),
     ]);
     if (local && local.erro) {
@@ -1749,6 +1753,9 @@
     var grade = UI.el('div', { classe: 'encontrei-opcoes' });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'encontrei' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'O que você encontrou?' }),
+      UI.el('button', { classe: 'opcao-encontrei opcao-vitima', type: 'button', id: 'encontrei-vitima', onclick: function () { fechar(); escolherCondicaoVitima(); } }, [
+        UI.el('strong', { texto: 'Encontrei a vítima' }), UI.el('span', { texto: 'a pessoa que está sendo procurada' }),
+      ]),
       grade,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
@@ -1792,9 +1799,70 @@
     });
   }
 
+  // "Encontrei a vítima": escolhe a condição, confirma e envia com a localização.
+  // A condição vai só ao servidor (corpo da chamada, nunca na URL); depois do envio
+  // este aparelho mostra apenas o termo neutro. Sem texto livre neste fluxo.
+  function escolherCondicaoVitima() {
+    if (!estado.part || estado.finalizado) return;
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'encontrei' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Encontrei a vítima' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Como a vítima está? Só os bombeiros responsáveis vão ver esta informação.' }),
+      UI.el('div', { classe: 'encontrei-opcoes' }, [
+        UI.el('button', { classe: 'opcao-encontrei opcao-condicao', type: 'button', id: 'vitima-viva', onclick: function () { fechar(); confirmarVitima('viva', 'Viva'); } }, [
+          UI.el('strong', { texto: 'Viva' }),
+        ]),
+        UI.el('button', { classe: 'opcao-encontrei opcao-condicao', type: 'button', id: 'vitima-obito', onclick: function () { fechar(); confirmarVitima('obito', 'Morta'); } }, [
+          UI.el('strong', { texto: 'Morta' }),
+        ]),
+      ]),
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
+    ]), { fecharNoFundo: false });
+  }
+
+  function confirmarVitima(condicao, rotulo) {
+    var btnEnviar = UI.el('button', { classe: 'btn btn-primario btn-gigante', type: 'button', id: 'vitima-confirmar', texto: 'CONFIRMAR E ENVIAR' });
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Confirmar envio?' }),
+      UI.el('p', { classe: 'confirma-condicao', texto: 'Vítima: ' + rotulo }),
+      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Depois de enviado, este celular mostra apenas "' + TEXTO_VITIMA + '".' }),
+      UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar]),
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
+    ]), { fecharNoFundo: false });
+    var enviado = false;
+    btnEnviar.addEventListener('click', async function () {
+      if (enviado) return;
+      enviado = true;
+      fechar();
+      var pos = posicaoRecente() || await obterPosicaoAgora();
+      if (!pos.ok) UI.aviso('Sem GPS agora: o aviso vai sem a localização.', 'erro', 6000);
+      var item = { client_id: C.uuid(), categoria: 'VITIMA', condicao: condicao, texto: TEXTO_VITIMA, criada_local: Date.now() };
+      if (pos.ok) {
+        item.lat = Math.round(pos.lat * 1e7) / 1e7;
+        item.lng = Math.round(pos.lng * 1e7) / 1e7;
+        item.prec = pos.prec == null ? null : Math.round(pos.prec * 10) / 10;
+        item.t = pos.t;
+      }
+      // A fila (sem internet) guarda a condição só até o servidor confirmar o envio.
+      estado.msgPendentes.push(item);
+      salvarMsgPendentes();
+      renderizarHistorico();
+      var ok = await enviarMensagemPendente(item);
+      if (ok) UI.aviso('Os bombeiros foram avisados. ' + TEXTO_VITIMA + '.', 'ok', 6000);
+      else if (!item.erro) UI.aviso('Sem internet: o aviso vai ser enviado quando o sinal voltar.', 'erro', 7000);
+    });
+  }
+
   async function enviarMensagemPendente(item) {
     try {
-      var m = await C.rpc('participante_enviar_mensagem', {
+      var m = item.categoria === 'VITIMA' ? await C.rpc('participante_registrar_vitima', {
+        p_participante: estado.part.participante_id,
+        p_condicao: item.condicao,
+        p_lat: item.lat != null ? item.lat : null,
+        p_lng: item.lng != null ? item.lng : null,
+        p_precisao: item.prec != null ? item.prec : null,
+        p_posicao_em: item.t ? new Date(item.t).toISOString() : null,
+        p_client_id: item.client_id,
+      }) : await C.rpc('participante_enviar_mensagem', {
         p_participante: estado.part.participante_id,
         p_categoria: item.categoria,
         p_texto: item.texto,

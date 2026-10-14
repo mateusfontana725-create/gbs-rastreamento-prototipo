@@ -448,6 +448,15 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   (transição suave) e aparece o botão discreto **« Participantes N** para reabrir — com um ponto amarelo
   piscando se houver pedido de ajuda, pedido de saída ou mensagem nova. O rastreamento, o tempo real
   e as fichas continuam funcionando normalmente; a escolha fica lembrada no aparelho.
+- **Celular e tablet em pé**: o mapa ocupa a tela toda e a lista de participantes vira uma **gaveta** que
+  sobe por cima, com três alturas — **recolhida** (só o cabeçalho e o resumo), **meio** e **tela cheia**.
+  Tocar na alça (traço no topo da lista) alterna; arrastar ajusta e encaixa na altura mais próxima (um gesto
+  rápido vai para a próxima). Pelo teclado: seta para cima/baixo. A legenda e a escala sobem junto com a
+  gaveta. Ao desenhar um setor ou marcar um ponto, a gaveta recolhe sozinha. A altura escolhida fica
+  lembrada. Os botões de trilhas ficam em **Ferramentas → Camadas do mapa → Trilhas de todos**.
+- **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
+- No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
+  direita) e as abas que não cabem quebram linha em vez de sair da tela.
 
 ### Ferramentas de mapa (inspiradas no AlpineQuest)
 

@@ -46,6 +46,7 @@
   var CHAVE_AJUDA_VISTA = 'sar-militar-ajuda-vista';
   var CHAVE_LATERAL = 'gbs-painel-lateral-oculta';
   var CHAVE_PREFS_MAPA = 'gbs-painel-mapa';
+  var CHAVE_GAVETA = 'gbs-painel-gaveta';
 
   // Relatos de campo enviados pelos participantes (mensagens com categoria).
   var CATEGORIAS = {
@@ -240,6 +241,7 @@
     $('btn-trilhas-off').addEventListener('click', function () { definirTodasTrilhas(false); });
     $('busca').addEventListener('input', function () { est.listaSuja = true; renderizarLista(); });
     $('btn-recolher').addEventListener('click', alternarLateral);
+    iniciarGaveta();
     $('ficha-fechar').addEventListener('click', fecharFicha);
     $('ficha-centralizar').addEventListener('click', function () { centralizar(est.selecionado); });
     $('ficha-trilha').addEventListener('click', function () { alternarTrilha(est.selecionado); });
@@ -757,6 +759,7 @@
       return;
     }
     est.op = op;
+    avaliarGaveta();
     aplicarLateral(false);
     renderizarCabecalho();
     criarMapa();
@@ -1197,7 +1200,7 @@
 
   // Ocultar a lista muda só a interface: dados, rastreamento e tempo real seguem iguais.
   function aplicarLateral(animar) {
-    var oculta = est.lateralOculta;
+    var oculta = est.lateralOculta && !gaveta.ativa;
     document.body.classList.toggle('lateral-oculta', oculta);
     $('lateral').setAttribute('aria-hidden', String(oculta));
     if (oculta) $('lateral').setAttribute('inert', ''); else $('lateral').removeAttribute('inert');
@@ -1903,6 +1906,130 @@
     UI.aviso(visivel ? 'Todas as trilhas visíveis.' : 'Trilhas ocultas (o rastreamento continua).');
   }
 
+  /* ---------- Gaveta da lista (celular e tablet em pé) ---------------- */
+  // O mapa ocupa a tela toda e a lista sobe por cima em três alturas:
+  // mini (só o cabeçalho), meia e cheia. Tocar na alça alterna; arrastar ajusta.
+  var gaveta = {
+    ativa: false,
+    estado: (function () { var v = C.local.ler(CHAVE_GAVETA, 'meia'); return v === 'mini' || v === 'cheia' ? v : 'meia'; })(),
+    mq: window.matchMedia ? window.matchMedia('(max-width: 860px) and (orientation: portrait)') : null,
+    arrastou: false,
+  };
+
+  function alturasGaveta() {
+    var corpo = $('painel-corpo'), lat = $('lateral');
+    var H = corpo.clientHeight || window.innerHeight;
+    var topo = lat.getBoundingClientRect().top;
+    var resumo = lat.querySelector('.resumo');
+    var mini = resumo ? Math.round(resumo.getBoundingClientRect().bottom - topo + 10) : 92;
+    mini = Math.max(64, Math.min(mini, 140));
+    var cheia = Math.max(mini + 120, H - 52);
+    var meia = Math.max(mini + 80, Math.min(Math.round(H * 0.5), cheia - 60));
+    return { mini: mini, meia: meia, cheia: cheia };
+  }
+
+  function alturaGaveta(h) {
+    $('lateral').style.height = h + 'px';
+    $('painel-corpo').style.setProperty('--gaveta-h', h + 'px');
+  }
+
+  function aplicarGaveta() {
+    var lat = $('lateral');
+    if (!gaveta.ativa) {
+      lat.style.height = '';
+      $('painel-corpo').style.removeProperty('--gaveta-h');
+      delete lat.dataset.gaveta;
+      delete $('painel-corpo').dataset.gaveta;
+      return;
+    }
+    lat.dataset.gaveta = gaveta.estado;
+    $('painel-corpo').dataset.gaveta = gaveta.estado;
+    // primeiro o estado (mostra/esconde partes), depois a medida da altura
+    alturaGaveta(alturasGaveta()[gaveta.estado]);
+    var rot = { mini: 'recolhida', meia: 'pela metade', cheia: 'em tela cheia' }[gaveta.estado];
+    $('gaveta-alca').setAttribute('aria-label', 'Lista de participantes ' + rot + '. Tocar muda o tamanho; também dá para arrastar.');
+    $('gaveta-alca').setAttribute('aria-expanded', String(gaveta.estado !== 'mini'));
+  }
+
+  function definirGaveta(estado, lembrar) {
+    gaveta.estado = estado;
+    if (lembrar !== false) C.local.gravar(CHAVE_GAVETA, estado);
+    aplicarGaveta();
+  }
+
+  function avaliarGaveta() {
+    var ativa = Boolean(gaveta.mq && gaveta.mq.matches);
+    if (ativa !== gaveta.ativa) {
+      gaveta.ativa = ativa;
+      document.body.classList.toggle('gaveta', ativa);
+      if (est.op) aplicarLateral(false);
+    }
+    aplicarGaveta();
+  }
+
+  function iniciarGaveta() {
+    var lat = $('lateral'), alca = $('gaveta-alca');
+    if (gaveta.mq) {
+      if (gaveta.mq.addEventListener) gaveta.mq.addEventListener('change', avaliarGaveta);
+      else if (gaveta.mq.addListener) gaveta.mq.addListener(avaliarGaveta);
+    }
+    var tAjuste = null;
+    window.addEventListener('resize', function () { clearTimeout(tAjuste); tAjuste = setTimeout(function () { if (gaveta.ativa) aplicarGaveta(); }, 120); });
+    alca.addEventListener('click', function () {
+      if (gaveta.arrastou) { gaveta.arrastou = false; return; }
+      definirGaveta({ mini: 'meia', meia: 'cheia', cheia: 'mini' }[gaveta.estado]);
+    });
+    alca.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowUp') { ev.preventDefault(); definirGaveta(gaveta.estado === 'mini' ? 'meia' : 'cheia'); }
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); definirGaveta(gaveta.estado === 'cheia' ? 'meia' : 'mini'); }
+    });
+    // Arrastar pela alça ou pelo título
+    var arr = null;
+    function inicio(ev) {
+      if (!gaveta.ativa || (ev.button != null && ev.button !== 0)) return;
+      if (ev.target.closest('button:not(.gaveta-alca), input, select, a')) return;
+      arr = { y: ev.clientY, h: lat.getBoundingClientRect().height, t: Date.now(), id: ev.pointerId, alt: alturasGaveta(), moveu: false };
+      try { ev.target.setPointerCapture(ev.pointerId); } catch (e) { /* ignora */ }
+    }
+    function mover(ev) {
+      if (!arr || ev.pointerId !== arr.id) return;
+      var dy = ev.clientY - arr.y;
+      if (!arr.moveu && Math.abs(dy) < 6) return;
+      if (!arr.moveu) { arr.moveu = true; lat.classList.add('arrastando'); }
+      ev.preventDefault();
+      alturaGaveta(Math.max(arr.alt.mini, Math.min(arr.alt.cheia, arr.h - dy)));
+    }
+    function fim(ev) {
+      if (!arr || ev.pointerId !== arr.id) return;
+      var a = arr;
+      arr = null;
+      lat.classList.remove('arrastando');
+      if (!a.moveu) return;
+      gaveta.arrastou = true;
+      setTimeout(function () { gaveta.arrastou = false; }, 350);
+      var h = lat.getBoundingClientRect().height;
+      var vel = (ev.clientY - a.y) / Math.max(1, Date.now() - a.t);   // px/ms (positivo = para baixo)
+      var ordem = ['mini', 'meia', 'cheia'];
+      var alvo;
+      if (Math.abs(vel) > 0.6) {
+        // gesto rápido: vai para a próxima posição na direção do gesto
+        var atual = ordem.reduce(function (m, k) { return Math.abs(a.alt[k] - a.h) < Math.abs(a.alt[m] - a.h) ? k : m; }, 'meia');
+        var i = ordem.indexOf(atual) + (vel < 0 ? 1 : -1);
+        alvo = ordem[Math.max(0, Math.min(2, i))];
+      } else {
+        alvo = ordem.reduce(function (m, k) { return Math.abs(a.alt[k] - h) < Math.abs(a.alt[m] - h) ? k : m; }, 'meia');
+      }
+      definirGaveta(alvo);
+    }
+    [alca, lat.querySelector('.lateral-cabeca .linha')].forEach(function (el) {
+      el.addEventListener('pointerdown', inicio);
+      el.addEventListener('pointermove', mover);
+      el.addEventListener('pointerup', fim);
+      el.addEventListener('pointercancel', fim);
+    });
+    avaliarGaveta();
+  }
+
   /* ---------- Lista lateral ---------------------------------------- */
   function alternarLateral() {
     var lat = $('lateral');
@@ -2030,6 +2157,8 @@
       '<span><span class="ponto ponto-sem_atualizacao"></span> <b>' + cont.sem_atualizacao + '</b> sem atualização</span>' +
       (cont.parado ? '<span><span class="ponto ponto-parado"></span> <b>' + cont.parado + '</b> interrompidos</span>' : '') +
       '<span class="muted">' + cont.militar + ' militar(es) · ' + cont.civil + ' civil(is) · ' + cont.responsavel + ' responsável(is)</span>';
+    // a altura da gaveta recolhida depende do resumo (que muda de tamanho)
+    if (gaveta.ativa && gaveta.estado === 'mini' && !$('lateral').classList.contains('arrastando')) aplicarGaveta();
     atualizarBotaoReabrir();
   }
 
@@ -3697,6 +3826,7 @@
     cancelarDesenho();
     fecharMenu(false);
     if (telaPequena()) { fecharAreas(); fecharCentral(); if (!$('ficha').hidden) fecharFicha(); }
+    if (gaveta.ativa) definirGaveta('mini', false);   // o mapa inteiro livre para desenhar
     est.desenho = Object.assign({ tipo: tipo, camadaTemp: L.layerGroup().addTo(est.mapa), pontos: [] }, opcoes || {});
     $('mapa').classList.add('modo-desenho');
     var cancelar = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'desenho-cancelar', texto: 'Cancelar', onclick: cancelarDesenho });

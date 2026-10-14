@@ -45,7 +45,12 @@
     gps: 'aguardando',
     ultimaLeitura: null,      // { lat, lng, prec, recebidaEm }
     ultimoAceito: null,       // { lat, lng, t }
-    fila: [],
+    trilha: null,             // fila offline dos pontos (trilha-local.js: IndexedDB)
+    trilhaAbrindo: null,
+    bufferPontos: [],         // pontos capturados enquanto a fila abre
+    filaLegada: null,         // fila da versão anterior (localStorage), migrada ao abrir
+    userId: null,
+    grupos: [],               // grupos deste participante (nome, cor, papel)
     enviando: false,
     timerEnvio: null,
     falhas: 0,
@@ -164,6 +169,8 @@
 
     // Tela inicial
     $('ini-operacao').textContent = estado.info.operacao;
+    $('ini-grupo-caixa').hidden = !estado.info.grupo;
+    $('ini-grupo').textContent = estado.info.grupo || '';
     var permiteMilitar = (estado.info.tipos_permitidos || []).indexOf('militar') !== -1;
     $('ini-tipo-escolha').hidden = !permiteMilitar;
 
@@ -177,9 +184,10 @@
         if (r) r.checked = true;
       }
       if (salvo.ativo) $('btn-iniciar').textContent = 'CONTINUAR';
+      // Fila da versão anterior (localStorage): passa para o IndexedDB quando a participação abrir.
       var fila = C.local.ler(CHAVE_FILA, null);
       if (fila && fila.participante_id === salvo.participante_id && Array.isArray(fila.pontos)) {
-        estado.fila = fila.pontos;
+        estado.filaLegada = fila;
       }
       var conf = C.local.ler(CHAVE_CONF, null);
       if (conf && conf.participante_id === salvo.participante_id && Array.isArray(conf.itens)) {
@@ -202,6 +210,7 @@
     $('conversa-fechar').addEventListener('click', fecharConversa);
     $('btn-onde-estou').addEventListener('click', function () { estado.seguindo = true; centralizarEmMim(true); mostrarMinhasCoordenadas(); });
     $('nav-encerrar').addEventListener('click', encerrarNavegacao);
+    $('nav-finalizar').addEventListener('click', finalizarBuscaSetor);
     $('nav-bussola-ativar').addEventListener('click', pedirBussola);
     document.querySelectorAll('.nav-modos [data-modo]').forEach(function (b) {
       b.addEventListener('click', function () { trocarModoNav(b.getAttribute('data-modo')); });
@@ -472,7 +481,8 @@
 
       // 2. Sessão anônima e ingresso (o mesmo aparelho volta para o mesmo registro)
       btn.textContent = 'CONECTANDO…';
-      await garantirSessao();
+      var sessao = await garantirSessao();
+      estado.userId = sessao && sessao.user ? sessao.user.id : null;
       var part = await C.rpc('ingressar', {
         p_token: estado.token, p_nome: dados.nome, p_tipo: dados.tipo,
         p_cpf: dados.cpf || null, p_telefone: dados.tel || null,
@@ -481,10 +491,11 @@
       estado.telefone = dados.tel;
       estado.saidaSolicitadaEm = part.saida_solicitada_em || null;
 
-      if (estado.part && estado.part.participante_id !== part.participante_id) estado.fila = [];
+      if (estado.part && estado.part.participante_id !== part.participante_id) fecharTrilha();
       var salvo = C.local.ler(CHAVE_PART, null);
       if (salvo && salvo.participante_id !== part.participante_id) {
-        estado.fila = [];
+        fecharTrilha();
+        estado.filaLegada = null;
         estado.confPendentes = [];
         estado.confirmadasLocal.clear();
       }
@@ -543,6 +554,7 @@
     estado.ultimoTique = Date.now();
     estado.filtro.reiniciar();
     salvarParticipacao(true);
+    abrirTrilha();
     if (posInicial) processarPosicao(posInicial);
     iniciarWatch();
     pedirTelaLigada();
@@ -554,8 +566,9 @@
     iniciarMapa();
     carregarEquipe();
     carregarDestino();
+    carregarMeusGrupos();
     if (!estado.timerEquipe) {
-      estado.timerEquipe = setInterval(function () { carregarEquipe(); carregarDestino(); }, CFG.destinoMs);
+      estado.timerEquipe = setInterval(function () { carregarEquipe(); carregarDestino(); carregarMeusGrupos(); }, CFG.destinoMs);
     }
     carregarFilaFotos().then(processarFilaFotos);
     carregarMinhasFotos();
@@ -618,13 +631,15 @@
     }
     if (r.pontos.length) {
       estado.ultimoAceito = r.ponto;
-      r.pontos.forEach(function (p) {
-        estado.fila.push({ id: C.uuid(), lat: p.lat, lng: p.lng, prec: p.prec, t: p.t });
+      var rapido = r.rapido;
+      // Cada ponto tem um id único gerado aqui: o reenvio nunca duplica no servidor.
+      // Primeiro é gravado no aparelho (IndexedDB); depois enviado.
+      guardarPontos(r.pontos.map(function (p) {
+        return { id: C.uuid(), lat: p.lat, lng: p.lng, prec: p.prec, t: p.t };
+      })).then(function () {
+        // 1º ponto vai na hora; depois, logo em seguida (mais rápido em veículo).
+        agendarEnvio(!estado.ultimoEnviadoT ? 300 : rapido ? CFG.envioRapidoMs : CFG.envioPeMs);
       });
-      if (estado.fila.length > CFG.filaMaxima) estado.fila.splice(0, estado.fila.length - CFG.filaMaxima);
-      salvarFila();
-      // 1º ponto vai na hora; depois, logo em seguida (mais rápido em veículo).
-      agendarEnvio(!estado.ultimoEnviadoT ? 300 : r.rapido ? CFG.envioRapidoMs : CFG.envioPeMs);
     }
     if (window.GBS_DEBUG_GPS) console.debug('[GPS]', r.motivo, r.atual ? Math.round(r.atual.prec || 0) + ' m' : '');
     atualizarUI();
@@ -647,9 +662,62 @@
     return lote.map(function (p) { return Object.assign({}, p, { t: Math.round(p.t + desvio) }); });
   }
 
-  function salvarFila() {
-    if (!estado.part) return;
-    C.local.gravar(CHAVE_FILA, { participante_id: estado.part.participante_id, pontos: estado.fila });
+  /* ------------------------------------------------------------------ */
+  /* Fila offline dos pontos (IndexedDB — trilha-local.js)                */
+  /* ------------------------------------------------------------------ */
+  // Abre a fila deste participante. A fila da versão anterior (localStorage)
+  // é passada para o IndexedDB e só depois apagada.
+  function abrirTrilha() {
+    if (!estado.part) return Promise.resolve(null);
+    var pid = estado.part.participante_id;
+    if (estado.trilha && estado.trilha.ids.participanteId === pid) return Promise.resolve(estado.trilha);
+    if (estado.trilhaAbrindo && estado.trilhaAbrindo.pid === pid) return estado.trilhaAbrindo.promessa;
+    var legado = estado.filaLegada && estado.filaLegada.participante_id === pid ? estado.filaLegada.pontos : null;
+    var promessa = window.TrilhaLocal.abrir({
+      participanteId: pid, userId: estado.userId, operacaoId: estado.part.operacao_id || null, legado: legado,
+    }).then(function (f) {
+      if (!estado.part || estado.part.participante_id !== pid) return null;
+      estado.trilha = f;
+      estado.trilhaAbrindo = null;
+      if (legado) { C.local.apagar(CHAVE_FILA); estado.filaLegada = null; }
+      var buf = estado.bufferPontos;
+      estado.bufferPontos = [];
+      return (buf.length ? f.adicionar(buf) : Promise.resolve()).then(function () {
+        agendarEnvio(0);
+        atualizarUI();
+        return f;
+      });
+    }).catch(function () {
+      estado.trilhaAbrindo = null;   // tenta de novo no próximo ponto
+      return null;
+    });
+    estado.trilhaAbrindo = { pid: pid, promessa: promessa };
+    return promessa;
+  }
+
+  function guardarPontos(pontos) {
+    if (estado.trilha && estado.part && estado.trilha.ids.participanteId === estado.part.participante_id) {
+      return estado.trilha.adicionar(pontos);
+    }
+    Array.prototype.push.apply(estado.bufferPontos, pontos);
+    if (estado.bufferPontos.length > CFG.filaMaxima) estado.bufferPontos.splice(0, estado.bufferPontos.length - CFG.filaMaxima);
+    return abrirTrilha();
+  }
+
+  function qtdPendentes() {
+    return (estado.trilha ? estado.trilha.qtdPendentes() : 0) + estado.bufferPontos.length;
+  }
+
+  function fecharTrilha() {
+    estado.trilha = null;
+    estado.trilhaAbrindo = null;
+    estado.bufferPontos = [];
+  }
+
+  // O intervalo máximo sem ponto vem da operação (padrão 15 s).
+  function aplicarIntervaloGps(s) {
+    var ms = Number(s) * 1000;
+    if (ms >= 5000 && ms <= 300000 && estado.filtro.cfg.intervaloParadoMs !== ms) estado.filtro.configurar({ intervaloParadoMs: ms });
   }
 
   /* ------------------------------------------------------------------ */
@@ -665,30 +733,28 @@
     estado.timerEnvio = setTimeout(function () { estado.envioAgendadoPara = 0; enviarFila(); }, ms);
   }
 
+  // Envia os pontos pendentes em lote. Um ponto só é marcado como enviado
+  // depois que o servidor confirma que ele está gravado (enviar_posicoes_lote).
   async function enviarFila() {
-    if (estado.enviando || !estado.part || estado.finalizado || !estado.fila.length) return;
+    var fila = estado.trilha;
+    if (estado.enviando || !estado.part || estado.finalizado || !fila || !fila.qtdPendentes()) return;
     estado.enviando = true;
-    var lote = estado.fila.slice(0, CFG.loteMaximo);
     try {
-      var resp = await C.rpc('enviar_posicoes', {
-        p_participante: estado.part.participante_id,
-        p_pontos: paraHoraDoServidor(lote),
-        p_gps: estado.rastreando ? estado.gps : null,
-      }, 20000);
-      if (resp && resp.inseridos < lote.length) estado.filtro.registrar(null, false, 'servidor_recusou');
-      var enviados = new Set(lote.map(function (p) { return p.id; }));
-      estado.fila = estado.fila.filter(function (p) { return !enviados.has(p.id); });
-      salvarFila();
-      lote.forEach(function (p) { if (!estado.ultimoEnviadoT || p.t > estado.ultimoEnviadoT) estado.ultimoEnviadoT = p.t; });
+      var r = await window.TrilhaLocal.enviarLote(fila, C.rpc, {
+        lote: CFG.loteMaximo,
+        gps: estado.rastreando ? estado.gps : null,
+        ajustarHora: paraHoraDoServidor,
+      });
+      if (r.recusados) estado.filtro.registrar(null, false, 'servidor_recusou');
+      if (r.resp && r.resp.gps_intervalo_s) aplicarIntervaloGps(r.resp.gps_intervalo_s);
+      if (r.ultimoT != null && (!estado.ultimoEnviadoT || r.ultimoT > estado.ultimoEnviadoT)) estado.ultimoEnviadoT = r.ultimoT;
       marcarSucesso();
-      if (estado.fila.length) agendarEnvio(300);
+      if (fila.qtdPendentes()) agendarEnvio(300);
     } catch (e) {
       if (!tratarErroFatal(e)) {
         if (e.codigo === 'lote_invalido') {
-          // Dados corrompidos: descarta este lote para não travar a fila.
-          var ruins = new Set(lote.map(function (p) { return p.id; }));
-          estado.fila = estado.fila.filter(function (p) { return !ruins.has(p.id); });
-          salvarFila();
+          // Dados corrompidos: marca este lote como recusado para não travar a fila.
+          await fila.marcarRecusados(fila.pendentes(CFG.loteMaximo).map(function (p) { return { id: p.id, motivo: 'lote_invalido' }; }));
         } else {
           marcarFalha(e);
           agendarEnvio(Math.min(30000, 2000 * Math.pow(2, Math.min(estado.falhas, 5) - 1)));
@@ -696,7 +762,7 @@
       }
     } finally {
       estado.enviando = false;
-      if (estado.fila.length && !estado.envioAgendadoPara && !estado.finalizado) agendarEnvio(CFG.envioPeMs);
+      if (qtdPendentes() && !estado.envioAgendadoPara && !estado.finalizado) agendarEnvio(CFG.envioPeMs);
       atualizarUI();
     }
   }
@@ -718,8 +784,9 @@
         chamarAtencao();
       }
       estado.saidaSolicitadaEm = r.saida_solicitada_em || null;
+      if (r.gps_intervalo_s) aplicarIntervaloGps(r.gps_intervalo_s);
       marcarSucesso();
-      if (estado.fila.length) agendarEnvio(0);
+      if (qtdPendentes()) agendarEnvio(0);
       await buscarMensagens();
       await reenviarConfirmacoes();
       await reenviarMensagens();
@@ -1123,6 +1190,19 @@
     }
   }
 
+  // Grupos deste participante (só os dele; o servidor não mostra os outros membros).
+  async function carregarMeusGrupos() {
+    if (!estado.part || estado.finalizado || estado.semGrupos) return;
+    try {
+      var lista = await C.rpc('meus_grupos', { p_participante: estado.part.participante_id }, 12000);
+      estado.grupos = Array.isArray(lista) ? lista : [];
+      atualizarUI();
+    } catch (e) {
+      if (e.codigo === 'funcao_ausente') estado.semGrupos = true;   // servidor sem a migração 008
+      else tratarErroFatal(e);
+    }
+  }
+
   async function confirmarDestino(id) {
     try {
       await C.rpc('confirmar_destino', { p_destino: id }, 12000);
@@ -1178,7 +1258,7 @@
     }
   }
 
-  var LETRA_PONTO = { ENCONTRO: 'E', RISCO: '!' };
+  var LETRA_PONTO = { ENCONTRO: 'E', RISCO: '!', BASE: 'B' };
   var RAIO_ALERTA_PADRAO = 100;   // m — área de risco sem raio definido pelos bombeiros
 
   // Alarme de proximidade: entrou numa área de risco marcada pelos bombeiros.
@@ -1203,7 +1283,7 @@
       UI.aviso('Você saiu da área de risco.', 'ok');
     }
   }
-  var NOME_PONTO = { ENCONTRO: 'Ponto de encontro', RISCO: 'Área de risco — cuidado' };
+  var NOME_PONTO = { ENCONTRO: 'Ponto de encontro', RISCO: 'Área de risco — cuidado', BASE: 'Base da operação' };
 
   // Setores atribuídos a mim (contorno) e pontos de encontro / risco.
   function desenharExtras(setores, pontos) {
@@ -1265,6 +1345,7 @@
     $('navegacao').hidden = false;
     $('lg-destino').hidden = false;
     $('nav-nome').textContent = d.nome;
+    atualizarMissaoNav(d.missao || null);
     $('nav-coord').textContent = C.coord(d.lat) + ', ' + C.coord(d.lng);
     $('nav-rota').href = window.Rotas.linkGoogle([d.lat, d.lng], estado.modoNav);
     if (novo) {
@@ -1284,6 +1365,42 @@
     atualizarDestinoNoMapa();
     agendarNavegacao();
     if (novo) calcularRota('novo');
+  }
+
+  // Destino enviado ao grupo: mostra a missão e, para o responsável do grupo,
+  // o botão para avisar que a busca no setor terminou (começa o retorno à base).
+  function atualizarMissaoNav(m) {
+    var caixa = $('nav-missao');
+    var btn = $('nav-finalizar');
+    if (!m) { caixa.hidden = true; btn.hidden = true; return; }
+    var txt = (m.volta_base ? 'Retorno à base · ' : 'Missão do grupo ') + m.grupo + (m.setor && !m.volta_base ? ' · Setor ' + m.setor : '');
+    if (caixa.textContent !== txt) caixa.textContent = txt;
+    caixa.hidden = false;
+    btn.hidden = !m.pode_finalizar;
+    btn.setAttribute('data-missao', m.id);
+  }
+
+  async function finalizarBuscaSetor() {
+    var id = $('nav-finalizar').getAttribute('data-missao');
+    if (!id) return;
+    var r = await UI.confirmar({
+      titulo: 'A busca no setor terminou?',
+      texto: 'Os bombeiros são avisados e todo o grupo recebe o destino de volta para a base. Confirme só quando a busca no setor estiver concluída.',
+      ok: 'Sim, busca concluída',
+      cancelar: 'Voltar',
+    });
+    if (!r) return;
+    var btn = $('nav-finalizar');
+    btn.disabled = true;
+    try {
+      await C.rpc('finalizar_busca', { p_missao: id }, 15000);
+      UI.aviso('Os bombeiros foram avisados. Siga para a base.', 'ok', 7000);
+      carregarDestino();
+    } catch (e) {
+      if (!tratarErroFatal(e)) UI.aviso(e.rede ? 'Sem internet: não deu para avisar. Tente de novo.' : e.message, 'erro', 7000);
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   /* ---------- Rota por caminhos reais -------------------------------- */
@@ -1986,9 +2103,11 @@
       estado.gps = 'sem_sinal';
     }
     // Parado, alguns aparelhos só avisam quando há mudança: pede uma leitura nova
-    // a cada 45 s para a posição não envelhecer (o filtro decide se entra na trilha).
-    if (estado.rastreando && estado.ultimaLeitura && estado.gps !== 'negado' && agora - estado.ultimaLeitura.recebidaEm > 45000 &&
-        agora - (estado.leituraPedidaEm || 0) > 45000) {
+    // no ritmo do intervalo de GPS da operação (padrão 15 s), para a trilha ter
+    // pelo menos um ponto nesse intervalo (o filtro decide se a leitura entra).
+    var intervalo = Math.max(5000, estado.filtro.cfg.intervaloParadoMs - 2000);
+    if (estado.rastreando && estado.ultimaLeitura && estado.gps !== 'negado' && agora - estado.ultimaLeitura.recebidaEm > intervalo &&
+        agora - (estado.leituraPedidaEm || 0) > intervalo) {
       estado.leituraPedidaEm = agora;
       navigator.geolocation.getCurrentPosition(processarPosicao, function () { /* o observador trata os erros */ },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
@@ -2105,7 +2224,10 @@
     };
     var t = textos[motivo] || textos.encerrada;
     estado.motivoFim = motivo;
-    estado.fila = [];
+    // A participação acabou: o servidor não aceita mais pontos. Limpa a fila do aparelho.
+    if (estado.trilha) estado.trilha.limpar();
+    fecharTrilha();
+    estado.filaLegada = null;
     estado.destino = null;
     estado.destinoConfirmado = null;
     $('navegacao').hidden = true;
@@ -2177,7 +2299,10 @@
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Diagnóstico do GPS' }),
       UI.el('p', { classe: 'ajuda', texto: 'Fica só neste aparelho; não é enviado. Permissão: ' + estado.permissao + ' · estado: ' + estado.gps +
-        ' · na fila: ' + estado.fila.length + ' ponto(s).' }),
+        ' · na fila: ' + qtdPendentes() + ' ponto(s)' +
+        (estado.trilha ? ' · guardados em: ' + estado.trilha.tipo + ' · enviados: ' + estado.trilha.qtdEnviados() +
+          ' · recusados pelo servidor: ' + estado.trilha.recusados().length + (estado.trilha.falhaGravacao ? ' · falha ao gravar: ' + estado.trilha.falhaGravacao : '') : '') +
+        ' · intervalo máximo: ' + Math.round(f.cfg.intervaloParadoMs / 1000) + ' s.' }),
       UI.el('p', { classe: 'ajuda', texto: resumo || 'Sem leituras ainda.' }),
       caixa,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
@@ -2189,10 +2314,12 @@
   /* ------------------------------------------------------------------ */
   function atualizarUI() {
     if (!estado.part || estado.finalizado) return;
-    $('st-nome').textContent = estado.part.nome + ' · ' + estado.part.operacao;
+    var grupos = (estado.grupos || []).map(function (g) { return 'Grupo ' + g.nome + (g.papel === 'responsavel' ? ' (responsável)' : ''); });
+    var quem = [estado.part.nome, estado.part.operacao].concat(grupos).join(' · ');
+    if ($('st-nome').textContent !== quem) $('st-nome').textContent = quem;
 
     var net = estadoInternet();
-    var pend = estado.fila.length;
+    var pend = qtdPendentes();
     var cod, titulo, sub;
     if (!estado.rastreando) {
       cod = 'parado'; titulo = 'Localização desligada'; sub = 'Toque em CONTINUAR para voltar a ajudar.';

@@ -1601,3 +1601,132 @@ body.conversa-aberta { overflow: hidden; }
 .minhas-coord strong { font-size: 1.05rem; }
 .minhas-coord .mono { font-size: 1.15rem; font-weight: 700; }
 .alerta-risco { margin: 0 0 10px; padding: 12px 14px; border-radius: 10px; background: #450a0a; border: 2px solid #ef4444; color: #fee2e2; font-weight: 700; font-size: 1.05rem; }
+
+/* =====================================================================
+ * Cadastro da operação e fichas de vítimas
+ * ===================================================================== */
+.linha-form-fim { grid-template-columns: 220px auto; justify-content: start; margin-top: 4px; }
+.campos-cadastro { display: grid; gap: 0; }
+.linha-ponto { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; color: var(--texto-2); }
+.campos-cadastro .acoes-linha { margin-bottom: 6px; }
+.grupo-gps { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px 10px; margin: 6px 0 10px; }
+.grupo-gps legend { padding: 0 6px; font-weight: 800; font-size: .85rem; color: var(--texto-2); }
+.modal-mapa-escolha { width: min(720px, 100%); }
+.mapa-escolha { height: min(52vh, 420px); border-radius: var(--raio); border: 1px solid var(--borda-forte); margin: 6px 0; background: #0e1318; }
+.texto-longo { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lista-vitimas { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.item-vitima {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; text-align: left; cursor: pointer;
+  background: var(--superficie-2); border: 1px solid var(--borda); border-radius: var(--raio); color: var(--texto);
+}
+.item-vitima:hover, .item-vitima:focus-visible { border-color: var(--acento); }
+.vitima-mini { flex: none; width: 48px; height: 48px; border-radius: 6px; object-fit: cover; border: 1px solid var(--borda-forte); }
+.vitima-sem-foto { display: grid; place-items: center; background: var(--superficie-3); font-size: 22px; }
+.vitima-foto { margin: 8px 0 12px; }
+.vitima-foto img { display: block; max-width: 100%; max-height: 50vh; border-radius: var(--raio); border: 1px solid var(--borda-forte); }
+.grupo-duplo-largo { grid-template-columns: 1fr 140px; }
+.op-grupo { margin-top: 10px; }
+.op-destaque .val-grupo { font-size: 1.15rem; color: var(--acento); }
+
+/* Local da operação no mapa */
+.mk-local-wrap { background: none; border: 0; }
+.mk-local {
+  position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; display: grid; place-items: center;
+  border-radius: 50%; background: #0b1220; color: #f97316; border: 3px solid #f97316; font-size: 18px; font-weight: 900;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 6px rgba(0, 0, 0, .7);
+}
+.mk-local-rotulo {
+  position: absolute; left: 18px; top: -10px; white-space: nowrap; background: rgba(6, 8, 10, .92); color: #fdba74;
+  border: 1px solid #f97316; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 800;
+}
+.esconder-rotulos .mk-local-rotulo { display: none; }
+.legenda .mk-local-legenda { position: static; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #f97316; color: #f97316; font-size: 10px; }
+.poi-BASE { background: #0369a1; border-color: #7dd3fc !important; }
+
+/* Falha na trilha: tracejado com início (○) e fim (●) */
+.lg-lacuna { border-top: 2px dashed #9ca3af; width: 22px; }
+.lg-estrela { color: #facc15; font-weight: 900; width: 16px; text-align: center; text-shadow: 0 0 2px #000; }
+
+/* =====================================================================
+ * Grupos: controle do mapa (ícone de olho), filtro, selos, ficha, janelas
+ * ===================================================================== */
+.controle-grupos {
+  background: rgba(18, 23, 28, .95); color: var(--texto); padding: 6px 8px; border-radius: 6px; max-width: 260px;
+  border: 1px solid var(--borda-forte); font-size: 12px; box-shadow: var(--sombra); max-height: 50vh; overflow: auto;
+}
+.controle-grupos summary { cursor: pointer; font-family: var(--fonte-titulo); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.lista-grupos-mapa { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.lista-grupos-mapa li { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 4px; }
+.lista-grupos-mapa li.ativo { background: var(--alerta-claro); outline: 1px solid var(--acento); }
+.grupo-mapa-nome { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-olho { min-height: 32px; min-width: 40px; padding: 2px 6px; font-size: 14px; }
+.faixa-filtro {
+  position: absolute; z-index: 1150; left: 50%; top: 10px; transform: translateX(-50%); width: min(620px, calc(100% - 140px));
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border-radius: 10px;
+  background: rgba(18, 23, 28, .96); color: var(--texto); border: 2px solid var(--cor-grupo, var(--acento)); box-shadow: var(--sombra); font-weight: 700; font-size: .9rem;
+}
+.faixa-filtro span { flex: 1 1 260px; }
+body:not(.lateral-oculta) .faixa-filtro { left: calc((100% - var(--larg-lateral)) / 2); width: min(560px, calc(100% - var(--larg-lateral) - 120px)); }
+.selo-grupo { color: var(--texto); background: var(--superficie-3); border: 1px solid var(--cor-grupo, var(--borda-forte)); box-shadow: inset 4px 0 0 var(--cor-grupo, transparent); }
+.mk.resp-grupo .simbolo::after {
+  content: "★"; position: absolute; right: -9px; top: -10px; color: #facc15; font-size: 13px; line-height: 1;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+.linha-grupo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--borda); }
+.linha-grupo:first-child { border-top: 0; }
+.linha-grupo strong { flex: 1 1 120px; overflow-wrap: anywhere; }
+.linha-grupo-novo { border-top: 1px dashed var(--borda-forte); margin-top: 4px; }
+.lista-grupos, .lista-membros { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.item-grupo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; background: var(--superficie-2); display: grid; gap: 6px; }
+.item-grupo-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.item-grupo-topo small { flex-basis: 100%; }
+.modal-grupos, .modal-membros, .modal-missoes, .modal-vitimas { width: min(760px, 100%); }
+.campo-pequeno { min-height: 36px; padding: 4px 8px; font-size: .9rem; width: auto; }
+
+/* Alerta crítico (equipe pode estar perdida) */
+.faixa-alerta {
+  flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px;
+  background: #7f1d1d; color: #fff; border-bottom: 3px solid #fca5a5; animation: alerta-critico 1.2s ease-in-out infinite alternate;
+}
+.faixa-alerta-textos { flex: 1 1 320px; display: grid; gap: 2px; }
+.faixa-alerta-textos strong { font-family: var(--fonte-titulo); font-size: 1.1rem; letter-spacing: .03em; }
+.faixa-alerta-textos small { color: #fecaca; }
+.faixa-alerta-botoes { display: flex; gap: 8px; }
+@keyframes alerta-critico { from { background: #7f1d1d; } to { background: #b91c1c; } }
+@media (prefers-reduced-motion: reduce) { .faixa-alerta { animation: none; } }
+.pulso-alerta { animation: pulso 1s ease-in-out infinite; }
+.lista-alertas { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.item-alerta { border: 1px solid var(--borda); border-left: 5px solid var(--responsavel); border-radius: var(--raio); padding: 8px 10px; background: var(--superficie-2); display: grid; gap: 4px; }
+.item-alerta p { margin: 0; }
+.item-alerta.alerta-critico { border-left-color: #ef4444; background: rgba(127, 29, 29, .35); }
+.item-alerta.reconhecido { opacity: .7; }
+.item-alerta-cabeca { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+
+/* Deslocamentos de grupos */
+.bloco-destino-grupo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; margin-bottom: 10px; }
+.item-missao { border: 1px solid var(--borda); border-left: 5px solid var(--neutro); border-radius: var(--raio); padding: 10px; margin-top: 10px; background: var(--superficie-2); display: grid; gap: 8px; }
+.item-missao p { margin: 0; }
+.item-missao.status-em_deslocamento, .item-missao.status-busca_finalizada { border-left-color: var(--alerta); }
+.item-missao.status-no_setor { border-left-color: var(--responsavel); }
+.item-missao.status-retorno_atrasado { border-left-color: #ef4444; background: rgba(127, 29, 29, .3); }
+.item-missao.status-na_base { border-left-color: var(--ok); }
+.item-missao-cabeca { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.linha-tempo { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.linha-tempo li { display: grid; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--borda); font-size: .8rem; min-width: 110px; }
+.linha-tempo li small { font-family: var(--mono); color: var(--texto-3); }
+.linha-tempo li.feita { border-color: var(--ok); background: var(--ok-claro); }
+.linha-tempo li.prazo { border-color: var(--alerta); background: var(--alerta-claro); }
+.linha-tempo li.pendente { opacity: .6; }
+.tabela-membros-missao { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.tabela-membros-missao th, .tabela-membros-missao td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--borda); }
+.tabela-membros-missao td.atrasado { color: #fca5a5; font-weight: 800; }
+.tabela-membros-missao tr.fora { opacity: .55; }
+
+/* Celular: missão no cartão de destino */
+.nav-missao { margin: -4px 0 8px; font-weight: 800; color: var(--acento); }
+#nav-finalizar { flex-basis: 100%; }
+@media (max-width: 600px) {
+  .linha-form-fim { grid-template-columns: 1fr; }
+  .faixa-filtro, body:not(.lateral-oculta) .faixa-filtro { left: 50%; width: calc(100% - 24px); top: 56px; }
+  .grupo-duplo-largo { grid-template-columns: 1fr 110px; }
+}

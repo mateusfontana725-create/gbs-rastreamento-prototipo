@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#06080a">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="gbs-versao" content="2026-10-12.3">
+  <meta name="gbs-versao" content="2026-10-13.1">
   <title>Rastreamento GBS — Painel do Responsável</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
@@ -68,11 +68,13 @@
     <div class="conteudo">
       <form class="cartao secao" id="form-nova" novalidate>
         <h2>Nova operação</h2>
-        <div class="linha-form">
-          <div class="grupo">
-            <label class="rotulo" for="nova-codigo">Nome ou código da operação</label>
-            <input class="campo" id="nova-codigo" maxlength="80" required placeholder="Ex.: BUSCA SERRA AZUL 09/10">
-          </div>
+        <div class="grupo">
+          <label class="rotulo" for="nova-codigo">Nome ou código da operação *</label>
+          <input class="campo" id="nova-codigo" maxlength="80" required placeholder="Ex.: BUSCA SERRA AZUL 09/10">
+        </div>
+        <!-- tipo, acionamento, local e descrição (cadastro.js) -->
+        <div id="nova-cadastro"></div>
+        <div class="linha-form linha-form-fim">
           <div class="grupo">
             <label class="rotulo" for="nova-retencao">Apagar dados</label>
             <select class="campo" id="nova-retencao">
@@ -180,6 +182,10 @@
                 <span class="ico-pos" aria-hidden="true"></span><span>Minha posição</span><small class="menu-estado" id="minha-pos-estado">desligada</small>
               </button>
               <p class="menu-nota" id="minha-pos-nota">Liga sozinha ao abrir a operação (se o navegador permitir). Funciona com o painel aberto e a tela ligada: em segundo plano ou com a tela bloqueada o celular pode pausar o envio.</p>
+              <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
+              <button class="menu-item" type="button" id="menu-vitimas"><span class="ico-item" aria-hidden="true">👤</span><span>Vítimas (fichas)</span></button>
+              <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
+              <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">🧭</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
               <button class="menu-item" type="button" id="btn-registrar-foto"><span class="ico-camera" aria-hidden="true"></span><span>Registrar foto</span></button>
               <button class="menu-item" type="button" id="btn-convite"><span class="ico-item" aria-hidden="true">＋</span><span>Convidar participantes</span></button>
               <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
@@ -207,6 +213,7 @@
               <button class="menu-item menu-check" type="button" id="opt-fotos" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Fotos no mapa</span></button>
               <button class="menu-item menu-check" type="button" id="opt-relatos" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Relatos no mapa</span></button>
               <button class="menu-item menu-check" type="button" id="opt-trilhas" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Trilhas de todos</span></button>
+              <button class="menu-item menu-check" type="button" id="opt-local" aria-pressed="true"><span class="marca-opcao" aria-hidden="true"></span><span>Local da operação</span></button>
             </section>
             <section class="menu-grupo" aria-labelledby="mg-vis">
               <h3 id="mg-vis">Visualização</h3>
@@ -244,8 +251,27 @@
       <button class="btn btn-pequeno btn-perigo" type="button" id="btn-apagar-faixa">Apagar dados agora</button>
     </div>
 
+    <!-- Alerta crítico (ex.: equipe pode estar perdida): fica até alguém tocar em Ciente -->
+    <div class="faixa-alerta" id="faixa-alerta" role="alert" hidden>
+      <div class="faixa-alerta-textos">
+        <strong id="faixa-alerta-titulo"></strong>
+        <span id="faixa-alerta-texto"></span>
+        <small id="faixa-alerta-meta"></small>
+      </div>
+      <div class="faixa-alerta-botoes">
+        <button class="btn btn-pequeno" type="button" id="faixa-alerta-mapa">Ver no mapa</button>
+        <button class="btn btn-pequeno btn-escuro" type="button" id="faixa-alerta-ciente">Ciente</button>
+      </div>
+    </div>
+
     <div class="painel-corpo" id="painel-corpo">
       <div id="mapa" role="region" aria-label="Mapa dos participantes"></div>
+
+      <!-- Filtro por grupo (ícone de olho no controle "Grupos" do mapa) -->
+      <div class="faixa-filtro" id="faixa-filtro" role="status" hidden>
+        <span id="faixa-filtro-texto"></span>
+        <button class="btn btn-pequeno btn-escuro" type="button" id="faixa-filtro-todos">Mostrar todos</button>
+      </div>
 
       <!-- Barra do modo de desenho (setores, pontos, destino) -->
       <div class="barra-desenho" id="barra-desenho" role="status" hidden>
@@ -317,6 +343,7 @@
         <div class="abas central-abas" role="tablist">
           <button class="btn btn-pequeno btn-ativo" type="button" role="tab" id="aba-msgs" aria-selected="true" aria-controls="painel-msgs">Mensagens e relatos</button>
           <button class="btn btn-pequeno" type="button" role="tab" id="aba-fotos" aria-selected="false" aria-controls="painel-fotos"><span>Fotos (<span id="qtd-fotos">0</span>)</span></button>
+          <button class="btn btn-pequeno" type="button" role="tab" id="aba-alertas" aria-selected="false" aria-controls="painel-alertas"><span>Alertas <span class="contador-mini" id="qtd-alertas" hidden>0</span></span></button>
         </div>
         <div class="ficha-corpo central-corpo">
           <div id="painel-msgs" role="tabpanel" aria-labelledby="aba-msgs">
@@ -332,6 +359,10 @@
             <div class="nota" id="minhas-fotos-fila" hidden></div>
             <ul class="galeria" id="galeria"></ul>
             <p class="muted" id="galeria-vazia">Nenhuma foto registrada ainda.</p>
+          </div>
+          <div id="painel-alertas" role="tabpanel" aria-labelledby="aba-alertas" hidden>
+            <ul class="feed lista-alertas" id="lista-alertas"></ul>
+            <p class="muted" id="alertas-vazio">Nenhum alerta ainda. Os deslocamentos de grupos geram alertas de início, chegada ao setor, fim da busca e retorno à base.</p>
           </div>
         </div>
       </aside>
@@ -374,6 +405,10 @@
               <button class="btn btn-escuro" type="submit" id="btn-responder">Enviar</button>
             </form>
             <p class="ajuda" id="ficha-cmd-aviso" hidden></p>
+          </div>
+          <div class="ficha-bloco" id="ficha-grupos-bloco" hidden>
+            <h3>Grupos</h3>
+            <div id="ficha-grupos"></div>
           </div>
           <div class="ficha-bloco" id="ficha-fotos-bloco" hidden>
             <h3>Fotos (<span id="ficha-qtd-fotos">0</span>)</h3>
@@ -434,9 +469,11 @@
   <script src="js/interface.js"></script>
   <script src="js/fotos.js"></script>
   <script src="js/gps.js"></script>
+  <script src="js/trilha-local.js"></script>
   <script src="js/rotas.js"></script>
   <script src="js/coords.js"></script>
   <script src="js/arquivos.js"></script>
+  <script src="js/cadastro.js"></script>
   <script src="js/militar.js"></script>
   <script src="js/ferramentas.js"></script>
 </body>

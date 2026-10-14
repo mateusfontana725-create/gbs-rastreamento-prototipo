@@ -143,6 +143,78 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   Também há a aba **Fotos** na central (galeria) e a seção **Fotos** na ficha de cada participante.
 - A foto é **um registro de uma posição**: não entra no histórico nem altera a trilha.
 
+### Cadastro completo da operação
+
+- **Nova operação**: nome (obrigatório), **tipo** (Aquática, Terrestre, Aérea ou Outras — em "Outras" um
+  campo "Qual?" com texto livre) e **data e hora do acionamento** (já vem com a hora atual; não pode estar
+  no futuro) são obrigatórios. **Endereço**, **ponto no mapa** (📍 Escolher no mapa, Usar minha posição ou
+  digitar a coordenada em qualquer formato) e **descrição** são opcionais e podem ser completados depois.
+- **Ferramentas → Dados da operação**: ver e editar tudo (inclusive o nome) e o **intervalo do GPS** (ver
+  "Trilhas GPS"). O local aparece no mapa como **◎ laranja** ("Local da operação", camada própria em
+  **Camadas do mapa**); tocar nele abre os dados.
+- **Operações antigas** (criadas só com o nome) continuam válidas: a lista mostra o selo **Cadastro
+  incompleto** e o botão **Completar cadastro**. Nada é preenchido sozinho.
+- O participante continua vendo só o **nome** da operação (endereço e descrição não vão ao celular).
+
+### Ficha da vítima
+
+- **Ferramentas → Vítimas (fichas)**: uma ou mais fichas por operação, com **foto**, **nome** (ou "Não
+  identificada"), **idade**, **características físicas**, **roupas** e **observações**.
+- A foto é reduzida no aparelho (máx. 1600 px, JPEG) e guardada no bucket **privado `vitimas`** do
+  Supabase Storage; só aparece por link temporário assinado. Trocar ou tirar a foto apaga o arquivo antigo.
+- **Somente os responsáveis da operação** veem as fichas (RLS no banco e no Storage). Civis e militares de
+  campo não têm acesso de nenhuma forma (nem pela API, nem pelo tempo real).
+- Quando os dados da operação são apagados (retenção) ou a operação é excluída, as fichas e as fotos
+  também são.
+
+### Grupos
+
+- **Ferramentas → Grupos**: criar grupos com **nome livre** (ex.: Polícia Civil, Polícia Militar,
+  Bombeiros) e cor; uma pessoa pode estar em mais de um grupo.
+- **Membros**: adicionar pessoas pelo painel (marcar várias e **Adicionar marcados**) e definir o
+  **papel**: **Membro** ou **★ Responsável** do grupo. Também na ficha do participante (seção **Grupos**).
+- **Link do grupo** (com QR Code, Copiar, Compartilhar): quem entra por ele entra na operação **e** no
+  grupo, sempre como **membro**; como civil, a não ser que o grupo permita militares. **Gerar novo link**
+  invalida o anterior na hora. O papel de responsável só é dado pelo painel.
+- **No mapa, controle "Grupos"** (canto superior direito): cada grupo tem um **ícone de olho 👁**. Tocar
+  mostra **só as pessoas (marcador e trilha) e os destinos do grupo**; tocar de novo, ou em **Mostrar
+  todos**, restaura a visualização completa. Uma faixa mostra "Mostrando só o grupo X (n de N pessoas)".
+  Setores, pontos de interesse, fotos e relatos continuam visíveis; **pedidos de ajuda, pedidos de saída e
+  alertas de quem está fora do grupo continuam tocando** e avisam "fora do grupo mostrado". O filtro não
+  fica lembrado ao recarregar.
+- Na lista, cada pessoa tem o selo dos grupos (★ = responsável do grupo); no mapa, o responsável do grupo
+  tem uma ★ no marcador.
+- **Quem vê o quê (RLS)**: os responsáveis da operação veem todos os grupos e links; cada participante vê
+  **somente os grupos de que faz parte** e o próprio papel (no celular: "Grupo X (responsável)"). Ninguém
+  em campo lê os links nem a lista de membros.
+
+### Deslocamento de grupos, alertas e controle de retorno
+
+- **Enviar destino → Grupo** (Ferramentas → Enviar destino, "Enviar o centro como destino" num setor, ou
+  Grupos → 🧭 Enviar destino): escolha o grupo e **quem recebe** — **todos os membros** ou **só o
+  responsável do grupo** —, a **base** (ponto de interesse do tipo **Base da operação**, com o raio de
+  chegada) e o **prazo de retorno** (padrão 30 min). Todos os membros de campo ativos são acompanhados.
+- **Alertas automáticos ao responsável da operação**, em tempo real (Supabase Realtime, com conferência
+  periódica de reserva), na aba **Alertas** da central:
+  - **início do deslocamento** — primeiro ponto a ≥ 100 m de onde a pessoa estava no envio (ou fora do
+    raio da base, para quem estava na base);
+  - **chegada ao setor** — 2 pontos seguidos dentro do setor (círculo ou polígono); destino sem setor: a até 30 m;
+  - **finalização da busca** — pelo **responsável do grupo** no celular (**BUSCA NO SETOR CONCLUÍDA**) ou
+    por um responsável da operação (**Deslocamentos de grupos → Finalizar busca**). O setor não vira
+    "Concluído" sozinho;
+  - **chegada à base** — quando **todos** os acompanhados ativos estão dentro do raio da base (com GPS
+    preciso o suficiente);
+  - **retorno atrasado (crítico)** — se o prazo passar sem todos na base: faixa vermelha fixa, alarme
+    repetido até alguém tocar em **Ciente**, com quem falta e há quanto tempo foi a última posição de cada um
+    ("a equipe pode estar perdida").
+- Tudo é calculado **no servidor, pela trilha GPS** (hora do GPS; pontos com precisão pior que 150 m não
+  contam; pontos que chegam atrasados da fila offline contam com o horário real). O atraso é verificado
+  **por tempo** pelo `pg_cron` do Supabase (a cada minuto), mesmo com os celulares sem sinal e sem painel
+  aberto; sem `pg_cron`, o painel aberto faz essa verificação a cada 30 s.
+- Ao finalizar a busca, todos recebem o destino **"Volte para a base"** no celular. **Prorrogar +15 min** e
+  **Encerrar** ficam em **Ferramentas → Deslocamentos de grupos**, com a linha do tempo e a situação de
+  cada membro. Uma missão nova do mesmo grupo substitui a anterior.
+
 ### Setores de busca (áreas)
 
 - **Criar** (menu **Ferramentas → Áreas e pontos**):
@@ -318,12 +390,13 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 | Captura | `watchPosition` com alta precisão, `maximumAge: 0`, `timeout: 30 s`, usando os **eventos reais do GPS** (não um temporizador). Um único observador; parado, pede leitura nova a cada 45 s; sem leituras por 90 s com a tela aberta, reinicia o observador |
 | A pé | ponto quando o afastamento sai do círculo de precisão, ou com a velocidade medida pelo GPS (≥ 0,7 m/s), ou quando o afastamento se mantém por 3 leituras **na mesma direção**; no máximo 1 ponto a cada 2 s. Na prática: ~1 ponto a cada 3 s andando (com velocidade do GPS) ou a cada ~5 s (sem ela) |
 | Veículo | acima de 18 km/h (velocidade do GPS, ou deslocamento rápido e em linha): **até 1 ponto por segundo**, a cada 8 m |
-| Parado | oscilação menor que 0,6 × a precisão (de 3 a 25 m) não vira trilha; com o GPS informando velocidade 0, só um afastamento claro conta; confirma a posição a cada 45 s |
+| Parado | oscilação menor que 0,6 × a precisão (de 3 a 25 m) não vira trilha; com o GPS informando velocidade 0, só um afastamento claro conta; confirma a posição a cada **15 s** (o **intervalo máximo sem ponto**, configurável por operação em Dados da operação: 5 a 300 s) |
+| Guardado no aparelho | todo ponto aceito é gravado **primeiro no IndexedDB** (sem ele, localStorage) com id único (UUID do aparelho), latitude, longitude, precisão, hora do GPS, usuário, operação e o **indicador de envio**; vale também para a "Minha posição" do responsável. A fila antiga (localStorage) é migrada sozinha |
 | Saltos | só é "salto" o que for incoerente com o movimento recente (> 12 m/s sem histórico, ou > 2,5 × a velocidade recente; nunca acima de 252 km/h). Um pico isolado é descartado; se a leitura seguinte confirmar o novo local (ex.: entrou num carro), **as duas entram** — nada de pontos intermediários perdidos |
 | Precisão | até 150 m entra na trilha (com as regras acima); pior que 150 m vira "posição aproximada" (no máximo 1 a cada 30 s), fora da linha da trilha |
 | Leituras ruins | antiga (> 30 s), repetida, fora de ordem ou inválida (0,0, NaN): descartada. Relógio do GPS diferente do celular: corrigido. Relógio do celular errado: o horário dos pontos é convertido para o do servidor antes do envio (o servidor recusaria pontos "do futuro") |
-| Envio | separado da captura: fila no aparelho (sobrevive a falta de internet e a recarregar a página) e envio **~1,5 s** após o ponto a pé e **~1 s** em veículo (o 1º na hora), vários pontos por envio; sem internet, tenta de novo com espera crescente e envia tudo na ordem quando volta, sem duplicar (identificador único por ponto) |
-| Painel | recebe cada ponto pelo tempo real (com conferência periódica de reserva), insere na ordem cronológica e redesenha no quadro seguinte da tela. **Todos os pontos viram vértices** (nada é escondido). A linha só é interrompida em **lacuna** (mais de 2 min sem pontos com deslocamento, ou 10 min) ou salto impossível; a lacuna aparece como linha **cinza pontilhada** com o horário ("Sem posições registradas de 10:02 a 10:21 — o percurso real é desconhecido"). Pontos de pessoas diferentes nunca se ligam |
+| Envio | separado da captura: envio em lote **~1,5 s** após o ponto a pé e **~1 s** em veículo (o 1º na hora); sem internet, tenta de novo com espera crescente e envia tudo na ordem quando volta. `enviar_posicoes_lote` devolve **quais ids o servidor gravou**: só esses são marcados como enviados (o resto continua pendente); os recusados (horário fora da operação) ficam marcados com o motivo e aparecem no diagnóstico. O id único torna o reenvio idempotente (não duplica) |
+| Painel | recebe cada ponto pelo tempo real (com conferência periódica de reserva), insere na **ordem do horário do GPS** (empate: pelo id) e redesenha no quadro seguinte da tela. **Todos os pontos viram vértices** (nada é escondido). Quando dois pontos seguidos estão separados por mais que o **limite de falha** da operação (padrão **60 s**, configurável), ou há salto impossível, o trecho é desenhado **tracejado em cinza**, com **○ início** e **● fim** da falha marcados ("Falha: sem posições registradas de 10:02 a 10:21 — o percurso real é desconhecido"). Pontos de pessoas diferentes nunca se ligam |
 | Medição | o histórico da ficha mostra, para cada ponto, **quanto tempo levou da captura até chegar ao servidor** (coluna "Chegou") |
 
 - **Diagnóstico**: **Ferramentas → Diagnóstico do GPS** (responsável) e, no participante, abrindo o link com
@@ -474,7 +547,9 @@ rastreamento-sar/
 │       ├── coords.js           formatos de coordenadas (decimal, GMS, UTM, MGRS), rumo, nascer/pôr do sol
 │       ├── arquivos.js         exportar e importar GPX, KML/KMZ, GeoJSON e CSV
 │       ├── ferramentas.js      ferramentas de mapa do painel (medir, ir para coordenada, estatísticas…)
-│       ├── militar.js          lógica do painel
+│       ├── trilha-local.js     fila offline dos pontos (IndexedDB) e envio com confirmação por ponto
+│       ├── cadastro.js         cadastro da operação, escolha de ponto no mapa e fichas das vítimas
+│       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
 │       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 ├── api/
 │   ├── config.js               entrega ao navegador só a URL e a chave PÚBLICA (de variáveis de ambiente)
@@ -487,10 +562,16 @@ rastreamento-sar/
 │       ├── 003_setores_pontos_navegacao.sql   setores, pontos de interesse e destinos
 │       ├── 004_destinos_reinclusao.sql        destino recebido pelo participante e reinclusão
 │       ├── 005_modo_destino.sql               modo do destino (a pé, trilha, carro)
-│       └── 006_raio_alerta.sql                raio do alarme de proximidade nas áreas de risco
+│       ├── 006_raio_alerta.sql                raio do alarme de proximidade nas áreas de risco
+│       ├── 007_cadastro_operacao_vitimas.sql  cadastro completo da operação e fichas das vítimas
+│       ├── 008_grupos.sql                     grupos, membros, papéis e link por grupo
+│       ├── 009_trilha_offline.sql             envio em lote com confirmação e intervalo do GPS
+│       └── 010_missoes_alertas.sql            destino para grupos, alertas e controle de retorno
 ├── testes/
-│   ├── filtro_gps.test.js      teste do filtro de GPS (node, sem dependências)
-│   └── coords.test.js          teste das conversões de coordenadas (UTM, MGRS, GMS, rumo, sol)
+│   ├── filtro_gps.test.js      teste do filtro de GPS e do desenho das falhas (node, sem dependências)
+│   ├── coords.test.js          teste das conversões de coordenadas (UTM, MGRS, GMS, rumo, sol)
+│   ├── trilha_local.test.js    teste da fila offline (pendentes, confirmação, reenvio sem duplicar)
+│   └── banco_migracoes.test.mjs  schema e migrações num PostgreSQL real (PGlite): RLS e fluxos (npm run test:banco)
 ├── vercel.json                 diretório publicado, agendamento da limpeza e cabeçalhos de segurança
 ├── .env.example                nomes das variáveis de ambiente
 └── package.json
@@ -535,7 +616,27 @@ rastreamento-sar/
    `pontos_interesse.raio_m` (raio do alarme de proximidade, de 10 m a 5 km, opcional), aceita o raio em
    `salvar_ponto` e o devolve em `mapa_do_participante`. Nenhuma política RLS é alterada. Sem ela, os
    pontos continuam sendo salvos e o alarme usa o raio padrão de 100 m.
-   O `schema.sql` completo já inclui a 003, a 004, a 005 e a 006 (seções 10 a 13).
+   **Migrações 007 a 010** (idempotentes, nesta ordem; cada uma exige a anterior):
+   - **007** (`007_cadastro_operacao_vitimas.sql`): colunas **opcionais** do cadastro em `operacoes` (as
+     operações antigas continuam válidas), `criar_operacao` com `p_dados` (chamadas antigas continuam
+     funcionando), `atualizar_operacao`, tabela `vitimas` (RLS: só responsáveis), bucket privado
+     **`vitimas`** com as regras `gbs_vitimas_enviar/ver/apagar`, `salvar_vitima`, `excluir_vitima`,
+     `definir_foto_vitima`, `meus_arquivos_pendentes_v2`;
+   - **008** (`008_grupos.sql`): `grupos`, `grupo_convites` (links), `grupo_membros` (papel), RLS (cada
+     participante só vê os próprios grupos), `salvar_grupo`, `definir_membro`, `remover_membro`,
+     `link_do_grupo`, `gerar_novo_link_grupo`, `meus_grupos`; `info_operacao` e `ingressar` aceitam o link do grupo;
+   - **009** (`009_trilha_offline.sql`): `operacoes.gps_intervalo_s` (15 s) e `gps_lacuna_s` (60 s),
+     `configurar_gps_operacao`, `enviar_posicoes_lote` (confirmação por ponto); `enviar_posicoes` continua;
+   - **010** (`010_missoes_alertas.sql`): categoria **BASE**, `missoes`, `missao_membros`, `alertas`,
+     `destinos.missao_id`, `enviar_destino_grupo`, `finalizar_busca`, `prorrogar_retorno`, `encerrar_missao`,
+     `verificar_retornos`, `reconhecer_alerta`; avaliação dos eventos pela trilha GPS no servidor; agenda o
+     `pg_cron` se ele estiver ativo.
+   - **Alerta de retorno atrasado sem painel aberto**: ative **Database → Extensions → pg_cron** e rode a
+     migração 010 (ou o `schema.sql`) de novo — ela agenda `select public.verificar_retornos()` a cada minuto
+     (job `gbs-verificar-retornos`). Sem `pg_cron`, o alerta só é verificado com algum painel aberto.
+   O painel e a página do participante funcionam com o banco ainda sem essas migrações (as funções novas
+   ficam indisponíveis, com aviso).
+   O `schema.sql` completo já inclui da 003 à 010 (seções 10 a 17).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -560,12 +661,13 @@ rastreamento-sar/
    - **Publishable key** (`sb_publishable_…`) — ou, em projetos antigos, a **anon key**;
    - **Secret key** (`sb_secret_…`) — ou, em projetos antigos, a **service_role key**. **Nunca** coloque esta em arquivos do site.
 8. (Conferência) Em **Database → Publications → supabase_realtime**, as tabelas `participantes`,
-   `posicoes`, `mensagens`, `fotos`, `setores`, `pontos_interesse` e `destinos` devem aparecer marcadas.
-   O `schema.sql` (e a migração 003) já fazem isso.
-9. (Conferência) Em **Storage**, deve existir o bucket **`fotos`**, **privado** (não público), com
-   limite de 10 MB e só `image/jpeg`. O `schema.sql` cria o bucket e as regras de acesso
-   (`gbs_fotos_enviar`, `gbs_fotos_ver`, `gbs_fotos_apagar`). Se o SQL Editor recusar a parte do
-   Storage por permissão, crie o bucket `fotos` manualmente como **privado** e rode o `schema.sql` de novo.
+   `posicoes`, `mensagens`, `fotos`, `setores`, `pontos_interesse`, `destinos`, `vitimas`, `grupos`,
+   `grupo_membros`, `missoes`, `missao_membros` e `alertas` devem aparecer marcadas.
+   O `schema.sql` (e as migrações) já fazem isso.
+9. (Conferência) Em **Storage**, devem existir os buckets **`fotos`** e **`vitimas`**, **privados** (não
+   públicos), com limite de 10 MB e só `image/jpeg`. O `schema.sql` cria os buckets e as regras de acesso
+   (`gbs_fotos_*` e `gbs_vitimas_*`). Se o SQL Editor recusar a parte do Storage por permissão, crie os
+   buckets manualmente como **privados** e rode o `schema.sql` de novo.
 
 > O cadastro aberto de usuários por e-mail pode ficar como está: o acesso ao painel depende
 > **exclusivamente** da tabela `responsaveis`, que só um administrador altera (pelo painel).
@@ -694,6 +796,11 @@ identidades anônimas sem participação há mais de 7 dias são removidas. A li
 | Fotos | bucket **privado**: não existe link público. A imagem só é vista por **link temporário assinado (1 h)**, gerado apenas para os responsáveis da operação ou para o próprio autor. O envio só é aceito na pasta `operação/participante/` do próprio participante, com a operação ativa, JPEG até 10 MB; o registro (`registrar_foto`) confere que o arquivo existe e valida as coordenadas |
 | Setores, pontos e destinos | leitura só pelos responsáveis da operação (RLS); gravação só pelas funções, que conferem a equipe da operação; excluir só por quem criou o registro, quem criou a operação ou um administrador; participantes recebem só o próprio setor, pontos de encontro/risco e o próprio destino (`mapa_do_participante`, `meu_destino` e a política `destinos_ler_participante`, que só libera a linha do próprio participante — inclusive no tempo real); um destino só é enviado a participante da mesma operação |
 | Rota por caminhos | a chave do openrouteservice fica só na variável `ORS_API_KEY` da Vercel; `/api/rota` exige login (participante ativo, só para si; ou responsável ativo), limita a 20 cálculos/min por pessoa, valida coordenadas e distância e não grava nada |
+| Fichas de vítimas | tabela `vitimas` e bucket privado `vitimas`: leitura, envio e visualização da foto **só pelos responsáveis da operação** (RLS no banco e regras no Storage); participantes não têm política de leitura; gravação só por `salvar_vitima`/`definir_foto_vitima` (confere que o arquivo existe na pasta da própria ficha); apagadas com a retenção ou a exclusão da operação |
+| Cadastro da operação | só responsáveis da operação editam (`atualizar_operacao`); tipo, acionamento (não pode estar no futuro), coordenadas e tamanhos validados no servidor; `info_operacao` continua entregando ao participante só o nome |
+| Grupos | RLS: responsáveis da operação leem grupos, membros e links; o participante lê **só os grupos de que é membro ativo** e a própria linha de membro (função `eh_membro_grupo`, security definer, sem recursão); os links ficam em `grupo_convites`, que só os responsáveis leem; o link do grupo nunca concede o papel de responsável; chaves compostas garantem que grupo e pessoa são da mesma operação |
+| Deslocamentos e alertas | `missoes`, `missao_membros` e `alertas`: leitura só pelos responsáveis da operação; eventos calculados no servidor a partir das posições gravadas (o celular não informa "cheguei"); finalizar a busca: só o responsável da operação ou o responsável do grupo da missão; cada evento gera um alerta só (chave única); `verificar_retornos` sem operação só roda pelo agendador (`pg_cron`) |
+| Fila offline | o celular só marca um ponto como enviado quando o servidor confirma o id; usuário e operação de cada ponto vêm sempre da sessão no servidor (os ids guardados no aparelho são só para diagnóstico) |
 | Remover e reincluir | remover não apaga dados; reincluir só por responsável da operação ativa (`reincluir_participante`), reativando o mesmo registro; histórico em `participacao_eventos` (só responsáveis leem); participante não remove nem reinclui ninguém |
 | Exclusão de operação | só o criador ou um administrador da equipe (`excluir_operacao`, verificado no banco); transação única; arquivos removidos do Storage com fila de pendências e limpeza diária; tokens invalidados na hora |
 | Validação de dados | latitude/longitude/precisão/horário validados no servidor; lote máximo de 500 pontos; orientação até 500 caracteres; limite de 60 orientações por minuto e de 300 participantes por operação |
@@ -805,9 +912,30 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 31 | Andar 5 min em rua e 5 min em mata, com o painel aberto | a trilha acompanha (pontos a cada poucos segundos); na ficha, coluna "Chegou" com poucos segundos |
 | 32 | Ir de carro por 2–3 km com a página do civil aberta | a trilha segue o percurso do carro quase em tempo real, sem "saltos" descartados |
 | 33 | Enviar um destino "A pé" e depois trocar para "Carro" no celular | rota azul por ruas, com tempo e instruções; ao trocar, recalcula pelas vias de carro; ao sair da rota, recalcula |
-| 34 | Ficar 5 min sem sinal de GPS andando (ex.: túnel/mata densa) | a trilha mostra o trecho sem dados como linha cinza pontilhada, não como linha contínua |
+| 34 | Ficar 2 min sem sinal de GPS andando (ex.: túnel/mata densa) | a trilha mostra o trecho sem dados **tracejado em cinza**, com ○ início e ● fim da falha (tocar mostra os horários), não como linha contínua |
+| 35 | Criar uma operação nova preenchendo tipo "Outras" (com o texto), acionamento, endereço, ponto no mapa e descrição | o painel abre com o ◎ do local no mapa; **Dados da operação** mostra tudo; uma operação antiga aparece com "Cadastro incompleto" e pode ser completada |
+| 36 | **Vítimas → Nova ficha** com foto; abrir o mesmo painel com outro responsável e, num celular de participante, tentar ler `vitimas` | o outro responsável vê a ficha (tempo real); o participante não recebe nenhuma linha nem consegue abrir a foto |
+| 37 | Criar os grupos "Polícia Civil" e "Bombeiros", adicionar pessoas, marcar um responsável ★ e enviar o link do grupo a um celular novo | quem entra pelo link aparece no grupo (selo na lista); no celular, "Grupo Polícia Civil"; ele não vê o outro grupo |
+| 38 | No controle **Grupos** do mapa, tocar no 👁 de um grupo e depois de novo | só as pessoas, trilhas e destinos do grupo ficam visíveis, com a faixa "Mostrando só…"; um pedido de ajuda de fora do grupo continua tocando; o segundo toque restaura tudo |
+| 39 | Marcar uma **Base**, enviar o centro de um setor ao grupo (só o responsável), andar até o setor, tocar **BUSCA NO SETOR CONCLUÍDA** no celular do responsável do grupo e voltar à base | alertas: início do deslocamento, chegada ao setor, busca finalizada e equipe na base, em tempo real; o celular passa a mostrar "Volte para a base" |
+| 40 | Repetir com prazo de retorno de 5 min e um membro que não volta (ou com o celular em modo avião) | ao vencer o prazo, faixa vermelha "EQUIPE PODE ESTAR PERDIDA" com o alarme repetindo até **Ciente**, mesmo com o painel fechado durante o prazo (com `pg_cron` ativo) |
+| 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Cadastro, vítimas, grupos, trilha offline e deslocamentos (versão 2026-10-13)**: `npm test` passa —
+  filtro de GPS com o intervalo de 15 s e a falha por tempo (39 verificações), coordenadas (45) e a
+  **fila offline** (20: pendentes em ordem do GPS, campos de cada ponto, sem conexão, recarregar, confirmação
+  só do que o servidor gravou, recusados, reenvio sem duplicar, servidor sem a migração 009, migração da
+  fila antiga, limpeza). **Banco (77 verificações)**: `npm run test:banco` executa o `schema.sql` num
+  **PostgreSQL real** (PGlite, no Node) com o Supabase simulado (papéis, `auth.uid()`, Storage com RLS,
+  publicação do Realtime): instalação nova, reexecução idempotente do `schema.sql` e das migrações
+  007–010, RLS das tabelas novas (participante não lê vítimas, links nem alertas; vê só os próprios
+  grupos), regras do bucket `vitimas`, ingresso pelo link do grupo, lote com confirmação por ponto e o
+  fluxo completo do deslocamento (início, chegada ao setor, finalização pelo responsável do grupo,
+  retorno atrasado e chegada à base), retenção e exclusão. **Ainda não executados**: o Supabase real
+  (Realtime, API do Storage, `pg_cron` agendado) e as telas novas num navegador e em celulares — faça os
+  testes 35 a 41 do roteiro acima antes do uso operacional.
 
 - **Backend (318 verificações)**: o `schema.sql` foi executado num PostgreSQL 16 com PostgREST, usando o
   supabase-js real, inclusive por cima de um banco da versão anterior (sem perda); as migrações 004 e 005

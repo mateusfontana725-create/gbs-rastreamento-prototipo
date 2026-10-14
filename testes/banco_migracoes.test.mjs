@@ -1,0 +1,235 @@
+// Teste do banco (schema.sql e migrações 007–010) num PostgreSQL REAL rodando no Node (PGlite),
+// simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
+// Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
+// RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
+//
+// Não faz parte do "npm test" (precisa de um pacote). Para rodar:
+//   npm install --no-save @electric-sql/pglite@0.2.17
+//   npm run test:banco
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+let PGlite;
+try {
+  ({ PGlite } = await import('@electric-sql/pglite'));
+} catch (e) {
+  console.error('Instale antes: npm install --no-save @electric-sql/pglite@0.2.17');
+  process.exit(1);
+}
+
+const RAIZ = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), '..');
+const ler = (p) => readFileSync(join(RAIZ, p), 'utf8');
+let ok = 0, falha = 0;
+const chk = (c, m, x) => { if (c) { ok++; console.log('  ✔ ' + m); } else { falha++; console.log('  ✘ ' + m + (x !== undefined ? ' → ' + JSON.stringify(x) : '')); } };
+
+const db = new PGlite();
+
+await db.exec(`
+  create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
+  grant usage on schema public to anon, authenticated, service_role;
+  create schema auth;
+  create table auth.users (id uuid primary key default gen_random_uuid(), email text, is_anonymous boolean not null default false,
+    created_at timestamptz not null default now(), last_sign_in_at timestamptz);
+  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+  grant usage on schema auth to anon, authenticated, service_role;
+  create schema storage;
+  create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid,
+    created_at timestamptz default now(), unique (bucket_id, name));
+  alter table storage.objects enable row level security;
+  grant usage on schema storage to anon, authenticated, service_role;
+  grant select, insert, delete on storage.objects to authenticated;
+  create publication supabase_realtime;
+`);
+
+console.log('Instalação');
+const schema = ler('supabase/schema.sql');
+try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
+try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas']) {
+  try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
+  catch (e) { chk(false, 'migração ' + m, e.message); }
+}
+const pub = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime' order by 1`)).rows.map((r) => r.tablename);
+chk(['vitimas', 'grupos', 'grupo_membros', 'missoes', 'missao_membros', 'alertas'].every((t) => pub.includes(t)), 'tabelas novas publicadas no Realtime', pub);
+const crit = (await db.query(`select proname, pg_get_function_identity_arguments(p.oid) a from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname='public' and proname='criar_operacao'`)).rows;
+chk(crit.length === 1 && /jsonb/.test(crit[0].a), 'criar_operacao: só a versão nova (com p_dados) fica no banco', crit);
+
+// --- usuários ---
+async function usuario(email, anon) {
+  return (await db.query(`insert into auth.users (email, is_anonymous) values ($1, $2) returning id`, [email, Boolean(anon)])).rows[0].id;
+}
+const resp1 = await usuario('r1@cbm', false), resp2 = await usuario('r2@cbm', false);
+const anA = await usuario(null, true), anB = await usuario(null, true), anC = await usuario(null, true);
+await db.query(`insert into public.responsaveis (user_id, nome) values ($1, 'Sgt Um'), ($2, 'Sgt Dois')`, [resp1, resp2]);
+
+async function como(uid, sql, params, role) {
+  await db.exec(`set role ${role || 'authenticated'}`);
+  await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [uid || '']);
+  try { return await db.query(sql, params || []); }
+  finally { await db.exec('reset role'); await db.query(`select set_config('request.jwt.claim.sub', '', false)`); }
+}
+async function rpc(uid, fn, args) {
+  const nomes = Object.keys(args || {});
+  const sql = `select public.${fn}(${nomes.map((k, i) => k + ' => $' + (i + 1)).join(', ')}) as r`;
+  const r = await como(uid, sql, nomes.map((k) => args[k]));
+  return r.rows[0].r;
+}
+async function erroDe(p) { try { await p; return null; } catch (e) { return e.message; } }
+
+console.log('Cadastro da operação');
+const agora = Date.now();
+let op = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TESTE', p_retencao_horas: 72, p_dados: JSON.stringify({
+  tipo: 'outras', tipo_outro: 'Deslizamento', acionado_em: new Date(agora - 3600e3).toISOString(),
+  local_endereco: 'Rua A, 1', local_lat: -22.9, local_lng: -43.2, descricao: 'Pessoa desaparecida' }) });
+chk(op.tipo === 'outras' && op.tipo_outro === 'Deslizamento' && op.local_lat === -22.9 && op.gps_intervalo_s === 15, 'cria com tipo, acionamento, local e descrição', op);
+const antiga = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ANTIGA', p_retencao_horas: 0 });
+chk(antiga.tipo === null && antiga.descricao === '', 'chamada antiga (só nome) continua funcionando e a operação fica válida');
+chk(/tipo_operacao_invalido/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'X Y', p_retencao_horas: 0, p_dados: '{}' }))), 'painel novo sem tipo: recusado');
+chk(/acionamento_invalido/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'X Y', p_retencao_horas: 0,
+  p_dados: JSON.stringify({ tipo: 'terrestre', acionado_em: new Date(agora + 3600e3).toISOString() }) }))), 'acionamento no futuro: recusado');
+chk(/tipo_operacao_invalido/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'X Y', p_retencao_horas: 0,
+  p_dados: JSON.stringify({ tipo: 'outras', acionado_em: new Date(agora).toISOString() }) }))), '"Outras" sem o texto: recusado');
+const atu = await rpc(resp1, 'atualizar_operacao', { p_operacao: antiga.id, p_dados: JSON.stringify({ tipo: 'aquatica', acionado_em: new Date(agora - 60e3).toISOString() }) });
+chk(atu.tipo === 'aquatica' && atu.tipo_outro === null && atu.atualizado_por_nome === 'Sgt Um', 'operação antiga completada depois');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'atualizar_operacao', { p_operacao: op.id, p_dados: '{}' }))), 'responsável de outra operação não edita');
+const info = await rpc(null, 'info_operacao', { p_token: op.token_civil });
+chk(info.operacao === 'OP TESTE' && !('descricao' in info) && !('local_endereco' in info), 'participante continua vendo só o nome da operação');
+
+console.log('Ficha da vítima');
+let v = await rpc(resp1, 'salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'João', idade: 34, caracteristicas: 'alto', roupas: 'camisa azul' }) });
+chk(v.nome === 'João' && v.idade === 34, 'ficha criada');
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_vitima', { p_operacao: op.id, p_id: v.id, p_dados: JSON.stringify({ idade: 200 }) }))), 'idade fora de 0–130: recusada');
+const caminho = op.id + '/' + v.id + '/' + '11111111-1111-4111-8111-111111111111.jpg';
+chk(/foto_nao_enviada/.test(await erroDe(rpc(resp1, 'definir_foto_vitima', { p_vitima: v.id, p_caminho: caminho }))), 'registrar foto sem o arquivo no Storage: recusado');
+await como(resp1, `insert into storage.objects (bucket_id, name) values ('vitimas', $1)`, [caminho]);
+chk(true, 'responsável da operação envia o arquivo ao bucket vitimas (regra do Storage)');
+chk(/row-level security/.test(await erroDe(como(resp2, `insert into storage.objects (bucket_id, name) values ('vitimas', $1)`, [op.id + '/' + v.id + '/22222222-2222-4222-8222-222222222222.jpg']))), 'responsável de outra operação não envia foto');
+v = await rpc(resp1, 'definir_foto_vitima', { p_vitima: v.id, p_caminho: caminho });
+chk(v.foto_caminho === caminho, 'foto registrada na ficha');
+chk((await como(resp1, `select count(*)::int n from storage.objects where bucket_id='vitimas'`)).rows[0].n === 1, 'responsável vê a foto (regra de leitura)');
+chk((await como(resp1, `select count(*)::int n from public.vitimas`)).rows[0].n === 1, 'responsável lê a ficha');
+chk((await como(resp2, `select count(*)::int n from public.vitimas`)).rows[0].n === 0, 'responsável de outra operação não lê a ficha');
+
+console.log('Grupos e ingresso pelo link do grupo');
+const g = await rpc(resp1, 'salvar_grupo', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'Polícia Civil', cor: '#3b82f6' }) });
+const g2 = await rpc(resp1, 'salvar_grupo', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'Bombeiros' }) });
+chk(/grupo_existente/.test(await erroDe(rpc(resp1, 'salvar_grupo', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'polícia civil' }) }))), 'nome de grupo repetido: recusado');
+const link = await rpc(resp1, 'link_do_grupo', { p_grupo: g.id });
+chk(link.token && link.token.length === 64, 'link do grupo gerado');
+const infoG = await rpc(null, 'info_operacao', { p_token: link.token });
+chk(infoG.grupo === 'Polícia Civil' && JSON.stringify(infoG.tipos_permitidos) === '["civil"]', 'tela inicial pelo link do grupo mostra o grupo (só civil)', infoG);
+const cpf = '52998224725', tel = '21998765432';
+const pA = await rpc(anA, 'ingressar', { p_token: link.token, p_nome: 'Ana', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+chk(pA.grupo === 'Polícia Civil' && pA.tipo === 'civil', 'entra pelo link do grupo: no grupo e como civil (link não concede militar)', pA);
+const pB = await rpc(anB, 'ingressar', { p_token: op.token_civil, p_nome: 'Beto', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+const pC = await rpc(anC, 'ingressar', { p_token: op.token_civil, p_nome: 'Caio', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+await rpc(resp1, 'definir_membro', { p_grupo: g.id, p_participante: pB.participante_id, p_papel: 'responsavel' });
+await rpc(resp1, 'definir_membro', { p_grupo: g2.id, p_participante: pC.participante_id, p_papel: 'membro' });
+const papelA = (await como(anA, `select papel, origem from public.grupo_membros`)).rows;
+chk(papelA.length === 1 && papelA[0].papel === 'membro' && papelA[0].origem === 'link', 'participante lê só a própria linha de membro (papel membro, pelo link)', papelA);
+chk((await como(anA, `select nome from public.grupos`)).rows.map((r) => r.nome).join() === 'Polícia Civil', 'participante vê só o grupo dele');
+chk((await como(anC, `select nome from public.grupos`)).rows.map((r) => r.nome).join() === 'Bombeiros', 'outro participante vê só o grupo dele');
+chk((await como(anA, `select count(*)::int n from public.grupo_convites`)).rows[0].n === 0, 'participante não lê os links dos grupos');
+chk((await como(anA, `select count(*)::int n from public.vitimas`)).rows[0].n === 0, 'participante não lê fichas de vítimas');
+chk((await como(anA, `select count(*)::int n from storage.objects where bucket_id='vitimas'`)).rows[0].n === 0, 'participante não vê a foto da vítima');
+chk((await como(resp2, `select count(*)::int n from public.grupos`)).rows[0].n === 0, 'responsável de outra operação não vê os grupos');
+chk((await como(resp1, `select count(*)::int n from public.grupo_membros`)).rows[0].n === 3, 'responsável da operação vê todos os vínculos');
+const meus = await rpc(anB, 'meus_grupos', { p_participante: pB.participante_id });
+chk(meus.length === 1 && meus[0].papel === 'responsavel', 'meus_grupos: responsável do grupo no celular', meus);
+chk(/row-level security|permission denied/.test(await erroDe(como(anA, `insert into public.grupo_membros (grupo_id, participante_id, operacao_id) values ($1, $2, $3)`, [g2.id, pA.participante_id, op.id]))), 'participante não grava vínculo direto na tabela');
+const novo = await rpc(resp1, 'gerar_novo_link_grupo', { p_grupo: g.id });
+chk(novo.token !== link.token && (await rpc(null, 'info_operacao', { p_token: link.token })) === null, 'novo link invalida o anterior na hora');
+
+console.log('Trilha: lote com confirmação por ponto');
+const uid = (n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
+const M = 1 / 111320;
+const pt = (n, lat, lng, t) => ({ id: uid(n), lat, lng, prec: 8, t: t == null ? Date.now() : t });
+let lote = await rpc(anA, 'enviar_posicoes_lote', { p_participante: pA.participante_id, p_gps: 'ok', p_pontos: JSON.stringify([
+  pt(1, -22.9, -43.2), { id: 'nao-e-uuid', lat: -22.9, lng: -43.2, t: Date.now() }, pt(2, -22.9, -43.2, Date.parse('2001-01-01'))]) });
+chk(lote.confirmados.length === 1 && lote.confirmados[0] === uid(1) && lote.recusados.length === 2, 'confirma o válido e recusa os inválidos com o motivo', lote);
+chk(lote.recusados.some((r) => r.motivo === 'fora_do_periodo') && lote.recusados.some((r) => r.motivo === 'invalido'), 'motivos: fora_do_periodo e invalido');
+lote = await rpc(anA, 'enviar_posicoes_lote', { p_participante: pA.participante_id, p_gps: 'ok', p_pontos: JSON.stringify([pt(1, -22.9, -43.2)]) });
+chk(lote.confirmados.length === 1 && lote.inseridos === 0, 'reenvio do mesmo ponto: confirmado de novo sem duplicar');
+chk((await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [pA.participante_id])).rows[0].n === 1, 'um único ponto gravado');
+const sv = await rpc(anA, 'sinal_vida', { p_participante: pA.participante_id, p_rastreando: true, p_gps: 'ok' });
+chk(sv.gps_intervalo_s === 15, 'sinal_vida informa o intervalo de GPS da operação');
+const cfg = await rpc(resp1, 'configurar_gps_operacao', { p_operacao: op.id, p_intervalo_s: 20, p_lacuna_s: 90 });
+chk(cfg.gps_intervalo_s === 20 && cfg.gps_lacuna_s === 90, 'intervalo e limite de falha configuráveis');
+chk(/gps_config_invalida/.test(await erroDe(rpc(resp1, 'configurar_gps_operacao', { p_operacao: op.id, p_intervalo_s: 60, p_lacuna_s: 40 }))), 'limite de falha menor que o intervalo: recusado');
+
+console.log('Destino ao grupo, eventos pela trilha e controle de retorno');
+const setor = await rpc(resp1, 'salvar_setor', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'S1', forma: 'circulo', centro_lat: -22.95, centro_lng: -43.2, raio_m: 300 }) });
+const base = await rpc(resp1, 'salvar_ponto', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ categoria: 'BASE', titulo: 'Base 1', lat: -22.9, lng: -43.2, raio_m: 100 }) });
+chk(base.categoria === 'BASE' && base.raio_m === 100, 'ponto de interesse do tipo Base, com raio');
+let n = 10;
+async function andar(anon, part, lat, lng, t) { return rpc(anon, 'enviar_posicoes_lote', { p_participante: part, p_gps: 'ok', p_pontos: JSON.stringify([pt(n++, lat, lng, t)]) }); }
+await andar(anB, pB.participante_id, -22.9, -43.2);   // B na base
+chk(/grupo_vazio/.test(await erroDe(rpc(resp1, 'enviar_destino_grupo', { p_grupo: (await rpc(resp1, 'salvar_grupo', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'Vazio' }) })).id,
+  p_nome: 'X', p_lat: -22.95, p_lng: -43.2 }))), 'grupo sem membros de campo: recusado');
+chk(/grupo_sem_responsavel/.test(await erroDe(rpc(resp1, 'enviar_destino_grupo', { p_grupo: g2.id, p_nome: 'X', p_lat: -22.95, p_lng: -43.2, p_publico: 'responsavel' }))), 'só o responsável, num grupo sem responsável: recusado');
+let env = await rpc(resp1, 'enviar_destino_grupo', { p_grupo: g.id, p_nome: 'Setor S1', p_lat: -22.95, p_lng: -43.2, p_publico: 'responsavel', p_modo: 'a_pe',
+  p_setor: setor.id, p_ponto: null, p_base: base.id, p_raio_base_m: null, p_prazo_min: 5 });
+const missao = env.missao;
+chk(env.destinatarios === 1 && env.acompanhados === 2 && missao.raio_base_m === 100, 'só o responsável recebe o destino; os 2 membros são acompanhados', env);
+const dB = await rpc(anB, 'meu_destino', { p_participante: pB.participante_id });
+const dA = await rpc(anA, 'meu_destino', { p_participante: pA.participante_id });
+chk(dB && dB.missao && dB.missao.pode_finalizar === true && dB.missao.grupo === 'Polícia Civil', 'celular do responsável do grupo: destino com a missão e o botão de finalizar', dB);
+chk(dA === null, 'membro comum não recebe o destino (público: só o responsável)');
+await andar(anA, pA.participante_id, -22.9 + 400 * M, -43.2);
+let al = (await db.query(`select tipo from public.alertas order by id`)).rows.map((r) => r.tipo);
+chk(al.join() === 'deslocamento_iniciado', 'início do deslocamento detectado pela trilha (≥ 100 m da posição no envio)', al);
+await andar(anA, pA.participante_id, -22.95, -43.2);
+al = (await db.query(`select tipo from public.alertas order by id`)).rows.map((r) => r.tipo);
+chk(!al.includes('chegou_setor'), '1 ponto dentro do setor ainda não conta como chegada');
+await andar(anA, pA.participante_id, -22.9501, -43.2001);
+al = (await db.query(`select tipo from public.alertas order by id`)).rows.map((r) => r.tipo);
+chk(al.join() === 'deslocamento_iniciado,chegou_setor', 'chegada ao setor com 2 pontos seguidos dentro do círculo', al);
+await andar(anA, pA.participante_id, -22.9502, -43.2002);
+chk((await db.query(`select count(*)::int n from public.alertas`)).rows[0].n === 2, 'novos pontos não repetem alertas');
+chk(/sem_permissao/.test(await erroDe(rpc(anA, 'finalizar_busca', { p_missao: missao.id }))), 'membro comum não finaliza a busca');
+const fin = await rpc(anB, 'finalizar_busca', { p_missao: missao.id });
+chk(fin.status === 'busca_finalizada' && fin.prazo_retorno_em, 'responsável do grupo finaliza a busca pelo celular; prazo de retorno começa', fin.status);
+const volta = await rpc(anA, 'meu_destino', { p_participante: pA.participante_id });
+chk(volta && /Volte para a base/.test(volta.nome) && volta.missao.volta_base === true, 'todos recebem "Volte para a base"', volta && volta.nome);
+chk(/sem_permissao/.test(await erroDe(rpc(resp1, 'verificar_retornos', {}))), 'verificar_retornos sem operação: só o agendador (pg_cron)');
+chk((await rpc(resp1, 'verificar_retornos', { p_operacao: op.id })) === 0, 'antes do prazo: sem alerta de atraso');
+await db.query(`update public.missoes set prazo_retorno_em = now() - interval '1 minute' where id = $1`, [missao.id]);
+chk((await rpc(resp1, 'verificar_retornos', { p_operacao: op.id })) === 1, 'prazo vencido sem todos na base: alerta gerado');
+const crit2 = (await db.query(`select nivel, titulo, texto from public.alertas where tipo = 'retorno_atrasado'`)).rows[0];
+chk(crit2 && crit2.nivel === 'critico' && /PERDIDA/.test(crit2.titulo) && /Ana/.test(crit2.texto) && /Beto/.test(crit2.texto), 'alerta crítico lista quem falta', crit2);
+chk((await db.query(`select verificar_retornos() n`)).rows[0].n === 0, 'pg_cron (sem usuário) roda e não repete o mesmo alerta');
+await andar(anA, pA.participante_id, -22.9, -43.2);
+chk((await db.query(`select status from public.missoes where id = $1`, [missao.id])).rows[0].status === 'retorno_atrasado', 'um membro na base, outro não: continua atrasado');
+await andar(anB, pB.participante_id, -22.9002, -43.2);
+const fim = (await db.query(`select status from public.missoes where id = $1`, [missao.id])).rows[0].status;
+const tbase = (await db.query(`select texto from public.alertas where tipo = 'chegou_base'`)).rows[0];
+chk(fim === 'na_base' && tbase && /depois do prazo/.test(tbase.texto), 'todos na base: missão "na base" e alerta informa que foi depois do prazo', [fim, tbase]);
+chk((await rpc(anA, 'meu_destino', { p_participante: pA.participante_id })) === null, 'navegação até a base encerrada ao chegarem');
+chk((await como(anA, `select count(*)::int n from public.alertas`)).rows[0].n === 0, 'participante não lê alertas');
+chk((await como(resp2, `select count(*)::int n from public.missoes`)).rows[0].n === 0, 'responsável de outra operação não lê os deslocamentos');
+const ack = await rpc(resp1, 'reconhecer_alerta', { p_alerta: (await db.query(`select id from public.alertas where tipo='retorno_atrasado'`)).rows[0].id });
+chk(ack.reconhecido_por_nome === 'Sgt Um', 'Ciente registra quem reconheceu');
+// polígono
+const poli = await rpc(resp1, 'salvar_setor', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'P1', forma: 'poligono', pontos: [[-22.80, -43.30], [-22.80, -43.10], [-22.70, -43.10], [-22.70, -43.30]] }) });
+const dentro = (await db.query(`select public.ponto_no_setor(s, -22.75, -43.2) d, public.ponto_no_setor(s, -22.85, -43.2) f from public.setores s where id = $1`, [poli.id])).rows[0];
+chk(dentro.d === true && dentro.f === false, 'ponto dentro/fora de setor desenhado (polígono)');
+
+console.log('Retenção e exclusão');
+await rpc(resp1, 'encerrar_operacao', { p_operacao: op.id });
+await rpc(resp1, 'apagar_dados_operacao', { p_operacao: op.id });
+const cont = (await db.query(`select (select count(*) from public.vitimas where operacao_id=$1)::int v, (select count(*) from public.grupos where operacao_id=$1)::int g,
+  (select count(*) from public.missoes where operacao_id=$1)::int m, (select count(*) from public.alertas where operacao_id=$1)::int a,
+  (select count(*) from public.arquivos_pendentes where bucket='vitimas')::int f, (select codigo from public.operacoes where id=$1) c, (select tipo from public.operacoes where id=$1) t`, [op.id])).rows[0];
+chk(cont.v === 0 && cont.g === 0 && cont.m === 0 && cont.a === 0, 'dados apagados: fichas, grupos, deslocamentos e alertas apagados', cont);
+chk(cont.f === 1, 'a foto da vítima entrou na fila de remoção do Storage (bucket vitimas)');
+chk(cont.c === 'OP TESTE' && cont.t === 'outras', 'o cadastro da operação continua (como o nome já continuava)');
+const pend = await rpc(resp1, 'meus_arquivos_pendentes_v2', {});
+chk(pend.length === 1 && pend[0].bucket === 'vitimas', 'meus_arquivos_pendentes_v2 informa o bucket', pend);
+const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null, p_dados: JSON.stringify({ nome: 'Não identificada' }) });
+const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
+chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
+
+console.log('\nMigrações 007–010 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+process.exit(falha ? 1 : 0);

@@ -2704,3 +2704,2349 @@ end;
 $$;
 
 notify pgrst, 'reload schema';
+
+-- =====================================================================
+-- 14. CADASTRO COMPLETO DA OPERAÇÃO E FICHA DA VÍTIMA
+--     (migração 007 — idempotente; exige a 006)
+--
+--  operacoes: tipo (aquática, terrestre, aérea ou outras + texto livre),
+--    data e hora do acionamento, local (endereço e ponto no mapa) e
+--    descrição. Todas as colunas novas são OPCIONAIS: as operações antigas,
+--    que só têm o nome (codigo), continuam válidas e podem ser completadas
+--    depois. O nome continua na coluna "codigo" (nada foi renomeado).
+--    O participante continua vendo só o nome (info_operacao não muda).
+--
+--  vitimas: ficha da vítima (foto, nome, idade, características físicas,
+--    roupas e observações), várias por operação. Leitura SOMENTE pelos
+--    responsáveis da operação (RLS); civis e militares de campo nunca leem.
+--    A foto fica no bucket PRIVADO "vitimas", no caminho
+--    <operacao_id>/<vitima_id>/<uuid>.jpg (links assinados e temporários).
+--
+--  Retenção: quando os dados da operação são apagados, as fichas (e as
+--  fotos, pela fila arquivos_pendentes) também são. Os campos do cadastro
+--  da operação continuam, como o nome já continuava.
+-- =====================================================================
+
+alter table public.operacoes add column if not exists tipo text;
+alter table public.operacoes add column if not exists tipo_outro text;
+alter table public.operacoes add column if not exists acionado_em timestamptz;
+alter table public.operacoes add column if not exists local_endereco text;
+alter table public.operacoes add column if not exists local_lat double precision;
+alter table public.operacoes add column if not exists local_lng double precision;
+alter table public.operacoes add column if not exists descricao text not null default '';
+alter table public.operacoes add column if not exists atualizado_em timestamptz;
+alter table public.operacoes add column if not exists atualizado_por_nome text;
+
+alter table public.operacoes drop constraint if exists operacoes_tipo_check;
+alter table public.operacoes add constraint operacoes_tipo_check check (
+  (tipo is null and tipo_outro is null)
+  or (tipo in ('aquatica', 'terrestre', 'aerea') and tipo_outro is null)
+  or (tipo = 'outras' and char_length(btrim(coalesce(tipo_outro, ''))) between 1 and 60));
+alter table public.operacoes drop constraint if exists operacoes_local_check;
+alter table public.operacoes add constraint operacoes_local_check check (
+  (local_lat is null) = (local_lng is null)
+  and (local_lat is null or (local_lat between -90 and 90 and local_lng between -180 and 180)));
+alter table public.operacoes drop constraint if exists operacoes_textos_check;
+alter table public.operacoes add constraint operacoes_textos_check check (
+  char_length(coalesce(local_endereco, '')) <= 300 and char_length(descricao) <= 2000);
+
+-- Aplica (e valida) os campos do cadastro enviados em p_dados sobre a operação.
+-- Só os campos presentes em p_dados mudam. Uso interno das funções abaixo.
+create or replace function public.aplicar_cadastro_operacao(p_op public.operacoes, p_dados jsonb)
+returns public.operacoes
+language plpgsql
+set search_path = public
+as $$
+declare
+  v public.operacoes := p_op;
+  v_txt text;
+begin
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if p_dados ? 'codigo' then
+    v.codigo := btrim(regexp_replace(coalesce(p_dados->>'codigo', ''), '\s+', ' ', 'g'));
+    if char_length(v.codigo) < 2 or char_length(v.codigo) > 80 then
+      raise exception 'codigo_invalido';
+    end if;
+  end if;
+
+  if p_dados ? 'tipo' or p_dados ? 'tipo_outro' then
+    if p_dados ? 'tipo' then
+      v.tipo := nullif(btrim(coalesce(p_dados->>'tipo', '')), '');
+    end if;
+    if v.tipo is not null and v.tipo not in ('aquatica', 'terrestre', 'aerea', 'outras') then
+      raise exception 'tipo_operacao_invalido';
+    end if;
+    if v.tipo = 'outras' then
+      if p_dados ? 'tipo_outro' then
+        v.tipo_outro := btrim(regexp_replace(coalesce(p_dados->>'tipo_outro', ''), '\s+', ' ', 'g'));
+      end if;
+      if char_length(coalesce(v.tipo_outro, '')) not between 1 and 60 then
+        raise exception 'tipo_operacao_invalido';
+      end if;
+    else
+      v.tipo_outro := null;
+    end if;
+  end if;
+
+  if p_dados ? 'acionado_em' then
+    v_txt := nullif(btrim(coalesce(p_dados->>'acionado_em', '')), '');
+    if v_txt is null then
+      v.acionado_em := null;
+    else
+      begin
+        v.acionado_em := v_txt::timestamptz;
+      exception when others then
+        raise exception 'acionamento_invalido';
+      end;
+      if v.acionado_em > now() + interval '5 minutes' or v.acionado_em < '2000-01-01'::timestamptz then
+        raise exception 'acionamento_invalido';
+      end if;
+    end if;
+  end if;
+
+  if p_dados ? 'local_endereco' then
+    v.local_endereco := nullif(btrim(regexp_replace(coalesce(p_dados->>'local_endereco', ''), '\s+', ' ', 'g')), '');
+    if char_length(coalesce(v.local_endereco, '')) > 300 then
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+
+  if p_dados ? 'local_lat' or p_dados ? 'local_lng' then
+    if jsonb_typeof(p_dados->'local_lat') = 'number' and jsonb_typeof(p_dados->'local_lng') = 'number' then
+      v.local_lat := (p_dados->>'local_lat')::double precision;
+      v.local_lng := (p_dados->>'local_lng')::double precision;
+      if v.local_lat not between -90 and 90 or v.local_lng not between -180 and 180 or (v.local_lat = 0 and v.local_lng = 0) then
+        raise exception 'posicao_invalida';
+      end if;
+    elsif coalesce(jsonb_typeof(p_dados->'local_lat'), 'null') = 'null' and coalesce(jsonb_typeof(p_dados->'local_lng'), 'null') = 'null' then
+      v.local_lat := null;
+      v.local_lng := null;
+    else
+      raise exception 'posicao_invalida';
+    end if;
+  end if;
+
+  if p_dados ? 'descricao' then
+    v.descricao := btrim(coalesce(p_dados->>'descricao', ''));
+    if char_length(v.descricao) > 2000 then
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+  return v;
+end;
+$$;
+
+-- Criação: a versão de 2 parâmetros é substituída. Chamadas antigas (sem
+-- p_dados) continuam funcionando e criam a operação só com o nome. Com
+-- p_dados (painel novo), tipo e data/hora do acionamento são obrigatórios.
+drop function if exists public.criar_operacao(text, integer);
+
+create or replace function public.criar_operacao(p_codigo text, p_retencao_horas integer default 0, p_dados jsonb default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_op public.operacoes%rowtype;
+begin
+  if not public.eh_responsavel() then
+    raise exception 'sem_permissao';
+  end if;
+  if p_retencao_horas is null or p_retencao_horas not in (0, 24, 72, 168, 720) then
+    raise exception 'retencao_invalida';
+  end if;
+  v_op.codigo := btrim(regexp_replace(coalesce(p_codigo, ''), '\s+', ' ', 'g'));
+  if char_length(v_op.codigo) < 2 or char_length(v_op.codigo) > 80 then
+    raise exception 'codigo_invalido';
+  end if;
+  v_op.descricao := '';
+  if p_dados is not null then
+    v_op := public.aplicar_cadastro_operacao(v_op, p_dados - 'codigo');
+    if v_op.tipo is null then
+      raise exception 'tipo_operacao_invalido';
+    end if;
+    if v_op.acionado_em is null then
+      raise exception 'acionamento_invalido';
+    end if;
+  end if;
+
+  insert into public.operacoes (codigo, responsavel_id, token_civil, token_militar, retencao_horas,
+                                tipo, tipo_outro, acionado_em, local_endereco, local_lat, local_lng, descricao)
+  values (v_op.codigo, auth.uid(), public.gerar_token(), public.gerar_token(), p_retencao_horas,
+          v_op.tipo, v_op.tipo_outro, v_op.acionado_em, v_op.local_endereco, v_op.local_lat, v_op.local_lng,
+          coalesce(v_op.descricao, ''))
+  returning * into v_op;
+
+  return row_to_json(v_op);
+end;
+$$;
+
+-- Edição do cadastro (nome, tipo, acionamento, local, descrição): qualquer
+-- responsável da operação. Só os campos enviados mudam.
+create or replace function public.atualizar_operacao(p_operacao uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_op public.operacoes%rowtype;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao for update;
+  if not found then
+    raise exception 'sem_permissao';
+  end if;
+  v_op := public.aplicar_cadastro_operacao(v_op, p_dados);
+  update public.operacoes
+     set codigo = v_op.codigo, tipo = v_op.tipo, tipo_outro = v_op.tipo_outro, acionado_em = v_op.acionado_em,
+         local_endereco = v_op.local_endereco, local_lat = v_op.local_lat, local_lng = v_op.local_lng,
+         descricao = coalesce(v_op.descricao, ''), atualizado_em = now(), atualizado_por_nome = v_nome
+   where id = p_operacao
+  returning * into v_op;
+  return row_to_json(v_op);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Ficha da vítima
+-- ---------------------------------------------------------------------
+create table if not exists public.vitimas (
+  id                  uuid primary key default gen_random_uuid(),
+  operacao_id         uuid not null references public.operacoes(id) on delete cascade,
+  nome                text not null check (char_length(btrim(nome)) between 1 and 80),
+  idade               smallint check (idade between 0 and 130),
+  caracteristicas     text not null default '' check (char_length(caracteristicas) <= 1000),
+  roupas              text not null default '' check (char_length(roupas) <= 1000),
+  observacoes         text not null default '' check (char_length(observacoes) <= 2000),
+  foto_caminho        text unique,
+  foto_atualizada_em  timestamptz,
+  criado_por          uuid references auth.users(id) on delete set null,
+  criado_por_nome     text not null,
+  criado_em           timestamptz not null default now(),
+  atualizado_em       timestamptz not null default now(),
+  atualizado_por_nome text
+);
+create index if not exists vitimas_operacao_idx on public.vitimas (operacao_id, criado_em);
+
+alter table public.vitimas enable row level security;
+drop policy if exists vitimas_ler on public.vitimas;
+create policy vitimas_ler on public.vitimas
+  for select to authenticated using (public.dono_operacao(operacao_id));
+revoke all on public.vitimas from anon;
+revoke insert, update, delete, truncate on public.vitimas from authenticated;
+grant select on public.vitimas to authenticated;
+
+-- Cria (p_id nulo) ou altera uma ficha. Na alteração, só os campos enviados mudam.
+create or replace function public.salvar_vitima(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v public.vitimas%rowtype;
+  v_op public.operacoes%rowtype;
+  v_idade numeric;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.dados_apagados_em is not null then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if p_id is null then
+    v.id := gen_random_uuid();
+    v.operacao_id := p_operacao;
+    v.criado_por := auth.uid();
+    v.criado_por_nome := v_nome_resp;
+    v.criado_em := now();
+    v.caracteristicas := '';
+    v.roupas := '';
+    v.observacoes := '';
+  else
+    select * into v from public.vitimas where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'vitima_nao_encontrada';
+    end if;
+  end if;
+
+  if p_dados ? 'nome' then v.nome := btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'caracteristicas' then v.caracteristicas := btrim(coalesce(p_dados->>'caracteristicas', '')); end if;
+  if p_dados ? 'roupas' then v.roupas := btrim(coalesce(p_dados->>'roupas', '')); end if;
+  if p_dados ? 'observacoes' then v.observacoes := btrim(coalesce(p_dados->>'observacoes', '')); end if;
+  if p_dados ? 'idade' then
+    if coalesce(jsonb_typeof(p_dados->'idade'), 'null') = 'null' then
+      v.idade := null;
+    elsif jsonb_typeof(p_dados->'idade') = 'number' then
+      v_idade := (p_dados->>'idade')::numeric;
+      if v_idade <> trunc(v_idade) or v_idade not between 0 and 130 then
+        raise exception 'dados_invalidos';
+      end if;
+      v.idade := v_idade::smallint;
+    else
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+
+  if v.nome is null or char_length(v.nome) not between 1 and 80 then
+    raise exception 'nome_vitima_invalido';
+  end if;
+  if char_length(v.caracteristicas) > 1000 or char_length(v.roupas) > 1000 or char_length(v.observacoes) > 2000 then
+    raise exception 'dados_invalidos';
+  end if;
+
+  v.atualizado_em := now();
+  v.atualizado_por_nome := v_nome_resp;
+  if p_id is null then
+    insert into public.vitimas select v.*;
+  else
+    update public.vitimas set nome = v.nome, idade = v.idade, caracteristicas = v.caracteristicas, roupas = v.roupas,
+           observacoes = v.observacoes, atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+     where id = v.id;
+  end if;
+  return row_to_json(v);
+end;
+$$;
+
+-- Excluir: quem criou a ficha, quem criou a operação ou um administrador da equipe.
+create or replace function public.excluir_vitima(p_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v public.vitimas%rowtype;
+begin
+  select * into v from public.vitimas where id = p_id;
+  if not found or not public.pode_excluir_registro(v.operacao_id, v.criado_por) then
+    raise exception 'sem_permissao';
+  end if;
+  delete from public.vitimas where id = p_id;   -- a foto entra na fila de arquivos a apagar (gatilho)
+end;
+$$;
+
+-- Caminho válido da foto: <operacao_id>/<vitima_id>/<uuid>.jpg  → {operacao, vitima, arquivo}
+create or replace function public.caminho_vitima_partes(p_nome text)
+returns uuid[]
+language plpgsql immutable
+as $$
+begin
+  if coalesce(p_nome, '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$' then
+    return null;
+  end if;
+  return array[split_part(p_nome, '/', 1)::uuid, split_part(p_nome, '/', 2)::uuid,
+               replace(split_part(p_nome, '/', 3), '.jpg', '')::uuid];
+end;
+$$;
+
+-- Depois de enviar o arquivo ao Storage, o painel registra a foto na ficha.
+-- p_caminho nulo tira a foto (o arquivo vai para a fila de remoção).
+create or replace function public.definir_foto_vitima(p_vitima uuid, p_caminho text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v public.vitimas%rowtype;
+  v_partes uuid[];
+begin
+  select * into v from public.vitimas where id = p_vitima for update;
+  if not found or v_nome_resp is null or not public.dono_operacao(v.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  if exists (select 1 from public.operacoes where id = v.operacao_id and dados_apagados_em is not null) then
+    raise exception 'operacao_encerrada';
+  end if;
+  if p_caminho is not null then
+    v_partes := public.caminho_vitima_partes(p_caminho);
+    if v_partes is null or v_partes[1] <> v.operacao_id or v_partes[2] <> v.id then
+      raise exception 'dados_invalidos';
+    end if;
+    if not exists (select 1 from storage.objects where bucket_id = 'vitimas' and name = p_caminho) then
+      raise exception 'foto_nao_enviada';
+    end if;
+  end if;
+  update public.vitimas
+     set foto_caminho = p_caminho,
+         foto_atualizada_em = case when p_caminho is null then null else now() end,
+         atualizado_em = now(), atualizado_por_nome = v_nome_resp
+   where id = v.id
+  returning * into v;
+  return row_to_json(v);
+end;
+$$;
+
+-- Foto trocada ou ficha excluída: o arquivo antigo entra na fila de remoção do Storage.
+create or replace function public.fila_apagar_foto_vitima()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.foto_caminho is not null then
+      insert into public.arquivos_pendentes (caminho, bucket, operacao_id, excluido_por)
+      values (old.foto_caminho, 'vitimas', old.operacao_id, auth.uid())
+      on conflict (caminho) do nothing;
+    end if;
+    return old;
+  end if;
+  if old.foto_caminho is not null and old.foto_caminho is distinct from new.foto_caminho then
+    insert into public.arquivos_pendentes (caminho, bucket, operacao_id, excluido_por)
+    values (old.foto_caminho, 'vitimas', old.operacao_id, auth.uid())
+    on conflict (caminho) do nothing;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists vitimas_apagar_foto on public.vitimas;
+create trigger vitimas_apagar_foto after delete or update of foto_caminho on public.vitimas
+  for each row execute function public.fila_apagar_foto_vitima();
+
+-- Regras do Storage (bucket "vitimas"):
+--   enviar: só responsáveis da operação, na pasta de uma ficha existente;
+--   ver: só responsáveis da operação (ou quem excluiu e precisa apagar o arquivo);
+--   apagar: só arquivos cujo registro já saiu (fila arquivos_pendentes).
+create or replace function public.pode_enviar_foto_vitima(p_nome text)
+returns boolean
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v uuid[] := public.caminho_vitima_partes(p_nome);
+begin
+  if v is null then
+    return false;
+  end if;
+  return public.dono_operacao(v[1]) and exists (
+    select 1 from public.vitimas t join public.operacoes o on o.id = t.operacao_id
+     where t.id = v[2] and t.operacao_id = v[1] and o.dados_apagados_em is null);
+end;
+$$;
+
+create or replace function public.pode_ver_foto_vitima(p_nome text)
+returns boolean
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v uuid[] := public.caminho_vitima_partes(p_nome);
+begin
+  if v is null then
+    return false;
+  end if;
+  return public.dono_operacao(v[1])
+      or exists (select 1 from public.arquivos_pendentes a where a.caminho = p_nome and a.bucket = 'vitimas' and a.excluido_por = auth.uid());
+end;
+$$;
+
+create or replace function public.pode_apagar_foto_vitima(p_nome text)
+returns boolean
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  return exists (
+    select 1 from public.arquivos_pendentes a
+     where a.caminho = p_nome and a.bucket = 'vitimas'
+       and (a.excluido_por = auth.uid() or (a.operacao_id is not null and public.dono_operacao(a.operacao_id))));
+end;
+$$;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('vitimas', 'vitimas', false, 10485760, array['image/jpeg'])
+on conflict (id) do update
+  set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists gbs_vitimas_enviar on storage.objects;
+create policy gbs_vitimas_enviar on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'vitimas' and public.pode_enviar_foto_vitima(name));
+
+drop policy if exists gbs_vitimas_ver on storage.objects;
+create policy gbs_vitimas_ver on storage.objects
+  for select to authenticated
+  using (bucket_id = 'vitimas' and public.pode_ver_foto_vitima(name));
+
+drop policy if exists gbs_vitimas_apagar on storage.objects;
+create policy gbs_vitimas_apagar on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'vitimas' and public.pode_apagar_foto_vitima(name));
+
+-- Arquivos a apagar deste responsável, com o bucket (fotos de campo ou fotos de vítimas).
+create or replace function public.meus_arquivos_pendentes_v2()
+returns json
+language sql stable security definer set search_path = public
+as $$
+  select coalesce(json_agg(json_build_object('caminho', caminho, 'bucket', bucket)), '[]'::json)
+    from (select caminho, bucket from public.arquivos_pendentes
+           where excluido_por = auth.uid() order by criado_em limit 1000) x;
+$$;
+
+-- Retenção: dados apagados → fichas apagadas (as fotos entram na fila).
+create or replace function public.apagar_vitimas_da_operacao()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.dados_apagados_em is not null and old.dados_apagados_em is null then
+    delete from public.vitimas where operacao_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists operacoes_apagar_vitimas on public.operacoes;
+create trigger operacoes_apagar_vitimas after update of dados_apagados_em on public.operacoes
+  for each row execute function public.apagar_vitimas_da_operacao();
+
+-- Exclusão definitiva: informa também quantas fichas de vítima foram apagadas.
+create or replace function public.excluir_operacao(p_operacao uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_codigo text;
+  v_fotos integer;
+  v_participantes integer;
+  v_vitimas integer;
+begin
+  if not (public.eh_criador(p_operacao) or (public.eh_admin() and public.dono_operacao(p_operacao))) then
+    raise exception 'sem_permissao';
+  end if;
+  select codigo into v_codigo from public.operacoes where id = p_operacao for update;
+  if v_codigo is null then
+    raise exception 'sem_permissao';
+  end if;
+  select count(*) into v_fotos from public.fotos where operacao_id = p_operacao;
+  select count(*) into v_participantes from public.participantes where operacao_id = p_operacao and tipo <> 'responsavel';
+  select count(*) into v_vitimas from public.vitimas where operacao_id = p_operacao;
+
+  delete from public.operacoes where id = p_operacao;   -- apaga em cascata tudo o que é da operação
+
+  return json_build_object('operacao', v_codigo, 'fotos', v_fotos, 'participantes', v_participantes, 'vitimas', v_vitimas);
+end;
+$$;
+
+revoke execute on function public.aplicar_cadastro_operacao(public.operacoes, jsonb) from public, anon, authenticated;
+revoke execute on function public.apagar_vitimas_da_operacao(), public.fila_apagar_foto_vitima() from public, anon, authenticated;
+revoke execute on function
+  public.criar_operacao(text, integer, jsonb), public.atualizar_operacao(uuid, jsonb),
+  public.salvar_vitima(uuid, uuid, jsonb), public.excluir_vitima(uuid), public.definir_foto_vitima(uuid, text),
+  public.caminho_vitima_partes(text), public.pode_enviar_foto_vitima(text), public.pode_ver_foto_vitima(text),
+  public.pode_apagar_foto_vitima(text), public.meus_arquivos_pendentes_v2(), public.excluir_operacao(uuid)
+  from public, anon;
+grant execute on function
+  public.criar_operacao(text, integer, jsonb), public.atualizar_operacao(uuid, jsonb),
+  public.salvar_vitima(uuid, uuid, jsonb), public.excluir_vitima(uuid), public.definir_foto_vitima(uuid, text),
+  public.caminho_vitima_partes(text), public.pode_enviar_foto_vitima(text), public.pode_ver_foto_vitima(text),
+  public.pode_apagar_foto_vitima(text), public.meus_arquivos_pendentes_v2(), public.excluir_operacao(uuid)
+  to authenticated;
+
+-- Tempo real: fichas aparecem para os outros responsáveis sem recarregar.
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    begin
+      execute 'alter publication supabase_realtime add table public.vitimas';
+    exception when duplicate_object then
+      null;
+    end;
+  end if;
+end;
+$$;
+
+notify pgrst, 'reload schema';
+
+-- =====================================================================
+-- 15. GRUPOS DENTRO DA OPERAÇÃO
+--     (migração 008 — idempotente; exige a 007)
+--
+--  grupos          grupos com nome livre (ex.: Polícia Civil, Bombeiros), com cor
+--  grupo_convites  o link (token) de cada grupo — separado dos dados do grupo
+--                  para que um membro, que lê o grupo, NÃO leia o link
+--  grupo_membros   quem está em cada grupo e com que papel (responsável/membro)
+--
+--  Quem vê o quê (RLS):
+--   * responsáveis da operação: todos os grupos, membros e links da operação;
+--   * participante: SOMENTE os grupos aos quais pertence e a própria linha de
+--     membro (com o papel). Nunca lê os links nem os outros membros.
+--  O navegador não grava nessas tabelas: tudo passa pelas funções abaixo.
+--
+--  Link do grupo: entra na operação E no grupo, sempre como "membro". O papel
+--  de responsável do grupo só é dado pelo painel. Pelo link de um grupo, a
+--  pessoa entra como civil, a não ser que o grupo permita militares.
+--  "Gerar novo link" troca o token: o link anterior deixa de funcionar na hora.
+--  Uma pessoa pode estar em mais de um grupo.
+-- =====================================================================
+
+-- Chave composta: garante que grupo e pessoa de um vínculo são da MESMA operação.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'participantes_id_operacao_key') then
+    alter table public.participantes add constraint participantes_id_operacao_key unique (id, operacao_id);
+  end if;
+end;
+$$;
+
+create table if not exists public.grupos (
+  id                  uuid primary key default gen_random_uuid(),
+  operacao_id         uuid not null references public.operacoes(id) on delete cascade,
+  nome                text not null check (char_length(btrim(nome)) between 1 and 60),
+  cor                 text not null default '#f59e0b' check (cor ~ '^#[0-9a-fA-F]{6}$'),
+  permite_militar     boolean not null default false,
+  criado_por          uuid references auth.users(id) on delete set null,
+  criado_por_nome     text not null,
+  criado_em           timestamptz not null default now(),
+  atualizado_em       timestamptz not null default now(),
+  atualizado_por_nome text,
+  constraint grupos_id_operacao_key unique (id, operacao_id)
+);
+create unique index if not exists grupos_nome_unico on public.grupos (operacao_id, lower(nome));
+
+create table if not exists public.grupo_convites (
+  grupo_id         uuid primary key references public.grupos(id) on delete cascade,
+  operacao_id      uuid not null references public.operacoes(id) on delete cascade,
+  token            text not null unique check (char_length(token) = 64),
+  criado_em        timestamptz not null default now(),
+  criado_por_nome  text
+);
+
+create table if not exists public.grupo_membros (
+  grupo_id             uuid not null,
+  participante_id      uuid not null,
+  operacao_id          uuid not null,
+  papel                text not null default 'membro' check (papel in ('responsavel', 'membro')),
+  origem               text not null default 'painel' check (origem in ('painel', 'link')),
+  adicionado_por_nome  text,
+  criado_em            timestamptz not null default now(),
+  atualizado_em        timestamptz not null default now(),
+  primary key (grupo_id, participante_id),
+  constraint grupo_membros_grupo_fk foreign key (grupo_id, operacao_id)
+    references public.grupos(id, operacao_id) on delete cascade,
+  constraint grupo_membros_participante_fk foreign key (participante_id, operacao_id)
+    references public.participantes(id, operacao_id) on delete cascade
+);
+create index if not exists grupo_membros_participante_idx on public.grupo_membros (participante_id);
+create index if not exists grupo_membros_operacao_idx on public.grupo_membros (operacao_id);
+
+-- A pessoa logada é participante ATIVO deste grupo? (security definer: evita a
+-- recursão de uma política de grupo_membros consultando a própria tabela)
+create or replace function public.eh_membro_grupo(p_grupo uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.grupo_membros m
+      join public.participantes p on p.id = m.participante_id
+     where m.grupo_id = p_grupo and p.user_id = auth.uid() and not p.removido and p.liberado_em is null);
+$$;
+
+alter table public.grupos enable row level security;
+alter table public.grupo_convites enable row level security;
+alter table public.grupo_membros enable row level security;
+
+drop policy if exists grupos_ler on public.grupos;
+create policy grupos_ler on public.grupos
+  for select to authenticated using (public.dono_operacao(operacao_id) or public.eh_membro_grupo(id));
+
+drop policy if exists grupo_convites_ler on public.grupo_convites;
+create policy grupo_convites_ler on public.grupo_convites
+  for select to authenticated using (public.dono_operacao(operacao_id));
+
+drop policy if exists grupo_membros_ler on public.grupo_membros;
+create policy grupo_membros_ler on public.grupo_membros
+  for select to authenticated using (public.dono_operacao(operacao_id) or public.eh_meu_participante(participante_id));
+
+revoke all on public.grupos, public.grupo_convites, public.grupo_membros from anon;
+revoke insert, update, delete, truncate on public.grupos, public.grupo_convites, public.grupo_membros from authenticated;
+grant select on public.grupos, public.grupo_convites, public.grupo_membros to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Funções do painel (responsáveis da operação)
+-- ---------------------------------------------------------------------
+
+-- Cria (p_id nulo) ou altera um grupo: nome, cor, permite_militar.
+create or replace function public.salvar_grupo(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v public.grupos%rowtype;
+  v_op public.operacoes%rowtype;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.dados_apagados_em is not null then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if p_id is null then
+    v.id := gen_random_uuid();
+    v.operacao_id := p_operacao;
+    v.cor := '#f59e0b';
+    v.permite_militar := false;
+    v.criado_por := auth.uid();
+    v.criado_por_nome := v_nome_resp;
+    v.criado_em := now();
+  else
+    select * into v from public.grupos where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'grupo_nao_encontrado';
+    end if;
+  end if;
+
+  if p_dados ? 'nome' then v.nome := btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'cor' then v.cor := p_dados->>'cor'; end if;
+  if p_dados ? 'permite_militar' then
+    if jsonb_typeof(p_dados->'permite_militar') <> 'boolean' then
+      raise exception 'dados_invalidos';
+    end if;
+    v.permite_militar := (p_dados->>'permite_militar')::boolean;
+  end if;
+  if v.nome is null or char_length(v.nome) not between 1 and 60 then
+    raise exception 'nome_grupo_invalido';
+  end if;
+  if v.cor is null or v.cor !~ '^#[0-9a-fA-F]{6}$' then
+    raise exception 'dados_invalidos';
+  end if;
+
+  v.atualizado_em := now();
+  v.atualizado_por_nome := v_nome_resp;
+  begin
+    if p_id is null then
+      insert into public.grupos select v.*;
+      insert into public.grupo_convites (grupo_id, operacao_id, token, criado_por_nome)
+      values (v.id, v.operacao_id, public.gerar_token(), v_nome_resp);
+    else
+      update public.grupos set nome = v.nome, cor = v.cor, permite_militar = v.permite_militar,
+             atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+       where id = v.id;
+    end if;
+  exception when unique_violation then
+    raise exception 'grupo_existente';
+  end;
+  return row_to_json(v);
+end;
+$$;
+
+-- Excluir o grupo: quem o criou, quem criou a operação ou um administrador.
+-- Os vínculos e o link são apagados junto; as pessoas continuam na operação.
+create or replace function public.excluir_grupo(p_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v public.grupos%rowtype;
+begin
+  select * into v from public.grupos where id = p_id;
+  if not found or not public.pode_excluir_registro(v.operacao_id, v.criado_por) then
+    raise exception 'sem_permissao';
+  end if;
+  delete from public.grupos where id = p_id;
+end;
+$$;
+
+-- Coloca uma pessoa no grupo (ou muda o papel dela). Só pelo painel.
+create or replace function public.definir_membro(p_grupo uuid, p_participante uuid, p_papel text default 'membro')
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v_g public.grupos%rowtype;
+  v_m public.grupo_membros%rowtype;
+begin
+  select * into v_g from public.grupos where id = p_grupo;
+  if not found or v_nome_resp is null or not public.dono_operacao(v_g.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  if exists (select 1 from public.operacoes where id = v_g.operacao_id and dados_apagados_em is not null) then
+    raise exception 'operacao_encerrada';
+  end if;
+  if coalesce(p_papel, '') not in ('responsavel', 'membro') then
+    raise exception 'dados_invalidos';
+  end if;
+  if not exists (select 1 from public.participantes where id = p_participante and operacao_id = v_g.operacao_id) then
+    raise exception 'participante_invalido';
+  end if;
+  insert into public.grupo_membros (grupo_id, participante_id, operacao_id, papel, origem, adicionado_por_nome)
+  values (v_g.id, p_participante, v_g.operacao_id, p_papel, 'painel', v_nome_resp)
+  on conflict (grupo_id, participante_id) do update
+     set papel = excluded.papel, atualizado_em = now()
+  returning * into v_m;
+  return row_to_json(v_m);
+end;
+$$;
+
+create or replace function public.remover_membro(p_grupo uuid, p_participante uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_op uuid;
+begin
+  select operacao_id into v_op from public.grupos where id = p_grupo;
+  if v_op is null or public.nome_responsavel_atual() is null or not public.dono_operacao(v_op) then
+    raise exception 'sem_permissao';
+  end if;
+  delete from public.grupo_membros where grupo_id = p_grupo and participante_id = p_participante;
+end;
+$$;
+
+-- Link (token) do grupo: só responsáveis da operação.
+create or replace function public.link_do_grupo(p_grupo uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_g public.grupos%rowtype;
+  v_token text;
+begin
+  select * into v_g from public.grupos where id = p_grupo;
+  if not found or not public.dono_operacao(v_g.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  select token into v_token from public.grupo_convites where grupo_id = p_grupo;
+  if v_token is null then
+    insert into public.grupo_convites (grupo_id, operacao_id, token, criado_por_nome)
+    values (v_g.id, v_g.operacao_id, public.gerar_token(), public.nome_responsavel_atual())
+    returning token into v_token;
+  end if;
+  return json_build_object('grupo_id', v_g.id, 'token', v_token, 'permite_militar', v_g.permite_militar);
+end;
+$$;
+
+-- Troca o link do grupo: o anterior deixa de funcionar na hora.
+create or replace function public.gerar_novo_link_grupo(p_grupo uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_g public.grupos%rowtype;
+  v_nome text := public.nome_responsavel_atual();
+  v_token text := public.gerar_token();
+begin
+  select * into v_g from public.grupos where id = p_grupo;
+  if not found or v_nome is null or not public.dono_operacao(v_g.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  insert into public.grupo_convites (grupo_id, operacao_id, token, criado_por_nome)
+  values (v_g.id, v_g.operacao_id, v_token, v_nome)
+  on conflict (grupo_id) do update set token = excluded.token, criado_em = now(), criado_por_nome = excluded.criado_por_nome;
+  return json_build_object('grupo_id', v_g.id, 'token', v_token, 'permite_militar', v_g.permite_militar);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Funções do participante
+-- ---------------------------------------------------------------------
+
+-- Grupos do próprio participante (nome, cor e o papel dele). Nada sobre os outros membros.
+create or replace function public.meus_grupos(p_participante uuid)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_part public.participantes%rowtype;
+begin
+  select * into v_part from public.participantes where id = p_participante and user_id = auth.uid();
+  if not found then
+    raise exception 'participante_invalido';
+  end if;
+  return coalesce((
+    select json_agg(json_build_object('id', g.id, 'nome', g.nome, 'cor', g.cor, 'papel', m.papel) order by g.nome)
+      from public.grupo_membros m join public.grupos g on g.id = m.grupo_id
+     where m.participante_id = v_part.id), '[]'::json);
+end;
+$$;
+
+-- Tela inicial: aceita também o link de um grupo (mostra o nome do grupo).
+create or replace function public.info_operacao(p_token text)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_op public.operacoes%rowtype;
+  v_tipo text;
+  v_grupo text;
+  v_perm boolean;
+  v_opid uuid;
+begin
+  if p_token is null or char_length(p_token) <> 64 then
+    return null;
+  end if;
+  select * into v_op from public.operacoes where token_civil = p_token;
+  if found then
+    v_tipo := 'civil';
+  else
+    select * into v_op from public.operacoes where token_militar = p_token;
+    if found then
+      v_tipo := 'militar';
+    else
+      select g.nome, g.permite_militar, g.operacao_id into v_grupo, v_perm, v_opid
+        from public.grupo_convites c join public.grupos g on g.id = c.grupo_id
+       where c.token = p_token;
+      if v_opid is null then
+        return null;
+      end if;
+      select * into v_op from public.operacoes where id = v_opid;
+      v_tipo := case when v_perm then 'militar' else 'civil' end;
+    end if;
+  end if;
+  return json_build_object(
+    'operacao', v_op.codigo,
+    'ativa', v_op.status = 'ativa',
+    'tipos_permitidos', case when v_tipo = 'militar' then json_build_array('militar', 'civil') else json_build_array('civil') end,
+    'grupo', v_grupo
+  );
+end;
+$$;
+
+-- Ingresso: igual ao anterior, aceitando também o link de um grupo. Pelo link
+-- do grupo a pessoa entra na operação e no grupo (papel "membro").
+create or replace function public.ingressar(p_token text, p_nome text, p_tipo text default 'civil',
+                                            p_cpf text default null, p_telefone text default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_op public.operacoes%rowtype;
+  v_link text;
+  v_tipo text;
+  v_nome text := btrim(regexp_replace(coalesce(p_nome, ''), '\s+', ' ', 'g'));
+  v_part public.participantes%rowtype;
+  v_total integer;
+  v_cpf text := public.cpf_normalizado(p_cpf);
+  v_tel text := public.telefone_normalizado(p_telefone);
+  v_grupo_id uuid;
+  v_grupo_nome text;
+  v_perm boolean;
+  v_opid uuid;
+begin
+  if v_uid is null then
+    raise exception 'nao_autenticado';
+  end if;
+  if p_token is null or char_length(p_token) <> 64 then
+    raise exception 'link_invalido';
+  end if;
+
+  select * into v_op from public.operacoes where token_civil = p_token;
+  if found then
+    v_link := 'civil';
+  else
+    select * into v_op from public.operacoes where token_militar = p_token;
+    if found then
+      v_link := 'militar';
+    else
+      select g.id, g.nome, g.permite_militar, g.operacao_id into v_grupo_id, v_grupo_nome, v_perm, v_opid
+        from public.grupo_convites c join public.grupos g on g.id = c.grupo_id
+       where c.token = p_token;
+      if v_grupo_id is null then
+        raise exception 'link_invalido';
+      end if;
+      select * into v_op from public.operacoes where id = v_opid;
+      v_link := case when v_perm then 'militar' else 'civil' end;
+    end if;
+  end if;
+
+  if v_op.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if char_length(v_nome) < 2 or char_length(v_nome) > 40 then
+    raise exception 'nome_invalido';
+  end if;
+
+  -- O tipo é decidido pelo servidor: o link de civis nunca concede "militar".
+  if v_link = 'militar' and p_tipo = 'militar' then
+    v_tipo := 'militar';
+  else
+    v_tipo := 'civil';
+  end if;
+
+  -- CPF e celular: obrigatórios para civis; opcionais para militares (se informados, válidos).
+  if coalesce(btrim(p_cpf), '') <> '' and v_cpf is null then
+    raise exception 'cpf_invalido';
+  end if;
+  if coalesce(btrim(p_telefone), '') <> '' and v_tel is null then
+    raise exception 'telefone_invalido';
+  end if;
+  if v_tipo = 'civil' and v_cpf is null then
+    raise exception 'cpf_invalido';
+  end if;
+  if v_tipo = 'civil' and v_tel is null then
+    raise exception 'telefone_invalido';
+  end if;
+
+  select * into v_part from public.participantes where operacao_id = v_op.id and user_id = v_uid;
+  if found then
+    if v_part.liberado_em is not null then
+      raise exception 'participante_liberado';
+    end if;
+    if v_part.removido or v_part.tipo = 'responsavel' then
+      raise exception 'participante_removido';
+    end if;
+    update public.participantes
+       set nome = v_nome, tipo = v_tipo,
+           cpf = coalesce(v_cpf, cpf), telefone = coalesce(v_tel, telefone)
+     where id = v_part.id returning * into v_part;
+  else
+    select count(*) into v_total from public.participantes where operacao_id = v_op.id;
+    if v_total >= 300 then
+      raise exception 'limite_participantes';
+    end if;
+    insert into public.participantes (operacao_id, user_id, nome, tipo, cpf, telefone)
+    values (v_op.id, v_uid, v_nome, v_tipo, v_cpf, v_tel)
+    returning * into v_part;
+  end if;
+
+  if v_grupo_id is not null then
+    insert into public.grupo_membros (grupo_id, participante_id, operacao_id, papel, origem, adicionado_por_nome)
+    values (v_grupo_id, v_part.id, v_op.id, 'membro', 'link', 'link do grupo')
+    on conflict (grupo_id, participante_id) do nothing;
+  end if;
+
+  return json_build_object(
+    'participante_id', v_part.id,
+    'nome', v_part.nome,
+    'tipo', v_part.tipo,
+    'operacao', v_op.codigo,
+    'operacao_id', v_op.id,
+    'saida_solicitada_em', v_part.saida_solicitada_em,
+    'grupo', v_grupo_nome
+  );
+end;
+$$;
+
+-- Retenção: dados apagados → grupos, links e vínculos apagados.
+create or replace function public.apagar_grupos_da_operacao()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.dados_apagados_em is not null and old.dados_apagados_em is null then
+    delete from public.grupos where operacao_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists operacoes_apagar_grupos on public.operacoes;
+create trigger operacoes_apagar_grupos after update of dados_apagados_em on public.operacoes
+  for each row execute function public.apagar_grupos_da_operacao();
+
+revoke execute on function public.apagar_grupos_da_operacao() from public, anon, authenticated;
+revoke execute on function
+  public.eh_membro_grupo(uuid), public.salvar_grupo(uuid, uuid, jsonb), public.excluir_grupo(uuid),
+  public.definir_membro(uuid, uuid, text), public.remover_membro(uuid, uuid), public.link_do_grupo(uuid),
+  public.gerar_novo_link_grupo(uuid), public.meus_grupos(uuid), public.info_operacao(text),
+  public.ingressar(text, text, text, text, text)
+  from public, anon;
+grant execute on function
+  public.eh_membro_grupo(uuid), public.salvar_grupo(uuid, uuid, jsonb), public.excluir_grupo(uuid),
+  public.definir_membro(uuid, uuid, text), public.remover_membro(uuid, uuid), public.link_do_grupo(uuid),
+  public.gerar_novo_link_grupo(uuid), public.meus_grupos(uuid), public.info_operacao(text),
+  public.ingressar(text, text, text, text, text)
+  to authenticated;
+-- A tela inicial do participante mostra o nome da operação (e do grupo) antes do login anônimo.
+grant execute on function public.info_operacao(text) to anon;
+
+-- Tempo real para os painéis (o RLS continua valendo para quem assina).
+do $$
+declare
+  t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['grupos', 'grupo_membros'] loop
+      begin
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      exception when duplicate_object then
+        null;
+      end;
+    end loop;
+  end if;
+end;
+$$;
+
+notify pgrst, 'reload schema';
+
+-- =====================================================================
+-- 16. TRILHA GPS COM SUPORTE OFFLINE (confirmação por ponto)
+--     (migração 009 — idempotente; exige a 008)
+--
+--  operacoes.gps_intervalo_s  intervalo MÁXIMO sem ponto na trilha (padrão 15 s):
+--                             parado, o celular confirma a posição nesse ritmo;
+--                             andando ou em veículo os pontos continuam mais
+--                             frequentes (filtro de gps.js).
+--  operacoes.gps_lacuna_s     intervalo entre dois pontos seguidos acima do qual
+--                             o painel desenha o trecho como FALHA (tracejado,
+--                             com início e fim marcados). Padrão 60 s.
+--
+--  enviar_posicoes_lote: mesma gravação de enviar_posicoes (idempotente pelo
+--  id gerado no celular), mas devolve QUAIS pontos o servidor confirmou
+--  (inseridos agora ou já gravados antes) e quais recusou, com o motivo. O
+--  celular só marca um ponto como enviado depois dessa confirmação.
+--  enviar_posicoes continua igual (páginas antigas abertas seguem funcionando).
+--
+--  apos_posicoes: gancho chamado depois de gravar posições (usado pela
+--  migração 010 para os alertas dos deslocamentos de grupo).
+-- =====================================================================
+
+alter table public.operacoes add column if not exists gps_intervalo_s integer not null default 15;
+alter table public.operacoes add column if not exists gps_lacuna_s integer not null default 60;
+alter table public.operacoes drop constraint if exists operacoes_gps_check;
+alter table public.operacoes add constraint operacoes_gps_check check (
+  gps_intervalo_s between 5 and 300 and gps_lacuna_s between 30 and 3600 and gps_lacuna_s > gps_intervalo_s);
+
+-- Gancho depois de gravar posições. Criado vazio só se ainda não existir
+-- (a migração 010 o substitui; rodar esta migração de novo não o desfaz).
+do $$
+begin
+  if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where n.nspname = 'public' and p.proname = 'apos_posicoes') then
+    execute $f$
+      create function public.apos_posicoes(p_participante uuid)
+      returns void
+      language plpgsql security definer set search_path = public
+      as $b$ begin return; end; $b$
+    $f$;
+  end if;
+end;
+$$;
+revoke execute on function public.apos_posicoes(uuid) from public, anon, authenticated;
+
+-- Configuração do GPS da operação (painel → Dados da operação).
+create or replace function public.configurar_gps_operacao(p_operacao uuid, p_intervalo_s integer, p_lacuna_s integer)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_op public.operacoes%rowtype;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  if p_intervalo_s is null or p_intervalo_s not between 5 and 300
+     or p_lacuna_s is null or p_lacuna_s not between 30 and 3600 or p_lacuna_s <= p_intervalo_s then
+    raise exception 'gps_config_invalida';
+  end if;
+  update public.operacoes
+     set gps_intervalo_s = p_intervalo_s, gps_lacuna_s = p_lacuna_s, atualizado_em = now(), atualizado_por_nome = v_nome
+   where id = p_operacao
+  returning * into v_op;
+  return row_to_json(v_op);
+end;
+$$;
+
+-- Versão anterior, agora chamando o gancho apos_posicoes (o resto não mudou).
+create or replace function public.enviar_posicoes(p_participante uuid, p_pontos jsonb, p_gps text default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part public.participantes%rowtype;
+  v_op public.operacoes%rowtype;
+  v_inseridos integer := 0;
+  v_ult record;
+begin
+  select * into v_part from public.participantes where id = p_participante and user_id = auth.uid();
+  if not found then
+    raise exception 'participante_invalido';
+  end if;
+  if v_part.liberado_em is not null then
+    raise exception 'participante_liberado';
+  end if;
+  if v_part.removido then
+    raise exception 'participante_removido';
+  end if;
+  select * into v_op from public.operacoes where id = v_part.operacao_id;
+  if v_op.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if p_pontos is null or jsonb_typeof(p_pontos) <> 'array' or jsonb_array_length(p_pontos) > 500 then
+    raise exception 'lote_invalido';
+  end if;
+
+  with numericos as (
+    select case when jsonb_typeof(e) = 'object'
+                 and coalesce(e ->> 'id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                then (e ->> 'id')::uuid end as client_id,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 'lat') = 'number' then (e -> 'lat')::numeric end as lat,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 'lng') = 'number' then (e -> 'lng')::numeric end as lng,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 'prec') = 'number' then (e -> 'prec')::numeric end as prec,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 't') = 'number' then (e -> 't')::numeric end as t
+      from jsonb_array_elements(p_pontos) as e
+  ), validos as (
+    select client_id,
+           case when lat between -90 and 90 then lat::double precision end as lat,
+           case when lng between -180 and 180 then lng::double precision end as lng,
+           case when prec between 0 and 100000 then prec::real end as prec,
+           case when t between 946684800000 and 4102444800000
+                then to_timestamp((t / 1000)::double precision) end as registrado_em
+      from numericos
+  ), dentro_do_periodo as (
+    select * from validos
+     where client_id is not null
+       and lat is not null and lng is not null
+       and not (lat = 0 and lng = 0)
+       and registrado_em between v_op.criada_em - interval '10 minutes' and now() + interval '2 minutes'
+  ), inseridos as (
+    insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em)
+    select v_op.id, v_part.id, client_id, lat, lng, prec, registrado_em from dentro_do_periodo
+    on conflict (participante_id, client_id) do nothing
+    returning 1
+  )
+  select count(*) into v_inseridos from inseridos;
+
+  select lat, lng, precisao, registrado_em into v_ult
+    from public.posicoes
+   where participante_id = v_part.id
+   order by registrado_em desc
+   limit 1;
+
+  update public.participantes
+     set ultimo_contato_em = now(),
+         rastreando = true,
+         gps_estado = case when p_gps in ('ok', 'fraco', 'sem_sinal', 'negado', 'indisponivel') then p_gps
+                           when v_inseridos > 0 then 'ok'
+                           else gps_estado end,
+         ultima_lat = coalesce(v_ult.lat, ultima_lat),
+         ultima_lng = coalesce(v_ult.lng, ultima_lng),
+         ultima_precisao = case when v_ult.registrado_em is not null then v_ult.precisao else ultima_precisao end,
+         ultima_posicao_em = coalesce(v_ult.registrado_em, ultima_posicao_em)
+   where id = v_part.id;
+
+  if v_inseridos > 0 then
+    begin
+      perform public.apos_posicoes(v_part.id);
+    exception when others then
+      raise warning 'apos_posicoes: %', sqlerrm;   -- nunca impede a gravação das posições
+    end;
+  end if;
+
+  return json_build_object('status', 'ativa', 'recebidos', jsonb_array_length(p_pontos), 'inseridos', v_inseridos);
+end;
+$$;
+
+-- Lote com confirmação por ponto. Formato de cada ponto, como em enviar_posicoes:
+--   {"id": "<uuid gerado no celular>", "lat": -15.79, "lng": -47.88, "prec": 8.5, "t": <epoch ms>}
+-- Resposta: { status, confirmados: [ids gravados no servidor], recusados: [{id, motivo}],
+--             inseridos, gps_intervalo_s, gps_lacuna_s }
+--   motivo: 'invalido' (dados malformados) ou 'fora_do_periodo' (horário antes
+--   da operação ou no futuro). Reenviar um ponto já gravado o confirma de novo.
+create or replace function public.enviar_posicoes_lote(p_participante uuid, p_pontos jsonb, p_gps text default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part public.participantes%rowtype;
+  v_op public.operacoes%rowtype;
+  v_inseridos integer := 0;
+  v_ult record;
+  v_ids uuid[];
+  v_lats double precision[];
+  v_lngs double precision[];
+  v_precs real[];
+  v_ts timestamptz[];
+  v_recusados jsonb;
+  v_confirmados json := '[]'::json;
+begin
+  select * into v_part from public.participantes where id = p_participante and user_id = auth.uid();
+  if not found then
+    raise exception 'participante_invalido';
+  end if;
+  if v_part.liberado_em is not null then
+    raise exception 'participante_liberado';
+  end if;
+  if v_part.removido then
+    raise exception 'participante_removido';
+  end if;
+  select * into v_op from public.operacoes where id = v_part.operacao_id;
+  if v_op.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if p_pontos is null or jsonb_typeof(p_pontos) <> 'array' or jsonb_array_length(p_pontos) > 500 then
+    raise exception 'lote_invalido';
+  end if;
+
+  -- Classifica cada ponto (conversões protegidas por CASE: um ponto malformado
+  -- não derruba o lote).
+  with numericos as (
+    select case when jsonb_typeof(e) = 'object' then left(e ->> 'id', 64) end as id_txt,
+           case when jsonb_typeof(e) = 'object'
+                 and coalesce(e ->> 'id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                then (e ->> 'id')::uuid end as client_id,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 'lat') = 'number' then (e -> 'lat')::numeric end as lat,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 'lng') = 'number' then (e -> 'lng')::numeric end as lng,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 'prec') = 'number' then (e -> 'prec')::numeric end as prec,
+           case when jsonb_typeof(e) = 'object' and jsonb_typeof(e -> 't') = 'number' then (e -> 't')::numeric end as t
+      from jsonb_array_elements(p_pontos) as e
+  ), validos as (
+    select id_txt, client_id,
+           case when lat between -90 and 90 then lat::double precision end as lat,
+           case when lng between -180 and 180 then lng::double precision end as lng,
+           case when prec between 0 and 100000 then prec::real end as prec,
+           case when t between 946684800000 and 4102444800000
+                then to_timestamp((t / 1000)::double precision) end as registrado_em
+      from numericos
+  ), classificados as (
+    select *,
+           case when client_id is null or lat is null or lng is null or (lat = 0 and lng = 0) or registrado_em is null then 'invalido'
+                when registrado_em not between v_op.criada_em - interval '10 minutes' and now() + interval '2 minutes' then 'fora_do_periodo'
+           end as motivo
+      from validos
+  )
+  select array_agg(client_id order by registrado_em) filter (where motivo is null),
+         array_agg(lat order by registrado_em) filter (where motivo is null),
+         array_agg(lng order by registrado_em) filter (where motivo is null),
+         array_agg(prec order by registrado_em) filter (where motivo is null),
+         array_agg(registrado_em order by registrado_em) filter (where motivo is null),
+         coalesce(jsonb_agg(jsonb_build_object('id', id_txt, 'motivo', motivo)) filter (where motivo is not null), '[]'::jsonb)
+    into v_ids, v_lats, v_lngs, v_precs, v_ts, v_recusados
+    from classificados;
+
+  if v_ids is not null then
+    insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em)
+    select v_op.id, v_part.id, u.cid, u.la, u.ln, u.pr, u.t
+      from unnest(v_ids, v_lats, v_lngs, v_precs, v_ts) as u(cid, la, ln, pr, t)
+    on conflict (participante_id, client_id) do nothing;
+    get diagnostics v_inseridos = row_count;
+
+    -- Confirmados: os que EXISTEM no servidor agora (inseridos neste envio ou antes).
+    select coalesce(json_agg(p.client_id), '[]'::json) into v_confirmados
+      from public.posicoes p
+     where p.participante_id = v_part.id and p.client_id = any (v_ids);
+  end if;
+
+  select lat, lng, precisao, registrado_em into v_ult
+    from public.posicoes
+   where participante_id = v_part.id
+   order by registrado_em desc
+   limit 1;
+
+  update public.participantes
+     set ultimo_contato_em = now(),
+         rastreando = true,
+         gps_estado = case when p_gps in ('ok', 'fraco', 'sem_sinal', 'negado', 'indisponivel') then p_gps
+                           when v_inseridos > 0 then 'ok'
+                           else gps_estado end,
+         ultima_lat = coalesce(v_ult.lat, ultima_lat),
+         ultima_lng = coalesce(v_ult.lng, ultima_lng),
+         ultima_precisao = case when v_ult.registrado_em is not null then v_ult.precisao else ultima_precisao end,
+         ultima_posicao_em = coalesce(v_ult.registrado_em, ultima_posicao_em)
+   where id = v_part.id;
+
+  if v_inseridos > 0 then
+    begin
+      perform public.apos_posicoes(v_part.id);
+    exception when others then
+      raise warning 'apos_posicoes: %', sqlerrm;   -- nunca impede a gravação das posições
+    end;
+  end if;
+
+  return json_build_object(
+    'status', 'ativa',
+    'recebidos', jsonb_array_length(p_pontos),
+    'inseridos', v_inseridos,
+    'confirmados', v_confirmados,
+    'recusados', v_recusados,
+    'gps_intervalo_s', v_op.gps_intervalo_s,
+    'gps_lacuna_s', v_op.gps_lacuna_s
+  );
+end;
+$$;
+
+-- Sinal de vida: igual ao anterior, informando também o intervalo de GPS da operação.
+create or replace function public.sinal_vida(p_participante uuid, p_rastreando boolean, p_gps text default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part public.participantes%rowtype;
+  v_op public.operacoes%rowtype;
+begin
+  select * into v_part from public.participantes where id = p_participante and user_id = auth.uid();
+  if not found then
+    return json_build_object('status', 'inexistente');
+  end if;
+  if v_part.liberado_em is not null then
+    return json_build_object('status', 'liberado');
+  end if;
+  if v_part.removido then
+    return json_build_object('status', 'removido');
+  end if;
+  select * into v_op from public.operacoes where id = v_part.operacao_id;
+  if v_op.status <> 'ativa' then
+    return json_build_object('status', 'encerrada');
+  end if;
+
+  update public.participantes
+     set ultimo_contato_em = now(),
+         rastreando = coalesce(p_rastreando, rastreando),
+         gps_estado = case when p_gps in ('aguardando', 'ok', 'fraco', 'sem_sinal', 'negado', 'indisponivel') then p_gps
+                           else gps_estado end
+   where id = v_part.id;
+
+  return json_build_object('status', 'ativa', 'agora', now(), 'saida_solicitada_em', v_part.saida_solicitada_em,
+                           'gps_intervalo_s', v_op.gps_intervalo_s);
+end;
+$$;
+
+revoke execute on function public.configurar_gps_operacao(uuid, integer, integer),
+  public.enviar_posicoes(uuid, jsonb, text), public.enviar_posicoes_lote(uuid, jsonb, text),
+  public.sinal_vida(uuid, boolean, text) from public, anon;
+grant execute on function public.configurar_gps_operacao(uuid, integer, integer),
+  public.enviar_posicoes(uuid, jsonb, text), public.enviar_posicoes_lote(uuid, jsonb, text),
+  public.sinal_vida(uuid, boolean, text) to authenticated;
+
+notify pgrst, 'reload schema';
+
+-- =====================================================================
+-- 17. DESTINO PARA GRUPOS, ALERTAS AUTOMÁTICOS E CONTROLE DE RETORNO
+--     (migração 010 — idempotente; exige a 009)
+--
+--  BASE (pontos_interesse.categoria): base da operação; raio_m = raio de
+--    chegada (padrão 100 m). Aparece também no mapa do participante.
+--
+--  missoes          destino enviado a um GRUPO (setor ou ponto), com o público
+--                   (só o responsável do grupo ou todos os membros), a base, o
+--                   raio da base e o prazo de retorno.
+--  missao_membros   quem é acompanhado em cada missão (todos os membros ativos
+--                   de campo do grupo) e quando iniciou, chegou ao setor e
+--                   voltou à base. Cada destinatário recebe uma linha comum em
+--                   "destinos" (com missao_id): o celular não muda nada para
+--                   receber o destino (tempo real, rota, "Você chegou").
+--  alertas          alertas para os responsáveis da operação (tempo real).
+--                   chave única: cada evento gera UM alerta, mesmo com reenvio
+--                   de pontos ou duas verificações ao mesmo tempo.
+--
+--  Eventos (calculados no SERVIDOR pela trilha GPS — posicoes —, pela hora do
+--  GPS; pontos com precisão pior que 150 m não contam):
+--    início do deslocamento  1º ponto a ≥ 100 m da posição no envio (ou fora
+--                            do raio da base, para quem estava na base)
+--    chegada ao setor        2 pontos seguidos dentro do setor (círculo ou
+--                            polígono); destino sem setor: a até 30 m do ponto
+--    finalização da busca    ação do responsável do grupo (celular) ou de um
+--                            responsável da operação (painel)
+--    chegada à base          ponto a até raio_base_m da base com precisão
+--                            ≤ raio_base_m; a missão fica "na base" quando
+--                            TODOS os acompanhados ativos chegam
+--    retorno atrasado        prazo vencido sem todos na base: alerta CRÍTICO
+--                            ("a equipe pode estar perdida"). Verificado por
+--                            tempo (pg_cron, a cada minuto) — funciona mesmo com
+--                            o celular sem sinal e sem nenhum painel aberto.
+--                            Sem pg_cron, o painel aberto faz a verificação.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Base: categoria nova de ponto de interesse
+-- ---------------------------------------------------------------------
+alter table public.pontos_interesse drop constraint if exists pontos_interesse_categoria_check;
+alter table public.pontos_interesse add constraint pontos_interesse_categoria_check check (
+  categoria in ('ULTIMA_LOCALIZACAO', 'POSSIVEL_LOCALIZACAO', 'VESTIGIO', 'RISCO', 'ENCONTRO', 'VITIMA_ENCONTRADA', 'OUTRO', 'BASE'));
+
+create or replace function public.salvar_ponto(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v_p public.pontos_interesse%rowtype;
+  v_op public.operacoes%rowtype;
+  v_ref uuid;
+  v_msg public.mensagens%rowtype;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.dados_apagados_em is not null then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+
+  if p_id is null then
+    v_p.id := gen_random_uuid();
+    v_p.operacao_id := p_operacao;
+    v_p.criado_por := auth.uid();
+    v_p.criado_por_nome := v_nome_resp;
+    v_p.criado_em := now();
+    v_p.descricao := '';
+    -- ponto criado a partir de um relato: guarda quem relatou
+    if p_dados ? 'mensagem_id' and nullif(p_dados->>'mensagem_id', '') is not null then
+      select * into v_msg from public.mensagens
+       where id = (p_dados->>'mensagem_id')::uuid and operacao_id = p_operacao and direcao = 'entrada';
+      if not found then
+        raise exception 'dados_invalidos';
+      end if;
+      v_p.mensagem_id := v_msg.id;
+      v_p.relatado_por_nome := v_msg.remetente_nome;
+    end if;
+  else
+    select * into v_p from public.pontos_interesse where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'ponto_nao_encontrado';
+    end if;
+  end if;
+
+  if p_dados ? 'categoria' then v_p.categoria := p_dados->>'categoria'; end if;
+  if p_dados ? 'titulo' then v_p.titulo := btrim(coalesce(p_dados->>'titulo', '')); end if;
+  if p_dados ? 'descricao' then v_p.descricao := left(btrim(coalesce(p_dados->>'descricao', '')), 1000); end if;
+  if p_dados ? 'lat' then v_p.lat := (p_dados->>'lat')::double precision; end if;
+  if p_dados ? 'lng' then v_p.lng := (p_dados->>'lng')::double precision; end if;
+  if p_dados ? 'raio_m' then v_p.raio_m := nullif(p_dados->>'raio_m', '')::double precision; end if;
+  if p_dados ? 'foto_id' then
+    v_ref := nullif(p_dados->>'foto_id', '')::uuid;
+    if v_ref is not null and not exists (select 1 from public.fotos where id = v_ref and operacao_id = p_operacao) then
+      raise exception 'dados_invalidos';
+    end if;
+    v_p.foto_id := v_ref;
+  end if;
+
+  if v_p.categoria is null or v_p.categoria not in ('ULTIMA_LOCALIZACAO', 'POSSIVEL_LOCALIZACAO', 'VESTIGIO',
+                                                      'RISCO', 'ENCONTRO', 'VITIMA_ENCONTRADA', 'OUTRO', 'BASE') then
+    raise exception 'dados_invalidos';
+  end if;
+  if v_p.titulo is null or char_length(v_p.titulo) not between 1 and 80 then
+    raise exception 'nome_invalido';
+  end if;
+  if v_p.lat is null or v_p.lng is null or v_p.lat not between -90 and 90 or v_p.lng not between -180 and 180
+     or (v_p.lat = 0 and v_p.lng = 0) then
+    raise exception 'posicao_invalida';
+  end if;
+
+  if v_p.raio_m is not null and v_p.raio_m not between 10 and 5000 then
+    raise exception 'dados_invalidos';
+  end if;
+  v_p.atualizado_em := now();
+  v_p.atualizado_por_nome := v_nome_resp;
+  if p_id is null then
+    insert into public.pontos_interesse select v_p.*;
+  else
+    update public.pontos_interesse set categoria = v_p.categoria, titulo = v_p.titulo, descricao = v_p.descricao,
+           lat = v_p.lat, lng = v_p.lng, foto_id = v_p.foto_id, raio_m = v_p.raio_m, atualizado_em = v_p.atualizado_em,
+           atualizado_por_nome = v_p.atualizado_por_nome
+     where id = v_p.id;
+  end if;
+  return row_to_json(v_p);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Geometria (sem PostGIS): mesmas contas de gps.js / militar.js
+-- ---------------------------------------------------------------------
+create or replace function public.distancia_m(lat1 double precision, lng1 double precision,
+                                              lat2 double precision, lng2 double precision)
+returns double precision
+language sql immutable
+as $$
+  select 2 * 6371000 * asin(least(1, sqrt(
+           power(sin(radians(lat2 - lat1) / 2), 2) +
+           cos(radians(lat1)) * cos(radians(lat2)) * power(sin(radians(lng2 - lng1) / 2), 2))));
+$$;
+
+-- Ponto dentro do setor: círculo (distância ao centro ≤ raio) ou polígono
+-- (cruzamento de raio sobre os vértices [[lat, lng], …]).
+create or replace function public.ponto_no_setor(p_setor public.setores, p_lat double precision, p_lng double precision)
+returns boolean
+language plpgsql immutable
+as $$
+declare
+  n integer;
+  j integer;
+  yi double precision; xi double precision;
+  yj double precision; xj double precision;
+  dentro boolean := false;
+begin
+  if p_setor.forma = 'circulo' then
+    return public.distancia_m(p_setor.centro_lat, p_setor.centro_lng, p_lat, p_lng) <= p_setor.raio_m;
+  end if;
+  n := coalesce(jsonb_array_length(p_setor.pontos), 0);
+  if n < 3 then
+    return false;
+  end if;
+  j := n - 1;
+  for i in 0 .. n - 1 loop
+    yi := (p_setor.pontos->i->>0)::double precision; xi := (p_setor.pontos->i->>1)::double precision;
+    yj := (p_setor.pontos->j->>0)::double precision; xj := (p_setor.pontos->j->>1)::double precision;
+    if (yi > p_lat) <> (yj > p_lat) then
+      if p_lng < (xj - xi) * (p_lat - yi) / (yj - yi) + xi then
+        dentro := not dentro;
+      end if;
+    end if;
+    j := i;
+  end loop;
+  return dentro;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Tabelas
+-- ---------------------------------------------------------------------
+create table if not exists public.missoes (
+  id                         uuid primary key default gen_random_uuid(),
+  operacao_id                uuid not null references public.operacoes(id) on delete cascade,
+  grupo_id                   uuid references public.grupos(id) on delete set null,
+  grupo_nome                 text not null,
+  setor_id                   uuid references public.setores(id) on delete set null,
+  setor_nome                 text,
+  ponto_id                   uuid references public.pontos_interesse(id) on delete set null,
+  nome                       text not null check (char_length(btrim(nome)) between 1 and 80),
+  lat                        double precision not null check (lat between -90 and 90),
+  lng                        double precision not null check (lng between -180 and 180),
+  modo                       text not null default 'a_pe' check (modo in ('a_pe', 'trilha', 'carro')),
+  publico                    text not null check (publico in ('responsavel', 'todos')),
+  base_id                    uuid references public.pontos_interesse(id) on delete set null,
+  base_nome                  text,
+  base_lat                   double precision,
+  base_lng                   double precision,
+  raio_base_m                double precision check (raio_base_m is null or raio_base_m between 10 and 5000),
+  prazo_retorno_min          integer not null default 30 check (prazo_retorno_min between 5 and 720),
+  status                     text not null default 'enviada'
+                             check (status in ('enviada', 'em_deslocamento', 'no_setor', 'busca_finalizada',
+                                               'retorno_atrasado', 'na_base', 'encerrada')),
+  enviada_em                 timestamptz not null default now(),
+  enviado_por                uuid references auth.users(id) on delete set null,
+  enviado_por_nome           text not null,
+  iniciada_em                timestamptz,
+  chegou_setor_em            timestamptz,
+  busca_finalizada_em        timestamptz,
+  busca_finalizada_por_nome  text,
+  prazo_retorno_em           timestamptz,
+  chegou_base_em             timestamptz,
+  encerrada_em               timestamptz,
+  encerrada_por_nome         text,
+  check ((base_lat is null) = (base_lng is null) and (base_lat is null) = (raio_base_m is null))
+);
+create index if not exists missoes_operacao_idx on public.missoes (operacao_id, enviada_em desc);
+create index if not exists missoes_ativas_idx on public.missoes (status) where status in ('busca_finalizada', 'retorno_atrasado');
+
+create table if not exists public.missao_membros (
+  missao_id        uuid not null references public.missoes(id) on delete cascade,
+  participante_id  uuid not null references public.participantes(id) on delete cascade,
+  operacao_id      uuid not null references public.operacoes(id) on delete cascade,
+  recebe_destino   boolean not null,
+  destino_id       uuid references public.destinos(id) on delete set null,
+  inicio_lat       double precision,
+  inicio_lng       double precision,
+  inicio_na_base   boolean not null default false,
+  ultimo_pos_id    bigint not null default 0,
+  dentro_seq       smallint not null default 0,
+  iniciou_em       timestamptz,
+  chegou_setor_em  timestamptz,
+  chegou_base_em   timestamptz,
+  primary key (missao_id, participante_id)
+);
+create index if not exists missao_membros_participante_idx on public.missao_membros (participante_id);
+
+alter table public.destinos add column if not exists missao_id uuid references public.missoes(id) on delete set null;
+
+create table if not exists public.alertas (
+  id                    bigint generated always as identity primary key,
+  operacao_id           uuid not null references public.operacoes(id) on delete cascade,
+  tipo                  text not null check (tipo in ('deslocamento_iniciado', 'chegou_setor', 'busca_finalizada',
+                                                      'chegou_base', 'retorno_atrasado')),
+  nivel                 text not null default 'info' check (nivel in ('info', 'critico')),
+  titulo                text not null,
+  texto                 text not null default '',
+  missao_id             uuid references public.missoes(id) on delete cascade,
+  grupo_id              uuid references public.grupos(id) on delete set null,
+  participante_id       uuid references public.participantes(id) on delete set null,
+  lat                   double precision,
+  lng                   double precision,
+  posicao_em            timestamptz,
+  chave                 text not null unique,
+  criado_em             timestamptz not null default now(),
+  reconhecido_em        timestamptz,
+  reconhecido_por_nome  text
+);
+create index if not exists alertas_operacao_idx on public.alertas (operacao_id, criado_em);
+
+alter table public.missoes enable row level security;
+alter table public.missao_membros enable row level security;
+alter table public.alertas enable row level security;
+drop policy if exists missoes_ler on public.missoes;
+create policy missoes_ler on public.missoes for select to authenticated using (public.dono_operacao(operacao_id));
+drop policy if exists missao_membros_ler on public.missao_membros;
+create policy missao_membros_ler on public.missao_membros for select to authenticated using (public.dono_operacao(operacao_id));
+drop policy if exists alertas_ler on public.alertas;
+create policy alertas_ler on public.alertas for select to authenticated using (public.dono_operacao(operacao_id));
+revoke all on public.missoes, public.missao_membros, public.alertas from anon;
+revoke insert, update, delete, truncate on public.missoes, public.missao_membros, public.alertas from authenticated;
+grant select on public.missoes, public.missao_membros, public.alertas to authenticated;
+
+-- Registra um alerta (uma vez por chave). Devolve true se o alerta é novo. Uso interno.
+create or replace function public.criar_alerta(p_operacao uuid, p_tipo text, p_nivel text, p_titulo text, p_texto text, p_chave text,
+                                               p_missao uuid default null, p_grupo uuid default null, p_participante uuid default null,
+                                               p_lat double precision default null, p_lng double precision default null,
+                                               p_posicao_em timestamptz default null)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_qtd integer;
+begin
+  insert into public.alertas (operacao_id, tipo, nivel, titulo, texto, chave, missao_id, grupo_id, participante_id, lat, lng, posicao_em)
+  values (p_operacao, p_tipo, p_nivel, left(p_titulo, 200), left(coalesce(p_texto, ''), 2000), p_chave,
+          p_missao, p_grupo, p_participante, p_lat, p_lng, p_posicao_em)
+  on conflict (chave) do nothing;
+  get diagnostics v_qtd = row_count;
+  return v_qtd > 0;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Envio do destino a um grupo (painel)
+-- ---------------------------------------------------------------------
+-- p_publico: 'todos' (todos os membros de campo ativos) ou 'responsavel'
+-- (só os membros com papel de responsável do grupo). Em ambos os casos TODOS
+-- os membros de campo ativos são acompanhados (início, chegada, retorno).
+-- Uma nova missão do mesmo grupo substitui a anterior. Tudo numa transação.
+create or replace function public.enviar_destino_grupo(p_grupo uuid, p_nome text, p_lat double precision, p_lng double precision,
+                                                       p_publico text default 'todos', p_modo text default 'a_pe',
+                                                       p_setor uuid default null, p_ponto uuid default null,
+                                                       p_base uuid default null, p_raio_base_m double precision default null,
+                                                       p_prazo_min integer default 30)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v_g public.grupos%rowtype;
+  v_op public.operacoes%rowtype;
+  v_m public.missoes%rowtype;
+  v_base public.pontos_interesse%rowtype;
+  v_setor_nome text;
+  v_raio double precision;
+  v_recebe boolean;
+  v_dest_id uuid;
+  v_rec integer := 0;
+  v_acomp integer := 0;
+  r record;
+begin
+  select * into v_g from public.grupos where id = p_grupo;
+  if not found or v_nome_resp is null or not public.dono_operacao(v_g.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = v_g.operacao_id;
+  if v_op.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if p_nome is null or char_length(btrim(p_nome)) not between 1 and 80 then
+    raise exception 'nome_invalido';
+  end if;
+  if p_lat is null or p_lng is null or p_lat not between -90 and 90 or p_lng not between -180 and 180 or (p_lat = 0 and p_lng = 0) then
+    raise exception 'posicao_invalida';
+  end if;
+  if coalesce(p_modo, 'a_pe') not in ('a_pe', 'trilha', 'carro') or coalesce(p_publico, '') not in ('responsavel', 'todos')
+     or p_prazo_min is null or p_prazo_min not between 5 and 720 then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_setor is not null then
+    select nome into v_setor_nome from public.setores where id = p_setor and operacao_id = v_op.id;
+    if v_setor_nome is null then
+      raise exception 'setor_nao_encontrado';
+    end if;
+  end if;
+  if p_ponto is not null and not exists (select 1 from public.pontos_interesse where id = p_ponto and operacao_id = v_op.id) then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_base is not null then
+    select * into v_base from public.pontos_interesse where id = p_base and operacao_id = v_op.id and categoria = 'BASE';
+    if not found then
+      raise exception 'base_invalida';
+    end if;
+    v_raio := coalesce(p_raio_base_m, v_base.raio_m, 100);
+    if v_raio not between 10 and 5000 then
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+
+  if not exists (select 1 from public.grupo_membros gm join public.participantes p on p.id = gm.participante_id
+                  where gm.grupo_id = v_g.id and not p.removido and p.liberado_em is null and p.tipo <> 'responsavel') then
+    raise exception 'grupo_vazio';
+  end if;
+  if p_publico = 'responsavel' and not exists (
+       select 1 from public.grupo_membros gm join public.participantes p on p.id = gm.participante_id
+        where gm.grupo_id = v_g.id and gm.papel = 'responsavel' and not p.removido and p.liberado_em is null and p.tipo <> 'responsavel') then
+    raise exception 'grupo_sem_responsavel';
+  end if;
+
+  -- missão anterior do mesmo grupo ainda ativa: substituída
+  update public.destinos set encerrado_em = now(), encerrado_por = 'substituído por nova missão do grupo'
+   where encerrado_em is null
+     and missao_id in (select id from public.missoes where grupo_id = v_g.id and status not in ('encerrada', 'na_base'));
+  update public.missoes set status = 'encerrada', encerrada_em = now(), encerrada_por_nome = 'substituída por nova missão'
+   where grupo_id = v_g.id and status not in ('encerrada', 'na_base');
+
+  insert into public.missoes (operacao_id, grupo_id, grupo_nome, setor_id, setor_nome, ponto_id, nome, lat, lng, modo, publico,
+                              base_id, base_nome, base_lat, base_lng, raio_base_m, prazo_retorno_min, enviado_por, enviado_por_nome)
+  values (v_op.id, v_g.id, v_g.nome, p_setor, v_setor_nome, p_ponto, btrim(p_nome), p_lat, p_lng, coalesce(p_modo, 'a_pe'), p_publico,
+          v_base.id, v_base.titulo, v_base.lat, v_base.lng, case when v_base.id is not null then v_raio end, p_prazo_min,
+          auth.uid(), v_nome_resp)
+  returning * into v_m;
+
+  for r in
+    select p.*, gm.papel
+      from public.grupo_membros gm join public.participantes p on p.id = gm.participante_id
+     where gm.grupo_id = v_g.id and not p.removido and p.liberado_em is null and p.tipo <> 'responsavel'
+  loop
+    v_recebe := p_publico = 'todos' or r.papel = 'responsavel';
+    v_dest_id := null;
+    if v_recebe then
+      update public.destinos set encerrado_em = now(), encerrado_por = 'substituído por novo destino'
+       where participante_id = r.id and encerrado_em is null;
+      insert into public.destinos (operacao_id, participante_id, nome, lat, lng, ponto_id, enviado_por, enviado_por_nome, modo, missao_id)
+      values (v_op.id, r.id, btrim(p_nome), p_lat, p_lng, p_ponto, auth.uid(), v_nome_resp, coalesce(p_modo, 'a_pe'), v_m.id)
+      returning id into v_dest_id;
+      v_rec := v_rec + 1;
+    end if;
+    insert into public.missao_membros (missao_id, participante_id, operacao_id, recebe_destino, destino_id,
+                                       inicio_lat, inicio_lng, inicio_na_base, ultimo_pos_id)
+    values (v_m.id, r.id, v_op.id, v_recebe, v_dest_id, r.ultima_lat, r.ultima_lng,
+            v_base.id is not null and r.ultima_lat is not null
+              and public.distancia_m(v_base.lat, v_base.lng, r.ultima_lat, r.ultima_lng) <= v_raio,
+            coalesce((select max(id) from public.posicoes where participante_id = r.id), 0));
+    v_acomp := v_acomp + 1;
+  end loop;
+
+  return json_build_object('missao', row_to_json(v_m), 'destinatarios', v_rec, 'acompanhados', v_acomp);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Avaliação pela trilha GPS (chamada depois de gravar posições)
+-- ---------------------------------------------------------------------
+create or replace function public.apos_posicoes(p_participante uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  mm public.missao_membros%rowtype;
+  v_m public.missoes%rowtype;
+  v_s public.setores%rowtype;
+  v_tem_setor boolean;
+  v_dentro boolean;
+  v_nome text;
+  v_max bigint;
+  v_ini_lat double precision; v_ini_lng double precision; v_ini_t timestamptz;
+  v_set_lat double precision; v_set_lng double precision;
+  pt record;
+begin
+  select nome into v_nome from public.participantes where id = p_participante;
+  for mm in
+    select mb.* from public.missao_membros mb join public.missoes ms on ms.id = mb.missao_id
+     where mb.participante_id = p_participante
+       and ms.status in ('enviada', 'em_deslocamento', 'no_setor', 'busca_finalizada', 'retorno_atrasado')
+  loop
+    select * into v_m from public.missoes where id = mm.missao_id for update;
+    -- outra transação pode ter avançado o cursor: relê a linha travada
+    select * into mm from public.missao_membros where missao_id = mm.missao_id and participante_id = p_participante for update;
+    v_tem_setor := false;
+    if v_m.setor_id is not null then
+      select * into v_s from public.setores where id = v_m.setor_id;
+      v_tem_setor := found;
+    end if;
+    select max(id) into v_max from public.posicoes where participante_id = p_participante and id > mm.ultimo_pos_id;
+    if v_max is null then
+      continue;
+    end if;
+    v_ini_t := null; v_set_lat := null;
+
+    for pt in
+      select id, lat, lng, precisao, registrado_em from public.posicoes
+       where participante_id = p_participante and id > mm.ultimo_pos_id and id <= v_max
+         and registrado_em >= v_m.enviada_em and (precisao is null or precisao <= 150)
+       order by registrado_em, id
+    loop
+      -- início do deslocamento
+      if mm.iniciou_em is null then
+        if mm.inicio_lat is null then
+          mm.inicio_lat := pt.lat;
+          mm.inicio_lng := pt.lng;
+        elsif public.distancia_m(mm.inicio_lat, mm.inicio_lng, pt.lat, pt.lng) >= greatest(100, 2 * coalesce(pt.precisao, 0))
+              or (mm.inicio_na_base and v_m.base_lat is not null
+                  and public.distancia_m(v_m.base_lat, v_m.base_lng, pt.lat, pt.lng) > v_m.raio_base_m + greatest(25, coalesce(pt.precisao, 0))) then
+          mm.iniciou_em := pt.registrado_em;
+          v_ini_t := pt.registrado_em; v_ini_lat := pt.lat; v_ini_lng := pt.lng;
+        end if;
+      end if;
+      -- chegada ao setor (antes da finalização da busca)
+      if mm.chegou_setor_em is null and v_m.busca_finalizada_em is null then
+        if v_tem_setor then
+          v_dentro := public.ponto_no_setor(v_s, pt.lat, pt.lng);
+        else
+          v_dentro := public.distancia_m(v_m.lat, v_m.lng, pt.lat, pt.lng) <= greatest(30, coalesce(pt.precisao, 0));
+        end if;
+        mm.dentro_seq := case when v_dentro then mm.dentro_seq + 1 else 0 end;
+        if mm.dentro_seq >= 2 then
+          mm.chegou_setor_em := pt.registrado_em;
+          v_set_lat := pt.lat; v_set_lng := pt.lng;
+          if mm.iniciou_em is null then
+            mm.iniciou_em := pt.registrado_em;
+            v_ini_t := pt.registrado_em; v_ini_lat := pt.lat; v_ini_lng := pt.lng;
+          end if;
+        end if;
+      end if;
+      -- chegada à base (depois da finalização da busca)
+      if mm.chegou_base_em is null and v_m.busca_finalizada_em is not null and v_m.base_lat is not null
+         and pt.registrado_em >= v_m.busca_finalizada_em
+         and public.distancia_m(v_m.base_lat, v_m.base_lng, pt.lat, pt.lng) <= v_m.raio_base_m
+         and coalesce(pt.precisao, 0) <= v_m.raio_base_m then
+        mm.chegou_base_em := pt.registrado_em;
+      end if;
+    end loop;
+
+    update public.missao_membros
+       set inicio_lat = mm.inicio_lat, inicio_lng = mm.inicio_lng, ultimo_pos_id = v_max, dentro_seq = mm.dentro_seq,
+           iniciou_em = mm.iniciou_em, chegou_setor_em = mm.chegou_setor_em, chegou_base_em = mm.chegou_base_em
+     where missao_id = mm.missao_id and participante_id = p_participante;
+
+    -- eventos da missão (o primeiro membro dispara; cada evento gera um alerta só)
+    if mm.iniciou_em is not null and v_m.iniciada_em is null then
+      update public.missoes
+         set iniciada_em = mm.iniciou_em,
+             status = case when status = 'enviada' then 'em_deslocamento' else status end
+       where id = v_m.id returning * into v_m;
+      perform public.criar_alerta(v_m.operacao_id, 'deslocamento_iniciado', 'info',
+        'Deslocamento iniciado — ' || v_m.grupo_nome,
+        coalesce(v_nome, 'Um membro') || ' começou o deslocamento até ' || v_m.nome || '.',
+        v_m.id || ':deslocamento_iniciado', v_m.id, v_m.grupo_id, p_participante, v_ini_lat, v_ini_lng, mm.iniciou_em);
+    end if;
+    if mm.chegou_setor_em is not null and v_m.chegou_setor_em is null then
+      update public.missoes
+         set chegou_setor_em = mm.chegou_setor_em,
+             status = case when status in ('enviada', 'em_deslocamento') then 'no_setor' else status end
+       where id = v_m.id returning * into v_m;
+      perform public.criar_alerta(v_m.operacao_id, 'chegou_setor', 'info',
+        'Chegada ao setor — ' || v_m.grupo_nome,
+        coalesce(v_nome, 'Um membro') || ' chegou a ' || v_m.nome || '.',
+        v_m.id || ':chegou_setor', v_m.id, v_m.grupo_id, p_participante, v_set_lat, v_set_lng, mm.chegou_setor_em);
+    end if;
+    if mm.chegou_base_em is not null then
+      perform public.concluir_retorno_se_todos(v_m.id);
+    end if;
+  end loop;
+end;
+$$;
+
+-- Todos os acompanhados ATIVOS da missão voltaram à base? Então "na base".
+create or replace function public.concluir_retorno_se_todos(p_missao uuid)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_m public.missoes%rowtype;
+  v_total integer;
+  v_atrasada boolean;
+begin
+  select * into v_m from public.missoes where id = p_missao for update;
+  if not found or v_m.status not in ('busca_finalizada', 'retorno_atrasado') or v_m.base_lat is null then
+    return false;
+  end if;
+  if exists (select 1 from public.missao_membros mb join public.participantes p on p.id = mb.participante_id
+              where mb.missao_id = v_m.id and mb.chegou_base_em is null and not p.removido and p.liberado_em is null) then
+    return false;
+  end if;
+  select count(*) into v_total from public.missao_membros mb join public.participantes p on p.id = mb.participante_id
+   where mb.missao_id = v_m.id and not p.removido and p.liberado_em is null;
+  v_atrasada := v_m.status = 'retorno_atrasado';
+  update public.missoes
+     set status = 'na_base',
+         chegou_base_em = coalesce((select max(chegou_base_em) from public.missao_membros where missao_id = v_m.id), now())
+   where id = v_m.id returning * into v_m;
+  update public.destinos set encerrado_em = now(), encerrado_por = 'equipe chegou à base'
+   where missao_id = v_m.id and encerrado_em is null;
+  perform public.criar_alerta(v_m.operacao_id, 'chegou_base', 'info',
+    'Equipe na base — ' || v_m.grupo_nome,
+    case when v_total > 0 then 'Todos os ' || v_total || ' acompanhado(s) voltaram à base' else 'A equipe voltou à base' end ||
+      coalesce(' ' || v_m.base_nome, '') || '.' ||
+      case when v_atrasada then ' Chegaram depois do prazo de retorno (o alerta de atraso pode ser encerrado).' else '' end,
+    v_m.id || ':chegou_base', v_m.id, v_m.grupo_id, null, v_m.base_lat, v_m.base_lng, v_m.chegou_base_em);
+  return true;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Finalização da busca, prazo de retorno e encerramento
+-- ---------------------------------------------------------------------
+-- Quem pode: um responsável da operação (painel) ou o responsável do grupo
+-- da missão (celular). Com base definida, todos os acompanhados recebem o
+-- destino "Volte para a base" e começa a contar o prazo de retorno.
+create or replace function public.finalizar_busca(p_missao uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_m public.missoes%rowtype;
+  v_quem text;
+  v_part public.participantes%rowtype;
+  r record;
+begin
+  select * into v_m from public.missoes where id = p_missao for update;
+  if not found then
+    raise exception 'sem_permissao';
+  end if;
+  if public.dono_operacao(v_m.operacao_id) then
+    v_quem := coalesce(public.nome_responsavel_atual(), 'responsável');
+  else
+    select p.* into v_part
+      from public.participantes p join public.grupo_membros gm on gm.participante_id = p.id
+     where gm.grupo_id = v_m.grupo_id and gm.papel = 'responsavel' and p.user_id = auth.uid()
+       and not p.removido and p.liberado_em is null
+     limit 1;
+    if not found then
+      raise exception 'sem_permissao';
+    end if;
+    v_quem := v_part.nome || ' (responsável do grupo)';
+  end if;
+  if v_m.status in ('encerrada', 'na_base') then
+    raise exception 'missao_encerrada';
+  end if;
+  if v_m.busca_finalizada_em is not null then
+    return row_to_json(v_m);   -- já finalizada (toque repetido ou dois aparelhos)
+  end if;
+  if not exists (select 1 from public.operacoes where id = v_m.operacao_id and status = 'ativa') then
+    raise exception 'operacao_encerrada';
+  end if;
+
+  update public.missoes
+     set busca_finalizada_em = now(), busca_finalizada_por_nome = v_quem,
+         prazo_retorno_em = case when base_lat is not null then now() + make_interval(mins => prazo_retorno_min) end,
+         status = case when base_lat is not null then 'busca_finalizada' else 'encerrada' end,
+         encerrada_em = case when base_lat is null then now() end,
+         encerrada_por_nome = case when base_lat is null then v_quem end
+   where id = v_m.id returning * into v_m;
+
+  perform public.criar_alerta(v_m.operacao_id, 'busca_finalizada', 'info',
+    'Busca finalizada — ' || v_m.grupo_nome,
+    'Busca em ' || v_m.nome || ' finalizada por ' || v_quem || '.' ||
+      case when v_m.base_lat is not null
+           then ' Prazo para voltar à base' || coalesce(' ' || v_m.base_nome, '') || ': ' || v_m.prazo_retorno_min || ' min.'
+           else ' Sem base definida: não há controle de retorno.' end,
+    v_m.id || ':busca_finalizada', v_m.id, v_m.grupo_id, v_part.id, null, null, v_m.busca_finalizada_em);
+
+  update public.destinos set encerrado_em = now(), encerrado_por = 'busca no setor finalizada'
+   where missao_id = v_m.id and encerrado_em is null;
+  if v_m.base_lat is not null then
+    for r in
+      select p.* from public.missao_membros mb join public.participantes p on p.id = mb.participante_id
+       where mb.missao_id = v_m.id and not p.removido and p.liberado_em is null and p.tipo <> 'responsavel'
+    loop
+      update public.destinos set encerrado_em = now(), encerrado_por = 'substituído por novo destino'
+       where participante_id = r.id and encerrado_em is null;
+      insert into public.destinos (operacao_id, participante_id, nome, lat, lng, ponto_id, enviado_por, enviado_por_nome, modo, missao_id)
+      values (v_m.operacao_id, r.id, left('Volte para a base' || coalesce(': ' || v_m.base_nome, ''), 80),
+              v_m.base_lat, v_m.base_lng, v_m.base_id, auth.uid(), left(v_quem, 80), v_m.modo, v_m.id);
+    end loop;
+  end if;
+  return row_to_json(v_m);
+end;
+$$;
+
+-- Mais tempo para o retorno (o alerta de atraso volta a valer para o novo prazo).
+create or replace function public.prorrogar_retorno(p_missao uuid, p_min integer)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_m public.missoes%rowtype;
+begin
+  select * into v_m from public.missoes where id = p_missao for update;
+  if not found or public.nome_responsavel_atual() is null or not public.dono_operacao(v_m.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  if v_m.status not in ('busca_finalizada', 'retorno_atrasado') then
+    raise exception 'missao_encerrada';
+  end if;
+  if p_min is null or p_min not between 5 and 240 then
+    raise exception 'dados_invalidos';
+  end if;
+  update public.missoes
+     set prazo_retorno_em = greatest(prazo_retorno_em, now()) + make_interval(mins => p_min),
+         status = 'busca_finalizada'
+   where id = v_m.id returning * into v_m;
+  return row_to_json(v_m);
+end;
+$$;
+
+create or replace function public.encerrar_missao(p_missao uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_m public.missoes%rowtype;
+begin
+  select * into v_m from public.missoes where id = p_missao for update;
+  if not found or v_nome is null or not public.dono_operacao(v_m.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  if v_m.status in ('encerrada', 'na_base') then
+    return row_to_json(v_m);
+  end if;
+  update public.missoes set status = 'encerrada', encerrada_em = now(), encerrada_por_nome = v_nome
+   where id = v_m.id returning * into v_m;
+  update public.destinos set encerrado_em = now(), encerrado_por = coalesce(v_nome, 'responsável')
+   where missao_id = v_m.id and encerrado_em is null;
+  return row_to_json(v_m);
+end;
+$$;
+
+-- Verificação por TEMPO do prazo de retorno. Sem parâmetro: todas as operações
+-- (só o agendador pg_cron / chave secreta). Com p_operacao: só aquela, por um
+-- responsável dela (o painel chama enquanto está aberto, como reserva).
+-- Devolve quantos alertas de atraso foram gerados agora.
+create or replace function public.verificar_retornos(p_operacao uuid default null)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_m public.missoes%rowtype;
+  v_faltam integer;
+  v_total integer;
+  v_lista text;
+  v_lat double precision;
+  v_lng double precision;
+  v_pos timestamptz;
+  v_pid uuid;
+  v_qtd integer := 0;
+begin
+  if p_operacao is null then
+    if auth.uid() is not null then
+      raise exception 'sem_permissao';
+    end if;
+  elsif not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+
+  for v_m in
+    select m.* from public.missoes m join public.operacoes o on o.id = m.operacao_id
+     where m.status in ('busca_finalizada', 'retorno_atrasado') and m.base_lat is not null and o.status = 'ativa'
+       and (p_operacao is null or m.operacao_id = p_operacao)
+     order by m.prazo_retorno_em
+  loop
+    if public.concluir_retorno_se_todos(v_m.id) then
+      continue;
+    end if;
+    if v_m.prazo_retorno_em is null or now() < v_m.prazo_retorno_em then
+      continue;
+    end if;
+    select count(*) filter (where mb.chegou_base_em is null), count(*),
+           string_agg(case when mb.chegou_base_em is null then
+                        p.nome || case when p.ultima_posicao_em is null then ' (sem posição)'
+                                       else ' (última posição há ' || greatest(0, floor(extract(epoch from now() - p.ultima_posicao_em) / 60))::integer || ' min)' end
+                      end, ', ' order by p.nome)
+      into v_faltam, v_total, v_lista
+      from public.missao_membros mb join public.participantes p on p.id = mb.participante_id
+     where mb.missao_id = v_m.id and not p.removido and p.liberado_em is null;
+    if coalesce(v_faltam, 0) = 0 then
+      continue;
+    end if;
+    select p.id, p.ultima_lat, p.ultima_lng, p.ultima_posicao_em into v_pid, v_lat, v_lng, v_pos
+      from public.missao_membros mb join public.participantes p on p.id = mb.participante_id
+     where mb.missao_id = v_m.id and mb.chegou_base_em is null and not p.removido and p.liberado_em is null
+     order by p.ultima_posicao_em nulls last limit 1;
+    if public.criar_alerta(v_m.operacao_id, 'retorno_atrasado', 'critico',
+         'EQUIPE PODE ESTAR PERDIDA — ' || v_m.grupo_nome,
+         'O prazo de retorno à base' || coalesce(' ' || v_m.base_nome, '') || ' (' || v_m.prazo_retorno_min || ' min após finalizar a busca em ' ||
+           v_m.nome || ') terminou e ' || v_faltam || ' de ' || v_total || ' pessoa(s) não chegaram. Faltam: ' || coalesce(v_lista, '—') || '.',
+         v_m.id || ':retorno_atrasado:' || floor(extract(epoch from v_m.prazo_retorno_em))::bigint,
+         v_m.id, v_m.grupo_id, v_pid, v_lat, v_lng, v_pos) then
+      v_qtd := v_qtd + 1;
+    end if;
+    update public.missoes set status = 'retorno_atrasado' where id = v_m.id and status = 'busca_finalizada';
+  end loop;
+  return v_qtd;
+end;
+$$;
+
+create or replace function public.reconhecer_alerta(p_alerta bigint)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v public.alertas%rowtype;
+begin
+  select * into v from public.alertas where id = p_alerta;
+  if not found or v_nome is null or not public.dono_operacao(v.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  update public.alertas set reconhecido_em = coalesce(reconhecido_em, now()), reconhecido_por_nome = coalesce(reconhecido_por_nome, v_nome)
+   where id = p_alerta returning * into v;
+  return row_to_json(v);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Celular: destino com os dados da missão; base no mapa
+-- ---------------------------------------------------------------------
+create or replace function public.meu_destino(p_participante uuid)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_part public.participantes%rowtype;
+  v_status text;
+begin
+  select * into v_part from public.participantes where id = p_participante and user_id = auth.uid();
+  if not found then
+    raise exception 'participante_invalido';
+  end if;
+  if v_part.liberado_em is not null then
+    raise exception 'participante_liberado';
+  end if;
+  if v_part.removido then
+    raise exception 'participante_removido';
+  end if;
+  select status into v_status from public.operacoes where id = v_part.operacao_id;
+  if v_status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  return (
+    select json_build_object('id', d.id, 'nome', d.nome, 'lat', d.lat, 'lng', d.lng,
+                             'criado_em', d.criado_em, 'recebido_em', d.recebido_em, 'modo', d.modo,
+                             'missao', (select json_build_object(
+                                          'id', m.id, 'grupo', m.grupo_nome, 'setor', m.setor_nome, 'status', m.status,
+                                          'volta_base', m.busca_finalizada_em is not null,
+                                          'pode_finalizar', m.busca_finalizada_em is null and m.status not in ('encerrada', 'na_base')
+                                            and exists (select 1 from public.grupo_membros gm
+                                                         where gm.grupo_id = m.grupo_id and gm.participante_id = v_part.id
+                                                           and gm.papel = 'responsavel'))
+                                          from public.missoes m where m.id = d.missao_id))
+      from public.destinos d
+     where d.participante_id = v_part.id and d.encerrado_em is null
+     order by d.criado_em desc limit 1);
+end;
+$$;
+
+create or replace function public.mapa_do_participante(p_participante uuid)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_part public.participantes%rowtype;
+  v_status text;
+begin
+  select * into v_part from public.participantes where id = p_participante and user_id = auth.uid();
+  if not found then
+    raise exception 'participante_invalido';
+  end if;
+  if v_part.liberado_em is not null then
+    raise exception 'participante_liberado';
+  end if;
+  if v_part.removido then
+    raise exception 'participante_removido';
+  end if;
+  select status into v_status from public.operacoes where id = v_part.operacao_id;
+  if v_status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  return json_build_object(
+    'equipe', public.equipe_no_mapa(p_participante),
+    'setores', coalesce((
+      select json_agg(json_build_object('id', s.id, 'nome', s.nome, 'forma', s.forma, 'centro_lat', s.centro_lat,
+                                        'centro_lng', s.centro_lng, 'raio_m', s.raio_m, 'pontos', s.pontos,
+                                        'cor', s.cor, 'status', s.status) order by s.criado_em)
+        from public.setores s where s.operacao_id = v_part.operacao_id and s.participante_id = v_part.id), '[]'::json),
+    'pontos', coalesce((
+      select json_agg(json_build_object('id', p.id, 'categoria', p.categoria, 'titulo', p.titulo,
+                                        'lat', p.lat, 'lng', p.lng, 'raio_m', p.raio_m) order by p.criado_em)
+        from public.pontos_interesse p
+       where p.operacao_id = v_part.operacao_id and p.categoria in ('ENCONTRO', 'RISCO', 'BASE')), '[]'::json),
+    'destino', (
+      select json_build_object('id', d.id, 'nome', d.nome, 'lat', d.lat, 'lng', d.lng, 'criado_em', d.criado_em, 'modo', d.modo)
+        from public.destinos d where d.participante_id = v_part.id and d.encerrado_em is null
+       order by d.criado_em desc limit 1)
+  );
+end;
+$$;
+
+-- Retenção: dados apagados → missões e alertas apagados (os destinos já são).
+create or replace function public.apagar_missoes_da_operacao()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.dados_apagados_em is not null and old.dados_apagados_em is null then
+    delete from public.alertas where operacao_id = new.id;
+    delete from public.missoes where operacao_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists operacoes_apagar_missoes on public.operacoes;
+create trigger operacoes_apagar_missoes after update of dados_apagados_em on public.operacoes
+  for each row execute function public.apagar_missoes_da_operacao();
+
+-- Permissões
+revoke execute on function public.apos_posicoes(uuid), public.concluir_retorno_se_todos(uuid),
+  public.criar_alerta(uuid, text, text, text, text, text, uuid, uuid, uuid, double precision, double precision, timestamptz),
+  public.apagar_missoes_da_operacao() from public, anon, authenticated;
+revoke execute on function public.distancia_m(double precision, double precision, double precision, double precision),
+  public.ponto_no_setor(public.setores, double precision, double precision),
+  public.salvar_ponto(uuid, uuid, jsonb),
+  public.enviar_destino_grupo(uuid, text, double precision, double precision, text, text, uuid, uuid, uuid, double precision, integer),
+  public.finalizar_busca(uuid), public.prorrogar_retorno(uuid, integer), public.encerrar_missao(uuid),
+  public.verificar_retornos(uuid), public.reconhecer_alerta(bigint), public.meu_destino(uuid), public.mapa_do_participante(uuid)
+  from public, anon;
+grant execute on function public.distancia_m(double precision, double precision, double precision, double precision),
+  public.ponto_no_setor(public.setores, double precision, double precision),
+  public.salvar_ponto(uuid, uuid, jsonb),
+  public.enviar_destino_grupo(uuid, text, double precision, double precision, text, text, uuid, uuid, uuid, double precision, integer),
+  public.finalizar_busca(uuid), public.prorrogar_retorno(uuid, integer), public.encerrar_missao(uuid),
+  public.verificar_retornos(uuid), public.reconhecer_alerta(bigint), public.meu_destino(uuid), public.mapa_do_participante(uuid)
+  to authenticated;
+grant execute on function public.verificar_retornos(uuid) to service_role;
+
+-- Tempo real: missões, situação dos membros e alertas chegam na hora ao painel.
+do $$
+declare
+  t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['missoes', 'missao_membros', 'alertas'] loop
+      begin
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      exception when duplicate_object then
+        null;
+      end;
+    end loop;
+  end if;
+end;
+$$;
+
+-- Agendamento (pg_cron): verifica os prazos de retorno a cada minuto.
+-- Ative a extensão em Database → Extensions → pg_cron e rode esta migração
+-- de novo. Sem pg_cron o resto funciona; o atraso é verificado só pelo painel aberto.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    begin
+      perform cron.unschedule('gbs-verificar-retornos');
+    exception when others then
+      null;   -- ainda não estava agendado
+    end;
+    perform cron.schedule('gbs-verificar-retornos', '* * * * *', 'select public.verificar_retornos()');
+  else
+    raise notice 'pg_cron não está ativo: o alerta de retorno atrasado depende de um painel aberto. Ative pg_cron e rode esta migração de novo.';
+  end if;
+exception when others then
+  raise notice 'Não foi possível agendar a verificação de retornos: %', sqlerrm;
+end;
+$$;
+
+notify pgrst, 'reload schema';

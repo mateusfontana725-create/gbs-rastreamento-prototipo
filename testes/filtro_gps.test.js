@@ -36,15 +36,22 @@ function deriva(amp) {
 console.log('Parado');
 let dv = deriva(6);
 let r = rodar(300, () => dv().concat([10]));
-chk(r.pts.length <= 20, 'parado 5 min, erro de ±6 m, precisão 10 m, aparelho SEM velocidade: no máximo 1 ponto a cada 15 s', r.pts.length);
+chk(r.pts.length <= 26, 'parado 5 min, erro de ±6 m, precisão 10 m, aparelho SEM velocidade: poucos pontos além da confirmação a cada 15 s', r.pts.length);
+chk(maiorIntervalo(r.pts) <= 16, 'parado: nunca mais de ~15 s sem ponto (intervalo máximo padrão)', maiorIntervalo(r.pts));
 dv = deriva(6);
 r = rodar(300, () => dv().concat([10, 0]));
-chk(r.pts.length <= 9, 'mesmo caso com o GPS informando velocidade 0 (Android): só a confirmação periódica (a cada 45 s)', r.pts.length);
+chk(r.pts.length <= 21, 'mesmo caso com o GPS informando velocidade 0 (Android): só a confirmação periódica (a cada 15 s)', r.pts.length);
+chk(r.pts.length >= 19, 'velocidade 0: a confirmação periódica acontece (≈ 20 pontos em 5 min)', r.pts.length);
 dv = deriva(20);
 r = rodar(300, () => dv().concat([35]));
-chk(r.pts.length <= 20, 'parado 5 min, erro de ±20 m, precisão 35 m (mata): poucos pontos (no máximo 1 a cada 15 s)', r.pts.length);
+chk(r.pts.length <= 26, 'parado 5 min, erro de ±20 m, precisão 35 m (mata): poucos pontos além da confirmação a cada 15 s', r.pts.length);
 r = rodar(300, () => [ruido(6), ruido(6), 10]);
-chk(r.pts.length <= 30, 'ruído extremo (cada leitura sorteada ±6 m): no máximo 1 ponto a cada 10 s', r.pts.length);
+chk(r.pts.length <= 35, 'ruído extremo (cada leitura sorteada ±6 m): poucos pontos (≈ 1 a cada 9 s)', r.pts.length);
+dv = deriva(6);
+r = rodar(300, () => dv().concat([10, 0]), { intervaloParadoMs: 30000 });
+chk(r.pts.length <= 11, 'intervalo configurado em 30 s (operação): parado, confirmação a cada 30 s', r.pts.length);
+{ const fc = new GPS.Filtro(); fc.configurar({ intervaloParadoMs: 20000, inexistente: 1 });
+  chk(fc.cfg.intervaloParadoMs === 20000 && !('inexistente' in fc.cfg), 'configurar() muda o intervalo sem aceitar chaves desconhecidas', fc.cfg.intervaloParadoMs); }
 
 console.log('A pé');
 r = rodar(120, (i) => [i * 1.4 + ruido(2), ruido(2), 6]);
@@ -96,9 +103,15 @@ let tr = GPS.trilha(linha(50, 3, 6));
 chk(tr.segmentos.length === 1 && tr.segmentos[0].length === 50, 'todos os pontos registrados viram vértices (nada escondido)', tr.segmentos[0].length);
 const comLacuna = linha(10, 3, 6).concat(linha(10, 3, 6).map((p) => ({ t: p.t + 400000, lat: p.lat + 500 * M, lng: p.lng, prec: 6 })));
 tr = GPS.trilha(comLacuna);
-chk(tr.segmentos.length === 2 && tr.lacunas.length === 1, '6 min sem pontos e 500 m adiante: lacuna separada, não uma linha contínua', [tr.segmentos.length, tr.lacunas.length]);
+chk(tr.segmentos.length === 2 && tr.lacunas.length === 1, '6 min sem pontos e 500 m adiante: falha separada, não uma linha contínua', [tr.segmentos.length, tr.lacunas.length]);
+chk(tr.lacunas[0].t0 === comLacuna[9].t && tr.lacunas[0].t1 === comLacuna[10].t, 'a falha informa início (último ponto antes) e fim (primeiro depois)', [tr.lacunas[0].t0, tr.lacunas[0].t1]);
 const parada = linha(10, 3, 6).concat([{ t: t0 + 200000, lat: -22.9 + 27 * M, lng: -43.2, prec: 6 }]);
-chk(GPS.trilha(parada).lacunas.length === 0, 'pausa longa sem sair do lugar não é lacuna');
+chk(GPS.trilha(parada).lacunas.length === 1, 'mais de 60 s sem pontos é falha mesmo sem sair do lugar (limite padrão)');
+chk(GPS.trilha(parada, { lacunaMs: 300000 }).lacunas.length === 0, 'com o limite configurado em 5 min, a mesma pausa não é falha');
+const ritmo = Array.from({ length: 20 }, (_, i) => ({ t: t0 + i * 15000, lat: -22.9 + i * 2 * M, lng: -43.2, prec: 8 }));
+chk(GPS.trilha(ritmo).lacunas.length === 0 && GPS.trilha(ritmo).segmentos.length === 1, 'pontos a cada 15 s (intervalo padrão): trilha contínua, sem falha');
+const salto61 = [{ t: t0, lat: -22.9, lng: -43.2, prec: 5 }, { t: t0 + 61000, lat: -22.9 + 3 * M, lng: -43.2, prec: 5 }];
+chk(GPS.trilha(salto61).lacunas.length === 1, '61 s entre dois pontos seguidos: falha (acima do limite de 60 s)');
 const desordem = [{ t: t0, lat: -22.9, lng: -43.2, prec: 5 }, { t: t0, lat: -22.9, lng: -43.2, prec: 5 }, { t: t0 + 2000, lat: -22.9 + 4 * M, lng: -43.2, prec: 5 }];
 chk(GPS.trilha(desordem).segmentos[0].length === 2, 'pontos duplicados ignorados no desenho');
 

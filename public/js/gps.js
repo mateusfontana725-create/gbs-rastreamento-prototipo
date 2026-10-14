@@ -34,16 +34,14 @@
     velocidadeRapidaMs: 5,      // acima de 18 km/h: modo veículo
     intervaloMinimoRapidoMs: 1000, // veículo: até 1 ponto por segundo…
     distanciaMinimaRapidoM: 8,     // …a cada 8 m ou mais
-    intervaloParadoMs: 45000,   // parado: confirma a posição a cada 45 s
+    intervaloParadoMs: 15000,   // intervalo MÁXIMO sem ponto: parado, confirma a posição a cada 15 s (configurável por operação)
     velocidadeBaseMs: 12,       // velocidade máxima aceita sem histórico (a pé/bicicleta)
     fatorVelocidade: 2.5,       // ou 2,5 × a velocidade recente (carro acelerando, rodovia…)
     velocidadeAbsurdaMs: 70,    // 252 km/h: nunca é movimento terrestre
     confirmacoesSalto: 2,       // 2 leituras seguidas e coerentes confirmam um deslocamento brusco
     idadeMaximaMs: 30000,       // leitura mais velha que isso é antiga (cache do aparelho)
     // painel (desenho da trilha)
-    lacunaMs: 120000,           // sem pontos por 2 min e deslocou: lacuna (não liga com linha cheia)
-    lacunaDistanciaM: 50,
-    lacunaMaximaMs: 10 * 60000, // sem pontos por 10 min: sempre lacuna
+    lacunaMs: 60000,            // mais de 60 s entre dois pontos seguidos: falha (tracejado, configurável por operação)
     diagnosticoMax: 400,
   };
 
@@ -101,6 +99,12 @@
     this.offsets = [];
     this.reiniciar();
   }
+
+  // Muda a configuração sem perder o estado (ex.: intervalo de GPS definido na operação).
+  Filtro.prototype.configurar = function (cfg) {
+    var self = this;
+    Object.keys(cfg || {}).forEach(function (k) { if (cfg[k] != null && k in PADRAO) self.cfg[k] = cfg[k]; });
+  };
 
   Filtro.prototype.reiniciar = function () {
     this.ancora = null;          // último ponto aceito na linha da trilha
@@ -344,13 +348,14 @@
   /* ------------------------------------------------------------------ */
   /* Trilha no painel: segmentos a desenhar                               */
   /* ------------------------------------------------------------------ */
-  // pontos: [{ t, lat, lng, prec }] em ordem cronológica.
+  // pontos: [{ t, lat, lng, prec }] em ordem cronológica (pelo horário do GPS).
   // Devolve { segmentos: [[lat,lng]…], lacunas: [{ de:[lat,lng], ate:[lat,lng], t0, t1 }] }.
   // Liga TODOS os pontos registrados (nenhum vértice é escondido), exceto:
   //   - pontos aproximados (precisão pior que precisaoTrilhaM): não entram na linha;
   //   - repetidos (mesmo horário e lugar);
-  //   - intervalos sem registro (lacuna) e saltos impossíveis: a linha é interrompida
-  //     e a lacuna é devolvida à parte, para ser desenhada de forma diferente.
+  //   - falhas (mais de lacunaMs entre dois pontos seguidos, mesmo parado) e saltos
+  //     impossíveis: a linha é interrompida e a falha é devolvida à parte, para ser
+  //     desenhada tracejada, com início e fim marcados.
   function trilha(pontos, cfg) {
     cfg = mesclar(cfg);
     var segs = [], seg = [], lacunas = [], ant = null;
@@ -364,7 +369,7 @@
         var d = distancia(ant.lat, ant.lng, pt.lat, pt.lng);
         var incerteza = (pt.prec || 0) + (ant.prec || 0) + 20;
         var impossivel = d > incerteza && d / Math.max(dt / 1000, 0.5) > cfg.velocidadeAbsurdaMs;
-        var semRegistro = dt > cfg.lacunaMaximaMs || (dt > cfg.lacunaMs && d > Math.max(cfg.lacunaDistanciaM, incerteza));
+        var semRegistro = dt > cfg.lacunaMs;
         if (impossivel || semRegistro) {
           if (seg.length) segs.push(seg);
           seg = [];

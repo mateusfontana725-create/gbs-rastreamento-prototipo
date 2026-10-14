@@ -101,7 +101,8 @@
     iniciandoMinhaPos: false,
     meuWatchEm: 0,
     permissaoMinha: 'desconhecido',
-    filaMinha: [],
+    filaMinha: null,            // fila offline da "Minha posição" (trilha-local.js: IndexedDB)
+    bufferMinha: [],            // pontos capturados enquanto a fila abre
     enviandoMinha: false,
     timerMinhaFila: null,
     timerMeuSinal: null,
@@ -129,7 +130,7 @@
     camadaAtual: 'osm',
     camadaPontos: null,         // fotos e relatos (agrupados quando próximos)
     legenda: null,
-    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, legenda: true, setores: true, pontos: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
+    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, legenda: true, setores: true, pontos: true, local: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
     lateralOculta: Boolean(C.local.ler(CHAVE_LATERAL, false)),
     centralAba: 'msgs',
     // setores, pontos de interesse e destinos
@@ -149,6 +150,28 @@
     centralFiltro: 'todas',
     centralVoltar: false,
     assinaturaConversa: '',
+    // cadastro da operação
+    camposNova: null,           // campos do cadastro no formulário "Nova operação"
+    marcaLocal: null,           // marcador do local da operação no mapa
+    // grupos
+    grupos: new Map(),          // id → grupo
+    membros: new Map(),         // grupo_id → Map(participante_id → vínculo {papel, origem…})
+    semGrupos: false,           // banco sem a migração 008
+    filtroGrupo: null,          // grupo mostrado sozinho no mapa (ícone de olho) — não fica lembrado
+    controleGrupos: null,
+    camadaDestinosGrupo: null,
+    timerGrupos: null,
+    canalExtras: null,          // tempo real das tabelas novas (separado: um erro nelas não derruba o canal principal)
+    // deslocamentos de grupos (missões) e alertas
+    missoes: new Map(),         // id → missão
+    missaoMembros: new Map(),   // missao_id → [membros]
+    semMissoes: false,          // banco sem a migração 010
+    alertas: new Map(),         // id → alerta
+    alertasCarregados: false,
+    timerMissoes: null,
+    timerRetornos: null,
+    timerAlarmeCritico: null,
+    alertaFaixa: null,
   };
 
   /* ------------------------------------------------------------------ */
@@ -189,6 +212,20 @@
     document.querySelectorAll('[data-acao="sair"]').forEach(function (b) { b.addEventListener('click', sair); });
     $('form-login').addEventListener('submit', entrar);
     $('form-nova').addEventListener('submit', criarOperacao);
+    // Cadastro completo da operação nova: tipo, acionamento, local e descrição
+    est.camposNova = window.Cadastro.camposOperacao(null, { obrigatorio: true, agoraPadrao: true, prefixo: 'nova' });
+    $('nova-cadastro').appendChild(est.camposNova.elemento);
+    $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
+    $('menu-vitimas').addEventListener('click', function () {
+      if (est.op) window.Cadastro.abrirVitimas(est.op, { editavel: !est.op.dados_apagados_em, limparArquivos: limparArquivosPendentes });
+    });
+    $('menu-grupos').addEventListener('click', abrirGrupos);
+    $('menu-missoes').addEventListener('click', abrirMissoes);
+    $('opt-local').addEventListener('click', function () { definirPrefMapa('local', !est.prefsMapa.local); });
+    $('faixa-filtro-todos').addEventListener('click', function () { filtrarGrupo(null); });
+    $('faixa-alerta-ciente').addEventListener('click', function () { if (est.alertaFaixa) reconhecerAlerta(est.alertaFaixa.id); });
+    $('faixa-alerta-mapa').addEventListener('click', function () { if (est.alertaFaixa) verAlertaNoMapa(est.alertaFaixa); });
+    $('aba-alertas').addEventListener('click', function () { mostrarAbaCentral('alertas'); });
     $('btn-voltar').addEventListener('click', function () { location.hash = ''; });
     $('btn-convite').addEventListener('click', abrirConvite);
     $('btn-encerrar').addEventListener('click', encerrarOperacao);
@@ -387,10 +424,15 @@
   }
 
   function descricaoOp(op) {
-    if (op.status === 'ativa') return 'Ativa desde ' + C.hora(op.criada_em, false) + ' · ' + textoRetencao(op.retencao_horas);
-    var t = 'Encerrada em ' + C.hora(op.encerrada_em, false);
-    if (op.dados_apagados_em) return t + ' · dados apagados';
-    return t + ' · dados serão apagados em ' + C.hora(op.expira_em, false);
+    var cad = [window.Cadastro.textoTipo(op), op.acionado_em ? 'acionada ' + window.Cadastro.dataHora(op.acionado_em) : '', op.local_endereco || '']
+      .filter(Boolean).join(' · ');
+    var t;
+    if (op.status === 'ativa') t = 'Ativa desde ' + C.hora(op.criada_em, false) + ' · ' + textoRetencao(op.retencao_horas);
+    else {
+      t = 'Encerrada em ' + C.hora(op.encerrada_em, false);
+      t += op.dados_apagados_em ? ' · dados apagados' : ' · dados serão apagados em ' + C.hora(op.expira_em, false);
+    }
+    return (cad ? cad + ' — ' : '') + t;
   }
 
   async function mostrarOperacoes() {
@@ -399,9 +441,10 @@
     ul.innerHTML = '<li class="muted">Carregando…</li>';
     var ops;
     try {
+      // select('*'): funciona com ou sem as colunas do cadastro (migração 007)
       ops = await C.consultar(
         C.cliente.from('operacoes')
-          .select('id,codigo,status,retencao_horas,criada_em,encerrada_em,expira_em,dados_apagados_em,responsavel_id')
+          .select('*')
           .order('criada_em', { ascending: false })
           .limit(100)
       );
@@ -423,14 +466,22 @@
       if (op.status !== 'ativa' && !op.dados_apagados_em) {
         acoes.appendChild(UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Apagar dados agora', onclick: function () { apagarDados(op); } }));
       }
+      // Operação antiga (só com o nome): continua válida; o painel sugere completar.
+      var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
+      if (incompleta) {
+        acoes.appendChild(UI.el('button', { classe: 'btn', type: 'button', texto: 'Completar cadastro', 'data-completar': op.id, onclick: function () {
+          window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } });
+        } }));
+      }
       if (podeExcluir(op)) {
         acoes.appendChild(UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Excluir operação', 'data-excluir': op.id, onclick: function () { excluirOperacao(op); } }));
       }
       var deEquipe = est.usuario && op.responsavel_id !== est.usuario.id
         ? UI.el('span', { classe: 'selo selo-responsavel', title: 'Você foi adicionado como responsável', texto: 'Equipe' }) : null;
+      var seloIncompleto = incompleta ? UI.el('span', { classe: 'selo selo-alerta', title: 'Falta tipo e/ou data e hora do acionamento', texto: 'Cadastro incompleto' }) : null;
       ul.appendChild(UI.el('li', null, [
         UI.el('div', { classe: 'op-info' }, [
-          UI.el('strong', null, [op.codigo + ' ', selo, deEquipe ? ' ' : null, deEquipe]),
+          UI.el('strong', null, [op.codigo + ' ', selo, deEquipe ? ' ' : null, deEquipe, seloIncompleto ? ' ' : null, seloIncompleto]),
           UI.el('span', { texto: descricaoOp(op) }),
         ]),
         acoes,
@@ -448,11 +499,30 @@
       erro.hidden = false;
       return;
     }
+    var dados;
+    try {
+      dados = est.camposNova.ler();
+    } catch (e) {
+      erro.textContent = e.message;
+      erro.hidden = false;
+      return;
+    }
     var btn = $('btn-criar');
     btn.disabled = true;
+    var args = { p_codigo: codigo, p_retencao_horas: Number($('nova-retencao').value), p_dados: dados };
     try {
-      var op = await C.rpc('criar_operacao', { p_codigo: codigo, p_retencao_horas: Number($('nova-retencao').value) });
+      var op;
+      try {
+        op = await C.rpc('criar_operacao', args);
+      } catch (e1) {
+        if (e1.codigo !== 'funcao_ausente') throw e1;
+        // banco sem a migração 007: cria só com o nome (o cadastro fica para depois)
+        delete args.p_dados;
+        op = await C.rpc('criar_operacao', args);
+        UI.aviso('Operação criada só com o nome: o servidor ainda não tem o cadastro completo (migração 007).', 'erro', 9000);
+      }
       $('nova-codigo').value = '';
+      est.camposNova.limpar();
       est.abrirConvite = true;
       location.hash = '#op=' + op.id;
     } catch (e) {
@@ -461,6 +531,23 @@
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // Ferramentas → Dados da operação (ver e editar o cadastro e o GPS).
+  function abrirDadosOperacao() {
+    if (!est.op) return;
+    window.Cadastro.abrirDados(est.op, {
+      editavel: true,
+      verNoMapa: function (op) { verLocalNoMapa(op); },
+      aoSalvar: function (atual) {
+        if (!est.op || !atual || atual.id !== est.op.id) return;
+        est.op = Object.assign(est.op, atual);
+        renderizarCabecalho();
+        desenharLocalOp();
+        aplicarIntervaloGpsMeu();
+        est.participantes.forEach(function (p) { sujarTrilha(p); });   // limite de falha pode ter mudado
+      },
+    });
   }
 
   async function apagarDados(op) {
@@ -506,24 +593,36 @@
   // de excluir. O que falhar continua na fila (arquivos_pendentes) e é apagado
   // depois pela limpeza diária (/api/limpeza), sem ficar esquecido.
   async function limparArquivosPendentes() {
-    var caminhos;
+    var itens;
     try {
-      caminhos = await C.rpc('meus_arquivos_pendentes');
+      // com o bucket de cada arquivo (fotos de campo ou fotos de vítimas — migração 007)
+      itens = await C.rpc('meus_arquivos_pendentes_v2');
     } catch (e) {
-      return { apagados: 0, falhas: 0, erro: e.message };
-    }
-    caminhos = caminhos || [];
-    var apagados = 0;
-    for (var i = 0; i < caminhos.length; i += 100) {
-      var lote = caminhos.slice(i, i + 100);
+      if (e.codigo !== 'funcao_ausente') return { apagados: 0, falhas: 0, erro: e.message };
       try {
-        var r = await C.cliente.storage.from('fotos').remove(lote);
-        if (r.error) continue;
-        var conf = await C.rpc('confirmar_arquivos_removidos', { p_caminhos: lote });
-        apagados += Number(conf) || 0;
-      } catch (e) { /* fica na fila para a limpeza diária */ }
+        itens = ((await C.rpc('meus_arquivos_pendentes')) || []).map(function (c) { return { caminho: c, bucket: 'fotos' }; });
+      } catch (e2) {
+        return { apagados: 0, falhas: 0, erro: e2.message };
+      }
     }
-    return { apagados: apagados, falhas: caminhos.length - apagados };
+    itens = itens || [];
+    var porBucket = {};
+    itens.forEach(function (it) { (porBucket[it.bucket || 'fotos'] = porBucket[it.bucket || 'fotos'] || []).push(it.caminho); });
+    var apagados = 0;
+    var buckets = Object.keys(porBucket);
+    for (var b = 0; b < buckets.length; b++) {
+      var caminhos = porBucket[buckets[b]];
+      for (var i = 0; i < caminhos.length; i += 100) {
+        var lote = caminhos.slice(i, i + 100);
+        try {
+          var r = await C.cliente.storage.from(buckets[b]).remove(lote);
+          if (r.error) continue;
+          var conf = await C.rpc('confirmar_arquivos_removidos', { p_caminhos: lote });
+          apagados += Number(conf) || 0;
+        } catch (e) { /* fica na fila para a limpeza diária */ }
+      }
+    }
+    return { apagados: apagados, falhas: itens.length - apagados };
   }
 
   function excluirOperacao(op) {
@@ -544,7 +643,9 @@
         UI.el('li', { texto: 'todo o histórico de localizações e as trilhas GPS;' }),
         UI.el('li', { texto: 'mensagens trocadas e relatos de campo (objetos, vestígios, pistas, obstáculos);' }),
         UI.el('li', { texto: 'fotografias registradas no mapa' + (nFotos ? ' (' + nFotos + ')' : '') + ' e os arquivos armazenados;' }),
-        UI.el('li', { texto: 'equipe de responsáveis da operação e os links/QR Codes de convite, que deixam de funcionar na hora.' }),
+        UI.el('li', { texto: 'fichas das vítimas e as fotos delas;' }),
+        UI.el('li', { texto: 'grupos, deslocamentos de grupos e alertas;' }),
+        UI.el('li', { texto: 'equipe de responsáveis da operação e os links/QR Codes de convite (inclusive os dos grupos), que deixam de funcionar na hora.' }),
       ]),
       UI.el('p', { classe: 'ajuda', texto: 'Quem ainda estiver com o link aberto deixa de enviar localização, mensagens e fotos. Outras operações não são afetadas.' }),
       UI.el('div', { classe: 'grupo' }, [
@@ -580,7 +681,7 @@
       var arq = await limparArquivosPendentes();
       fechar(true);
       var resumo = 'Operação "' + (r && r.operacao || op.codigo) + '" excluída' +
-        (r ? ' (' + r.participantes + ' participante(s), ' + r.fotos + ' foto(s))' : '') + '.';
+        (r ? ' (' + r.participantes + ' participante(s), ' + r.fotos + ' foto(s)' + (r.vitimas != null ? ', ' + r.vitimas + ' ficha(s) de vítima' : '') + ')' : '') + '.';
       if (arq.falhas) UI.aviso(resumo + ' ' + textoFalhaArquivos(arq.falhas), 'erro', 15000);
       else UI.aviso(resumo + ' Todos os dados foram apagados.', 'ok', 8000);
       if (est.op && est.op.id === op.id) {
@@ -617,9 +718,14 @@
     aplicarLateral(false);
     renderizarCabecalho();
     criarMapa();
+    desenharLocalOp();
+    aplicarIntervaloGpsMeu();
     await carregarTudo();
     assinarTempoReal();
+    assinarTempoRealExtras();
     est.timerStatus = setInterval(atualizarEstados, 5000);
+    // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
+    est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
     iniciarPolling();
     if (op.status === 'ativa') {
       await entrarComoResponsavel();
@@ -648,7 +754,9 @@
     clearInterval(est.timerMeuSinal);
     est.timerMeuSinal = null;
     est.meuPart = null;
-    est.filaMinha = [];
+    est.filaMinha = null;
+    est.abrindoMinha = null;
+    est.bufferMinha = [];
     est.ultimoAceitoMeu = null;
     est.filtroMeu.reiniciar();
     est.minhaPosEstado = 'desligada';
@@ -681,6 +789,30 @@
     est.fotosMarc = new Map();
     est.camadaPontos = est.legenda = est.camadasBase = null;
     est.assinaturaConversa = '';
+    est.marcaLocal = null;
+    est.grupos = new Map();
+    est.membros = new Map();
+    est.semGrupos = false;
+    est.filtroGrupo = null;
+    est.controleGrupos = est.camadaDestinosGrupo = null;
+    $('faixa-filtro').hidden = true;
+    est.missoes = new Map();
+    est.missaoMembros = new Map();
+    est.semMissoes = false;
+    est.alertas = new Map();
+    est.alertasCarregados = false;
+    est.alertaFaixa = null;
+    $('faixa-alerta').hidden = true;
+    clearInterval(est.timerRetornos);
+    clearInterval(est.timerAlarmeCritico);
+    clearTimeout(est.timerGrupos);
+    clearTimeout(est.timerMissoes);
+    clearTimeout(est.timerExtras);
+    est.timerRetornos = est.timerAlarmeCritico = est.timerGrupos = est.timerMissoes = null;
+    if (est.canalExtras) {
+      try { C.cliente.removeChannel(est.canalExtras); } catch (e) { /* ignora */ }
+      est.canalExtras = null;
+    }
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -726,6 +858,17 @@
       if (p.lacunas) p.lacunas.remove();
     });
     limparAreasDoMapa();
+    // grupos, deslocamentos e alertas também são apagados com os dados (retenção)
+    est.grupos = new Map();
+    est.membros = new Map();
+    est.missoes = new Map();
+    est.missaoMembros = new Map();
+    est.alertas = new Map();
+    est.filtroGrupo = null;   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
+    $('faixa-filtro').hidden = true;
+    if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
+    renderizarControleGrupos();
+    mostrarFaixaAlerta();
     if (est.circuloPrecisao) { est.circuloPrecisao.remove(); est.circuloPrecisao = null; }
     if (est.camadaPontos) est.camadaPontos.clearLayers();
     est.participantes = new Map();
@@ -745,7 +888,11 @@
   function renderizarCabecalho() {
     var op = est.op;
     $('op-codigo').textContent = op.codigo;
-    $('op-sub').textContent = op.status === 'ativa' ? 'Operação ativa · ' + textoRetencao(op.retencao_horas) : 'Operação encerrada';
+    var tipoOp = window.Cadastro.textoTipo(op);
+    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa · ' + textoRetencao(op.retencao_horas) : 'Operação encerrada');
+    $('menu-dados-estado').textContent = 'tipo' in op && window.Cadastro.incompleto(op) ? 'cadastro incompleto' : '';
+    $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
+    $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
     $('btn-encerrar').hidden = op.status !== 'ativa';
     $('btn-convite').hidden = op.status !== 'ativa';
     $('btn-minha-pos').hidden = op.status !== 'ativa';
@@ -828,9 +975,12 @@
           '<div><span class="mk-foto mk-foto-legenda"><span class="ico-camera"></span></span> Foto registrada no local</div>' +
           '<div><span class="mk-relato mk-relato-legenda"><span>P</span></span> Relato do participante</div>' +
           '<div><span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span> Ponto de interesse (letra = categoria)</div>' +
+          '<div><span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span> Base (círculo = raio de chegada)</div>' +
+          '<div><span class="mk-local mk-local-legenda" aria-hidden="true">◎</span> Local da operação</div>' +
           '<div><span class="setor-legenda"></span> Setor de busca (tracejado = pendente)</div>' +
           '<div><span class="lg-linha-rota"></span> Rota até o destino (por caminhos)</div>' +
-          '<div><span class="lg-lacuna"></span> Trecho sem posições registradas</div>' +
+          '<div><span class="lg-lacuna"></span> Falha: trecho sem posições (○ início · ● fim)</div>' +
+          '<div><span class="lg-estrela" aria-hidden="true">★</span> Responsável de um grupo</div>' +
           '</details>';
         L.DomEvent.disableClickPropagation(div);
         return div;
@@ -838,6 +988,22 @@
     });
     est.legenda = new Legenda();
     est.legenda.addTo(mapa);   // sempre no mapa; abre e fecha tocando em "Legenda"
+
+    // Grupos: cada grupo com o ícone de olho (mostrar só o grupo / restaurar tudo).
+    var Grupos = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        var div = L.DomUtil.create('div', 'controle-grupos');
+        div.hidden = true;
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        return div;
+      },
+    });
+    est.controleGrupos = new Grupos();
+    est.controleGrupos.addTo(mapa);
+    // Destinos dos membros do grupo filtrado (só aparecem com o filtro ligado).
+    est.camadaDestinosGrupo = L.layerGroup().addTo(mapa);
 
     // Fotos e relatos: agrupados quando estão próximos (o número indica quantos),
     // para não poluir o mapa. Ao aproximar, cada um aparece no seu local; vários
@@ -918,6 +1084,7 @@
       if (chave === 'legenda' && est.legenda) { if (valor) est.legenda.addTo(est.mapa); else est.legenda.remove(); }
       if (chave === 'setores' && est.camadaSetores) { if (valor) est.camadaSetores.addTo(est.mapa); else est.camadaSetores.remove(); }
       if (chave === 'pontos' && est.camadaPontosInt) { if (valor) est.camadaPontosInt.addTo(est.mapa); else est.camadaPontosInt.remove(); }
+      if (chave === 'local') desenharLocalOp();
       if (chave === 'nomes') $('mapa').classList.toggle('esconder-rotulos', !valor);
     }
     atualizarMenu();
@@ -964,6 +1131,10 @@
     $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomes)));
     $('opt-coord').value = est.prefsMapa.coord || 'dec';
     $('opt-trilhas').setAttribute('aria-pressed', String(todasTrilhasVisiveis()));
+    $('opt-local').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.local)));
+    $('menu-grupos-qtd').textContent = est.grupos.size ? String(est.grupos.size) : '';
+    var ativas = missoesAtivas().length;
+    $('menu-missoes-qtd').textContent = ativas ? ativas + ' ativo(s)' : '';
   }
 
   /* ---------- Lista lateral: ocultar e reabrir ----------------------- */
@@ -1016,10 +1187,11 @@
     var pts = [];
     est.participantes.forEach(function (p) {
       var pos = posicaoAtual(p);
-      if (pos) pts.push([pos.lat, pos.lng]);
+      if (pos && visivelNoFiltro(p)) pts.push([pos.lat, pos.lng]);
     });
+    if (!pts.length && est.op && est.op.local_lat != null) pts.push([est.op.local_lat, est.op.local_lng]);
     if (!pts.length) {
-      UI.aviso('Nenhum participante com posição ainda.');
+      UI.aviso(est.filtroGrupo ? 'Nenhum membro deste grupo com posição ainda.' : 'Nenhum participante com posição ainda.');
       return;
     }
     if (pts.length === 1) est.mapa.setView(pts[0], Math.max(est.mapa.getZoom(), 16));
@@ -1065,6 +1237,10 @@
       if (!est.op || est.op.id !== opId) return;
       await carregarAreas();
       if (!est.op || est.op.id !== opId) return;
+      await carregarGrupos();
+      if (!est.op || est.op.id !== opId) return;
+      await carregarMissoes(true);
+      if (!est.op || est.op.id !== opId) return;
 
       est.ultimoSyncOk = Date.now();
       est.syncFalhou = false;
@@ -1098,11 +1274,13 @@
       }
       if (op) {
         var mudou = op.status !== est.op.status || op.dados_apagados_em !== est.op.dados_apagados_em;
+        var mudouCadastro = op.atualizado_em !== est.op.atualizado_em;
+        var mudouLacuna = op.gps_lacuna_s !== est.op.gps_lacuna_s;
         est.op = op;
-        if (mudou) {
-          renderizarCabecalho();
-          if (op.dados_apagados_em) limparDadosDoMapa();
-        }
+        if (mudou || mudouCadastro) renderizarCabecalho();
+        if (mudou && op.dados_apagados_em) limparDadosDoMapa();
+        if (mudouCadastro) { desenharLocalOp(); aplicarIntervaloGpsMeu(); }
+        if (mudouLacuna) est.participantes.forEach(function (p) { sujarTrilha(p); });
       }
       var parts = await C.consultarTudo(function () {
         return C.cliente.from('participantes').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true });
@@ -1126,6 +1304,10 @@
       await carregarFotos(false);
       if (!est.op || est.op.id !== opId) return;
       await carregarAreas();
+      if (!est.op || est.op.id !== opId) return;
+      await carregarGrupos();
+      if (!est.op || est.op.id !== opId) return;
+      await carregarMissoes(false);
       if (!est.op || est.op.id !== opId) return;
 
       est.ultimoSyncOk = Date.now();
@@ -1200,6 +1382,42 @@
       });
   }
 
+  // Tabelas novas (fichas de vítimas, grupos, deslocamentos, alertas) num canal
+  // próprio: se o banco ainda não tiver as migrações 007–010, o canal principal
+  // (participantes, posições, mensagens…) continua funcionando. A conferência
+  // periódica (sincronizar) também busca esses dados, então nada se perde.
+  function assinarTempoRealExtras() {
+    if (!est.op) return;
+    var opId = est.op.id;
+    if (est.canalExtras) {
+      try { C.cliente.removeChannel(est.canalExtras); } catch (e) { /* ignora */ }
+    }
+    var filtro = 'operacao_id=eq.' + opId;
+    try {
+      est.canalExtras = C.cliente.channel('op-extras-' + opId + '-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'vitimas', filter: filtro }, function () {
+          if (window.Cadastro) window.Cadastro.aoMudarVitimas(opId);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'grupos', filter: filtro }, agendarGrupos)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'grupo_membros', filter: filtro }, agendarGrupos)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'missoes', filter: filtro }, agendarMissoes)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'missao_membros', filter: filtro }, agendarMissoes)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alertas', filter: filtro }, function (ev) {
+          if (ev.new && ev.new.id) receberAlerta(ev.new, false);
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'alertas', filter: filtro }, function (ev) {
+          if (ev.new && ev.new.id) receberAlerta(ev.new, true);
+        })
+        .subscribe(function (status) {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            // Sem as tabelas novas ou sem conexão: a conferência periódica cobre.
+            clearTimeout(est.timerExtras);
+            est.timerExtras = setTimeout(function () { if (est.op && est.op.id === opId && !est.semGrupos && !est.semMissoes) assinarTempoRealExtras(); }, 60000);
+          }
+        });
+    } catch (e) { /* conferência periódica cobre */ }
+  }
+
   function atualizarPilula() {
     var pil = $('pilula');
     if (!pil) return;
@@ -1234,7 +1452,7 @@
     } else {
       var antigo = p.dados;
       if (row.saida_solicitada_em && !antigo.saida_solicitada_em && !row.liberado_em) {
-        UI.aviso((row.nome || 'Participante') + ' PEDIU PARA ENCERRAR o rastreamento. Abra a ficha para liberar.', 'erro', 15000);
+        UI.aviso((row.nome || 'Participante') + ' PEDIU PARA ENCERRAR o rastreamento. Abra a ficha para liberar.' + sufixoFiltro(row.id), 'erro', 15000);
         alarme();
       }
       p.dados = Object.assign({}, antigo, row);
@@ -1406,6 +1624,7 @@
     if (naoLidasDe(p.id).length) c.push('msg-nova');
     if (est.selecionado === p.id) c.push('selecionado');
     if (ehEu(p)) c.push('eu');
+    if (gruposDe(p.id).some(function (g) { return g.papel === 'responsavel'; })) c.push('resp-grupo');
     return c.join(' ');
   }
 
@@ -1424,7 +1643,7 @@
   function atualizarMarcador(p) {
     if (!est.mapa) return;
     var pos = posicaoAtual(p);
-    if (!pos || p.dados.removido) {
+    if (!pos || p.dados.removido || !visivelNoFiltro(p)) {
       if (p.marcador) { p.marcador.remove(); p.marcador = null; }
       return;
     }
@@ -1483,9 +1702,10 @@
     var pt = { id: row.id, t: C.paraMs(row.registrado_em), lat: row.lat, lng: row.lng, prec: row.precisao,
       rec: C.paraMs(row.recebido_em), exib: C.agora() };
     // insere na ordem temporal correta (pontos enviados depois de uma queda chegam fora de ordem)
+    // (mesmo horário: desempata pelo id, para o desenho ser sempre o mesmo)
     var arr = p.pontos;
     var i = arr.length;
-    while (i > 0 && arr[i - 1].t > pt.t) i--;
+    while (i > 0 && (arr[i - 1].t > pt.t || (arr[i - 1].t === pt.t && arr[i - 1].id > pt.id))) i--;
     arr.splice(i, 0, pt);
 
     var d = p.dados;
@@ -1526,14 +1746,19 @@
   // impossível, nem desenha o vaivém de quem está parado (gps.js). Os pontos
   // guardados não mudam: o histórico completo continua na ficha.
   function trilhaDe(p) {
-    return window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM });
+    return window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp() });
+  }
+
+  // Limite de falha da operação (s sem ponto entre dois pontos seguidos); padrão do gps.js sem a migração 009.
+  function lacunaMsOp() {
+    return est.op && est.op.gps_lacuna_s ? est.op.gps_lacuna_s * 1000 : undefined;
   }
 
   function pesoTrilha(p) { return est.selecionado === p.id ? 6 : 4; }
 
   function desenharTrilha(p) {
     if (!est.mapa) return;
-    var tr = p.trilhaVisivel ? trilhaDe(p) : { segmentos: [], lacunas: [] };
+    var tr = p.trilhaVisivel && visivelNoFiltro(p) ? trilhaDe(p) : { segmentos: [], lacunas: [] };
     var segs = tr.segmentos;
     desenharLacunas(p, tr.lacunas);
     if (!segs.length) {   // oculta ou sem pontos: nada a desenhar
@@ -1567,8 +1792,9 @@
     if (!est.mapa.hasLayer(p.trilha)) p.trilha.addTo(est.mapa);
   }
 
-  // Lacuna: período sem posições registradas em que a pessoa se deslocou. É
-  // desenhada como uma linha cinza fina pontilhada (não é percurso registrado).
+  // Falha: intervalo maior que o limite da operação entre dois pontos seguidos
+  // (ou salto incoerente). É desenhada TRACEJADA em cinza (não é percurso
+  // registrado), com o início (○) e o fim (●) da falha marcados.
   function desenharLacunas(p, lacunas) {
     if (!lacunas.length) { if (p.lacunas) { p.lacunas.remove(); p.lacunas = null; } return; }
     if (!p.lacunas) p.lacunas = L.layerGroup().addTo(est.mapa);
@@ -1577,10 +1803,18 @@
     p.lacunas._assinatura = assinatura;
     p.lacunas.clearLayers();
     lacunas.forEach(function (l) {
-      var min = Math.max(1, Math.round((l.t1 - l.t0) / 60000));
-      L.polyline([l.de, l.ate], { color: '#9ca3af', weight: 2, opacity: 0.8, dashArray: '2 7', interactive: true, className: 'trilha-lacuna' })
-        .bindTooltip('Sem posições registradas de ' + C.hora(l.t0, false) + ' a ' + C.hora(l.t1, false) + ' (' + min + ' min)' +
-          (l.impossivel ? ' — salto incoerente' : '') + '. O percurso real nesse trecho é desconhecido.', { sticky: true })
+      var dur = Math.round((l.t1 - l.t0) / 1000);
+      var txtDur = dur < 120 ? dur + ' s' : Math.round(dur / 60) + ' min';
+      var texto = 'Falha: sem posições registradas de ' + C.hora(l.t0) + ' a ' + C.hora(l.t1) + ' (' + txtDur + ')' +
+        (l.impossivel ? ' — salto incoerente' : '') + '. O percurso real nesse trecho é desconhecido.';
+      L.polyline([l.de, l.ate], { color: '#9ca3af', weight: 2.5, opacity: 0.9, dashArray: '8 6', interactive: true, className: 'trilha-lacuna' })
+        .bindTooltip(texto, { sticky: true })
+        .addTo(p.lacunas);
+      L.circleMarker(l.de, { radius: 5, color: '#e5e7eb', weight: 2, fillColor: '#111827', fillOpacity: 1, className: 'falha-inicio' })
+        .bindTooltip('Início da falha · ' + nomeExibido(p) + ' · ' + C.hora(l.t0) + ' (último ponto antes da falha)')
+        .addTo(p.lacunas);
+      L.circleMarker(l.ate, { radius: 5, color: '#111827', weight: 2, fillColor: '#e5e7eb', fillOpacity: 1, className: 'falha-fim' })
+        .bindTooltip('Fim da falha · ' + nomeExibido(p) + ' · ' + C.hora(l.t1) + ' (primeiro ponto depois da falha, ' + txtDur + ' sem posições)')
         .addTo(p.lacunas);
     });
   }
@@ -1668,6 +1902,10 @@
     if (partes.simbolo.innerHTML !== htmlSimb) partes.simbolo.innerHTML = htmlSimb;
 
     var htmlNome = '<span class="nome-txt">' + C.esc(nomeExibido(p)) + '</span>' + htmlSeloTipo(d) +
+      gruposDe(p.id).map(function (g) {
+        return '<span class="selo selo-grupo" style="--cor-grupo:' + C.esc(g.cor) + '" title="' + (g.papel === 'responsavel' ? 'Responsável do grupo ' : 'Grupo ') + C.esc(g.nome) + '">' +
+          (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
+      }).join('') +
       (ajuda ? '<span class="selo selo-perigo">Pediu ajuda</span>' : '') +
       (saidaPendente(p) ? '<span class="selo selo-alerta">Pediu para sair</span>' : '') +
       (aguardandoRetorno(p) ? '<span class="selo selo-responsavel">Reincluído</span>' : '') +
@@ -1690,7 +1928,7 @@
     p.li.classList.toggle('alerta-ajuda', Boolean(ajuda));
     p.li.classList.toggle('alerta-saida', saidaPendente(p) && !ajuda);
     var busca = $('busca').value.trim().toLowerCase();
-    p.li.hidden = Boolean(busca) && d.nome.toLowerCase().indexOf(busca) === -1;
+    p.li.hidden = (Boolean(busca) && d.nome.toLowerCase().indexOf(busca) === -1) || !visivelNoFiltro(p);
   }
 
   function ordemLista(a, b) {
@@ -1720,7 +1958,8 @@
       while (ul.children.length > par[1].length) ul.removeChild(ul.lastChild);
     });
     $('lista-vazia').hidden = lista.length > 0;
-    $('qtd-part').textContent = String(ativos.length);
+    var noFiltro = est.filtroGrupo ? ativos.filter(visivelNoFiltro).length : null;
+    $('qtd-part').textContent = noFiltro == null ? String(ativos.length) : noFiltro + ' de ' + ativos.length;
     $('qtd-removidos').textContent = String(fora.length);
     $('grupo-removidos').hidden = fora.length === 0;
 
@@ -1748,6 +1987,7 @@
     renderizarLista();
     if (est.selecionado) atualizarFicha();
     atualizarPilula();
+    if (est.filtroGrupo) desenharDestinosGrupo();
   }
 
   /* ------------------------------------------------------------------ */
@@ -1966,6 +2206,8 @@
 
     // Fotos registradas por este participante
     renderizarFotosFicha(p);
+    // Grupos deste participante (papel, adicionar, remover)
+    renderizarGruposFicha(p);
 
     // Histórico de posições (últimos 50)
     $('ficha-qtd-pontos').textContent = String(p.pontos.length);
@@ -2080,7 +2322,7 @@
     est.mensagens.set(m.id, m);
     var p = est.participantes.get(m.participante_id);
     if (!silencioso && m.resposta === 'PRECISO_AJUDA' && (!antiga || antiga.resposta !== 'PRECISO_AJUDA') && !est.ajudaVista.has(m.id)) {
-      UI.aviso('PEDIDO DE AJUDA: ' + (p ? p.dados.nome : 'participante'), 'erro', 15000);
+      UI.aviso('PEDIDO DE AJUDA: ' + (p ? p.dados.nome : 'participante') + sufixoFiltro(m.participante_id), 'erro', 15000);
       alarme();
     }
     if (!silencioso && est.meuPart && m.participante_id === est.meuPart && m.direcao !== 'entrada' && !antiga && !m.confirmada_em) {
@@ -2091,7 +2333,7 @@
       // Mensagem ou relato do participante para os responsáveis.
       if (antiga && antiga.lida_em == null && m.lida_em != null) est.lidasLocal.delete(m.id);
       if (!antiga && !silencioso && m.categoria === 'AJUDA' && !est.ajudaVista.has(m.id)) {
-        UI.aviso('PEDIDO DE AJUDA: ' + nomeDoParticipante(m.participante_id, m.remetente_nome) + (m.lat != null ? ' (com localização)' : ''), 'erro', 15000);
+        UI.aviso('PEDIDO DE AJUDA: ' + nomeDoParticipante(m.participante_id, m.remetente_nome) + (m.lat != null ? ' (com localização)' : '') + sufixoFiltro(m.participante_id), 'erro', 15000);
         alarme();
       } else if (!antiga && !silencioso && !m.lida_em) {
         notificarEntrada(m);
@@ -2667,14 +2909,13 @@
   }
 
   function mostrarAbaCentral(aba) {
-    est.centralAba = aba === 'fotos' ? 'fotos' : 'msgs';
-    var msgs = est.centralAba === 'msgs';
-    $('aba-msgs').classList.toggle('btn-ativo', msgs);
-    $('aba-msgs').setAttribute('aria-selected', String(msgs));
-    $('aba-fotos').classList.toggle('btn-ativo', !msgs);
-    $('aba-fotos').setAttribute('aria-selected', String(!msgs));
-    $('painel-msgs').hidden = !msgs;
-    $('painel-fotos').hidden = msgs;
+    est.centralAba = aba === 'fotos' || aba === 'alertas' ? aba : 'msgs';
+    ['msgs', 'fotos', 'alertas'].forEach(function (a) {
+      var ativa = est.centralAba === a;
+      $('aba-' + a).classList.toggle('btn-ativo', ativa);
+      $('aba-' + a).setAttribute('aria-selected', String(ativa));
+      $('painel-' + a).hidden = !ativa;
+    });
     renderizarCentral();
   }
 
@@ -2689,8 +2930,10 @@
   function renderizarCentral() {
     $('qtd-fotos').textContent = String(est.fotos.size);
     renderizarFilaFotos();
+    atualizarContadorAlertas();
     if ($('central').hidden || !est.op) return;
     if (est.centralAba === 'msgs') renderizarFeed();
+    else if (est.centralAba === 'alertas') renderizarAlertas();
     else renderizarGaleria();
     marcarLidasVisiveis();
   }
@@ -3106,8 +3349,10 @@
     RISCO: { rotulo: 'Área de risco / perigo', letra: '!' },
     ENCONTRO: { rotulo: 'Ponto de encontro', letra: 'E' },
     VITIMA_ENCONTRADA: { rotulo: 'Vítima encontrada', letra: '+' },
+    BASE: { rotulo: 'Base da operação', letra: 'B' },
     OUTRO: { rotulo: 'Outro ponto', letra: '•' },
   };
+  var RAIO_BASE_PADRAO = 100;   // m — raio de chegada à base sem valor definido
   var FAIXA_COBERTURA_M = 25;   // meia-largura de varredura considerada em volta de cada rastro
   var URL_DEM = 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
 
@@ -3176,6 +3421,7 @@
     est.destinos = new Map();
     lista.forEach(function (d) { if (!d.encerrado_em) est.destinos.set(d.participante_id, d); });
     if (est.selecionado) atualizarFicha();
+    if (est.filtroGrupo) desenharDestinosGrupo();
   }
 
   function limparAreasDoMapa() {
@@ -3338,6 +3584,10 @@
     if (d.categoria === 'RISCO') {
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 2, dashArray: '6 6',
         fillColor: '#ef4444', fillOpacity: 0.08, interactive: false, className: 'circulo-risco' }).addTo(est.camadaPontosInt);
+    } else if (d.categoria === 'BASE') {
+      // Base: círculo do raio de chegada (usado no controle de retorno dos grupos).
+      p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_BASE_PADRAO, color: '#0ea5e9', weight: 2, dashArray: '4 6',
+        fillColor: '#0ea5e9', fillOpacity: 0.06, interactive: false, className: 'circulo-base' }).addTo(est.camadaPontosInt);
     }
     var mk = L.marker([d.lat, d.lng], { icon: iconePontoInt(d), keyboard: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo, zIndexOffset: -50 });
     mk.on('click', function () {
@@ -3417,8 +3667,9 @@
       abrirFormPontoInt({ lat: ll[0], lng: ll[1] });
     } else if (dz.tipo === 'destino') {
       var pre = dz.participantes;
+      var grupoPre = dz.grupo_id;
       cancelarDesenho();
-      abrirEnviarDestino({ nome: 'Ponto marcado no mapa', lat: ll[0], lng: ll[1], participantes: pre });
+      abrirEnviarDestino({ nome: 'Ponto marcado no mapa', lat: ll[0], lng: ll[1], participantes: pre, grupo_id: grupoPre });
     } else if (dz.tipo === 'externo' && dz.aoClicar) {
       dz.aoClicar(ll);
     }
@@ -3637,7 +3888,7 @@
         podeEditar && est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', texto: '🧭 Enviar o centro como destino', onclick: function () {
           var c = centroSetor(d);
           fechar();
-          abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], participantes: d.participante_id ? [d.participante_id] : [] });
+          abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: d.participante_id ? [d.participante_id] : [] });
         } }) : null,
         UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'setor-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirSetor(d); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
@@ -3765,12 +4016,23 @@
       else coordInfo.textContent = coordTxt.value.trim() ? 'Formato não reconhecido' : '';
     });
     var raio = UI.el('input', { classe: 'campo', id: 'ponto-raio', type: 'number', min: '10', max: '5000', step: '10', inputmode: 'numeric',
-      value: d.raio_m ? String(Math.round(d.raio_m)) : String(RAIO_ALERTA_PADRAO) });
-    var grupoRaio = UI.el('div', { classe: 'grupo', hidden: d.categoria !== 'RISCO' }, [
-      UI.el('label', { classe: 'rotulo', for: 'ponto-raio', texto: 'Raio do alarme de proximidade (m)' }), raio,
-      UI.el('small', { classe: 'muted', texto: 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.' })]);
+      value: d.raio_m ? String(Math.round(d.raio_m)) : String(d.categoria === 'BASE' ? RAIO_BASE_PADRAO : RAIO_ALERTA_PADRAO) });
+    var rotRaio = UI.el('label', { classe: 'rotulo', for: 'ponto-raio' });
+    var ajudaRaio = UI.el('small', { classe: 'muted' });
+    var grupoRaio = UI.el('div', { classe: 'grupo' }, [rotRaio, raio, ajudaRaio]);
+    // Raio: alarme de proximidade (área de risco) ou chegada (base).
+    function ajustarRaio(k) {
+      grupoRaio.hidden = k !== 'RISCO' && k !== 'BASE';
+      rotRaio.textContent = k === 'BASE' ? 'Raio de chegada à base (m)' : 'Raio do alarme de proximidade (m)';
+      ajudaRaio.textContent = k === 'BASE'
+        ? 'Quem estiver dentro deste círculo (com o GPS preciso o suficiente) conta como "chegou à base" no controle de retorno dos grupos.'
+        : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.';
+    }
+    ajustarRaio(d.categoria);
     grade.addEventListener('change', function () {
-      grupoRaio.hidden = (grade.querySelector('input:checked') || {}).value !== 'RISCO';
+      var k = (grade.querySelector('input:checked') || {}).value;
+      if (k === 'BASE' && !d.raio_m && Number(raio.value) === RAIO_ALERTA_PADRAO) raio.value = String(RAIO_BASE_PADRAO);
+      ajustarRaio(k);
     });
     grade.addEventListener('change', function () {
       var k = (grade.querySelector('input:checked') || {}).value;
@@ -3809,9 +4071,9 @@
         erro.textContent = 'Coordenadas inválidas.'; erro.hidden = false; return;
       }
       if (novo && d.mensagem_id) dados.mensagem_id = d.mensagem_id;
-      if (dados.categoria === 'RISCO') {
+      if (dados.categoria === 'RISCO' || dados.categoria === 'BASE') {
         var r = Number(raio.value);
-        if (!isFinite(r) || r < 10 || r > 5000) { erro.textContent = 'Raio do alarme: de 10 m a 5.000 m.'; erro.hidden = false; return; }
+        if (!isFinite(r) || r < 10 || r > 5000) { erro.textContent = 'Raio: de 10 m a 5.000 m.'; erro.hidden = false; return; }
         dados.raio_m = Math.round(r);
       }
       btn.disabled = true;
@@ -3873,6 +4135,7 @@
     if (d.descricao) linha('Descrição', d.descricao);
     linha('Coordenadas', blocoCoordenadas(d.lat, d.lng));
     if (d.categoria === 'RISCO') linha('Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m');
+    if (d.categoria === 'BASE') linha('Chegada à base', 'raio de ' + Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m');
     var alt = linha('Altitude', UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' }));
     linha('Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
     if (d.relatado_por_nome) linha('Relatado por', d.relatado_por_nome + ' (participante)');
@@ -3954,7 +4217,10 @@
       .sort(function (a, b) { return a.dados.nome.localeCompare(b.dados.nome, 'pt-BR'); });
   }
 
-  // alvo: { nome, lat, lng, ponto_id?, participantes?: [ids pré-marcados] }
+  // alvo: { nome, lat, lng, ponto_id?, setor_id?, participantes?: [ids pré-marcados], grupo_id?: grupo pré-escolhido }
+  // "Pessoas": um destino para cada participante marcado (como antes).
+  // "Grupo": um deslocamento do grupo inteiro (só o responsável do grupo ou todos
+  // os membros), com base e prazo de retorno — gera os alertas automáticos.
   function abrirEnviarDestino(alvo) {
     if (!est.op || est.op.status !== 'ativa') return;
     var lista = participantesNavegaveis();
@@ -3978,25 +4244,88 @@
           UI.el('span', null, [UI.el('strong', { texto: m.icone + ' ' + m.rotulo }), UI.el('small', { texto: m.descricao })]),
         ]);
       }));
+
+    // --- Para quem: pessoas ou um grupo ---
+    var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    var modoGrupo = Boolean(alvo.grupo_id && est.grupos.has(alvo.grupo_id));
+    var abaPessoas = UI.el('button', { classe: 'btn', type: 'button', id: 'destino-aba-pessoas', texto: 'Pessoas' });
+    var abaGrupo = UI.el('button', { classe: 'btn', type: 'button', id: 'destino-aba-grupo', texto: 'Grupo', disabled: est.semGrupos ? true : null });
+    var blocoPessoas = UI.el('div', { classe: 'grupo' }, [
+      UI.el('div', { classe: 'linha-rotulo' }, [UI.el('span', { classe: 'rotulo', texto: 'Para quem' }),
+        lista.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Marcar todos', onclick: function () { caixas.querySelectorAll('input').forEach(function (c) { c.checked = true; }); } }) : null]),
+      caixas,
+    ]);
+    var selGrupo = UI.el('select', { classe: 'campo', id: 'destino-grupo' }, grupos.map(function (g) {
+      var n = membrosAtivosCampo(g.id).length;
+      return UI.el('option', { value: g.id, selected: g.id === alvo.grupo_id ? true : null, texto: g.nome + ' (' + n + ' membro' + (n === 1 ? '' : 's') + ' de campo)' });
+    }));
+    var publico = UI.el('div', { classe: 'opcoes-modo', role: 'radiogroup', 'aria-label': 'Quem do grupo recebe o destino' }, [
+      UI.el('label', { classe: 'opcao-modo' }, [UI.el('input', { type: 'radio', name: 'destino-publico', value: 'todos', checked: true }),
+        UI.el('span', null, [UI.el('strong', { texto: 'Todos os membros' }), UI.el('small', { texto: 'cada membro de campo vê o destino no celular' })])]),
+      UI.el('label', { classe: 'opcao-modo' }, [UI.el('input', { type: 'radio', name: 'destino-publico', value: 'responsavel' }),
+        UI.el('span', null, [UI.el('strong', { texto: 'Só o responsável do grupo' }), UI.el('small', { texto: 'quem tem o papel ★ no grupo leva a equipe' })])]),
+    ]);
+    var bases = Array.from(est.pontosInt.values()).map(function (x) { return x.d; }).filter(function (d) { return d.categoria === 'BASE'; });
+    var selBase = UI.el('select', { classe: 'campo', id: 'destino-base' }, [UI.el('option', { value: '', texto: '— sem base (sem controle de retorno) —' })].concat(
+      bases.map(function (b, i) { return UI.el('option', { value: b.id, selected: i === 0 ? true : null, texto: b.titulo + ' (raio ' + Math.round(b.raio_m || RAIO_BASE_PADRAO) + ' m)' }); })));
+    var raioBase = UI.el('input', { classe: 'campo', id: 'destino-raio-base', type: 'number', min: '10', max: '5000', step: '10', inputmode: 'numeric' });
+    var prazo = UI.el('input', { classe: 'campo', id: 'destino-prazo', type: 'number', min: '5', max: '720', step: '5', inputmode: 'numeric', value: '30' });
+    function ajustarRaioBase() {
+      var b = est.pontosInt.get(selBase.value);
+      raioBase.value = String(Math.round((b && b.d.raio_m) || RAIO_BASE_PADRAO));
+      raioBase.disabled = prazo.disabled = !selBase.value;
+    }
+    selBase.addEventListener('change', ajustarRaioBase);
+    ajustarRaioBase();
+    var blocoGrupo = UI.el('div', { classe: 'bloco-destino-grupo' }, grupos.length ? [
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-grupo', texto: 'Grupo' }), selGrupo]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Quem recebe' }), publico]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-base', texto: 'Base para o retorno' }), selBase,
+        bases.length ? null : UI.el('small', { classe: 'muted', texto: 'Nenhuma base marcada: use Ferramentas → Marcar ponto de interesse → "Base da operação".' })]),
+      UI.el('div', { classe: 'grupo-duplo' }, [
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-raio-base', texto: 'Raio de chegada à base (m)' }), raioBase]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-prazo', texto: 'Prazo de retorno após a busca (min)' }), prazo]),
+      ]),
+      UI.el('p', { classe: 'ajuda', texto: 'Você recebe alertas automáticos no início do deslocamento, na chegada ao ' + (alvo.setor_id ? 'setor' : 'destino') +
+        ', na finalização da busca e no retorno à base. Se o prazo de retorno passar sem todos na base, o painel avisa que a equipe pode estar perdida.' }),
+    ] : [UI.el('p', { classe: 'muted', texto: 'Nenhum grupo nesta operação. Crie em Ferramentas → Grupos.' })]);
+    function mostrarModo() {
+      abaPessoas.className = 'btn' + (!modoGrupo ? ' btn-ativo' : '');
+      abaGrupo.className = 'btn' + (modoGrupo ? ' btn-ativo' : '');
+      abaPessoas.setAttribute('aria-pressed', String(!modoGrupo));
+      abaGrupo.setAttribute('aria-pressed', String(modoGrupo));
+      blocoPessoas.hidden = modoGrupo;
+      blocoGrupo.hidden = !modoGrupo;
+      btn.textContent = modoGrupo ? 'Enviar ao grupo' : 'Enviar destino';
+      erro.hidden = true;
+    }
+    abaPessoas.addEventListener('click', function () { modoGrupo = false; mostrarModo(); });
+    abaGrupo.addEventListener('click', function () { modoGrupo = true; mostrarModo(); });
+
     var form = UI.el('form', { novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Enviar destino' }),
       UI.el('p', { classe: 'ajuda', texto: 'O celular de cada participante escolhido mostra o destino no mapa, a distância em linha reta e a direção. Coordenadas: ' + C.coord(alvo.lat) + ', ' + C.coord(alvo.lng) + '.' }),
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-nome', texto: 'Nome do destino (o participante vê este nome)' }), nome]),
       UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Rota até lá (o celular calcula por ruas, caminhos e trilhas)' }), modos]),
-      UI.el('div', { classe: 'grupo' }, [
-        UI.el('div', { classe: 'linha-rotulo' }, [UI.el('span', { classe: 'rotulo', texto: 'Para quem' }),
-          lista.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Marcar todos', onclick: function () { caixas.querySelectorAll('input').forEach(function (c) { c.checked = true; }); } }) : null]),
-        caixas,
-      ]),
+      UI.el('div', { classe: 'abas', role: 'group', 'aria-label': 'Enviar para' }, [abaPessoas, abaGrupo]),
+      blocoPessoas,
+      blocoGrupo,
       erro,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
+    mostrarModo();
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       var ids = Array.from(caixas.querySelectorAll('input:checked')).map(function (c) { return c.value; });
       var modoSel = (form.querySelector('input[name="destino-modo"]:checked') || {}).value || 'a_pe';
       var n = nome.value.replace(/\s+/g, ' ').trim();
       if (!n) { erro.textContent = 'Informe o nome do destino.'; erro.hidden = false; return; }
+      if (modoGrupo) {
+        enviarDestinoAoGrupo({ form: form, btn: btn, erro: erro, fechar: function () { fechar(true); }, alvo: alvo, nome: n, modo: modoSel,
+          grupo: selGrupo.value, publico: (form.querySelector('input[name="destino-publico"]:checked') || {}).value || 'todos',
+          base: selBase.value || null, raio: Number(raioBase.value), prazo: Number(prazo.value) });
+        return;
+      }
       if (!ids.length) { erro.textContent = 'Escolha pelo menos um participante.'; erro.hidden = false; return; }
       btn.disabled = true;
       var ok = 0, falhas = [];
@@ -4026,19 +4355,56 @@
     var fechar = UI.abrirModal(form);
   }
 
+  // Deslocamento de um grupo inteiro (migração 010): numa transação só, o servidor
+  // cria a missão, envia o destino a quem deve receber e passa a acompanhar todos.
+  async function enviarDestinoAoGrupo(o) {
+    o.erro.hidden = true;
+    if (!o.grupo) { o.erro.textContent = 'Escolha o grupo.'; o.erro.hidden = false; return; }
+    if (o.base && !(o.raio >= 10 && o.raio <= 5000)) { o.erro.textContent = 'Raio de chegada à base: de 10 m a 5.000 m.'; o.erro.hidden = false; return; }
+    if (o.base && !(o.prazo >= 5 && o.prazo <= 720)) { o.erro.textContent = 'Prazo de retorno: de 5 a 720 minutos.'; o.erro.hidden = false; return; }
+    o.btn.disabled = true;
+    try {
+      var r = await C.rpc('enviar_destino_grupo', {
+        p_grupo: o.grupo, p_nome: o.nome, p_lat: o.alvo.lat, p_lng: o.alvo.lng, p_publico: o.publico, p_modo: o.modo,
+        p_setor: o.alvo.setor_id || null, p_ponto: o.alvo.ponto_id || null,
+        p_base: o.base, p_raio_base_m: o.base ? o.raio : null, p_prazo_min: o.base ? o.prazo : 30,
+      }, 20000);
+      o.fechar();
+      var g = est.grupos.get(o.grupo);
+      UI.aviso('Destino "' + o.nome + '" enviado ao grupo ' + (g ? g.nome : '') + ': ' + r.destinatarios + ' recebe(m) no celular, ' +
+        r.acompanhados + ' acompanhado(s).' + (o.base ? ' Prazo de retorno: ' + o.prazo + ' min após finalizar a busca.' : ' Sem base: não há controle de retorno.'), 'ok', 10000);
+      agendarAreas();
+      agendarMissoes();
+    } catch (e) {
+      o.erro.textContent = e.codigo === 'funcao_ausente'
+        ? 'O servidor ainda não tem os deslocamentos de grupos (execute a migração 010 no Supabase).'
+        : 'Não foi possível enviar: ' + e.message;
+      o.erro.hidden = false;
+      o.btn.disabled = false;
+    }
+  }
+
   // Escolher o destino: um ponto de interesse ou um local tocado no mapa.
-  function escolherDestino(participantes) {
+  function escolherDestino(participantes, grupoId) {
     var pontos = Array.from(est.pontosInt.values()).map(function (p) { return p.d; });
+    var setores = Array.from(est.setores.values()).map(function (s) { return s.d; });
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Enviar destino' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Escolha um ponto de interesse ou toque no mapa.' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Escolha um setor, um ponto de interesse ou toque no mapa.' }),
       UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'destino-no-mapa', texto: 'Escolher no mapa', onclick: function () {
-        fechar(); iniciarDesenho('destino', { participantes: participantes || [] });
+        fechar(); iniciarDesenho('destino', { participantes: participantes || [], grupo_id: grupoId || null });
       } }),
+      setores.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, setores.map(function (d) {
+        return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
+          var c = centroSetor(d);
+          fechar(); abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: participantes, grupo_id: grupoId });
+        } }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }),
+          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: STATUS_SETOR[d.status].rotulo + ' · o centro do setor é o destino' })])])]);
+      })) : null,
       pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
         var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
         return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
-          fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes });
+          fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes, grupo_id: grupoId });
         } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
           UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
       })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto de interesse marcado ainda.' }),
@@ -4545,6 +4911,7 @@
     try {
       if (!est.meuPart) await entrarComoResponsavel();
       if (!est.meuPart) throw new Error('Não foi possível registrar você no mapa. Verifique a conexão.');
+      abrirMinhaTrilha();
       var teste = await new Promise(function (resolve) {
         navigator.geolocation.getCurrentPosition(
           function (pos) { resolve({ ok: true, pos: pos }); },
@@ -4613,22 +4980,61 @@
       est.minhaPosEstado = 'ativa';
     }
     if (r.pontos.length) {
-      r.pontos.forEach(function (p) { est.filaMinha.push({ id: C.uuid(), lat: p.lat, lng: p.lng, prec: p.prec, t: p.t }); });
-      if (est.filaMinha.length > 2000) est.filaMinha.splice(0, est.filaMinha.length - 2000);
-      // envio logo em seguida (o primeiro na hora; ~1 s em veículo; ~1,5 s a pé), sem adiar o que já está marcado
-      if (!est.timerMinhaFila) {
-        est.timerMinhaFila = setTimeout(function () { est.timerMinhaFila = null; enviarMinhaFila(); },
-          !est.enviouMinhaAlguma ? 300 : r.rapido ? CFG_GPS.envioRapidoMs : CFG_GPS.envioPeMs);
-      }
+      var rapido = r.rapido;
+      // gravado primeiro no aparelho (IndexedDB), com id único; depois enviado
+      guardarMinhaPosicao(r.pontos.map(function (p) { return { id: C.uuid(), lat: p.lat, lng: p.lng, prec: p.prec, t: p.t }; })).then(function () {
+        // envio logo em seguida (o primeiro na hora; ~1 s em veículo; ~1,5 s a pé), sem adiar o que já está marcado
+        if (!est.timerMinhaFila) {
+          est.timerMinhaFila = setTimeout(function () { est.timerMinhaFila = null; enviarMinhaFila(); },
+            !est.enviouMinhaAlguma ? 300 : rapido ? CFG_GPS.envioRapidoMs : CFG_GPS.envioPeMs);
+        }
+      });
     }
     atualizarBotaoMinhaPos();
   }
 
+  // Fila offline da "Minha posição" (a mesma da página do participante).
+  function abrirMinhaTrilha() {
+    if (!est.meuPart || !est.op) return Promise.resolve(null);
+    var pid = est.meuPart;
+    if (est.filaMinha && est.filaMinha.ids.participanteId === pid) return Promise.resolve(est.filaMinha);
+    if (est.abrindoMinha && est.abrindoMinha.pid === pid) return est.abrindoMinha.promessa;
+    var promessa = window.TrilhaLocal.abrir({ participanteId: pid, userId: est.usuario && est.usuario.id, operacaoId: est.op.id })
+      .then(function (f) {
+        est.abrindoMinha = null;
+        if (est.meuPart !== pid) return null;
+        est.filaMinha = f;
+        var buf = est.bufferMinha;
+        est.bufferMinha = [];
+        return (buf.length ? f.adicionar(buf) : Promise.resolve()).then(function () { enviarMinhaFila(); return f; });
+      })
+      .catch(function () { est.abrindoMinha = null; return null; });
+    est.abrindoMinha = { pid: pid, promessa: promessa };
+    return promessa;
+  }
+
+  function guardarMinhaPosicao(pontos) {
+    if (est.filaMinha && est.filaMinha.ids.participanteId === est.meuPart) return est.filaMinha.adicionar(pontos);
+    Array.prototype.push.apply(est.bufferMinha, pontos);
+    if (est.bufferMinha.length > 2000) est.bufferMinha.splice(0, est.bufferMinha.length - 2000);
+    return abrirMinhaTrilha();
+  }
+
+  function pendentesMinha() {
+    return (est.filaMinha ? est.filaMinha.qtdPendentes() : 0) + est.bufferMinha.length;
+  }
+
+  // Intervalo máximo sem ponto definido na operação (padrão 15 s).
+  function aplicarIntervaloGpsMeu() {
+    var s = est.op && est.op.gps_intervalo_s;
+    if (s) est.filtroMeu.configurar({ intervaloParadoMs: s * 1000 });
+  }
+
   // Parado no mesmo lugar, o navegador pode não avisar novas leituras; então
-  // pedimos uma leitura nova para a posição não ficar marcada como antiga.
+  // pedimos uma leitura nova (no ritmo do intervalo de GPS da operação).
   function lerPosicaoSeParado() {
     if (!est.compartilhando || !est.ultimoAceitoMeu) return;
-    if (Date.now() - est.ultimoAceitoMeu.recebidaEm < 45000) return;
+    if (Date.now() - est.ultimoAceitoMeu.recebidaEm < Math.max(5000, est.filtroMeu.cfg.intervaloParadoMs - 2000)) return;
     navigator.geolocation.getCurrentPosition(processarMinhaPosicao, function () {}, {
       enableHighAccuracy: true, maximumAge: 0, timeout: 20000,
     });
@@ -4649,24 +5055,33 @@
     atualizarBotaoMinhaPos();
   }
 
+  // Envio em lote: o ponto só é marcado como enviado quando o servidor confirma.
   async function enviarMinhaFila() {
-    if (est.enviandoMinha || !est.meuPart || !est.filaMinha.length) return;
+    var fila = est.filaMinha;
+    if (est.enviandoMinha || !est.meuPart || !fila || fila.ids.participanteId !== est.meuPart || !fila.qtdPendentes()) return;
     est.enviandoMinha = true;
-    var lote = est.filaMinha.slice(0, 200);
     try {
-      var desvio = C.agora() - Date.now();   // relógio do aparelho errado: converte para a hora do servidor
-      var envio = Math.abs(desvio) < 30000 ? lote : lote.map(function (x) { return Object.assign({}, x, { t: Math.round(x.t + desvio) }); });
-      var resp = await C.rpc('enviar_posicoes', { p_participante: est.meuPart, p_pontos: envio, p_gps: est.compartilhando ? est.gpsMeu : null }, 20000);
-      if (resp && resp.inseridos < lote.length) est.filtroMeu.registrar(null, false, 'servidor_recusou');
-      est.enviouMinhaAlguma = true;
-      C.local.gravar(chaveMinhaPosAqui(), Date.now());   // este aparelho é o que compartilha
-      var enviados = new Set(lote.map(function (x) { return x.id; }));
-      est.filaMinha = est.filaMinha.filter(function (x) { return !enviados.has(x.id); });
-      if (est.filaMinha.length) setTimeout(enviarMinhaFila, 300);
+      var r = await window.TrilhaLocal.enviarLote(fila, C.rpc, {
+        lote: 200,
+        gps: est.compartilhando ? est.gpsMeu : null,
+        ajustarHora: function (pts) {
+          var desvio = C.agora() - Date.now();   // relógio do aparelho errado: converte para a hora do servidor
+          return Math.abs(desvio) < 30000 ? pts : pts.map(function (x) { return Object.assign({}, x, { t: Math.round(x.t + desvio) }); });
+        },
+      });
+      if (r.recusados) est.filtroMeu.registrar(null, false, 'servidor_recusou');
+      if (r.confirmados) {
+        est.enviouMinhaAlguma = true;
+        C.local.gravar(chaveMinhaPosAqui(), Date.now());   // este aparelho é o que compartilha
+      }
+      if (fila.qtdPendentes()) setTimeout(enviarMinhaFila, 300);
     } catch (e) {
-      if (e.codigo === 'operacao_encerrada' || e.codigo === 'participante_invalido' || e.codigo === 'lote_invalido') {
-        est.filaMinha = [];
+      if (e.codigo === 'operacao_encerrada' || e.codigo === 'participante_invalido') {
+        fila.limpar();
+        est.filaMinha = null;
         if (e.codigo === 'participante_invalido') est.meuPart = null;
+      } else if (e.codigo === 'lote_invalido') {
+        await fila.marcarRecusados(fila.pendentes(200).map(function (p) { return { id: p.id, motivo: 'lote_invalido' }; }));
       } else if (!est.timerMinhaFila) {
         est.timerMinhaFila = setTimeout(function () { est.timerMinhaFila = null; enviarMinhaFila(); }, 5000);
       }
@@ -4720,7 +5135,9 @@
     function render() {
       caixa.innerHTML = window.GPS.tabelaDiagnostico(f, 80);
       info.textContent = 'Minha posição: ' + (TEXTO_MINHA_POS[est.minhaPosEstado] || est.minhaPosEstado) + ' · permissão do navegador: ' +
-        est.permissaoMinha + ' · na fila: ' + est.filaMinha.length + ' · ' +
+        est.permissaoMinha + ' · na fila: ' + pendentesMinha() +
+        (est.filaMinha ? ' (' + est.filaMinha.tipo + ', enviados ' + est.filaMinha.qtdEnviados() + ', recusados ' + est.filaMinha.recusados().length + ')' : '') +
+        ' · intervalo máximo: ' + Math.round(f.cfg.intervaloParadoMs / 1000) + ' s · ' +
         (f.resumo().map(function (x) { return x.texto + ': ' + x.qtd; }).join(' · ') || 'sem leituras ainda');
     }
     render();
@@ -5137,6 +5554,821 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Local da operação (cadastro)                                         */
+  /* ------------------------------------------------------------------ */
+  function desenharLocalOp() {
+    if (est.marcaLocal) { est.marcaLocal.remove(); est.marcaLocal = null; }
+    var op = est.op;
+    if (!est.mapa || !op || op.local_lat == null || op.local_lng == null || !est.prefsMapa.local) return;
+    var mk = L.marker([op.local_lat, op.local_lng], {
+      icon: L.divIcon({ className: 'mk-local-wrap', html: '<div class="mk-local">◎</div><div class="mk-local-rotulo">Local da operação</div>', iconSize: [0, 0] }),
+      keyboard: true, title: 'Local da operação' + (op.local_endereco ? ': ' + op.local_endereco : ''), alt: 'Local da operação', zIndexOffset: -100,
+    });
+    mk.on('click', function () {
+      if (est.desenho) { aoClicarNoMapa({ latlng: mk.getLatLng() }); return; }
+      abrirDadosOperacao();
+    });
+    mk.addTo(est.mapa);
+    est.marcaLocal = mk;
+    if (!est.jaEnquadrou && !temAlgumaPosicao()) est.mapa.setView([op.local_lat, op.local_lng], 15);
+  }
+
+  function verLocalNoMapa(op) {
+    if (!est.mapa || !op || op.local_lat == null) return;
+    if (!est.prefsMapa.local) definirPrefMapa('local', true);
+    est.mapa.setView([op.local_lat, op.local_lng], Math.max(est.mapa.getZoom(), 16));
+  }
+
+  // Tabela ainda inexistente no banco (migração não aplicada): a função fica desligada.
+  function ehTabelaAusente(e) {
+    var o = (e && e.original) || e || {};
+    return o.code === '42P01' || o.code === 'PGRST205' || /does not exist|Could not find the table|schema cache/i.test(String(o.message || ''));
+  }
+
+  function bipeCurto() {
+    var ac = est.audio;
+    if (!ac) return;
+    try {
+      if (ac.state === 'suspended') ac.resume();
+      var t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t); o.stop(t + 0.32);
+    } catch (e) { /* ignora */ }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Grupos                                                               */
+  /* ------------------------------------------------------------------ */
+  async function carregarGrupos() {
+    if (!est.op || est.semGrupos) return;
+    var opId = est.op.id;
+    try {
+      var r = await Promise.all([
+        C.consultar(C.cliente.from('grupos').select('*').eq('operacao_id', opId).order('nome', { ascending: true })),
+        C.consultar(C.cliente.from('grupo_membros').select('*').eq('operacao_id', opId)),
+      ]);
+      if (!est.op || est.op.id !== opId) return;
+      est.grupos = new Map((r[0] || []).map(function (g) { return [g.id, g]; }));
+      var mem = new Map();
+      (r[1] || []).forEach(function (m) {
+        if (!mem.has(m.grupo_id)) mem.set(m.grupo_id, new Map());
+        mem.get(m.grupo_id).set(m.participante_id, m);
+      });
+      est.membros = mem;
+      if (est.filtroGrupo && !est.grupos.has(est.filtroGrupo)) filtrarGrupo(null, true);
+      aplicarMudancaGrupos();
+    } catch (e) {
+      if (ehTabelaAusente(e)) { est.semGrupos = true; renderizarControleGrupos(); }
+    }
+  }
+
+  function agendarGrupos() {
+    clearTimeout(est.timerGrupos);
+    est.timerGrupos = setTimeout(carregarGrupos, 400);
+  }
+
+  // Depois de mudar grupos ou vínculos: marcadores (★), lista, ficha, filtro e controle.
+  function aplicarMudancaGrupos() {
+    est.participantes.forEach(function (p) {
+      atualizarAparenciaMarcador(p);
+      if (est.filtroGrupo) { atualizarMarcador(p); desenharTrilha(p); }
+    });
+    est.listaSuja = true;
+    renderizarLista();
+    if (est.selecionado) atualizarFicha();
+    if (est.filtroGrupo) { desenharDestinosGrupo(); atualizarFaixaFiltro(); }
+    renderizarControleGrupos();
+    atualizarMenu();
+    if (est.renderGruposAberto) est.renderGruposAberto();
+  }
+
+  // Grupos de um participante: [{ id, nome, cor, papel }]
+  function gruposDe(pid) {
+    var lista = [];
+    est.membros.forEach(function (mapa, gid) {
+      var m = mapa.get(pid);
+      var g = est.grupos.get(gid);
+      if (m && g) lista.push({ id: g.id, nome: g.nome, cor: g.cor, papel: m.papel, origem: m.origem });
+    });
+    return lista.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+  }
+
+  function membrosDe(gid) {
+    var mapa = est.membros.get(gid);
+    var lista = [];
+    if (mapa) mapa.forEach(function (m, pid) { var p = est.participantes.get(pid); if (p) lista.push({ p: p, m: m }); });
+    return lista.sort(function (a, b) { return a.p.dados.nome.localeCompare(b.p.dados.nome, 'pt-BR'); });
+  }
+
+  // Membros que podem receber destino (de campo, ativos).
+  function membrosAtivosCampo(gid) {
+    return membrosDe(gid).filter(function (x) { return !x.p.dados.removido && tipoDe(x.p.dados) !== 'responsavel'; });
+  }
+
+  // Filtro do ícone de olho: só os membros do grupo escolhido ficam no mapa e na lista.
+  function visivelNoFiltro(p) {
+    if (!est.filtroGrupo) return true;
+    var m = est.membros.get(est.filtroGrupo);
+    return Boolean(m && m.has(p.id));
+  }
+
+  // Aviso sobre alguém escondido pelo filtro (os alertas continuam sempre).
+  function sufixoFiltro(pid) {
+    if (!est.filtroGrupo) return '';
+    var p = est.participantes.get(pid);
+    return p && !visivelNoFiltro(p) ? ' — fora do grupo mostrado no mapa (toque em "Mostrar todos")' : '';
+  }
+
+  // id: grupo a mostrar sozinho, ou null para restaurar a visualização completa.
+  // Não fica lembrado ao recarregar (para ninguém esquecer pessoas escondidas).
+  function filtrarGrupo(id, silencioso) {
+    if (id && !est.grupos.has(id)) id = null;
+    est.filtroGrupo = id;
+    est.participantes.forEach(function (p) { atualizarMarcador(p); desenharTrilha(p); });
+    if (est.selecionado) {
+      var sel = est.participantes.get(est.selecionado);
+      if (sel && !visivelNoFiltro(sel)) fecharFicha();
+    }
+    est.listaSuja = true;
+    renderizarLista();
+    desenharDestinosGrupo();
+    renderizarControleGrupos();
+    atualizarFaixaFiltro();
+    if (id && !silencioso) enquadrarGrupo(id);
+  }
+
+  function atualizarFaixaFiltro() {
+    var faixa = $('faixa-filtro');
+    var g = est.filtroGrupo && est.grupos.get(est.filtroGrupo);
+    if (!g) { faixa.hidden = true; return; }
+    var ativos = Array.from(est.participantes.values()).filter(function (p) { return !p.dados.removido; });
+    var n = ativos.filter(visivelNoFiltro).length;
+    $('faixa-filtro-texto').textContent = 'Mostrando só o grupo ' + g.nome + ' (' + n + ' de ' + ativos.length + ' pessoas e os destinos delas). ' +
+      'Pedidos de ajuda e alertas de quem está fora do grupo continuam aparecendo.';
+    faixa.style.setProperty('--cor-grupo', g.cor);
+    faixa.hidden = false;
+  }
+
+  function enquadrarGrupo(gid) {
+    if (!est.mapa) return;
+    var pts = [];
+    membrosDe(gid).forEach(function (x) {
+      var pos = posicaoAtual(x.p);
+      if (pos && !x.p.dados.removido) pts.push([pos.lat, pos.lng]);
+      var d = est.destinos.get(x.p.id);
+      if (d) pts.push([d.lat, d.lng]);
+    });
+    if (!pts.length) { UI.aviso('Nenhum membro deste grupo com posição ainda.'); return; }
+    if (pts.length === 1) est.mapa.setView(pts[0], Math.max(est.mapa.getZoom(), 16));
+    else est.mapa.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 17 });
+  }
+
+  // Com o filtro ligado: o destino de cada membro do grupo (🧭) e a linha até ele.
+  function desenharDestinosGrupo() {
+    var camada = est.camadaDestinosGrupo;
+    if (!camada) return;
+    camada.clearLayers();
+    var g = est.filtroGrupo && est.grupos.get(est.filtroGrupo);
+    if (!g) return;
+    membrosDe(g.id).forEach(function (x) {
+      var d = est.destinos.get(x.p.id);
+      if (!d || x.p.dados.removido) return;
+      var nome = nomeExibido(x.p);
+      L.marker([d.lat, d.lng], {
+        icon: L.divIcon({ className: 'mk-destino-wrap', html: '<div class="mk-destino">🧭</div>', iconSize: [0, 0] }),
+        keyboard: false, zIndexOffset: 400, title: 'Destino de ' + nome + ': ' + d.nome,
+      }).bindTooltip('Destino de ' + C.esc(nome) + ': ' + C.esc(d.nome)).addTo(camada);
+      var pos = posicaoAtual(x.p);
+      if (pos) L.polyline([[pos.lat, pos.lng], [d.lat, d.lng]], { color: g.cor, weight: 2, dashArray: '4 8', opacity: 0.75, interactive: false }).addTo(camada);
+    });
+  }
+
+  // Controle "Grupos" no mapa: um ícone de olho por grupo.
+  function renderizarControleGrupos() {
+    var ctl = est.controleGrupos;
+    var div = ctl && ctl.getContainer && ctl.getContainer();
+    if (!div) return;
+    var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    div.hidden = !grupos.length;
+    var det = div.querySelector('details');
+    var aberto = det ? det.open : !telaPequena();
+    var focoGrupo = document.activeElement && div.contains(document.activeElement) ? document.activeElement.getAttribute('data-grupo') : null;
+    div.innerHTML = '';
+    if (!grupos.length) return;
+    var ul = UI.el('ul', { classe: 'lista-grupos-mapa' }, grupos.map(function (g) {
+      var ativo = est.filtroGrupo === g.id;
+      var n = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; }).length;
+      var rot = ativo ? 'Mostrar todos de novo' : 'Mostrar só o grupo ' + g.nome + ' no mapa';
+      return UI.el('li', { classe: ativo ? 'ativo' : '' }, [
+        UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
+        UI.el('span', { classe: 'grupo-mapa-nome', texto: g.nome }),
+        UI.el('small', { classe: 'muted', title: n + ' pessoa(s) ativa(s)', texto: String(n) }),
+        UI.el('button', { classe: 'btn btn-pequeno btn-olho' + (ativo ? ' btn-ativo' : ''), type: 'button', 'data-grupo': g.id,
+          'aria-pressed': String(ativo), 'aria-label': rot, title: rot, texto: ativo ? '👁 ✓' : '👁',
+          onclick: function () { filtrarGrupo(ativo ? null : g.id); } }),
+      ]);
+    }));
+    div.appendChild(UI.el('details', { open: aberto ? true : null }, [UI.el('summary', { texto: 'Grupos (' + grupos.length + ')' }), ul]));
+    if (focoGrupo) { var b = div.querySelector('[data-grupo="' + focoGrupo + '"]'); if (b) b.focus(); }
+  }
+
+  // Ficha do participante: grupos dele, papel e inclusão em outro grupo.
+  function renderizarGruposFicha(p) {
+    var bloco = $('ficha-grupos-bloco'), caixa = $('ficha-grupos');
+    if (est.semGrupos || !est.grupos.size) { bloco.hidden = true; caixa._assinatura = ''; return; }
+    var meus = gruposDe(p.id);
+    var editavel = !est.op.dados_apagados_em;
+    var assinatura = p.id + '|' + JSON.stringify(meus) + '|' + Array.from(est.grupos.keys()).join(',') + '|' + editavel;
+    bloco.hidden = false;
+    if (caixa._assinatura === assinatura) return;   // não refaz a cada 5 s (os campos perderiam o que está sendo escolhido)
+    caixa._assinatura = assinatura;
+    caixa.innerHTML = '';
+    if (!meus.length) caixa.appendChild(UI.el('p', { classe: 'muted', texto: 'Não está em nenhum grupo.' }));
+    meus.forEach(function (g) {
+      var papel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel no grupo ' + g.nome, disabled: editavel ? null : true }, [
+        UI.el('option', { value: 'membro', selected: g.papel === 'membro' ? true : null, texto: 'Membro' }),
+        UI.el('option', { value: 'responsavel', selected: g.papel === 'responsavel' ? true : null, texto: '★ Responsável' }),
+      ]);
+      papel.addEventListener('change', function () { definirMembro(g.id, p.id, papel.value); });
+      caixa.appendChild(UI.el('div', { classe: 'linha-grupo' }, [
+        UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
+        UI.el('strong', { texto: g.nome }),
+        g.origem === 'link' ? UI.el('small', { classe: 'muted', texto: 'entrou pelo link' }) : null,
+        papel,
+        editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Tirar do grupo', onclick: function () { removerMembro(g.id, p.id); } }) : null,
+      ]));
+    });
+    var outros = Array.from(est.grupos.values()).filter(function (g) { return !meus.some(function (x) { return x.id === g.id; }); });
+    if (editavel && outros.length && !p.dados.removido) {
+      var sel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Grupo' }, outros.map(function (g) { return UI.el('option', { value: g.id, texto: g.nome }); }));
+      var pap = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel' }, [
+        UI.el('option', { value: 'membro', texto: 'Membro' }), UI.el('option', { value: 'responsavel', texto: '★ Responsável' })]);
+      caixa.appendChild(UI.el('div', { classe: 'linha-grupo linha-grupo-novo' }, [
+        sel, pap, UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Adicionar ao grupo', onclick: function () { definirMembro(sel.value, p.id, pap.value); } }),
+      ]));
+    }
+  }
+
+  async function definirMembro(gid, pid, papel) {
+    try {
+      var m = await C.rpc('definir_membro', { p_grupo: gid, p_participante: pid, p_papel: papel });
+      if (!est.membros.has(gid)) est.membros.set(gid, new Map());
+      est.membros.get(gid).set(pid, m);
+      aplicarMudancaGrupos();
+      var g = est.grupos.get(gid), p = est.participantes.get(pid);
+      UI.aviso((p ? p.dados.nome : 'Participante') + ' no grupo ' + (g ? g.nome : '') + (papel === 'responsavel' ? ' como responsável.' : ' como membro.'), 'ok');
+      return true;
+    } catch (e) {
+      UI.aviso(e.message, 'erro');
+      return false;
+    }
+  }
+
+  async function removerMembro(gid, pid) {
+    try {
+      await C.rpc('remover_membro', { p_grupo: gid, p_participante: pid });
+      var mapa = est.membros.get(gid);
+      if (mapa) mapa.delete(pid);
+      aplicarMudancaGrupos();
+      UI.aviso('Retirado do grupo.', 'ok');
+    } catch (e) {
+      UI.aviso(e.message, 'erro');
+    }
+  }
+
+  // Ferramentas → Grupos
+  function abrirGrupos() {
+    if (!est.op) return;
+    var corpo = UI.el('div', { classe: 'corpo-grupos' });
+    var editavel = !est.op.dados_apagados_em;
+    function render() {
+      corpo.innerHTML = '';
+      if (est.semGrupos) {
+        corpo.appendChild(UI.el('p', { classe: 'nota', texto: 'Os grupos ainda não estão disponíveis no servidor: execute a migração 008 no Supabase.' }));
+        return;
+      }
+      var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+      if (!grupos.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum grupo ainda. Crie grupos com nome livre (ex.: Polícia Civil, Polícia Militar, Bombeiros).' }));
+      corpo.appendChild(UI.el('ul', { classe: 'lista-grupos' }, grupos.map(function (g) {
+        var mem = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; });
+        var resp = mem.filter(function (x) { return x.m.papel === 'responsavel'; }).map(function (x) { return x.p.dados.nome; });
+        var ativo = est.filtroGrupo === g.id;
+        return UI.el('li', { classe: 'item-grupo', 'data-grupo': g.id }, [
+          UI.el('div', { classe: 'item-grupo-topo' }, [
+            UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
+            UI.el('strong', { texto: g.nome }),
+            UI.el('small', { classe: 'muted', texto: mem.length + ' pessoa(s)' + (resp.length ? ' · ★ ' + resp.join(', ') : ' · sem responsável') +
+              ' · link: ' + (g.permite_militar ? 'militares ou civis' : 'civis') }),
+          ]),
+          UI.el('div', { classe: 'acoes-linha' }, [
+            UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando só este' : '👁 Só este no mapa',
+              onclick: function () { filtrarGrupo(ativo ? null : g.id); render(); } }),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { fechar(); abrirMembrosGrupo(g.id); } }),
+            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { fechar(); abrirLinkGrupo(g.id); } }) : null,
+            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: function () { fechar(); escolherDestino([], g.id); } }) : null,
+            editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormGrupo(g); } }) : null,
+            UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }),
+          ]),
+        ]);
+      })));
+    }
+    render();
+    est.renderGruposAberto = render;
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-grupos' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Grupos da operação' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.' }),
+      corpo,
+      UI.el('div', { classe: 'modal-acoes' }, [
+        editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { fechar(); abrirFormGrupo(null); } }) : null,
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
+    ]), { aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
+  }
+
+  function abrirFormGrupo(g) {
+    var novo = !g;
+    var usadas = new Set(Array.from(est.grupos.values()).map(function (x) { return x.cor.toLowerCase(); }));
+    var corPadrao = g ? g.cor : (CORES_SETOR.filter(function (c) { return !usadas.has(c.toLowerCase()); })[0] || CORES_SETOR[0]);
+    var nome = UI.el('input', { classe: 'campo', id: 'grupo-nome', maxlength: '60', value: g ? g.nome : '', placeholder: 'Ex.: Polícia Civil' });
+    var cores = UI.el('div', { classe: 'cores-setor', role: 'radiogroup', 'aria-label': 'Cor do grupo' }, CORES_SETOR.map(function (c) {
+      return UI.el('label', { classe: 'cor-opcao', title: c }, [
+        UI.el('input', { type: 'radio', name: 'grupo-cor', value: c, checked: c.toLowerCase() === corPadrao.toLowerCase() ? true : null }),
+        UI.el('span', { style: 'background:' + c }),
+      ]);
+    }));
+    var mil = UI.el('input', { type: 'checkbox', id: 'grupo-militar', checked: g && g.permite_militar ? true : null });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'grupo-salvar', texto: novo ? 'Criar grupo' : 'Salvar' });
+    var form = UI.el('form', { novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo grupo' : 'Editar grupo' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'grupo-nome', texto: 'Nome do grupo' }), nome]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor' }), cores]),
+      UI.el('label', { classe: 'linha-opcao' }, [mil, ' Quem entrar pelo link do grupo pode se identificar como militar']),
+      UI.el('p', { classe: 'ajuda', texto: 'Sem esta opção, quem entra pelo link do grupo aparece sempre como civil (CPF e celular obrigatórios). O papel de responsável do grupo só é dado aqui no painel.' }),
+      erro,
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var dados = {
+        nome: nome.value.replace(/\s+/g, ' ').trim(),
+        cor: (form.querySelector('input[name="grupo-cor"]:checked') || {}).value || corPadrao,
+        permite_militar: Boolean(mil.checked),
+      };
+      if (!dados.nome) { erro.textContent = 'Informe o nome do grupo.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var res = await C.rpc('salvar_grupo', { p_operacao: est.op.id, p_id: g ? g.id : null, p_dados: dados });
+        est.grupos.set(res.id, res);
+        aplicarMudancaGrupos();
+        fechar(true);
+        UI.aviso(novo ? 'Grupo "' + res.nome + '" criado. Agora adicione as pessoas.' : 'Grupo salvo.', 'ok');
+        if (novo) abrirMembrosGrupo(res.id); else abrirGrupos();
+      } catch (e) {
+        erro.textContent = e.codigo === 'funcao_ausente' ? 'Execute a migração 008 no Supabase para usar grupos.' : 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+  }
+
+  function abrirMembrosGrupo(gid) {
+    var g = est.grupos.get(gid);
+    if (!g) return;
+    var editavel = !est.op.dados_apagados_em;
+    var corpo = UI.el('div');
+    function render() {
+      corpo.innerHTML = '';
+      var mem = membrosDe(gid);
+      corpo.appendChild(UI.el('h3', { texto: 'No grupo (' + mem.length + ')' }));
+      if (!mem.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Ninguém ainda. Marque abaixo quem faz parte do grupo ou envie o link do grupo.' }));
+      corpo.appendChild(UI.el('ul', { classe: 'lista-membros' }, mem.map(function (x) {
+        var papel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel de ' + x.p.dados.nome, disabled: editavel ? null : true }, [
+          UI.el('option', { value: 'membro', selected: x.m.papel === 'membro' ? true : null, texto: 'Membro' }),
+          UI.el('option', { value: 'responsavel', selected: x.m.papel === 'responsavel' ? true : null, texto: '★ Responsável' }),
+        ]);
+        papel.addEventListener('change', async function () { if (await definirMembro(gid, x.p.id, papel.value)) render(); });
+        return UI.el('li', { classe: 'linha-grupo' }, [
+          UI.el('strong', { texto: nomeExibido(x.p) }),
+          UI.el('small', { classe: 'muted', texto: TIPOS[tipoDe(x.p.dados)].rotulo + (x.p.dados.removido ? ' · fora da operação' : '') + (x.m.origem === 'link' ? ' · entrou pelo link' : '') }),
+          papel,
+          editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Tirar', onclick: async function () { await removerMembro(gid, x.p.id); render(); } }) : null,
+        ]);
+      })));
+      if (!editavel) return;
+      var naoMembros = Array.from(est.participantes.values())
+        .filter(function (p) { return !p.dados.removido && !(est.membros.get(gid) && est.membros.get(gid).has(p.id)); })
+        .sort(function (a, b) { return a.dados.nome.localeCompare(b.dados.nome, 'pt-BR'); });
+      corpo.appendChild(UI.el('h3', { texto: 'Adicionar pessoas' }));
+      if (!naoMembros.length) { corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Todos os participantes ativos já estão no grupo.' })); return; }
+      var caixas = UI.el('div', { classe: 'lista-destino' }, naoMembros.map(function (p) {
+        var outros = gruposDe(p.id).map(function (x) { return x.nome; });
+        return UI.el('label', { classe: 'linha-opcao' }, [
+          UI.el('input', { type: 'checkbox', value: p.id }),
+          ' ' + nomeExibido(p) + ' (' + TIPOS[tipoDe(p.dados)].rotulo.toLowerCase() + ')',
+          outros.length ? UI.el('small', { classe: 'muted', texto: ' — já em: ' + outros.join(', ') }) : null,
+        ]);
+      }));
+      var pap = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel de quem será adicionado' }, [
+        UI.el('option', { value: 'membro', texto: 'como Membro' }), UI.el('option', { value: 'responsavel', texto: 'como ★ Responsável' })]);
+      var btnAdd = UI.el('button', { classe: 'btn btn-escuro btn-pequeno', type: 'button', id: 'membros-adicionar', texto: 'Adicionar marcados', onclick: async function () {
+        var ids = Array.from(caixas.querySelectorAll('input:checked')).map(function (c) { return c.value; });
+        if (!ids.length) { UI.aviso('Marque pelo menos uma pessoa.', 'erro'); return; }
+        btnAdd.disabled = true;
+        for (var i = 0; i < ids.length; i++) await definirMembro(gid, ids[i], pap.value);
+        render();
+      } });
+      corpo.appendChild(caixas);
+      corpo.appendChild(UI.el('div', { classe: 'acoes-linha' }, [pap, btnAdd]));
+    }
+    render();
+    est.renderGruposAberto = render;
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-membros' }, [
+      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' Membros — ' + g.nome]),
+      UI.el('p', { classe: 'ajuda', texto: 'O responsável do grupo (★) pode receber o destino pelo grupo e avisar pelo celular que a busca no setor terminou.' }),
+      corpo,
+      UI.el('div', { classe: 'modal-acoes' }, [
+        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
+    ]), { aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
+  }
+
+  // QR Code de um link (mesma biblioteca do convite da operação).
+  function qrDoLink(caixa, texto, titulo) {
+    if (!window.qrcode) { caixa.textContent = 'QR Code indisponível (biblioteca não carregada).'; return; }
+    try {
+      var q = window.qrcode(0, 'M');
+      q.addData(texto);
+      q.make();
+      caixa.innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true, title: titulo });
+    } catch (e) { caixa.textContent = 'Não foi possível gerar o QR Code.'; }
+  }
+
+  async function abrirLinkGrupo(gid) {
+    var g = est.grupos.get(gid);
+    if (!g || !est.op || est.op.status !== 'ativa') return;
+    var info;
+    try {
+      info = await C.rpc('link_do_grupo', { p_grupo: gid });
+    } catch (e) {
+      UI.aviso(e.message, 'erro');
+      return;
+    }
+    var entrada = UI.el('input', { classe: 'campo', readonly: true, 'aria-label': 'Link do grupo', value: linkPara(info.token) });
+    var qr = UI.el('div', { classe: 'qr', 'aria-label': 'QR Code do link do grupo' });
+    qrDoLink(qr, entrada.value, 'QR Code — link do grupo ' + g.nome);
+    var botoes = [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Copiar', onclick: function () { copiarTexto(entrada.value); } })];
+    if (navigator.share) botoes.push(UI.el('button', { classe: 'btn', type: 'button', texto: 'Compartilhar', onclick: function () {
+      navigator.share({ title: 'Grupo ' + g.nome + ' — operação ' + est.op.codigo,
+        text: 'Grupo ' + g.nome + ' da operação "' + est.op.codigo + '" — abra o link para entrar no grupo e compartilhar sua localização com a equipe:', url: entrada.value })
+        .catch(function () { /* cancelado */ });
+    } }));
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' Link do grupo ' + g.nome]),
+      UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
+      qr,
+      UI.el('p', { classe: 'nota', texto: 'Quem abrir este link entra na operação E no grupo ' + g.nome + ', como membro' +
+        (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como CIVIL.') + ' O link não dá acesso a este painel.' }),
+      UI.el('div', { classe: 'modal-acoes' }, [
+        UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Gerar novo link', onclick: async function () {
+          fechar();
+          var r = await UI.confirmar({ titulo: 'Gerar um novo link para o grupo ' + g.nome + '?', texto: 'O link atual (e o QR Code) deixa de funcionar na hora. Quem já entrou continua no grupo.', ok: 'Gerar novo link', perigo: true });
+          if (!r) { abrirLinkGrupo(gid); return; }
+          try {
+            await C.rpc('gerar_novo_link_grupo', { p_grupo: gid });
+            UI.aviso('Novo link gerado. O anterior não funciona mais.', 'ok');
+          } catch (e) { UI.aviso(e.message, 'erro'); }
+          abrirLinkGrupo(gid);
+        } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
+    ]));
+  }
+
+  async function excluirGrupo(g) {
+    var r = await UI.confirmar({
+      titulo: 'Excluir o grupo "' + g.nome + '"?',
+      texto: 'As pessoas continuam na operação; só deixam de estar no grupo. O link do grupo deixa de funcionar. Deslocamentos já feitos continuam no histórico.',
+      ok: 'Excluir grupo',
+      perigo: true,
+    });
+    if (!r) { abrirGrupos(); return; }
+    try {
+      await C.rpc('excluir_grupo', { p_id: g.id });
+      est.grupos.delete(g.id);
+      est.membros.delete(g.id);
+      if (est.filtroGrupo === g.id) filtrarGrupo(null);
+      aplicarMudancaGrupos();
+      UI.aviso('Grupo excluído.', 'ok');
+    } catch (e) {
+      UI.aviso(e.codigo === 'sem_permissao' ? 'Só quem criou o grupo, quem criou a operação ou um administrador pode excluí-lo.' : e.message, 'erro', 7000);
+    }
+    abrirGrupos();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Deslocamentos de grupos (missões) e alertas                          */
+  /* ------------------------------------------------------------------ */
+  var STATUS_MISSAO = {
+    enviada: { rotulo: 'Enviada', selo: 'selo-neutro' },
+    em_deslocamento: { rotulo: 'Em deslocamento', selo: 'selo-alerta' },
+    no_setor: { rotulo: 'No setor', selo: 'selo-responsavel' },
+    busca_finalizada: { rotulo: 'Busca finalizada · voltando à base', selo: 'selo-alerta' },
+    retorno_atrasado: { rotulo: 'RETORNO ATRASADO', selo: 'selo-perigo' },
+    na_base: { rotulo: 'Na base', selo: 'selo-ok' },
+    encerrada: { rotulo: 'Encerrada', selo: 'selo-neutro' },
+  };
+
+  function missoesAtivas() {
+    return Array.from(est.missoes.values()).filter(function (m) { return m.status !== 'encerrada' && m.status !== 'na_base'; });
+  }
+
+  async function carregarMissoes(silencioso) {
+    if (!est.op || est.semMissoes) return;
+    var opId = est.op.id;
+    try {
+      var r = await Promise.all([
+        C.consultar(C.cliente.from('missoes').select('*').eq('operacao_id', opId).order('enviada_em', { ascending: false }).limit(100)),
+        C.consultar(C.cliente.from('missao_membros').select('*').eq('operacao_id', opId)),
+        C.consultar(C.cliente.from('alertas').select('*').eq('operacao_id', opId).order('id', { ascending: false }).limit(500)),
+      ]);
+      if (!est.op || est.op.id !== opId) return;
+      est.missoes = new Map((r[0] || []).map(function (m) { return [m.id, m]; }));
+      var mm = new Map();
+      (r[1] || []).forEach(function (x) {
+        if (!mm.has(x.missao_id)) mm.set(x.missao_id, []);
+        mm.get(x.missao_id).push(x);
+      });
+      est.missaoMembros = mm;
+      var primeira = !est.alertasCarregados;
+      (r[2] || []).forEach(function (a) { receberAlerta(a, silencioso || primeira, true); });
+      est.alertasCarregados = true;
+      atualizarMenu();
+      if (est.renderMissoesAberto) est.renderMissoesAberto();
+    } catch (e) {
+      if (ehTabelaAusente(e)) est.semMissoes = true;
+    }
+  }
+
+  function agendarMissoes() {
+    clearTimeout(est.timerMissoes);
+    est.timerMissoes = setTimeout(function () { carregarMissoes(false); }, 500);
+  }
+
+  // Reserva para o alerta de retorno atrasado: sem pg_cron no Supabase, o painel
+  // aberto pede ao servidor que verifique os prazos (a regra e o anti-duplicação são do banco).
+  function verificarRetornosPainel() {
+    if (!est.op || est.op.status !== 'ativa' || est.semMissoes) return;
+    var temRetorno = Array.from(est.missoes.values()).some(function (m) { return m.status === 'busca_finalizada' || m.status === 'retorno_atrasado'; });
+    if (!temRetorno) return;
+    C.rpc('verificar_retornos', { p_operacao: est.op.id }, 15000).then(function (n) { if (n) agendarMissoes(); }).catch(function () { /* tenta no próximo ciclo */ });
+  }
+
+  // a: linha de "alertas". silencioso: sem som (carga inicial / atualização). deCarga: veio da consulta periódica.
+  function receberAlerta(a, silencioso, deCarga) {
+    var antigo = est.alertas.get(a.id);
+    est.alertas.set(a.id, a);
+    if (!antigo && !silencioso && !a.reconhecido_em) {
+      if (a.nivel === 'critico') {
+        alarme();
+        try { if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 800]); } catch (e) { /* ignora */ }
+      } else {
+        bipeCurto();
+        UI.aviso('🔔 ' + a.titulo + ': ' + a.texto, 'ok', 10000);
+      }
+    }
+    mostrarFaixaAlerta();
+    atualizarContadorAlertas();
+    if (!$('central').hidden && est.centralAba === 'alertas') renderizarAlertas();
+    if (!deCarga && !antigo && a.missao_id) agendarMissoes();
+  }
+
+  // Faixa vermelha fixa: o alerta crítico mais antigo ainda sem "Ciente", com alarme repetido.
+  function mostrarFaixaAlerta() {
+    var criticos = Array.from(est.alertas.values()).filter(function (a) { return a.nivel === 'critico' && !a.reconhecido_em; })
+      .sort(function (a, b) { return a.id - b.id; });
+    var a = criticos[0] || null;
+    est.alertaFaixa = a;
+    var faixa = $('faixa-alerta');
+    if (!a) {
+      faixa.hidden = true;
+      clearInterval(est.timerAlarmeCritico);
+      est.timerAlarmeCritico = null;
+      return;
+    }
+    $('faixa-alerta-titulo').textContent = '⚠ ' + a.titulo;
+    $('faixa-alerta-texto').textContent = a.texto;
+    $('faixa-alerta-meta').textContent = 'Alerta às ' + C.hora(a.criado_em, false) + (a.posicao_em ? ' · última posição às ' + C.hora(a.posicao_em, false) : '') +
+      (criticos.length > 1 ? ' · mais ' + (criticos.length - 1) + ' alerta(s) crítico(s)' : '');
+    $('faixa-alerta-mapa').hidden = a.lat == null && !a.grupo_id;
+    faixa.hidden = false;
+    if (!est.timerAlarmeCritico) est.timerAlarmeCritico = setInterval(function () { if (est.alertaFaixa) alarme(); }, 20000);
+  }
+
+  async function reconhecerAlerta(id) {
+    try {
+      var a = await C.rpc('reconhecer_alerta', { p_alerta: id });
+      receberAlerta(a, true, true);
+      UI.aviso('Alerta marcado como ciente.', 'ok');
+    } catch (e) {
+      UI.aviso(e.message, 'erro');
+    }
+  }
+
+  function verAlertaNoMapa(a) {
+    if (!est.mapa) return;
+    if (a.grupo_id && est.grupos.has(a.grupo_id)) filtrarGrupo(a.grupo_id, true);
+    if (a.lat != null) {
+      est.mapa.setView([a.lat, a.lng], Math.max(est.mapa.getZoom(), 16));
+      var marca = L.circleMarker([a.lat, a.lng], { radius: 18, color: a.nivel === 'critico' ? '#ef4444' : '#facc15', weight: 3, fill: false, className: 'pulso-alerta', interactive: false }).addTo(est.mapa);
+      setTimeout(function () { marca.remove(); }, 8000);
+    } else if (a.grupo_id) {
+      enquadrarGrupo(a.grupo_id);
+    }
+    if (telaPequena()) fecharCentral();
+  }
+
+  function atualizarContadorAlertas() {
+    var n = 0;
+    est.alertas.forEach(function (a) { if (!a.reconhecido_em) n++; });
+    var c = $('qtd-alertas');
+    if (!c) return;
+    c.textContent = String(n);
+    c.hidden = !n;
+  }
+
+  function renderizarAlertas() {
+    var ul = $('lista-alertas');
+    var lista = Array.from(est.alertas.values()).sort(function (a, b) { return b.id - a.id; });
+    $('alertas-vazio').hidden = lista.length > 0;
+    ul.innerHTML = '';
+    lista.forEach(function (a) {
+      ul.appendChild(UI.el('li', { classe: 'item-alerta alerta-' + a.nivel + (a.reconhecido_em ? ' reconhecido' : '') }, [
+        UI.el('div', { classe: 'item-alerta-cabeca' }, [
+          UI.el('strong', { texto: a.titulo }),
+          UI.el('small', { classe: 'muted', texto: C.hora(a.criado_em) }),
+        ]),
+        UI.el('p', { texto: a.texto }),
+        UI.el('small', { classe: 'muted', texto: (a.posicao_em ? 'Pela trilha GPS: ' + C.hora(a.posicao_em) + '. ' : '') +
+          (a.reconhecido_em ? 'Ciente: ' + (a.reconhecido_por_nome || '') + ' às ' + C.hora(a.reconhecido_em, false) + '.' : '') }),
+        UI.el('div', { classe: 'acoes-linha' }, [
+          a.lat != null || a.grupo_id ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verAlertaNoMapa(a); } }) : null,
+          !a.reconhecido_em ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Ciente', onclick: function () { reconhecerAlerta(a.id); } }) : null,
+        ]),
+      ]));
+    });
+  }
+
+  function linhaTempoMissao(m) {
+    var etapas = [
+      ['Enviada', m.enviada_em],
+      ['Início do deslocamento', m.iniciada_em],
+      [m.setor_nome ? 'Chegada ao setor' : 'Chegada ao destino', m.chegou_setor_em],
+      ['Busca finalizada' + (m.busca_finalizada_por_nome ? ' (' + m.busca_finalizada_por_nome + ')' : ''), m.busca_finalizada_em],
+    ];
+    if (m.base_lat != null) {
+      etapas.push(['Prazo de retorno', m.prazo_retorno_em, true]);
+      etapas.push(['Todos na base', m.chegou_base_em]);
+    }
+    if (m.encerrada_em) etapas.push(['Encerrada' + (m.encerrada_por_nome ? ' (' + m.encerrada_por_nome + ')' : ''), m.encerrada_em]);
+    return UI.el('ol', { classe: 'linha-tempo' }, etapas.map(function (e) {
+      return UI.el('li', { classe: e[1] ? (e[2] ? 'prazo' : 'feita') : 'pendente' }, [
+        UI.el('span', { texto: e[0] }), UI.el('small', { texto: e[1] ? C.hora(e[1]) : '—' }),
+      ]);
+    }));
+  }
+
+  // Ferramentas → Deslocamentos de grupos
+  function abrirMissoes() {
+    if (!est.op) return;
+    var corpo = UI.el('div', { classe: 'corpo-missoes' });
+    function render() {
+      corpo.innerHTML = '';
+      if (est.semMissoes) {
+        corpo.appendChild(UI.el('p', { classe: 'nota', texto: 'Os deslocamentos de grupos ainda não estão disponíveis no servidor: execute a migração 010 no Supabase.' }));
+        return;
+      }
+      var lista = Array.from(est.missoes.values()).sort(function (a, b) {
+        var aa = a.status === 'encerrada' || a.status === 'na_base' ? 1 : 0, bb = b.status === 'encerrada' || b.status === 'na_base' ? 1 : 0;
+        return aa - bb || C.paraMs(b.enviada_em) - C.paraMs(a.enviada_em);
+      });
+      if (!lista.length) {
+        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum deslocamento ainda. Envie um destino a um grupo: Ferramentas → Enviar destino → Grupo (ou "Enviar o centro como destino" num setor).' }));
+        return;
+      }
+      lista.forEach(function (m) {
+        var st = STATUS_MISSAO[m.status] || STATUS_MISSAO.encerrada;
+        var ativa = m.status !== 'encerrada' && m.status !== 'na_base' && est.op.status === 'ativa';
+        var membros = (est.missaoMembros.get(m.id) || []).map(function (x) { return { x: x, p: est.participantes.get(x.participante_id) }; })
+          .sort(function (a, b) { return (a.p ? a.p.dados.nome : '').localeCompare(b.p ? b.p.dados.nome : '', 'pt-BR'); });
+        var tabela = UI.el('table', { classe: 'tabela-membros-missao' }, [
+          UI.el('thead', null, [UI.el('tr', null, ['Pessoa', 'Destino', 'Iniciou', m.setor_nome ? 'No setor' : 'Chegou', 'Na base'].map(function (t) { return UI.el('th', { texto: t }); }))]),
+          UI.el('tbody', null, membros.map(function (y) {
+            var fora = y.p && y.p.dados.removido;
+            return UI.el('tr', { classe: fora ? 'fora' : '' }, [
+              UI.el('td', { texto: (y.p ? nomeExibido(y.p) : 'participante') + (fora ? ' (fora da operação)' : '') }),
+              UI.el('td', { texto: y.x.recebe_destino ? 'recebeu' : '—' }),
+              UI.el('td', { texto: y.x.iniciou_em ? C.hora(y.x.iniciou_em, false) : '—' }),
+              UI.el('td', { texto: y.x.chegou_setor_em ? C.hora(y.x.chegou_setor_em, false) : '—' }),
+              UI.el('td', { classe: !y.x.chegou_base_em && m.status === 'retorno_atrasado' && !fora ? 'atrasado' : '',
+                texto: y.x.chegou_base_em ? C.hora(y.x.chegou_base_em, false) : (m.base_lat != null && m.busca_finalizada_em ? 'ainda não' : '—') }),
+            ]);
+          })),
+        ]);
+        corpo.appendChild(UI.el('section', { classe: 'item-missao status-' + m.status }, [
+          UI.el('div', { classe: 'item-missao-cabeca' }, [
+            UI.el('strong', { texto: m.grupo_nome + ' → ' + m.nome }),
+            UI.el('span', { classe: 'selo ' + st.selo, texto: st.rotulo }),
+          ]),
+          UI.el('p', { classe: 'muted', texto: (m.publico === 'responsavel' ? 'Só o responsável do grupo recebeu o destino' : 'Todos os membros receberam o destino') +
+            ' · enviado por ' + m.enviado_por_nome + (m.base_nome ? ' · base: ' + m.base_nome + ' (raio ' + Math.round(m.raio_base_m) + ' m, prazo ' + m.prazo_retorno_min + ' min)' : ' · sem base (sem controle de retorno)') }),
+          linhaTempoMissao(m),
+          tabela,
+          UI.el('div', { classe: 'acoes-linha' }, [
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verMissaoNoMapa(m); } }),
+            ativa && !m.busca_finalizada_em ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Finalizar busca', onclick: function () { finalizarBuscaPainel(m); } }) : null,
+            ativa && m.busca_finalizada_em && m.base_lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Prorrogar +15 min', onclick: function () { prorrogarRetorno(m); } }) : null,
+            ativa ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Encerrar', onclick: function () { encerrarMissaoPainel(m); } }) : null,
+          ]),
+        ]));
+      });
+    }
+    render();
+    est.renderMissoesAberto = render;
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-missoes' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Deslocamentos de grupos' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Início, chegada e retorno são calculados pelo servidor a partir da trilha GPS de cada membro (hora do GPS). ' +
+        'O alerta de equipe possivelmente perdida é verificado por tempo, mesmo com os celulares sem sinal.' }),
+      corpo,
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]), { aoFechar: function () { if (est.renderMissoesAberto === render) est.renderMissoesAberto = null; } });
+  }
+
+  function verMissaoNoMapa(m) {
+    if (!est.mapa) return;
+    if (m.grupo_id && est.grupos.has(m.grupo_id)) filtrarGrupo(m.grupo_id, true);
+    var pts = [[m.lat, m.lng]];
+    if (m.base_lat != null) pts.push([m.base_lat, m.base_lng]);
+    (est.missaoMembros.get(m.id) || []).forEach(function (x) {
+      var p = est.participantes.get(x.participante_id);
+      var pos = p && posicaoAtual(p);
+      if (pos) pts.push([pos.lat, pos.lng]);
+    });
+    if (m.setor_id && est.setores.has(m.setor_id)) verticesSetor(est.setores.get(m.setor_id).d).forEach(function (v) { pts.push(v); });
+    est.mapa.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 17 });
+  }
+
+  async function finalizarBuscaPainel(m) {
+    var r = await UI.confirmar({
+      titulo: 'Finalizar a busca de ' + m.grupo_nome + ' em ' + m.nome + '?',
+      texto: m.base_lat != null
+        ? 'Todos os acompanhados recebem o destino "Volte para a base" e começa a contar o prazo de retorno (' + m.prazo_retorno_min + ' min). O setor NÃO é marcado como concluído automaticamente.'
+        : 'Sem base definida: a navegação do grupo é encerrada e não há controle de retorno.',
+      ok: 'Finalizar busca',
+    });
+    if (!r) return;
+    try {
+      await C.rpc('finalizar_busca', { p_missao: m.id });
+      UI.aviso('Busca finalizada. ' + (m.base_lat != null ? 'O grupo está voltando à base.' : ''), 'ok');
+      agendarMissoes();
+      agendarAreas();
+    } catch (e) { UI.aviso(e.message, 'erro'); }
+  }
+
+  async function prorrogarRetorno(m) {
+    try {
+      await C.rpc('prorrogar_retorno', { p_missao: m.id, p_min: 15 });
+      UI.aviso('Prazo de retorno prorrogado em 15 min.', 'ok');
+      agendarMissoes();
+    } catch (e) { UI.aviso(e.message, 'erro'); }
+  }
+
+  async function encerrarMissaoPainel(m) {
+    var r = await UI.confirmar({
+      titulo: 'Encerrar o deslocamento de ' + m.grupo_nome + '?',
+      texto: 'A navegação do grupo é encerrada e não há mais alertas automáticos deste deslocamento (inclusive de retorno).',
+      ok: 'Encerrar deslocamento',
+      perigo: true,
+    });
+    if (!r) return;
+    try {
+      await C.rpc('encerrar_missao', { p_missao: m.id });
+      UI.aviso('Deslocamento encerrado.', 'ok');
+      agendarMissoes();
+      agendarAreas();
+    } catch (e) { UI.aviso(e.message, 'erro'); }
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Interface para as ferramentas de mapa (ferramentas.js)               */
   /* ------------------------------------------------------------------ */
   window.Painel = {
@@ -5148,7 +6380,7 @@
     participante: function (id) { return est.participantes.get(id) || null; },
     nome: function (p) { return nomeExibido(p); },
     tipo: function (p) { return tipoDe(p.dados); },
-    trilha: function (p) { return window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, objetos: true }); },
+    trilha: function (p) { return window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp(), objetos: true }); },
     posicao: function (p) { return posicaoAtual(p); },
     pontosInteresse: function () { return Array.from(est.pontosInt.values()).map(function (x) { return x.d; }); },
     setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },

@@ -797,7 +797,10 @@ rastreamento-sar/
      cadastro do responsável, mas **recusa** quem não pode ser apagado: você mesmo e quem já tem histórico (operação
      criada, mensagem enviada ou localização de vítima registrada). Nesses casos, use **Desativar acesso**. O login
      é apagado logo depois pela função de servidor `/api/responsaveis` (ação `excluir`).
-   O `schema.sql` completo já inclui da 003 à 017 (seções 10 a 24).
+   - **018** (`018_pedido_acesso_responsavel.sql`): tabela `solicitacoes_responsavel` e as funções do **pedido de acesso**
+     (`meu_status_acesso`, `admin_listar_solicitacoes`, `admin_decidir_solicitacao`). Só o administrador decide.
+     A tabela não tem acesso direto: o pedido entra pela função de servidor `/api/responsaveis` (ação `solicitar`).
+   O `schema.sql` completo já inclui da 003 à 018 (seções 10 a 25).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -904,6 +907,12 @@ encerrada, e o token fica após o `#` (não é enviado aos servidores nem aparec
   só entrou por engano ou não deve mais ter acesso e não tem histórico, excluir é a opção.
 - Um administrador não consegue desativar nem tirar o próprio acesso de administrador (evita
   ficar sem nenhum administrador).
+- **Pedir acesso** (tela de login, botão **PEDIR ACESSO**): quem ainda não tem acesso preenche nome, e-mail e senha
+  num modal. O servidor cria o login **sem acesso** e registra o pedido como pendente. Enquanto isso, quem tenta
+  entrar vê "aguardando a aprovação de um administrador". Na tela **Responsáveis**, o administrador vê a seção
+  **Pedidos de acesso** e clica em **Aprovar** (vira responsável comum, sem administrador) ou **Recusar**. Um
+  pedido recusado pode ser aprovado depois. Quem já tem login (mesmo e-mail) não pode pedir de novo: a tela avisa.
+  Não há limite de pedidos por IP; os pedidos pendentes ficam visíveis ao administrador para recusar.
 - **Minha conta** (todos os responsáveis): trocar a própria senha.
 
 

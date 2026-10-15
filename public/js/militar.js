@@ -232,6 +232,7 @@
   async function iniciar() {
     document.querySelectorAll('[data-acao="sair"]').forEach(function (b) { b.addEventListener('click', sair); });
     $('form-login').addEventListener('submit', entrar);
+    $('btn-solicitar-acesso').addEventListener('click', abrirSolicitacaoAcesso);
     $('btn-nova-op').addEventListener('click', abrirNovaOperacao);
     // Cadastro completo da operação nova: tipo, acionamento, local e descrição
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
@@ -449,6 +450,7 @@
       return;
     }
     if (!resp || resp.ativo === false) {
+      $('sem-permissao-texto').textContent = await textoSemAcesso();
       mostrarTela('sem-permissao');
       return;
     }
@@ -457,6 +459,22 @@
     $('btn-responsaveis').hidden = !resp.admin;
     C.sincronizarRelogio();
     rotear();
+  }
+
+  // Mensagem de quem entrou mas ainda não tem acesso: pedido pendente, recusado ou desativado.
+  var MENSAGEM_SEM_ACESSO = {
+    pendente: 'Seu pedido de acesso está aguardando a aprovação de um administrador. Você poderá entrar assim que ele aprovar.',
+    recusada: 'Seu pedido de acesso não foi aprovado. Fale com um administrador se acha que é engano.',
+    desativado: 'Seu acesso ao painel está desativado. Fale com um administrador.',
+  };
+  async function textoSemAcesso() {
+    var padrao = 'Este usuário não está cadastrado como responsável. Peça ao administrador do sistema para autorizar o seu acesso.';
+    try {
+      var st = await C.rpc('meu_status_acesso');
+      return MENSAGEM_SEM_ACESSO[st && st.status] || padrao;
+    } catch (e) {
+      return padrao;
+    }
   }
 
   async function sair() {
@@ -6096,6 +6114,7 @@
     nao_pode_alterar_a_si: 'Você não pode alterar ou excluir o seu próprio acesso.',
     login_nao_apagado: 'O acesso ao painel foi removido, mas o login não pôde ser apagado. Apague-o em Authentication → Users no Supabase.',
     falha_rede: 'Falha de comunicação com o Supabase.',
+    email_em_uso: 'Este e-mail já tem cadastro. Se já pediu acesso, aguarde a aprovação; se foi recusado, fale com um administrador.',
   };
 
   function gerarSenha() {
@@ -6118,19 +6137,109 @@
   async function chamarApiResponsaveis(corpo) {
     var sessao = (await C.cliente.auth.getSession()).data.session;
     if (!sessao) throw new Error(ERROS_API.nao_autenticado);
+    return enviarApi(corpo, 'Bearer ' + sessao.access_token);
+  }
+
+  // Sem autorização = pedido de acesso (a conta ainda não existe para o painel).
+  async function enviarApi(corpo, autorizacao) {
+    var cabecalhos = { 'Content-Type': 'application/json' };
+    if (autorizacao) cabecalhos.Authorization = autorizacao;
     var r;
     try {
-      r = await fetch('/api/responsaveis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessao.access_token },
-        body: JSON.stringify(corpo),
-      });
+      r = await fetch('/api/responsaveis', { method: 'POST', headers: cabecalhos, body: JSON.stringify(corpo) });
     } catch (e) {
       throw new Error('Sem conexão com o servidor.');
     }
     var j = await r.json().catch(function () { return {}; });
     if (!r.ok) throw new Error(ERROS_API[j.erro] || ('Erro ' + r.status + (j.erro ? ': ' + j.erro : '')));
     return j;
+  }
+
+  // Pedido de acesso (modal na tela de login). Não cria acesso: o administrador aprova depois.
+  function abrirSolicitacaoAcesso() {
+    var form = document.importNode($('tpl-form-solicitacao').content, true).querySelector('form');
+    form.addEventListener('submit', enviarSolicitacao);
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    est.fecharSolicitacao = fechar;
+    form.querySelector('#sol-cancelar').addEventListener('click', function () { fechar(); });
+    setTimeout(function () { form.querySelector('#sol-nome').focus(); }, 40);
+  }
+
+  async function enviarSolicitacao(ev) {
+    ev.preventDefault();
+    var form = ev.currentTarget;
+    var erro = form.querySelector('#sol-erro');
+    erro.hidden = true;
+    var nome = form.querySelector('#sol-nome').value.replace(/\s+/g, ' ').trim();
+    var email = form.querySelector('#sol-email').value.trim().toLowerCase();
+    var senha = form.querySelector('#sol-senha').value;
+    var confirma = form.querySelector('#sol-senha2').value;
+    var msg = nome.length < 2 ? ERROS_API.nome_invalido
+      : !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) ? ERROS_API.email_invalido
+      : senha.length < 8 ? ERROS_API.senha_fraca
+      : senha !== confirma ? 'As senhas não conferem.' : '';
+    if (msg) { erro.textContent = msg; erro.hidden = false; return; }
+    var btn = form.querySelector('#sol-enviar');
+    btn.disabled = true;
+    try {
+      await enviarApi({ acao: 'solicitar', nome: nome, email: email, senha: senha }, null);
+      if (est.fecharSolicitacao) { est.fecharSolicitacao(); est.fecharSolicitacao = null; }
+      $('login-email').value = email;
+      UI.aviso('Pedido enviado. Um administrador vai analisar; você poderá entrar depois da aprovação.', 'ok', 9000);
+    } catch (e) {
+      erro.textContent = e.message;
+      erro.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Pedidos pendentes (só o administrador vê). A seção some quando não há nenhum.
+  async function carregarSolicitacoes() {
+    try {
+      desenharSolicitacoes(await C.rpc('admin_listar_solicitacoes'));
+    } catch (e) {
+      desenharSolicitacoes([]);
+      UI.aviso('Não foi possível carregar os pedidos de acesso: ' + e.message, 'erro', 7000);
+    }
+  }
+
+  function desenharSolicitacoes(lista) {
+    var ul = $('lista-solicitacoes');
+    lista = lista || [];
+    ul.innerHTML = '';
+    $('sec-solicitacoes').hidden = !lista.length;
+    $('sol-contagem').textContent = lista.length ? lista.length + (lista.length === 1 ? ' pendente' : ' pendentes') : '';
+    lista.forEach(function (s) {
+      ul.appendChild(UI.el('li', null, [
+        UI.el('div', { classe: 'op-info' }, [
+          UI.el('strong', { texto: s.nome }),
+          UI.el('span', { texto: (s.email || '') + ' · pediu em ' + C.hora(s.criado_em, false) }),
+        ]),
+        UI.el('div', { classe: 'op-acoes' }, [
+          UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Aprovar', onclick: function () { decidirSolicitacao(s, true); } }),
+          UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Recusar', onclick: function () { decidirSolicitacao(s, false); } }),
+        ]),
+      ]));
+    });
+  }
+
+  async function decidirSolicitacao(s, aprovar) {
+    var ok = await UI.confirmar({
+      titulo: (aprovar ? 'Aprovar ' : 'Recusar ') + s.nome,
+      texto: aprovar ? s.nome + ' passará a acessar o painel como responsável comum (não administrador).'
+        : s.nome + ' não terá acesso ao painel. O pedido fica registrado como recusado.',
+      ok: aprovar ? 'Aprovar' : 'Recusar',
+      perigo: !aprovar,
+    });
+    if (!ok) return;
+    try {
+      await C.rpc('admin_decidir_solicitacao', { p_id: s.id, p_aprovar: aprovar });
+      UI.aviso(aprovar ? s.nome + ' aprovado.' : 'Pedido recusado.', 'ok');
+      carregarResponsaveis();
+    } catch (e) {
+      UI.aviso(e.message, 'erro', 7000);
+    }
   }
 
   async function mostrarResponsaveis() {
@@ -6142,6 +6251,7 @@
   async function carregarResponsaveis() {
     var ul = $('lista-resp');
     ul.innerHTML = '<li class="muted">Carregando…</li>';
+    carregarSolicitacoes();
     try {
       renderizarResponsaveis(await C.rpc('admin_listar_responsaveis'));
     } catch (e) {

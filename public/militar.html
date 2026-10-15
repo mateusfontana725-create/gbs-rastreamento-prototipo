@@ -42,6 +42,8 @@
       <button class="btn btn-primario btn-gigante" type="submit" id="btn-entrar">ENTRAR</button>
       <p class="erro-form" id="login-erro" role="alert" hidden></p>
       <p class="ajuda">Somente militares cadastrados como responsáveis podem acessar este painel.</p>
+      <p class="ajuda">Ainda não tem acesso? Peça o cadastro e aguarde a aprovação de um administrador.</p>
+      <button class="btn btn-escuro btn-gigante" type="button" id="btn-solicitar-acesso">PEDIR ACESSO</button>
     </form>
   </section>
 
@@ -49,10 +51,41 @@
   <section id="tela-sem-permissao" class="tela-centro" hidden>
     <div class="cartao cartao-login">
       <h1 class="titulo-aviso">Acesso não autorizado</h1>
-      <p>Este usuário não está cadastrado como responsável. Peça ao administrador do sistema para autorizar o seu acesso.</p>
+      <p id="sem-permissao-texto">Este usuário não está cadastrado como responsável. Peça ao administrador do sistema para autorizar o seu acesso.</p>
       <button class="btn btn-escuro btn-gigante" type="button" data-acao="sair">SAIR</button>
     </div>
   </section>
+
+  <!-- Pedido de acesso (modal aberto pela tela de login) -->
+  <template id="tpl-form-solicitacao">
+    <form class="form-resp" novalidate>
+      <h2 id="modal-titulo">Pedir acesso ao painel</h2>
+      <div class="grade-resp">
+        <div class="grupo">
+          <label class="rotulo" for="sol-nome">Nome / posto e graduação</label>
+          <input class="campo" id="sol-nome" maxlength="60" autocomplete="name" placeholder="Ex.: Sgt BM Fulano de Tal">
+        </div>
+        <div class="grupo">
+          <label class="rotulo" for="sol-email">E-mail (será o login)</label>
+          <input class="campo" id="sol-email" type="email" maxlength="200" autocomplete="username" placeholder="fulano@cbm…">
+        </div>
+        <div class="grupo">
+          <label class="rotulo" for="sol-senha">Senha (mínimo de 8 caracteres)</label>
+          <input class="campo" id="sol-senha" type="password" maxlength="72" autocomplete="new-password">
+        </div>
+        <div class="grupo">
+          <label class="rotulo" for="sol-senha2">Confirmar senha</label>
+          <input class="campo" id="sol-senha2" type="password" maxlength="72" autocomplete="new-password">
+        </div>
+      </div>
+      <p class="erro-form" id="sol-erro" role="alert" hidden></p>
+      <p class="ajuda">Um administrador vai analisar o pedido. Você só entra depois da aprovação, e o acesso é de responsável comum (não de administrador).</p>
+      <div class="modal-acoes">
+        <button class="btn" type="button" id="sol-cancelar">Cancelar</button>
+        <button class="btn btn-primario" type="submit" id="sol-enviar">ENVIAR PEDIDO</button>
+      </div>
+    </form>
+  </template>
 
   <!-- Lista de operações -->
   <section id="tela-operacoes" hidden>
@@ -145,6 +178,13 @@
           <button class="btn" type="button" id="resp-cred-fechar">Fechar</button>
         </div>
         <p class="nota">Por segurança, esta senha não será mostrada de novo. Se for perdida, use "Redefinir senha".</p>
+      </div>
+
+      <div class="cartao secao" id="sec-solicitacoes" hidden>
+        <div class="ops-topo">
+          <h2>Pedidos de acesso <span class="contagem" id="sol-contagem"></span></h2>
+        </div>
+        <ul class="lista-resp" id="lista-solicitacoes"></ul>
       </div>
 
       <div class="cartao secao">

@@ -4,6 +4,7 @@
 //   { "acao": "criar", "nome": "...", "email": "...", "senha": "...", "admin": false }
 //   { "acao": "senha", "user_id": "<uuid>", "senha": "..." }      (redefinir senha)
 //   { "acao": "excluir", "user_id": "<uuid>" }                    (excluir responsável e o login)
+//   { "acao": "solicitar", "nome": "...", "email": "...", "senha": "..." }   (pedido de acesso, SEM login)
 //
 // Segurança:
 //   1. Quem chama envia o próprio token de login (Authorization: Bearer <token>).
@@ -50,6 +51,37 @@ async function rpcServico(url, chave, nome, args) {
   return { ok: r.ok, status: r.status, dados };
 }
 
+// Pedido de acesso: qualquer pessoa, sem login. A conta nasce SEM acesso ao painel e o pedido
+// fica pendente até um administrador aprovar (migração 018). Quem já tem login recebe 409.
+async function solicitarAcesso(url, chaveSecreta, corpo, res) {
+  const nome = String(corpo.nome || '').replace(/\s+/g, ' ').trim();
+  const email = String(corpo.email || '').trim().toLowerCase();
+  const senha = String(corpo.senha || '');
+  if (nome.length < 2 || nome.length > 60) return res.status(400).json({ erro: 'nome_invalido' });
+  if (!EMAIL_RE.test(email) || email.length > 200) return res.status(400).json({ erro: 'email_invalido' });
+  if (senha.length < 8 || senha.length > 72) return res.status(400).json({ erro: 'senha_fraca' });
+
+  const c = await fetch(`${url}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: cabecalhosServico(chaveSecreta),
+    body: JSON.stringify({ email, password: senha, email_confirm: true, user_metadata: { nome } }),
+  });
+  const cj = await c.json().catch(() => ({}));
+  if (!c.ok || !cj.id) {
+    if (/already|exists|registered/i.test(JSON.stringify(cj))) return res.status(409).json({ erro: 'email_em_uso' });
+    if (/password/i.test(JSON.stringify(cj))) return res.status(400).json({ erro: 'senha_fraca' });
+    return res.status(502).json({ erro: 'falha_supabase' });
+  }
+
+  const s = await rpcServico(url, chaveSecreta, 'servidor_criar_solicitacao', { p_user: cj.id, p_nome: nome, p_email: email });
+  if (!s.ok) {
+    // Não deixa login órfão: sem o pedido registrado, a conta é desfeita.
+    await fetch(`${url}/auth/v1/admin/users/${cj.id}`, { method: 'DELETE', headers: cabecalhosServico(chaveSecreta) });
+    return res.status(502).json({ erro: 'falha_supabase' });
+  }
+  return res.status(200).json({ ok: true });
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ erro: 'metodo_nao_permitido' });
@@ -59,6 +91,16 @@ module.exports = async (req, res) => {
   const chaveSecreta = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!url || !chavePublica || !chaveSecreta) {
     return res.status(500).json({ erro: 'variaveis_de_ambiente_ausentes' });
+  }
+
+  // Lido uma vez só: o pedido de acesso não exige login, as demais ações exigem.
+  const corpo = await lerCorpo(req);
+  if (corpo.acao === 'solicitar') {
+    try {
+      return await solicitarAcesso(url, chaveSecreta, corpo, res);
+    } catch (e) {
+      return res.status(502).json({ erro: 'falha_rede', detalhe: String(e && e.message).slice(0, 200) });
+    }
   }
 
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
@@ -74,7 +116,6 @@ module.exports = async (req, res) => {
     if (v.status === 401) return res.status(401).json({ erro: 'nao_autenticado' });
     if (!v.ok || (await v.json()) !== true) return res.status(403).json({ erro: 'sem_permissao' });
 
-    const corpo = await lerCorpo(req);
     const acao = corpo.acao;
 
     // 2a. Cadastrar novo responsável

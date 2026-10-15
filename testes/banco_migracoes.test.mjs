@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -484,6 +484,27 @@ const listaSemTres = await rpc(resp1, 'admin_excluir_responsavel', { p_user: res
 chk(!listaSemTres.some((r) => r.user_id === resp3) && listaSemTres.some((r) => r.user_id === resp1), 'administrador exclui responsável sem histórico e recebe a lista atualizada', listaSemTres.map((r) => r.nome));
 chk(/responsavel_nao_encontrado/.test(await erroDe(rpc(resp1, 'admin_excluir_responsavel', { p_user: resp3 }))), 'excluir de novo: responsável não encontrado');
 chk(/permission denied/.test(await erroDe(como(null, `select public.admin_excluir_responsavel($1)`, [resp2], 'anon'))), 'visitante anônimo não executa a exclusão');
+console.log('Pedido de acesso de responsável (migração 018)');
+const pedinte = await usuario('pedinte@cbm', false);
+await como(null, `select public.servidor_criar_solicitacao($1, $2, $3)`, [pedinte, 'Cb Novato', 'pedinte@cbm'], 'service_role');
+const solId = (await db.query(`select id from public.solicitacoes_responsavel where user_id = $1`, [pedinte])).rows[0].id;
+chk(/permission denied/.test(await erroDe(como(resp1, `select public.servidor_criar_solicitacao($1, $2, $3)`, [pedinte, 'X', 'x@x']))), 'pedido de acesso só é criado pelo servidor (chave secreta)');
+chk(/permission denied/.test(await erroDe(como(pedinte, `select count(*) from public.solicitacoes_responsavel`))), 'quem pede acesso não lê a tabela de pedidos');
+chk((await rpc(pedinte, 'meu_status_acesso', {})).status === 'pendente', 'pedido recém-enviado fica pendente, sem acesso', await rpc(pedinte, 'meu_status_acesso', {}));
+chk((await rpc(anA, 'meu_status_acesso', {})).status === 'sem_pedido', 'visitante sem pedido recebe sem_pedido');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'admin_listar_solicitacoes', {}))), 'responsável comum não vê os pedidos');
+chk((await rpc(resp1, 'admin_listar_solicitacoes', {})).some((x) => x.nome === 'Cb Novato'), 'administrador vê o pedido pendente');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'admin_decidir_solicitacao', { p_id: solId, p_aprovar: true }))), 'responsável comum não aprova pedido');
+chk(/permission denied/.test(await erroDe(como(null, `select public.meu_status_acesso()`, [], 'anon'))), 'visitante anônimo não consulta status de acesso');
+const recusou = await rpc(resp1, 'admin_decidir_solicitacao', { p_id: solId, p_aprovar: false });
+chk(!recusou.some((x) => x.nome === 'Cb Novato'), 'recusar tira o pedido da lista de pendentes');
+chk((await rpc(pedinte, 'meu_status_acesso', {})).status === 'recusada', 'pedido recusado: status recusada, sem acesso');
+chk((await db.query(`select count(*)::int n from public.responsaveis where user_id = $1`, [pedinte])).rows[0].n === 0, 'pedido recusado não cria responsável');
+await rpc(resp1, 'admin_decidir_solicitacao', { p_id: solId, p_aprovar: true });
+const apr = (await db.query(`select nome, admin, ativo from public.responsaveis where user_id = $1`, [pedinte])).rows[0];
+chk(apr && apr.nome === 'Cb Novato' && apr.admin === false && apr.ativo === true, 'aprovação cria responsável comum e ativo (sem administrador)', apr);
+chk((await rpc(pedinte, 'meu_status_acesso', {})).status === 'ativo', 'depois da aprovação o status é ativo');
+chk(/solicitacao_ja_decidida/.test(await erroDe(rpc(resp1, 'admin_decidir_solicitacao', { p_id: solId, p_aprovar: false }))), 'pedido já aprovado não muda de decisão');
 const pdfCam = op.id + '/44444444-4444-4444-8444-444444444444.pdf';
 
 chk(/arquivo_nao_enviado/.test(await erroDe(rpc(resp1, 'registrar_relatorio', { p_operacao: op.id, p_caminho: pdfCam, p_paginas: 12, p_bytes: 1000, p_sha256: 'a'.repeat(64) }))), 'registrar relatório sem o PDF no Storage: recusado');
@@ -517,5 +538,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–017 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–018 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

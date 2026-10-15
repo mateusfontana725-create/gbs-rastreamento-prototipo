@@ -228,7 +228,8 @@
       $('meteo-range').max = String(est.quadros.length - 1);
       if (!antes || est.quadro >= est.quadros.length - 1) mostrarQuadro(est.quadros.length - 1);
     }
-    integrarAlertas(d.alertas || []);
+    // Os alertas são integrados depois, em buscarGrade, quando a grade da área já está disponível.
+    est.oficiais = d.alertas || [];
   }
 
   // Junta os alertas (previsão, chuva na área e oficiais) e registra as mudanças.

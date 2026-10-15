@@ -165,7 +165,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   "Trilhas GPS"). O local aparece no mapa como **◎ laranja** ("Local da operação", camada própria em
   no painel **Camadas**); tocar nele abre os dados.
 - **Operações antigas** (criadas só com o nome) continuam válidas: a lista mostra o selo **Cadastro
-  incompleto** e o botão **Completar cadastro**. Nada é preenchido sozinho.
+  incompleto** e o ícone **✎ Completar cadastro**. Nada é preenchido sozinho.
 - O participante continua vendo só o **nome** da operação (endereço e descrição não vão ao celular).
 
 ### Ficha da vítima
@@ -595,7 +595,7 @@ chave própria).
 
 ### Diário da operação
 
-- **Ferramentas → Diário da operação** (ou **Diário** na lista de operações): registro cronológico agrupado
+- **Ferramentas → Diário da operação** (ou o ícone **☰** na lista de operações): registro cronológico agrupado
   por dia, com filtros (setores, deslocamentos e chegadas, encontros, alertas, pessoas, observações, operação).
 - **Eventos automáticos** são gravados pelo **próprio banco** (gatilhos) a partir dos outros módulos: criação e
   acionamento, início e fim da varredura de cada setor (mudança de situação), deslocamentos, chegadas ao setor
@@ -609,7 +609,7 @@ chave própria).
 ### Relatório final (PDF)
 
 - **Capa e cabeçalho**: a **logo do Corpo de Bombeiros Militar do Paraná** aparece no topo da capa e, a partir da segunda página, no cabeçalho (`public/img/logo-cbmpr.png`, carregada no navegador e embutida no PDF) fica à esquerda, com o código da operação e a marca "DOCUMENTO RESTRITO" à direita. A **mesma logo** aparece no topo da capa, acima do título.
-- **Ferramentas → Relatório final (PDF)** (ou **Relatório** na lista de operações). Só responsáveis da operação
+- **Ferramentas → Relatório final (PDF)** (ou o ícone **▤** na lista de operações). Só responsáveis da operação
   (o banco confere em `relatorio_operacao`).
 - Registre o **resultado** (vítima localizada com vida / em óbito / não localizada / outro, com descrição).
 - **Gerar PDF** monta, no navegador: capa com resultado e números, sumário, dados do cadastro e fichas das
@@ -886,11 +886,11 @@ encerrada, e o token fica após o `#` (não é enviado aos servidores nem aparec
 
 ## 6. Uso em campo
 
-**Cadastro de responsáveis (administrador)**: na tela de operações, botão **Responsáveis**.
-- **Cadastrar**: nome/posto, e-mail (será o login) e senha provisória (o botão **Gerar** cria uma
+**Cadastro de responsáveis (administrador)**: na tela de operações, botão **Responsáveis**. O cadastro abre num modal (como o de nova operação); clicar numa linha da lista abre os detalhes da pessoa.
+- **+ Cadastrar responsável** (modal): nome/posto, e-mail (será o login) e senha provisória (o botão **Gerar** cria uma
   senha aleatória). O login é criado na hora, sem e-mail de confirmação. O painel mostra os dados de
   acesso para copiar e repassar ao colega. Marque **Também é administrador** se ele puder cadastrar outros.
-- **Redefinir senha** (quem esqueceu), **Desativar/Reativar acesso** (corta ou devolve o acesso na
+- Ações da linha em ícones (↻ redefinir senha, ★ administrador, ⊘/✓ desativar/reativar, ✎ renomear); clicar na linha abre os detalhes com as mesmas ações. **Redefinir senha** (quem esqueceu), **Desativar/Reativar acesso** (corta ou devolve o acesso na
   hora; o histórico das operações é mantido), **Tornar/Tirar administrador** e **Renomear**.
 - Um administrador não consegue desativar nem tirar o próprio acesso de administrador (evita
   ficar sem nenhum administrador).
@@ -924,7 +924,7 @@ Os dados são apagados conforme a retenção escolhida:
 |---|---|
 | Ao encerrar | participantes, posições, trilhas, mensagens e fotos são apagados **no mesmo instante** |
 | 24 h / 3 / 7 / 30 dias | os dados ficam disponíveis para consulta e são apagados pela limpeza diária após o prazo |
-| Qualquer uma | o botão **Apagar dados agora** apaga antecipadamente |
+| Qualquer uma | o ícone **⌫ Apagar dados agora** apaga antecipadamente |
 | Excluir operação | apaga tudo **e a própria operação** (some da lista), na hora — ver seção 1 |
 
 Salvaguardas: operações esquecidas abertas por mais de 30 dias são encerradas automaticamente, e

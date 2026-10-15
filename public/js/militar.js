@@ -262,8 +262,7 @@
     $('gps-alerta-tentar').addEventListener('click', garantirMinhaPosicao);
     $('gps-alerta-como').addEventListener('click', mostrarComoLiberarMinha);
     $('btn-minha-conta').addEventListener('click', abrirMinhaConta);
-    $('form-resp').addEventListener('submit', cadastrarResponsavel);
-    $('resp-gerar').addEventListener('click', function () { $('resp-senha').value = gerarSenha(); });
+    $('btn-novo-resp').addEventListener('click', abrirCadastroResponsavel);
     $('resp-cred-fechar').addEventListener('click', function () { $('resp-credenciais').hidden = true; $('resp-cred-texto').textContent = ''; });
     $('resp-cred-copiar').addEventListener('click', function () { copiarTexto($('resp-cred-texto').textContent); });
     $('btn-equipe').addEventListener('click', abrirEquipe);
@@ -474,6 +473,15 @@
     return (cad ? cad + ' — ' : '') + t;
   }
 
+  // Ação da linha em forma de ícone: o nome completo fica na dica (title) e para leitores de tela.
+  function icone(simbolo, rotulo, onclick, classeExtra) {
+    return UI.el('button', { classe: 'btn btn-icone' + (classeExtra ? ' ' + classeExtra : ''), type: 'button', texto: simbolo, title: rotulo, 'aria-label': rotulo, onclick: onclick });
+  }
+
+  function abrirOperacao(op) {
+    location.hash = '#op=' + op.id;
+  }
+
   async function mostrarOperacoes() {
     mostrarTela('operacoes');
     var ul = $('lista-ops');
@@ -507,38 +515,45 @@
       var selo = op.status === 'ativa'
         ? UI.el('span', { classe: 'selo selo-ok', texto: 'Ativa' })
         : UI.el('span', { classe: 'selo selo-neutro', texto: 'Encerrada' });
+      var semPainel = Boolean(op.dados_apagados_em);
       var acoes = UI.el('div', { classe: 'op-acoes' });
-      if (!op.dados_apagados_em) {
-        acoes.appendChild(UI.el('a', { classe: 'btn ' + (op.status === 'ativa' ? 'btn-escuro' : ''), href: '#op=' + op.id, texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver dados' }));
+      if (!semPainel) {
+        acoes.appendChild(icone(op.status === 'ativa' ? '▶' : '◉', op.status === 'ativa' ? 'Abrir painel' : 'Ver dados', function () { abrirOperacao(op); }));
       }
       if (window.Relatorio) {
-        acoes.appendChild(UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', 'data-diario': op.id, onclick: function () { window.Relatorio.abrirDiario(op); } }));
-        acoes.appendChild(UI.el('button', { classe: 'btn', type: 'button', texto: 'Relatório', 'data-relatorio': op.id, onclick: function () { window.Relatorio.abrirRelatorio(op); } }));
+        acoes.appendChild(icone('☰', 'Diário da operação', function () { window.Relatorio.abrirDiario(op); }));
+        acoes.appendChild(icone('▤', 'Relatório final (PDF)', function () { window.Relatorio.abrirRelatorio(op); }));
       }
-      if (op.status !== 'ativa' && !op.dados_apagados_em) {
-        acoes.appendChild(UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Apagar dados agora', onclick: function () { apagarDados(op); } }));
+      if (op.status !== 'ativa' && !semPainel) {
+        acoes.appendChild(icone('⌫', 'Apagar dados agora', function () { apagarDados(op); }, 'btn-perigo'));
       }
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
       if (incompleta) {
-        acoes.appendChild(UI.el('button', { classe: 'btn', type: 'button', texto: 'Completar cadastro', 'data-completar': op.id, onclick: function () {
+        acoes.appendChild(icone('✎', 'Completar cadastro', function () {
           window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } });
-        } }));
+        }));
       }
       if (podeExcluir(op)) {
-        acoes.appendChild(UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Excluir operação', 'data-excluir': op.id, onclick: function () { excluirOperacao(op); } }));
+        acoes.appendChild(icone('✕', 'Excluir operação', function () { excluirOperacao(op); }, 'btn-perigo'));
       }
       var deEquipe = est.usuario && op.responsavel_id !== est.usuario.id
         ? UI.el('span', { classe: 'selo selo-responsavel', title: 'Você foi adicionado como responsável', texto: 'Equipe' }) : null;
       var seloIncompleto = incompleta ? UI.el('span', { classe: 'selo selo-alerta', title: 'Falta tipo e/ou data e hora do acionamento', texto: 'Cadastro incompleto' }) : null;
-      ul.appendChild(UI.el('li', null, [
+      var li = UI.el('li', { classe: semPainel ? '' : 'clicavel', tabindex: semPainel ? null : '0' }, [
         UI.el('div', { classe: 'op-info' }, [
           UI.el('strong', null, [op.codigo + ' ', selo, deEquipe ? ' ' : null, deEquipe, seloIncompleto ? ' ' : null, seloIncompleto]),
           UI.el('span', { texto: descricaoOp(op) }),
           admin && op.responsavel_id !== est.usuario.id ? UI.el('span', { classe: 'muted', texto: 'Criada por ' + (nomes[op.responsavel_id] || 'outro responsável') }) : null,
         ]),
         acoes,
-      ]));
+      ]);
+      // clicar na linha abre o painel (os ícones têm a própria ação)
+      if (!semPainel) {
+        li.addEventListener('click', function (ev) { if (!ev.target.closest('button')) abrirOperacao(op); });
+        li.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && ev.target === li) abrirOperacao(op); });
+      }
+      ul.appendChild(li);
     });
   }
 
@@ -6042,7 +6057,6 @@
   async function mostrarResponsaveis() {
     mostrarTela('responsaveis');
     document.title = 'Responsáveis — Painel GBS';
-    if (!$('resp-senha').value) $('resp-senha').value = gerarSenha();
     await carregarResponsaveis();
   }
 
@@ -6063,18 +6077,14 @@
     (lista || []).forEach(function (r) {
       var acoes = UI.el('div', { classe: 'op-acoes' });
       if (!r.eu) {
-        acoes.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Redefinir senha', onclick: function () { redefinirSenha(r); } }));
-        acoes.appendChild(UI.el('button', {
-          classe: 'btn btn-pequeno', type: 'button', texto: r.admin ? 'Tirar administrador' : 'Tornar administrador',
-          onclick: function () { alterarResponsavel(r, { p_admin: !r.admin }, r.admin ? 'deixará de ser administrador' : 'passará a ser administrador'); },
-        }));
-        acoes.appendChild(UI.el('button', {
-          classe: 'btn btn-pequeno ' + (r.ativo ? 'btn-perigo' : 'btn-ok'), type: 'button', texto: r.ativo ? 'Desativar acesso' : 'Reativar acesso',
-          onclick: function () { alterarResponsavel(r, { p_ativo: !r.ativo }, r.ativo ? 'perderá o acesso ao painel na hora' : 'voltará a acessar o painel'); },
-        }));
+        acoes.appendChild(icone('↻', 'Redefinir senha', function () { redefinirSenha(r); }));
+        acoes.appendChild(icone('★', r.admin ? 'Tirar administrador' : 'Tornar administrador', function () { alterarAdmin(r); }));
+        acoes.appendChild(r.ativo
+          ? icone('⊘', 'Desativar acesso', function () { alterarAtivo(r); }, 'btn-perigo')
+          : icone('✓', 'Reativar acesso', function () { alterarAtivo(r); }, 'btn-ok'));
       }
-      acoes.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Renomear', onclick: function () { renomearResponsavel(r); } }));
-      ul.appendChild(UI.el('li', { classe: r.ativo ? '' : 'inativo' }, [
+      acoes.appendChild(icone('✎', 'Renomear', function () { renomearResponsavel(r); }));
+      var li = UI.el('li', { classe: (r.ativo ? '' : 'inativo ') + 'clicavel', tabindex: '0' }, [
         UI.el('div', { classe: 'op-info' }, [
           UI.el('strong', null, [
             r.nome + ' ',
@@ -6085,8 +6095,53 @@
           UI.el('span', { texto: (r.email || '') + ' · último acesso: ' + (r.ultimo_acesso ? C.hora(r.ultimo_acesso, false) : 'nunca entrou') }),
         ]),
         acoes,
-      ]));
+      ]);
+      li.addEventListener('click', function (ev) { if (!ev.target.closest('button')) abrirDetalheResponsavel(r); });
+      li.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && ev.target === li) abrirDetalheResponsavel(r); });
+      ul.appendChild(li);
     });
+  }
+
+  function alterarAdmin(r) {
+    alterarResponsavel(r, { p_admin: !r.admin }, r.admin ? 'deixará de ser administrador' : 'passará a ser administrador');
+  }
+
+  function alterarAtivo(r) {
+    alterarResponsavel(r, { p_ativo: !r.ativo }, r.ativo ? 'perderá o acesso ao painel na hora' : 'voltará a acessar o painel');
+  }
+
+  // Detalhes de um responsável (clicar na linha): dados e as mesmas ações, em texto.
+  function abrirDetalheResponsavel(r) {
+    var fechar = null;
+    var acoes = [];
+    function acao(texto, fn, classe) {
+      return UI.el('button', { classe: 'btn ' + (classe || ''), type: 'button', texto: texto, onclick: function () { fechar(); fn(); } });
+    }
+    if (!r.eu) {
+      acoes.push(acao('Redefinir senha', function () { redefinirSenha(r); }));
+      acoes.push(acao(r.admin ? 'Tirar administrador' : 'Tornar administrador', function () { alterarAdmin(r); }));
+      acoes.push(acao(r.ativo ? 'Desativar acesso' : 'Reativar acesso', function () { alterarAtivo(r); }, r.ativo ? 'btn-perigo' : 'btn-ok'));
+    }
+    acoes.push(acao('Renomear', function () { renomearResponsavel(r); }));
+    fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-resp' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: r.nome }),
+      UI.el('p', { classe: 'muted', texto: r.email || '' }),
+      UI.el('p', { classe: 'ajuda', texto: (r.admin ? 'Administrador' : 'Responsável') + (r.ativo ? '' : ' · acesso desativado') +
+        ' · último acesso: ' + (r.ultimo_acesso ? C.hora(r.ultimo_acesso, false) : 'nunca entrou') }),
+      UI.el('div', { classe: 'modal-acoes' }, acoes.concat([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })])),
+    ]));
+  }
+
+  // Cadastro de responsável num modal (igual ao de nova operação). O modelo está no HTML (<template>).
+  function abrirCadastroResponsavel() {
+    var form = document.importNode($('tpl-form-resp').content, true).querySelector('form');
+    form.querySelector('#resp-senha').value = gerarSenha();
+    form.querySelector('#resp-gerar').addEventListener('click', function () { form.querySelector('#resp-senha').value = gerarSenha(); });
+    form.addEventListener('submit', cadastrarResponsavel);
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    est.fecharCadastroResp = fechar;
+    form.querySelector('#resp-cancelar').addEventListener('click', function () { fechar(); });
+    setTimeout(function () { form.querySelector('#resp-nome').focus(); }, 40);
   }
 
   async function cadastrarResponsavel(ev) {
@@ -6111,10 +6166,7 @@
         ? 'Painel: ' + painel.href + '\nE-mail: ' + email + '\nSenha: a mesma que essa pessoa já usava (o login já existia).'
         : 'Painel: ' + painel.href + '\nE-mail: ' + email + '\nSenha provisória: ' + senha + '\n\nTroque a senha em "Minha conta" no primeiro acesso.';
       $('resp-credenciais').hidden = false;
-      $('resp-nome').value = '';
-      $('resp-email').value = '';
-      $('resp-admin').checked = false;
-      $('resp-senha').value = gerarSenha();
+      if (est.fecharCadastroResp) { est.fecharCadastroResp(); est.fecharCadastroResp = null; }
       UI.aviso(nome + ' cadastrado.', 'ok');
       carregarResponsaveis();
     } catch (e) {

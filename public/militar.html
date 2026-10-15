@@ -92,8 +92,9 @@
       <button class="btn btn-barra btn-pequeno" type="button" data-acao="sair">Sair</button>
     </header>
     <div class="conteudo">
-      <form class="cartao secao" id="form-resp" novalidate>
-        <h2>Cadastrar responsável</h2>
+      <template id="tpl-form-resp">
+      <form class="form-resp" novalidate>
+        <h2 id="modal-titulo">Cadastrar responsável</h2>
         <div class="grade-resp">
           <div class="grupo">
             <label class="rotulo" for="resp-nome">Nome / posto e graduação</label>
@@ -112,10 +113,14 @@
           </div>
           <label class="linha-opcao"><input type="checkbox" id="resp-admin"> Também é administrador (pode cadastrar outros responsáveis)</label>
         </div>
-        <button class="btn btn-primario" type="submit" id="resp-cadastrar">CADASTRAR</button>
         <p class="erro-form" id="resp-erro" role="alert" hidden></p>
         <p class="ajuda">O login é criado na hora, sem e-mail de confirmação. Passe o endereço do painel, o e-mail e a senha provisória ao colega; ele pode trocar a senha em "Minha conta".</p>
+        <div class="modal-acoes">
+          <button class="btn" type="button" id="resp-cancelar">Cancelar</button>
+          <button class="btn btn-primario" type="submit" id="resp-cadastrar">CADASTRAR</button>
+        </div>
       </form>
+      </template>
 
       <div class="cartao secao credenciais" id="resp-credenciais" hidden>
         <h2>Acesso criado</h2>
@@ -128,7 +133,11 @@
       </div>
 
       <div class="cartao secao">
-        <h2>Responsáveis cadastrados</h2>
+        <div class="ops-topo">
+          <h2>Responsáveis cadastrados</h2>
+          <!-- o cadastro abre num modal (militar.js: abrirCadastroResponsavel) -->
+          <button class="btn btn-primario" type="button" id="btn-novo-resp">+ Cadastrar responsável</button>
+        </div>
         <ul class="lista-resp" id="lista-resp"></ul>
       </div>
     </div>

@@ -500,3 +500,25 @@ html[data-tema="claro"] .barra-topo small,
 html[data-tema="claro"] .painel-topo .titulo-op span { color: #9ca3af; }
 html[data-tema="claro"] .painel-topo .titulo-op strong { color: #ffffff; }
 html[data-tema="claro"] .pilula-conexao { color: #e5e7eb; border-color: #4b5563; }
+
+/* Listas de operações e responsáveis: ações da linha em ícone; a linha inteira é clicável */
+.btn.btn-icone { width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; font-size: 1.05rem; line-height: 1; }
+.btn.btn-icone.btn-perigo { color: #fca5a5; }
+html[data-tema="claro"] .btn.btn-icone.btn-perigo { color: #b91c1c; }
+.btn.btn-icone.btn-ok { color: #86efac; }
+html[data-tema="claro"] .btn.btn-icone.btn-ok { color: #15803d; }
+.lista-ops li.clicavel, .lista-resp li.clicavel { cursor: pointer; border-radius: 4px; }
+.lista-ops li.clicavel:hover, .lista-resp li.clicavel:hover { background: var(--superficie-2); }
+.lista-ops li.clicavel:focus-visible, .lista-resp li.clicavel:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.op-acoes { flex-wrap: nowrap; }
+@media (max-width: 599px) {
+  .op-acoes { flex-wrap: wrap; }
+}
+@media (pointer: coarse) {
+  .btn.btn-icone { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+}
+/* modais novos: cadastro de responsável e detalhes do responsável */
+.modal:has(.form-resp) { width: min(640px, 100%); }
+.modal:has(.detalhe-resp) { width: min(480px, 100%); }
+.detalhe-resp .muted, .detalhe-resp .ajuda { margin: 0 0 6px; }
+.op-acoes .btn.btn-icone { flex: 0 0 auto; }

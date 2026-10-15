@@ -416,19 +416,20 @@ body.gaveta.info-ponto-aberto #mapa .leaflet-bottom { visibility: hidden; }
  * ===================================================================== */
 html[data-tema="claro"] {
   color-scheme: light;
-  --fundo: #eef2f5;
-  --superficie: #ffffff;
-  --superficie-2: #f3f6f8;
-  --superficie-3: #e3e9ef;
-  --texto: #111827;
-  --texto-2: #374151;
-  --texto-3: #5b6672;
-  --borda: #d5dde5;
-  --borda-forte: #9aa7b4;
-  --vidro: rgba(255, 255, 255, .96);
-  --barra: #ffffff;
-  --barra-texto: #111827;
-  --sombra: 0 1px 2px rgba(15, 23, 42, .12), 0 6px 18px rgba(15, 23, 42, .12);
+  /* fundo azulado; cartões em tom mais claro; campos e botões em tom intermediário: há hierarquia visível */
+  --fundo: #d7e0ea;
+  --superficie: #f7f9fc;
+  --superficie-2: #e6ecf3;
+  --superficie-3: #cfd9e5;
+  --texto: #0f172a;
+  --texto-2: #293748;
+  --texto-3: #536173;
+  --borda: #bcc7d4;
+  --borda-forte: #7d8ca0;
+  --vidro: rgba(247, 249, 252, .97);
+  --barra: #e3eaf2;
+  --barra-texto: #0f172a;
+  --sombra: 0 1px 2px rgba(15, 23, 42, .16), 0 8px 22px rgba(15, 23, 42, .12);
   --militar-texto: #b91c1c;
   --civil-texto: #15803d;
   --ok-texto: #166534;
@@ -446,9 +447,9 @@ html[data-tema="claro"] body {
     linear-gradient(90deg, rgba(15, 23, 42, .035) 1px, transparent 1px);
 }
 /* campos, mapa e controles sobre o mapa */
-html[data-tema="claro"] .campo { background: #ffffff; color: var(--texto); }
+html[data-tema="claro"] .campo { background: var(--superficie); color: var(--texto); border-color: var(--borda-forte); }
 html[data-tema="claro"] .campo::placeholder { color: #8a95a1; }
-html[data-tema="claro"] .marca-opcao { background: #ffffff; }
+html[data-tema="claro"] .marca-opcao { background: var(--superficie-2); }
 html[data-tema="claro"] #mapa,
 html[data-tema="claro"] .leaflet-container,
 html[data-tema="claro"] .visao-3d-mapa { background: #dfe6ec; }
@@ -462,7 +463,7 @@ html[data-tema="claro"] .btn-reabrir,
 html[data-tema="claro"] .faixa-alerta-ciente { background: var(--vidro); color: var(--texto); }
 html[data-tema="claro"] .legenda-det[open] > summary,
 html[data-tema="claro"] .camadas-botao[aria-expanded="true"] { color: #92400e; border-color: #d97706; }
-html[data-tema="claro"] .camadas-painel { background: #ffffff; color: var(--texto); }
+html[data-tema="claro"] .camadas-painel { background: var(--superficie); color: var(--texto); }
 html[data-tema="claro"] .camadas-cabeca { background: var(--superficie-2); }
 /* seletores segmentados e chaves das camadas */
 html[data-tema="claro"] .seg { background: #e9eef3; }
@@ -475,8 +476,9 @@ html[data-tema="claro"] .camada-item[aria-pressed="true"] { color: var(--texto);
 html[data-tema="claro"] .camadas-nota.aviso-3d,
 html[data-tema="claro"] .nota { color: #92400e; }
 /* botões: o "escuro" vira o botão de ação forte; o padrão fica claro */
-html[data-tema="claro"] .btn { background: var(--superficie); color: var(--texto); border-color: #b8c3ce; }
-html[data-tema="claro"] .btn:hover { background: #e3e9ef; border-color: #7d8a97; }
+html[data-tema="claro"] .btn { background: var(--superficie-2); color: var(--texto); border-color: var(--borda-forte); }
+html[data-tema="claro"] .btn:hover { background: var(--superficie-3); border-color: var(--texto-3); }
+html[data-tema="claro"] .barra-topo { box-shadow: 0 2px 6px rgba(15, 23, 42, .12); }
 html[data-tema="claro"] .btn-escuro,
 html[data-tema="claro"] .acao-foto { background: #1f2933; border-color: #1f2933; color: #ffffff; }
 html[data-tema="claro"] .btn-escuro:hover { background: #374151; border-color: #374151; }
@@ -486,9 +488,9 @@ html[data-tema="claro"] .btn.btn-ativo:hover { background: #d97706; border-color
 html[data-tema="claro"] .modal-fundo { background: rgba(15, 23, 42, .45); }
 html[data-tema="claro"] .aviso-erro { background: #fee2e2; border-color: #fca5a5; color: #7f1d1d; }
 html[data-tema="claro"] .aviso-ok { background: #dcfce7; border-color: #86efac; color: #14532d; }
-html[data-tema="claro"] .aviso { background: #ffffff; color: var(--texto); }
+html[data-tema="claro"] .aviso { background: var(--superficie); color: var(--texto); }
 /* menu Ferramentas: a faixa de Configurações (tema) */
-html[data-tema="claro"] .menu-ferramentas { background: #ffffff; }
+html[data-tema="claro"] .menu-ferramentas { background: var(--superficie); }
 .menu-tema { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 14px 8px; }
 .menu-tema-rotulo { font-family: var(--fonte-titulo); font-weight: 600; font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--texto-3); }
 .menu-tema .seg { flex: 1 1 200px; max-width: 260px; }

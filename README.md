@@ -123,11 +123,19 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 - **Quem pode registrar**: participantes (civis e militares, pelo link) e responsáveis (**Ferramentas →
   Registrar foto**). Dá para **tirar a foto** com a câmera ou **escolher da galeria/arquivo**.
 - **Prévia antes de salvar**: a pessoa vê a foto, o local e pode escrever uma descrição; **Salvar** ou **Cancelar**.
+- **Registrado no banco (tabela `fotos`)**, não só no arquivo: horário da captura no aparelho, latitude,
+  longitude, precisão, horário da posição, operação, **setor** (calculado pelo banco pela posição; o nome
+  fica guardado mesmo se o setor for apagado) e quem tirou. Metadados visíveis só para os responsáveis da
+  operação e para o próprio autor (RLS).
 - **Localização**: foto da câmera usa o GPS do momento do registro; foto da galeria permite escolher entre
-  o local gravado na própria foto (EXIF), a posição atual ou **sem localização**. Sem GPS, ou com
-  precisão pior que ±500 m (localização aproximada pela rede), a foto é salva **sem coordenadas** e a
-  pessoa é avisada — **o sistema nunca inventa coordenadas**. Fotos sem localização aparecem na galeria,
-  não no mapa.
+  o local gravado na própria foto (EXIF), a posição atual ou **sem localização**. Com precisão pior que
+  ±500 m (localização aproximada pela rede) a leitura não é usada — **o sistema nunca inventa coordenadas**.
+- **Sem GPS na hora da foto da câmera**: a foto é registrada mesmo assim, com o local **pendente**. O
+  aparelho continua esperando o GPS e completa o local com a primeira leitura útil de até **10 min depois da
+  captura** (se a foto ainda estiver na fila, já sai com o local; se já foi enviada, o local é atualizado no
+  servidor). O servidor também completa pela **trilha GPS** da pessoa (ponto até 2 min antes ou depois da
+  foto), inclusive quando a trilha chega depois. Sem nenhuma leitura no prazo, fica "sem localização". O
+  marcador aparece no mapa do painel na hora em que o local é completado (tempo real).
 - **Horários**: guarda o horário da captura (câmera ou EXIF) e o horário em que chegou ao sistema; quando
   a foto foi enviada bem depois (falta de internet), o painel mostra a diferença.
 - **Conexões ruins**: a imagem é reduzida no aparelho (máx. 1600 px, JPEG — em geral 200–600 KB). No
@@ -137,8 +145,9 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 - **No mapa**: ícone de **câmera** (violeta) no local de cada foto. Fotos e relatos próximos se agrupam
   num círculo com o número; ao aproximar eles se separam, e vários no mesmo ponto se abrem em leque.
   Os participantes ficam sempre por cima.
-- **Janela da foto**: imagem, autor (e se é civil, militar ou responsável), data/hora da captura e do
-  recebimento, latitude, longitude, precisão, origem da posição e descrição; **Ampliar** (tela cheia;
+- **Janela da foto** (ao tocar na câmera do mapa): **data e hora da captura e o setor em destaque**, imagem,
+  autor (e se é civil, militar ou responsável), horário do recebimento, latitude, longitude, precisão,
+  origem da posição (GPS, EXIF, trilha GPS ou pendente), quando o local foi completado e descrição; **Ampliar** (tela cheia;
   tocar na imagem mostra o tamanho real), **Anterior/Próxima**, **Ver no mapa** e **Ficha** do autor.
   Também há a aba **Fotos** na central (galeria) e a seção **Fotos** na ficha de cada participante.
 - A foto é **um registro de uma posição**: não entra no histórico nem altera a trilha.
@@ -641,7 +650,8 @@ rastreamento-sar/
 │       ├── 010_missoes_alertas.sql            destino para grupos, alertas e controle de retorno
 │       ├── 011_vitima_localizada.sql          "Encontrei a vítima" (condição só para responsáveis)
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
-│       └── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
+│       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
+│       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
 ├── testes/
 │   ├── filtro_gps.test.js      teste do filtro de GPS e do desenho das falhas (node, sem dependências)
 │   ├── coords.test.js          teste das conversões de coordenadas (UTM, MGRS, GMS, rumo, sol)
@@ -715,12 +725,15 @@ rastreamento-sar/
    - **013** (`013_permanencia_setor.sql`): `operacoes.permanencia_limite_min` (padrão 60), `setor_permanencias`
      (RLS: só responsáveis; Realtime), `configurar_permanencia`, alerta `permanencia_setor`; o gancho
      `apos_posicoes` passa a chamar os deslocamentos (`apos_posicoes_missoes`) e a permanência.
+   - **014** (`014_fotos_localizacao.sql`): `fotos.setor_id`/`setor_nome` (calculado por gatilho),
+     `local_atualizado_em`, origens `pendente` e `trilha`, `registrar_foto` aceita local pendente,
+     `atualizar_local_foto`, e o gancho `apos_posicoes` completa fotos pendentes pela trilha.
    - **Alerta de retorno atrasado sem painel aberto**: ative **Database → Extensions → pg_cron** e rode a
      migração 010 (ou o `schema.sql`) de novo — ela agenda `select public.verificar_retornos()` a cada minuto
      (job `gbs-verificar-retornos`). Sem `pg_cron`, o alerta só é verificado com algum painel aberto.
    O painel e a página do participante funcionam com o banco ainda sem essas migrações (as funções novas
    ficam indisponíveis, com aviso).
-   O `schema.sql` completo já inclui da 003 à 013 (seções 10 a 20).
+   O `schema.sql` completo já inclui da 003 à 014 (seções 10 a 21).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

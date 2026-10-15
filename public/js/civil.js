@@ -18,6 +18,8 @@
   var CHAVE_CONF = 'sar-civil-confirmacoes';
   var CHAVE_MSGS = 'gbs-civil-mensagens-pendentes';
   var CHAVE_VISTO = 'gbs-civil-conversa-vista';
+  // Fotos com local pendente: [{ id (client_id), capturada, fix: {lat,lng,prec,t} | 'nenhuma' | null }]
+  var CHAVE_FOTOS_PEND = 'gbs-civil-fotos-local-pendente';
   var EQUIPE_ATUAL_S = 120;          // posição de bombeiro com até 2 min = atual
 
   // Coleta x envio: o GPS é lido continuamente (watchPosition, eventos reais do
@@ -200,6 +202,7 @@
       C.local.apagar(CHAVE_FILA);
       C.local.apagar(CHAVE_CONF);
       C.local.apagar(CHAVE_MSGS);
+      C.local.apagar(CHAVE_FOTOS_PEND);
     }
 
     $('form-inicio').addEventListener('submit', aoIniciar);
@@ -570,7 +573,7 @@
     if (!estado.timerEquipe) {
       estado.timerEquipe = setInterval(function () { carregarEquipe(); carregarDestino(); carregarMeusGrupos(); }, CFG.destinoMs);
     }
-    carregarFilaFotos().then(processarFilaFotos);
+    carregarFilaFotos().then(function () { retomarLocaisPendentes(); processarFilaFotos(); });
     carregarMinhasFotos();
     renderizarHistorico();
     if (!estado.timerUI) estado.timerUI = setInterval(tique, 2000);
@@ -1963,10 +1966,88 @@
           estado: 'fila',
         });
         await guardarFotoLocal(item);
+        if (item.origem === 'pendente') {
+          lerPendencias().push({ id: item.id, capturada: item.capturada, fix: null });
+          gravarPendencias();
+          aguardarLocalFoto(item.id, item.capturada);
+        }
         renderizarFotos();
         processarFilaFotos();
       },
     });
+  }
+
+  /* ---------- Local pendente das fotos (GPS respondeu depois) ----------- */
+  var pendencias = null;
+  function lerPendencias() {
+    if (!pendencias) {
+      var v = C.local.ler(CHAVE_FOTOS_PEND, null);
+      pendencias = v && estado.part && v.participante_id === estado.part.participante_id && Array.isArray(v.itens) ? v.itens : [];
+    }
+    return pendencias;
+  }
+  function gravarPendencias() {
+    if (!estado.part) return;
+    C.local.gravar(CHAVE_FOTOS_PEND, { participante_id: estado.part.participante_id, itens: lerPendencias() });
+  }
+  function aguardarLocalFoto(id, capturada) {
+    window.Fotos.aguardarLocal(capturada, function (pos) { aplicarLocalPendente(id, pos); });
+  }
+  // O GPS respondeu (pos) ou o prazo acabou (null)
+  async function aplicarLocalPendente(id, pos) {
+    var pend = lerPendencias().find(function (x) { return x.id === id; });
+    if (!pend) return;
+    var it = estado.fotosLocais.get(id);
+    if (it && it.estado !== 'enviando') {
+      // ainda no aparelho: a foto já sai com o local
+      if (pos) Object.assign(it, { origem: 'gps', lat: pos.lat, lng: pos.lng, prec: pos.prec, posicao_em: pos.t });
+      else it.origem = 'nenhuma';
+      await guardarFotoLocal(it);
+      pendencias = lerPendencias().filter(function (x) { return x.id !== id; });
+      gravarPendencias();
+      renderizarFotos();
+      return;
+    }
+    pend.fix = pos || 'nenhuma';
+    gravarPendencias();
+    enviarLocaisPendentes();
+  }
+  // Fotos já registradas no servidor: envia o local que chegou depois
+  async function enviarLocaisPendentes() {
+    if (!estado.part || estado.enviandoLocais) return;
+    estado.enviandoLocais = true;
+    try {
+      var lista = lerPendencias().filter(function (x) { return x.fix && !estado.fotosLocais.has(x.id); });
+      for (var i = 0; i < lista.length; i++) {
+        var x = lista[i];
+        try {
+          var f = await window.Fotos.atualizarLocal(estado.part.participante_id, x.id, x.fix === 'nenhuma' ? null : x.fix);
+          pendencias = lerPendencias().filter(function (y) { return y.id !== x.id; });
+          gravarPendencias();
+          if (f && f.id) estado.minhasFotos = estado.minhasFotos.map(function (m) { return m.id === f.id ? f : m; });
+        } catch (e) {
+          if (e.rede) break;   // tenta de novo quando a conexão voltar
+          if (e.codigo !== 'foto_nao_encontrada') {   // a foto ainda não chegou: espera; outro erro: desiste deste local
+            pendencias = lerPendencias().filter(function (y) { return y.id !== x.id; });
+            gravarPendencias();
+          }
+        }
+      }
+    } finally {
+      estado.enviandoLocais = false;
+      renderizarFotos();
+    }
+  }
+  // Ao abrir a página: volta a esperar o GPS das fotos ainda no prazo
+  function retomarLocaisPendentes() {
+    pendencias = null;
+    var agora = Date.now();
+    lerPendencias().forEach(function (x) {
+      if (x.fix) return;
+      if (x.capturada + window.Fotos.PENDENTE_DEPOIS_MS > agora) aguardarLocalFoto(x.id, x.capturada);
+      else aplicarLocalPendente(x.id, null);
+    });
+    enviarLocaisPendentes();
   }
 
   async function processarFilaFotos() {
@@ -1985,6 +2066,7 @@
           await enviarFoto(it);
           await apagarFotoLocal(it.id);
           UI.aviso('Foto enviada aos bombeiros.', 'ok');
+          enviarLocaisPendentes();
         } catch (e) {
           if (tratarErroFatal(e)) return;
           it.estado = e.rede ? 'fila' : 'erro';
@@ -2036,7 +2118,7 @@
       if (!it.urlPrevia) it.urlPrevia = URL.createObjectURL(it.blob);
       var li = UI.el('li', { classe: 'foto-item ' + (it.estado === 'erro' ? 'erro' : 'fila') }, [
         UI.el('img', { src: it.urlPrevia, alt: it.legenda || 'Foto' }),
-        UI.el('span', { classe: 'foto-selo', texto: it.estado === 'enviando' ? 'Enviando…' : it.estado === 'erro' ? 'Não enviada' : 'Esperando internet' }),
+        UI.el('span', { classe: 'foto-selo', texto: (it.estado === 'enviando' ? 'Enviando…' : it.estado === 'erro' ? 'Não enviada' : 'Esperando internet') + (it.origem === 'pendente' ? ' · 📍 localizando' : '') }),
       ]);
       if (it.estado === 'erro' || it.estado === 'fila') {
         li.appendChild(UI.el('div', { classe: 'foto-acoes' }, [
@@ -2050,7 +2132,7 @@
       var u = estado.urlsFotos.get(f.caminho);
       ul.appendChild(UI.el('li', { classe: 'foto-item enviada' }, [
         u ? UI.el('img', { src: u.url, alt: f.legenda || 'Foto enviada' }) : UI.el('div', { classe: 'foto-sem-previa', texto: 'Foto' }),
-        UI.el('span', { classe: 'foto-selo ok', texto: '✓ Enviada' }),
+        UI.el('span', { classe: 'foto-selo ok', texto: '✓ Enviada' + (f.origem_posicao === 'pendente' ? ' · 📍 localizando' : '') }),
       ]));
     });
     $('fotos-civil').hidden = !ul.children.length;
@@ -2281,6 +2363,8 @@
     C.local.apagar(CHAVE_CONF);
     C.local.apagar(CHAVE_MSGS);
     C.local.apagar(CHAVE_VISTO);
+    C.local.apagar(CHAVE_FOTOS_PEND);
+    pendencias = null;
     var naFila = estado.fotosLocais.size;
     estado.fotosLocais.forEach(function (it, id) { apagarFotoLocal(id); });
     if (naFila) UI.aviso(naFila + ' foto(s) que ainda não tinham sido enviadas foram descartadas.', 'erro', 8000);

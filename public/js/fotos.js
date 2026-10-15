@@ -5,7 +5,9 @@
  *   - redução da imagem (máx. 1600 px, JPEG) para enviar em conexão ruim
  *   - prévia com confirmação/cancelamento antes de salvar
  *   - envio ao Storage privado e registro no banco
- * Nunca inventa coordenadas: sem GPS, a foto é salva "sem localização".
+ * Nunca inventa coordenadas. Foto da câmera sem GPS no momento: é salva com o
+ * local PENDENTE e completada quando o GPS responder (até 10 min depois da
+ * captura); o servidor também completa pela trilha GPS da pessoa.
  * ===================================================================== */
 (function () {
   'use strict';
@@ -18,6 +20,9 @@
   // Acima desta incerteza a posição não serve para marcar a foto no mapa
   // (ex.: localização aproximada pela rede, sem GPS): a foto vai sem localização.
   var PRECISAO_MAXIMA_M = 500;
+  // Local pendente: aceita leitura do GPS de até 2 min antes a 10 min depois da captura
+  var PENDENTE_ANTES_MS = 2 * 60000;
+  var PENDENTE_DEPOIS_MS = 10 * 60000;
 
   function posicaoUtil(p) {
     if (!p || !p.ok) return p || { ok: false, motivo: 'GPS indisponível' };
@@ -188,11 +193,12 @@
         infoLocal.appendChild(UI.el('p', { classe: 'ok-txt', texto: 'Localização do GPS: ' + C.coord(p.lat) + ', ' + C.coord(p.lng) + ' (' + C.precisao(p.prec) + idade + ')' }));
         if (p.prec > 100) infoLocal.appendChild(UI.el('p', { classe: 'nota', texto: 'Precisão baixa (' + C.precisao(p.prec) + '). Se possível, vá a um local aberto e tire a foto de novo.' }));
       } else {
-        origem = 'nenhuma';
+        // a foto vai mesmo assim; o local é completado quando o GPS responder
+        origem = 'pendente';
         posEscolhida = null;
         infoLocal.appendChild(UI.el('p', { classe: 'nota', texto: simples
-          ? 'Sem sinal de GPS agora: a foto vai sem o local.'
-          : 'Não foi possível obter a localização (' + ((p && p.motivo) || 'GPS indisponível') + '). A foto será salva SEM localização e não aparecerá no mapa.' }));
+          ? 'Sem sinal de GPS agora: a foto vai assim mesmo e o local é completado quando o GPS responder.'
+          : 'Sem localização agora (' + ((p && p.motivo) || 'GPS indisponível') + '). A foto será salva com o local PENDENTE, completado quando o GPS responder (até 10 min depois da captura).' }));
         infoLocal.appendChild(UI.el('button', {
           classe: 'btn btn-pequeno', type: 'button', texto: 'Tentar localizar de novo',
           onclick: async function () { this.disabled = true; mostrarLocalCamera(await opcoes.obterPosicao()); },
@@ -260,7 +266,7 @@
       }
       var dados = {
         blob: f.blob,
-        origem: posEscolhida ? origem : 'nenhuma',
+        origem: posEscolhida ? origem : (f.daCamera && f.capturada ? 'pendente' : 'nenhuma'),
         lat: posEscolhida ? Math.round(posEscolhida.lat * 1e7) / 1e7 : null,
         lng: posEscolhida ? Math.round(posEscolhida.lng * 1e7) / 1e7 : null,
         prec: posEscolhida && posEscolhida.prec != null ? Math.round(posEscolhida.prec * 10) / 10 : null,
@@ -304,8 +310,18 @@
         throw err;
       }
     }
+    try {
+      return await registrar(it, it.origem);
+    } catch (e) {
+      // banco ainda sem a migração 014 (não conhece "pendente"): registra sem localização, como antes
+      if (it.origem === 'pendente' && e.codigo === 'foto_invalida') return registrar(it, 'nenhuma');
+      throw e;
+    }
+  }
+
+  function registrar(it, origem) {
     return C.rpc('registrar_foto', {
-      p_participante: it.participante_id, p_client_id: it.id, p_origem: it.origem,
+      p_participante: it.participante_id, p_client_id: it.id, p_origem: origem,
       p_lat: it.lat, p_lng: it.lng, p_precisao: it.prec,
       p_posicao_em: it.posicao_em ? new Date(it.posicao_em).toISOString() : null,
       p_capturada_em: it.capturada ? new Date(it.capturada).toISOString() : null,
@@ -330,7 +346,46 @@
   function guardarUrlLocal(caminho, url) { cacheUrls.set(caminho, { url: url, exp: Infinity }); }
   function urlEmCache(caminho) { var x = cacheUrls.get(caminho); return x && x.exp > Date.now() + 60000 ? x.url : null; }
 
+  // Espera o GPS responder para completar o local de uma foto pendente.
+  // aoObter({lat, lng, prec, t}) com a 1ª leitura útil, ou aoObter(null) se o prazo acabar.
+  // Devolve uma função que cancela a espera.
+  function aguardarLocal(capturada, aoObter) {
+    var fim = capturada + PENDENTE_DEPOIS_MS;
+    var acabou = false, watch = null, timer = null;
+    function terminar(pos) {
+      if (acabou) return;
+      acabou = true;
+      if (watch != null) { try { navigator.geolocation.clearWatch(watch); } catch (e) { /* ignora */ } }
+      clearTimeout(timer);
+      aoObter(pos);
+    }
+    if (!('geolocation' in navigator) || Date.now() >= fim) { setTimeout(function () { terminar(null); }, 0); return function () { acabou = true; }; }
+    timer = setTimeout(function () { terminar(null); }, fim - Date.now());
+    try {
+      watch = navigator.geolocation.watchPosition(function (p) {
+        var t = p.timestamp && Math.abs(p.timestamp - Date.now()) < 864e5 ? p.timestamp : Date.now();
+        if (p.coords.accuracy != null && p.coords.accuracy > PRECISAO_MAXIMA_M) return;   // ainda impreciso: espera outra leitura
+        if (t < capturada - PENDENTE_ANTES_MS || t > fim) return;
+        terminar({ lat: Math.round(p.coords.latitude * 1e7) / 1e7, lng: Math.round(p.coords.longitude * 1e7) / 1e7,
+          prec: p.coords.accuracy == null ? null : Math.round(p.coords.accuracy * 10) / 10, t: t });
+      }, function () { /* sem sinal ainda: continua esperando até o prazo */ }, { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 });
+    } catch (e) { /* sem GPS: o prazo encerra */ }
+    return function () { acabou = true; if (watch != null) { try { navigator.geolocation.clearWatch(watch); } catch (e) { /* ignora */ } } clearTimeout(timer); };
+  }
+
+  // Envia ao servidor o local que o GPS deu depois (pos nulo = desistiu: fica "sem localização").
+  function atualizarLocal(participante, clientId, pos) {
+    return C.rpc('atualizar_local_foto', {
+      p_participante: participante, p_client_id: clientId,
+      p_lat: pos ? pos.lat : null, p_lng: pos ? pos.lng : null, p_precisao: pos ? pos.prec : null,
+      p_posicao_em: pos && pos.t ? new Date(pos.t).toISOString() : null,
+    }, 20000);
+  }
+
   window.Fotos = {
+    aguardarLocal: aguardarLocal,
+    atualizarLocal: atualizarLocal,
+    PENDENTE_DEPOIS_MS: PENDENTE_DEPOIS_MS,
     lerExif: lerExif,
     prepararImagem: prepararImagem,
     lerArquivo: lerArquivo,

@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–013) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–014) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -333,6 +333,67 @@ console.log('Tempo de permanência em setor');
   await rpc(resp1, 'encerrar_operacao', { p_operacao: opP.id });
 }
 
+console.log('Fotos: setor, localização pendente e atualização pelo GPS');
+{
+  const opF = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP FOTOS', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre', acionado_em: new Date(Date.now() - 3 * 3600e3).toISOString() }) });
+  await db.query(`update public.operacoes set criada_em = now() - interval '2 hours' where id = $1`, [opF.id]);
+  const setF = await rpc(resp1, 'salvar_setor', { p_operacao: opF.id, p_id: null, p_dados: JSON.stringify({ nome: 'Margem', forma: 'circulo', centro_lat: -23.6, centro_lng: -46.7, raio_m: 400 }) });
+  const [uF, uF2] = [await usuario(null, true), await usuario(null, true)];
+  const pF = await rpc(uF, 'ingressar', { p_token: opF.token_civil, p_nome: 'Fotógrafa', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const pF2 = await rpc(uF2, 'ingressar', { p_token: opF.token_civil, p_nome: 'Outro', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  let k = 900;
+  async function foto(u, part, origem, extra) {
+    const cid = uid(k++);
+    await como(u, `insert into storage.objects (bucket_id, name) values ('fotos', $1)`, [opF.id + '/' + part + '/' + cid + '.jpg']);
+    const f = await rpc(u, 'registrar_foto', Object.assign({ p_participante: part, p_client_id: cid, p_origem: origem, p_lat: null, p_lng: null, p_precisao: null,
+      p_posicao_em: null, p_capturada_em: new Date().toISOString(), p_legenda: '', p_bytes: 1000, p_largura: 800, p_altura: 600 }, extra || {}));
+    return { f, cid };
+  }
+  // com GPS no momento: dados completos e setor calculado
+  const agora = Date.now();
+  const a = await foto(uF, pF.participante_id, 'gps', { p_lat: -23.601, p_lng: -46.7005, p_precisao: 6, p_posicao_em: new Date(agora - 2000).toISOString(), p_capturada_em: new Date(agora).toISOString() });
+  chk(a.f.origem_posicao === 'gps' && a.f.setor_id === setF.id && a.f.setor_nome === 'Margem' && a.f.capturada_em && a.f.precisao === 6 && a.f.autor_nome === 'Fotógrafa',
+    'foto com GPS: horário do aparelho, coordenadas, precisão, operação, setor e autor gravados na tabela', a.f);
+  // sem GPS: fica pendente; o celular completa quando o GPS responder
+  const capt = Date.now() - 60e3;
+  const b = await foto(uF, pF.participante_id, 'pendente', { p_capturada_em: new Date(capt).toISOString() });
+  chk(b.f.origem_posicao === 'pendente' && b.f.lat === null && b.f.setor_id === null, 'sem GPS: foto registrada mesmo assim, com localização pendente', b.f);
+  chk(/local_fora_do_prazo/.test(await erroDe(rpc(uF, 'atualizar_local_foto', { p_participante: pF.participante_id, p_client_id: b.cid,
+    p_lat: -23.6, p_lng: -46.7, p_precisao: 10, p_posicao_em: new Date(capt + 15 * 60e3).toISOString() }))), 'leitura do GPS muito depois da captura (15 min): recusada');
+  chk(/foto_nao_encontrada|participante_invalido/.test(await erroDe(rpc(uF2, 'atualizar_local_foto', { p_participante: pF2.participante_id, p_client_id: b.cid,
+    p_lat: -23.6, p_lng: -46.7, p_precisao: 10, p_posicao_em: new Date(capt + 60e3).toISOString() }))), 'outra pessoa não altera o local da foto');
+  const b2 = await rpc(uF, 'atualizar_local_foto', { p_participante: pF.participante_id, p_client_id: b.cid,
+    p_lat: -23.6002, p_lng: -46.7001, p_precisao: 12, p_posicao_em: new Date(capt + 3 * 60e3).toISOString() });
+  chk(b2.origem_posicao === 'gps' && b2.lat === -23.6002 && b2.setor_nome === 'Margem' && b2.local_atualizado_em, 'GPS respondeu 3 min depois: local completado e setor calculado', b2);
+  const b3 = await rpc(uF, 'atualizar_local_foto', { p_participante: pF.participante_id, p_client_id: b.cid, p_lat: -23.7, p_lng: -46.8, p_precisao: 5, p_posicao_em: new Date(capt + 4 * 60e3).toISOString() });
+  chk(b3.lat === -23.6002, 'local já completado não é trocado por um envio repetido');
+  // pendente, mas a trilha GPS tem um ponto do momento da foto: completa sozinha
+  const capt2 = Date.now() - 90e3;
+  await rpc(uF, 'enviar_posicoes_lote', { p_participante: pF.participante_id, p_gps: 'ok', p_pontos: JSON.stringify([pt(k++, -23.6011, -46.7002, capt2 - 40e3)]) });
+  const c = await foto(uF, pF.participante_id, 'pendente', { p_capturada_em: new Date(capt2).toISOString() });
+  chk(c.f.origem_posicao === 'trilha' && c.f.lat === -23.6011 && c.f.setor_nome === 'Margem', 'pendente com ponto da trilha 40 s antes: completada pela trilha GPS na hora', c.f);
+  // pendente, e a trilha chega depois (celular estava sem internet): completa quando os pontos chegam
+  const capt3 = Date.now() - 10 * 60e3;   // longe dos pontos anteriores da trilha
+  const d = await foto(uF, pF.participante_id, 'pendente', { p_capturada_em: new Date(capt3).toISOString() });
+  chk(d.f.origem_posicao === 'pendente', 'pendente sem ponto na trilha: continua pendente');
+  await rpc(uF, 'enviar_posicoes_lote', { p_participante: pF.participante_id, p_gps: 'ok', p_pontos: JSON.stringify([pt(k++, -23.59, -46.69, capt3 + 50e3)]) });
+  const d2 = (await db.query(`select origem_posicao, lat, setor_id from public.fotos where client_id = $1`, [d.cid])).rows[0];
+  chk(d2.origem_posicao === 'trilha' && d2.lat === -23.59 && d2.setor_id === null, 'pontos da trilha chegaram depois: foto pendente completada (fora de setor = sem setor)', d2);
+  // desistiu: sem GPS até o fim do prazo
+  const e = await foto(uF, pF.participante_id, 'pendente', { p_capturada_em: new Date(Date.now() - 20 * 60e3).toISOString() });
+  const e2 = await rpc(uF, 'atualizar_local_foto', { p_participante: pF.participante_id, p_client_id: e.cid });
+  chk(e.f.origem_posicao === 'pendente' && e2.origem_posicao === 'nenhuma', 'GPS não respondeu no prazo: fica "sem localização"');
+  // setor criado depois e fotos antigas
+  chk(/posicao_invalida/.test(await erroDe(foto(uF, pF.participante_id, 'pendente', { p_lat: -23.6, p_lng: -46.7 }))), 'pendente com coordenadas: recusado');
+  // RLS: metadados só para quem tem acesso à operação
+  chk((await como(resp1, `select count(*)::int n from public.fotos where operacao_id = $1`, [opF.id])).rows[0].n === 5, 'responsável da operação lê os metadados das fotos');
+  chk((await como(resp2, `select count(*)::int n from public.fotos where operacao_id = $1`, [opF.id])).rows[0].n === 0, 'responsável de outra operação não lê');
+  chk((await como(uF2, `select count(*)::int n from public.fotos where operacao_id = $1`, [opF.id])).rows[0].n === 0, 'outro participante não lê as fotos de quem tirou');
+  chk((await como(uF, `select count(*)::int n from public.fotos where operacao_id = $1`, [opF.id])).rows[0].n === 5, 'quem tirou vê as próprias fotos');
+  chk(/permission denied|row-level/.test(await erroDe(como(uF, `update public.fotos set lat = 1 where operacao_id = $1`, [opF.id]).then((r) => { if (!r.affectedRows) throw new Error('row-level: nada alterado'); }))), 'ninguém altera a tabela direto pelo navegador');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opF.id });
+}
+
 console.log('Diário da operação');
 const tipos = async () => (await como(resp1, `select tipo from public.diario where operacao_id = $1`, [op.id])).rows.map((r) => r.tipo);
 let td = await tipos();
@@ -408,5 +469,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–013 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–014 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

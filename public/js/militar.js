@@ -62,7 +62,10 @@
   // Condição da vítima localizada. Vem só da tabela vitima_localizacoes, que o
   // servidor (RLS) entrega apenas aos responsáveis da operação.
   var CONDICAO_VITIMA = { viva: 'VIVA', obito: 'MORTA' };
-  var ORIGEM_FOTO = { gps: 'GPS do aparelho no momento do registro', exif: 'gravada na própria foto (EXIF)', nenhuma: 'sem localização' };
+  var ORIGEM_FOTO = {
+    gps: 'GPS do aparelho', exif: 'gravada na própria foto (EXIF)', nenhuma: 'sem localização',
+    pendente: 'pendente (aguardando o GPS do aparelho)', trilha: 'trilha GPS da pessoa (ponto mais próximo do momento da foto)',
+  };
 
   var est = {
     usuario: null,
@@ -1417,7 +1420,8 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mensagens', filter: filtro }, function (ev) {
         if (ev.new && ev.new.id) receberMensagem(ev.new, false);
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'fotos', filter: filtro }, function (ev) {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fotos', filter: filtro }, function (ev) {
+        if (ev.eventType === 'DELETE') { if (ev.old && ev.old.id) removerFoto(ev.old.id); return; }
         if (ev.new && ev.new.id) adicionarFoto(ev.new, false);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'setores', filter: filtro }, agendarAreas)
@@ -3239,16 +3243,21 @@
     return L.divIcon({ className: 'mk-foto-wrap', html: '<div class="mk-foto"><span class="ico-camera"></span></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
   }
 
+  // "14/10/2026 13:56" no fuso do aparelho
+  function dataHoraCurta(v) { return window.Cadastro ? window.Cadastro.dataHora(v) : C.hora(v); }
+
   function adicionarFoto(f, silencioso) {
     if (!est.op || f.operacao_id !== est.op.id) return;
     var antiga = est.fotos.get(f.id);
     est.fotos.set(f.id, f);
-    if (!antiga) {
-      if (f.lat != null && f.lng != null && est.camadaPontos) {
-        var mk = L.marker([f.lat, f.lng], {
+    var mk = est.fotosMarc.get(f.id);
+    if (f.lat != null && f.lng != null && est.camadaPontos) {
+      if (!mk) {
+        mk = L.marker([f.lat, f.lng], {
           icon: iconeFoto(),
           keyboard: true,
-          title: 'Foto de ' + nomeDoParticipante(f.participante_id, f.autor_nome) + ' às ' + C.hora(f.capturada_em || f.registrada_em, false),
+          title: 'Foto de ' + nomeDoParticipante(f.participante_id, f.autor_nome) + ' · ' + dataHoraCurta(f.capturada_em || f.registrada_em) +
+            (f.setor_nome ? ' · setor ' + f.setor_nome : ''),
           alt: 'Foto',
           pane: 'pontos',    // participantes ficam por cima
           tipoPonto: 'foto',
@@ -3256,10 +3265,15 @@
         mk.on('click', function () { abrirFoto(f.id); });
         est.fotosMarc.set(f.id, mk);
         if (est.prefsMapa.fotos) est.camadaPontos.addLayer(mk);
+      } else if (antiga && (antiga.lat !== f.lat || antiga.lng !== f.lng)) {
+        mk.setLatLng([f.lat, f.lng]);
       }
+    }
+    if (!antiga) {
       if (!silencioso && f.participante_id !== est.meuPart) {
         avisoClicavel('Nova foto de ' + nomeDoParticipante(f.participante_id, f.autor_nome) +
-          (f.lat != null ? '' : ' (sem localização)') + (f.legenda ? ': ' + resumir(f.legenda, 80) : '') + '. Toque para ver.', function () { abrirFoto(f.id); });
+          (f.lat != null ? '' : f.origem_posicao === 'pendente' ? ' (local pendente: aparece no mapa quando o GPS responder)' : ' (sem localização)') +
+          (f.legenda ? ': ' + resumir(f.legenda, 80) : '') + '. Toque para ver.', function () { abrirFoto(f.id); });
         bipeMensagem();
       }
     }
@@ -3385,7 +3399,7 @@
     function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
     var selo = UI.el('span', { classe: 'selo ' + tipoAutor.selo, texto: tipoAutor.rotulo });
     linha('Registrada por', UI.el('span', null, [autor + ' ', selo]));
-    linha('Capturada em', f.capturada_em ? C.hora(f.capturada_em) : 'desconhecido');
+    linha('Capturada em', f.capturada_em ? dataHoraCurta(f.capturada_em) + ' (relógio do aparelho)' : 'desconhecido');
     var atraso = f.capturada_em ? C.paraMs(f.registrada_em) - C.paraMs(f.capturada_em) : 0;
     linha('Recebida às', C.hora(f.registrada_em) + (atraso > 120000 ? ' (enviada ' + C.idade(f.capturada_em, C.paraMs(f.registrada_em)).replace('há ', '') + ' depois da captura)' : ''));
     if (f.lat != null) {
@@ -3393,9 +3407,15 @@
       linha('Longitude', UI.el('span', { classe: 'mono', texto: C.coord(f.lng) }));
       linha('Precisão', C.precisao(f.precisao));
       linha('Origem do local', ORIGEM_FOTO[f.origem_posicao] || f.origem_posicao);
+      if (f.local_atualizado_em) linha('Local completado', dataHoraCurta(f.local_atualizado_em) + ' (a foto foi tirada sem GPS)');
+    } else if (f.origem_posicao === 'pendente') {
+      var vencido = f.capturada_em && C.agora() - C.paraMs(f.capturada_em) > 11 * 60000;
+      linha('Localização', vencido ? 'Não obtida: o GPS do aparelho não respondeu a tempo.'
+        : 'Pendente — será completada quando o GPS do aparelho responder (até 10 min após a captura).');
     } else {
       linha('Localização', 'Sem localização (o aparelho não informou) — a foto não aparece no mapa.');
     }
+    if ('setor_nome' in f) linha('Setor', f.setor_nome || (f.lat != null ? 'fora dos setores' : '—'));
     if (f.legenda) linha('Descrição', f.legenda);
     if (f.largura) linha('Imagem', f.largura + ' × ' + f.altura + ' px' + (f.bytes ? ' · ' + Math.round(f.bytes / 1024) + ' KB' : ''));
 
@@ -3407,6 +3427,7 @@
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'visor-foto' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Foto de ' + autor }),
+      UI.el('p', { classe: 'visor-quando', texto: (f.capturada_em ? dataHoraCurta(f.capturada_em) : 'Data desconhecida') + (f.setor_nome ? ' · setor ' + f.setor_nome : '') }),
       caixa,
       nav,
       dl,
@@ -3509,11 +3530,34 @@
       obterPosicao: obterMinhaPosicao,
       aoSalvar: async function (d) {
         if (!est.op || est.op.id !== opId) throw new Error('A operação foi fechada antes de salvar a foto.');
-        est.fotosFila.push(Object.assign(d, { id: C.uuid(), operacao_id: opId, participante_id: null, estado: 'fila', aoEnviar: aoEnviar || null }));
+        var item = Object.assign(d, { id: C.uuid(), operacao_id: opId, participante_id: null, estado: 'fila', aoEnviar: aoEnviar || null });
+        est.fotosFila.push(item);
+        if (item.origem === 'pendente') {
+          window.Fotos.aguardarLocal(item.capturada, function (pos) {
+            if (est.fotosFila.indexOf(item) !== -1 && item.estado !== 'enviando') {
+              // ainda na fila: a foto já sai com o local
+              if (pos) Object.assign(item, { origem: 'gps', lat: pos.lat, lng: pos.lng, prec: pos.prec, posicao_em: pos.t });
+              else item.origem = 'nenhuma';
+              return;
+            }
+            item.localDepois = pos || 'nenhuma';
+            enviarLocalDepois(item);
+          });
+        }
         renderizarFilaFotos();
         enviarFilaFotos();
       },
     });
+  }
+
+  // Foto do responsável já registrada: manda o local que o GPS deu depois
+  function enviarLocalDepois(item) {
+    if (!item.registrada || !item.localDepois || !est.meuPart) return;
+    var pos = item.localDepois === 'nenhuma' ? null : item.localDepois;
+    item.localDepois = null;
+    window.Fotos.atualizarLocal(item.participante_id || est.meuPart, item.id, pos)
+      .then(function (f) { if (f && f.id) adicionarFoto(f, true); })
+      .catch(function (e) { if (e.rede) { item.localDepois = pos || 'nenhuma'; setTimeout(function () { enviarLocalDepois(item); }, 15000); } });
   }
 
   async function enviarFilaFotos() {
@@ -3531,9 +3575,12 @@
         try {
           var foto = await window.Fotos.enviar(it);
           est.fotosFila.shift();
+          it.registrada = true;
+          if (it.localDepois) enviarLocalDepois(it);
           window.Fotos.guardarUrlLocal(foto.caminho, URL.createObjectURL(it.blob));
           adicionarFoto(foto, true);
-          UI.aviso(foto.lat != null ? 'Foto registrada no mapa.' : 'Foto registrada sem localização (não aparece no mapa).', 'ok');
+          UI.aviso(foto.lat != null ? 'Foto registrada no mapa.' : foto.origem_posicao === 'pendente'
+            ? 'Foto registrada. O local é completado quando o GPS responder.' : 'Foto registrada sem localização (não aparece no mapa).', 'ok');
           if (it.aoEnviar) { try { it.aoEnviar(foto); } catch (e2) { /* ignora */ } }
         } catch (e) {
           if (e.rede) {

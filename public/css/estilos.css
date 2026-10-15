@@ -1920,3 +1920,6 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 .ficha-permanencia.acima { color: var(--alerta-texto); }
 .permanencia-setor { display: block; margin-top: 2px; font-size: .78rem; font-weight: 700; color: var(--texto-2); }
 .permanencia-setor.acima { color: var(--alerta-texto); }
+
+/* Visor da foto: data, hora e setor em destaque */
+.visor-quando { margin: -4px 0 8px; font-family: var(--mono); font-weight: 800; color: var(--acento); }

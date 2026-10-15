@@ -11,11 +11,10 @@
   if (!P || !Core || !window.L) return;
   function $(id) { return document.getElementById(id); }
 
-  var CHAVE_LIG = 'gbs-meteo-ligada', CHAVE_SOM = 'gbs-meteo-som', CHAVE_AREA = 'gbs-meteo-raio';
+  var CHAVE_LIG = 'gbs-meteo-ligada', CHAVE_SOM = 'gbs-meteo-som';
   var CHAVE_RADAR = 'gbs-meteo-radar', CHAVE_VENTO = 'gbs-meteo-vento', CHAVE_TEMP = 'gbs-meteo-temp';
   var CHAVE_HIST = 'gbs-meteo-historico:';
   var INTERVALO_MS = 5 * 60e3, LIMITE_DESATUALIZADO_MIN = 20, MIN_ENTRE_SONS_MS = 10 * 60e3;
-  var AREAS_KM = [25, 50, 100];
   var NIVEIS = { informativo: 'Informativo', atencao: 'Atenção', alerta: 'Alerta', critico: 'Crítico' };
   var ESTADOS = { novo: 'novo', atualizado: 'atualizado', mantido: 'ativo', expirado: 'expirado' };
   var VISIVEIS_ANTES_DE_MOSTRAR_MAIS = 3;
@@ -25,19 +24,17 @@
   function hora(t) { return t ? new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—'; }
   function ordenarPorNivel(lista) { return lista.slice().sort(function (a, b) { return Core.RANK[b.nivel] - Core.RANK[a.nivel]; }); }
 
-  var areaInicial = Number(lerLocal(CHAVE_AREA, 50));
   var est = {
     ligada: Boolean(lerLocal(CHAVE_LIG, false)),
     radar: lerLocal(CHAVE_RADAR, true) !== false,
     vento: Boolean(lerLocal(CHAVE_VENTO, false)),
     temp: Boolean(lerLocal(CHAVE_TEMP, false)),
     som: lerLocal(CHAVE_SOM, true) !== false,
-    areaKm: AREAS_KM.indexOf(areaInicial) >= 0 ? areaInicial : 50,
     opId: null, alertas: [], estados: [], historico: [], previsao: null,
     quadros: [], host: null, quadro: 0, tocando: null,
     atualizadoEm: null, fontes: null, erro: null, buscando: false,
     grade: null, gradeEm: null, gradeErro: null,
-    camadaRadar: null, circulo: null, camadaVento: null, camadaTemp: null,
+    camadaRadar: null, camadaVento: null, camadaTemp: null,
     tilesOk: 0, tilesErro: 0, ultimoSom: {}, ctx: null, avisoOculto: false, verTodos: false,
   };
 
@@ -53,7 +50,6 @@
       if (el) el.setAttribute('aria-pressed', String(x[1]));
     });
     $('meteo-som').textContent = est.som ? '🔔 Som ligado' : '🔕 Som desligado';
-    $('meteo-raio').value = String(est.areaKm);
   }
 
   function ligar(valor) {
@@ -90,7 +86,6 @@
       if (!quer2 && m.hasLayer(camada)) m.removeLayer(camada);
       if (quer2 && est.grade) camada.setGrade(est.grade);
     });
-    desenharArea();
   }
 
   // Tile do radar sobre a operação: endereço para abrir numa aba e conferir a resposta do provedor.
@@ -114,15 +109,6 @@
   function urlQuadro(i) {
     var q = est.quadros[i];
     return q ? est.host + q.path + '/512/{z}/{x}/{y}/2/1_1.png' : '';
-  }
-
-  function desenharArea() {
-    var m = mapa(), o = op();
-    if (!m || !o || o.local_lat == null) return;
-    if (est.circulo) { m.removeLayer(est.circulo); est.circulo = null; }
-    if (!est.ligada) return;
-    est.circulo = L.circle([o.local_lat, o.local_lng], { radius: est.areaKm * 1000, color: '#38bdf8', weight: 2,
-      dashArray: '6 6', fillOpacity: 0.04, interactive: false, className: 'meteo-area' }).addTo(m);
   }
 
   function parar() {
@@ -189,7 +175,7 @@
     est.buscando = true;
     try {
       var token = await sessaoToken();
-      var r = await fetch('/api/meteo?lat=' + o.local_lat + '&lng=' + o.local_lng + '&raio=' + est.areaKm, { headers: { Authorization: 'Bearer ' + token } });
+      var r = await fetch('/api/meteo?lat=' + o.local_lat + '&lng=' + o.local_lng, { headers: { Authorization: 'Bearer ' + token } });
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(d.mensagem || 'Serviço meteorológico indisponível (' + (d.erro || r.status) + ').');
       processar(d);
@@ -208,7 +194,7 @@
     if (!o || o.local_lat == null) return;
     try {
       var token = await sessaoToken();
-      var r = await fetch('/api/meteo?tipo=grade&raio=' + est.areaKm + '&lat=' + o.local_lat + '&lng=' + o.local_lng, { headers: { Authorization: 'Bearer ' + token } });
+      var r = await fetch('/api/meteo?tipo=grade&lat=' + o.local_lat + '&lng=' + o.local_lng, { headers: { Authorization: 'Bearer ' + token } });
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok || !d.ok) throw new Error(d.erro || d.mensagem || 'grade indisponível');
       est.grade = d.grade; est.gradeEm = d.obtidoEm; est.gradeErro = null;
@@ -305,7 +291,7 @@
     if (!o || o.local_lat == null) st.textContent = 'Defina o local da operação.';
     else if (est.erro) st.textContent = 'Não atualizou: ' + est.erro;
     else if (!est.atualizadoEm) st.textContent = 'Carregando…';
-    else st.textContent = (desat ? 'Desatualizado · ' : 'Atualizado às ' + hora(est.atualizadoEm)) + ' · área de ' + est.areaKm + ' km';
+    else st.textContent = desat ? 'Desatualizado' : 'Atualizado às ' + hora(est.atualizadoEm);
     st.className = 'meteo-status' + (desat || est.erro ? ' meteo-desat' : '');
 
     desenharAlertas();
@@ -413,9 +399,9 @@
 
   function desenharGradeEstado() {
     var el = $('meteo-grade-estado');
-    if (est.gradeErro) el.textContent = 'Vento, temperatura e chuva na área indisponíveis: ' + est.gradeErro;
+    if (est.gradeErro) el.textContent = 'Vento, temperatura e chuva na região indisponíveis: ' + est.gradeErro;
     else if (!est.grade) el.textContent = '';
-    else el.textContent = 'Vento, temperatura e chuva por ponto da área (Open-Meteo' + (est.gradeEm ? ', ' + hora(est.gradeEm) : '') + ').';
+    else el.textContent = 'Vento, temperatura e chuva por ponto da região (Open-Meteo' + (est.gradeEm ? ', ' + hora(est.gradeEm) : '') + ').';
     el.className = 'meteo-detalhe' + (est.gradeErro ? ' meteo-desat' : '');
   }
 
@@ -451,10 +437,6 @@
     $('meteo-vento').addEventListener('click', function () { alternar({ nome: 'vento', chave: CHAVE_VENTO }); });
     $('meteo-temp').addEventListener('click', function () { alternar({ nome: 'temp', chave: CHAVE_TEMP }); });
     $('meteo-som').addEventListener('click', function () { est.som = !est.som; gravarLocal(CHAVE_SOM, est.som); if (est.som) prepararSom(); desenharSituacao(); });
-    $('meteo-raio').addEventListener('change', function () {
-      est.areaKm = Number(this.value); gravarLocal(CHAVE_AREA, est.areaKm);
-      est.grade = null; desenharArea(); consultar();
-    });
     $('meteo-atualizar').addEventListener('click', function () { consultar(); });
 
     if (est.ligada) $('meteo-painel').hidden = false;

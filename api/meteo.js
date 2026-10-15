@@ -11,7 +11,7 @@
 
 const TIMEOUT_MS = 8000;
 const GRADE_N = 13;          // pontos por lado da grade (13 × 13 = 169)
-const GRADE_MEIA_MAX_KM = 120;
+const GRADE_MEIA_KM = 120;   // área fixa da grade: 120 km para cada lado da operação
 const TTL = { radar: 5 * 60e3, previsao: 15 * 60e3, alertas: 10 * 60e3 };
 const cache = new Map();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -175,9 +175,8 @@ module.exports = async (req, res) => {
   const latR = Math.round(lat * 100) / 100, lngR = Math.round(lng * 100) / 100;
 
   if (grade) {
-    const meia = Math.min(GRADE_MEIA_MAX_KM, Math.max(10, Number(req.query.raio) || 50));
-    const chaveG = 'grade:' + latR + ',' + lngR + ',' + meia;
-    const r = await comCache(chaveG, TTL.previsao, function () { return gradeOpenMeteo(latR, lngR, meia); });
+    const chaveG = 'grade:' + latR + ',' + lngR;
+    const r = await comCache(chaveG, TTL.previsao, function () { return gradeOpenMeteo(latR, lngR, GRADE_MEIA_KM); });
     return res.status(200).json({
       atualizadoEm: new Date().toISOString(),
       fonte: 'Open-Meteo',

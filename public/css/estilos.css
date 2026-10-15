@@ -4,7 +4,8 @@
  * faixa de sinalização, alvos de toque grandes, sem animações pesadas.
  * Cores de identificação: MILITAR = vermelho (quadrado), CIVIL = verde (círculo).
  * Pedido de ajuda = amarelo (para não confundir com o vermelho dos militares).
- * Responsáveis (comando) = losango ciano, visível só no painel dos responsáveis.
+ * Responsáveis da operação = losango VERMELHO com a letra R (o militar de campo é quadrado com M).
+ * Responsáveis do painel ficam visíveis só para os responsáveis e para o próprio civil (no seu mapa).
  * ===================================================================== */
 
 :root {
@@ -316,10 +317,10 @@ body.no-painel { overflow: hidden; }
 /* Participante em grupo: a cor do grupo vence só o preenchimento; formato e letra do tipo continuam */
 .simbolo.em-grupo { background-color: var(--cor-grupo) !important; }
 .simbolo > span { display: block; line-height: 1; }
-/* responsável: losango ciano */
+/* responsável da operação: losango vermelho com R (a forma e a letra o diferenciam do militar) */
 .simbolo-responsavel {
   width: 22px; height: 22px; border-radius: 3px; transform: rotate(45deg);
-  background-color: var(--responsavel) !important; color: #031417;
+  background-color: var(--militar) !important; color: #fff;
 }
 .simbolo-responsavel > span { transform: rotate(-45deg); }
 .simbolo-eu { outline: 2px solid #fff; outline-offset: 2px; }

@@ -49,7 +49,7 @@ Realtime, Storage privado para as fotos) e **Vercel** (hospedagem e três funç�
 | Selo âmbar **Pediu para sair** | o participante solicitou o encerramento; o rastreamento continua até o responsável decidir |
 | **Saída liberada às …** | o responsável liberou; o celular parou de enviar |
 | Marcador tracejado e desbotado | posição com mais de 2 min: **não é a localização atual** |
-| Militar = quadrado **M** vermelho, trilha contínua · Civil = círculo **C** verde, trilha tracejada · Responsável = losango **R** ciano, trilha pontilhada | a informação não depende só da cor |
+| Militar = quadrado **M** vermelho, trilha contínua · Civil = círculo **C** verde, trilha tracejada · Responsável da operação = losango **R** vermelho, trilha pontilhada | a informação não depende só da cor |
 | Anel amarelo | o participante respondeu "Preciso de ajuda" |
 
 ### Estados das mensagens
@@ -67,7 +67,7 @@ mapa e toca um alarme no painel.
 - Todos veem o mesmo mapa, os mesmos participantes e mensagens, e podem enviar orientações (a
   mensagem mostra ao participante quem a enviou).
 - **Localização do responsável**: é **sempre compartilhada** durante a operação, sem liga/desliga no menu.
-  Os outros responsáveis a veem como um losango ciano **R**; civis e militares de campo **não** veem.
+  Os outros responsáveis a veem como um losango vermelho **R**; civis e militares de campo **não** veem.
   Só aparece um aviso (no menu **Ferramentas** e com um ponto vermelho no botão) quando a localização
   está bloqueada no navegador ou o aparelho não tem GPS.
 - Pela ficha de outro responsável é possível mandar ATENÇÃO, CONFIRME ou mensagem livre; ela chega
@@ -81,7 +81,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   (verde), "Procurando o sinal de GPS…", "Sem internet agora — sua localização está sendo guardada"
   (amarelo) ou "O GPS do celular está desligado" (vermelho). Sem horários, precisão ou contadores técnicos.
 - **Mapa**: mostra **você** (ponto azul, com o círculo de precisão) e os **bombeiros** da operação —
-  militares de campo (quadrado vermelho **M**) e o **responsável** (losango ciano **R**, só quando ele
+  militares de campo (quadrado vermelho **M**) e o **responsável da operação** (losango vermelho **R**, só quando ele
   está compartilhando). Civis de outros grupos **não** aparecem; quem está no **seu grupo** aparece com a
   cor do grupo, com nome, sem CPF nem telefone (ver "Grupos no mapa do participante"). A posição de um
   bombeiro com mais de 2 minutos aparece apagada e com "há X min"; com mais de 15 minutos, some do
@@ -205,11 +205,11 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   tem uma ★ no marcador.
 - **Cor do grupo no mapa**: quem está num grupo tem o **marcador** e a **trilha** na cor do grupo (o
   primeiro grupo, por nome, se houver mais de um). A forma continua dizendo o tipo: **quadrado** = militar,
-  **círculo** = civil, **losango ciano** = responsável da operação. O **responsável do grupo** recebe um
+  **círculo** = civil, **losango vermelho com R** = responsável da operação (diferenciado do militar pela forma e pela letra). O **responsável do grupo** recebe um
   **distintivo branco com ★** no canto do marcador, que não depende da cor. O **responsável da operação**
   nunca recebe a cor de um grupo.
 - **Paleta dos grupos** (novos grupos): rosa, laranja, índigo, lima, branco e ocre, escolhidas para não
-  se confundir com o vermelho dos militares, o verde dos civis, o ciano dos responsáveis, o amarelo de
+  se confundir com o vermelho dos militares e responsáveis, o verde dos civis, o amarelo de
   pedido de ajuda, o âmbar da seleção e as trilhas roxas e azuis. Grupos que já existiam mantêm a cor salva.
 - **Legenda**: começa **recolhida** (um toque em **▤ Legenda** abre e fecha). Mostra só os tipos presentes
   na operação, o distintivo do responsável do grupo, a lista **Grupos ativos** (gerada dos grupos cadastrados,
@@ -490,7 +490,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     coordenadas **não** fecham o menu.
   - "Legenda" e "Lista de participantes" saíram do menu: a **legenda** fica sempre no mapa e abre/fecha
     tocando nela; a **lista** tem os botões **» Ocultar** e **« Participantes**.
-- **Trilhas**: militares em vermelho (contínua), responsáveis em ciano (pontilhada) e **civis em roxo**
+- **Trilhas**: militares em azul (contínua), responsáveis da operação em vermelho (pontilhada) e **civis em roxo**
   (tracejada, com contorno claro por baixo para aparecer sobre mata, satélite e topográfico). Cada civil
   tem um tom de roxo/magenta diferente, e a trilha de quem está com a ficha aberta fica mais grossa. O
   marcador do civil continua sendo o círculo verde **C**.
@@ -1040,7 +1040,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 12 | No celular do civil, abrir `/militar.html` | pede login; com a sessão do civil não há acesso ao painel nem às posições |
 | 13 | Encerrar a operação | o celular mostra "Operação encerrada"; com retenção "Ao encerrar", os dados somem na hora; com prazo, somem após a limpeza diária |
 | 14 | No celular do civil, tocar em **Solicitar encerramento** | o painel toca alarme e mostra "Pediu para sair"; o rastreamento continua; ao **Liberar saída**, o celular mostra "Saída liberada" |
-| 15 | Adicionar um segundo responsável em **Equipe** e abrir a operação nos dois painéis (**Minha posição** liga sozinha) | cada um vê o outro no mapa (losango ciano); mensagem de um para o outro chega como alerta |
+| 15 | Adicionar um segundo responsável em **Equipe** e abrir a operação nos dois painéis (**Minha posição** liga sozinha) | cada um vê o outro no mapa (losango vermelho com R); mensagem de um para o outro chega como alerta |
 | 16 | Abrir o painel no celular (em pé e deitado) e no tablet | mapa, lista e ficha ficam utilizáveis, sem rolagem lateral |
 | 17 | No celular do civil, tocar **ENCONTREI ALGO → Possível pista**, escrever e enviar | o painel avisa com som, o botão **Mensagens** mostra 1, o marcador laranja aparece no mapa; ao abrir, o civil vê "Lida por …" |
 | 18 | Responder pela ficha (**Conversa**) | o civil recebe o alerta em tela cheia e confirma |
@@ -1050,7 +1050,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 23 | **Ferramentas → Novo setor por raio**: tocar no centro, raio 300 m, atribuir a um civil; depois desenhar outro setor por cantos | os dois aparecem com nome e situação; o civil vê "Seu setor" no celular; recarregar a página não os perde |
 | 24 | Marcar um **Ponto de encontro** e **Enviar como destino** ao civil; ele anda em direção ao ponto | o celular mostra distância e direção que diminuem/atualizam; testar com o GPS desligado (aviso "Sem GPS") |
 | 25 | Trocar para **Topográfico** e abrir **Relevo em 3D** numa região com morros | curvas de nível visíveis com trilhas e setores por cima; o 3D mostra os morros e a altitude ao tocar |
-| 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** ciano; outros civis não aparecem |
+| 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** vermelhoo; outros civis não aparecem |
 | 22b | No civil, tocar **FALAR COM OS BOMBEIROS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
 | 22 | Criar uma operação de teste, registrar dados e **Excluir operação** (digitando o nome) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
 | 26 | Celular parado sobre uma mesa por 5 min | a trilha não vira um "novelo"; no diagnóstico (`&diag=1`) aparecem leituras descartadas como "oscilação parado" |

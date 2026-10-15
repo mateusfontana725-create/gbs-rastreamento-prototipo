@@ -27,7 +27,8 @@
     militar: ['#1d4ed8', '#0e7490', '#4338ca', '#0369a1', '#1e40af', '#155e75', '#3730a3', '#2563eb'],
     // Trilhas civis em ROXO (não se confundem com a vegetação); um tom diferente para cada civil.
     civil: ['#A020F0', '#D946EF', '#7C3AED', '#C026D3', '#9D4EDD', '#E040FB', '#6D28D9', '#F0ABFC'],
-    responsavel: ['#0891b2', '#0e7490', '#06b6d4', '#155e75'],
+    // responsável da operação: vermelho (como o militar), diferenciado pelo losango e pela letra R
+    responsavel: ['#dc2626', '#ef4444', '#b91c1c', '#f87171'],
   };
 
   // Cores dos GRUPOS: escolhidas para não se confundir com as cores reservadas
@@ -1281,7 +1282,7 @@
     var linhas = [];
     if (presentes.militar) linhas.push(linhaLegenda('<span class="simbolo simbolo-militar"><span>M</span></span>', 'Militar', 'quadrado · trilha contínua'));
     if (presentes.civil) linhas.push(linhaLegenda('<span class="simbolo simbolo-civil"><span>C</span></span>', 'Civil', 'círculo · trilha tracejada'));
-    if (presentes.responsavel) linhas.push(linhaLegenda('<span class="simbolo simbolo-responsavel"><span>R</span></span>', 'Responsável da operação', 'losango ciano · cor própria, nunca a do grupo'));
+    if (presentes.responsavel) linhas.push(linhaLegenda('<span class="simbolo simbolo-responsavel"><span>R</span></span>', 'Responsável da operação', 'losango vermelho com R · nunca a cor do grupo'));
     var temRespGrupo = false;
     est.membros.forEach(function (mapa) { mapa.forEach(function (m) { if (m.papel === 'responsavel') temRespGrupo = true; }); });
     if (temRespGrupo) linhas.push(linhaLegenda('<span class="lg-resp-grupo"><span class="simbolo simbolo-militar em-grupo" style="--cor-grupo:' + GRUPO_CORES[0] + ';background:' + GRUPO_CORES[0] + '"><span>M</span></span></span>', 'Responsável do grupo', 'distintivo ★ branco · cor do grupo'));
@@ -1848,7 +1849,7 @@
   }
 
   // Grupo que define a cor do participante no mapa. Responsáveis da operação
-  // mantêm a identificação própria (ciano) e nunca recebem a cor de um grupo.
+  // mantêm a identificação própria (vermelho, com R) e nunca recebem a cor de um grupo.
   function grupoDoParticipante(p) {
     if (!p || tipoDe(p.dados) === 'responsavel') return null;
     return gruposDe(p.id)[0] || null;

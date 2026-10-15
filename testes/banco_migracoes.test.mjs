@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -219,6 +219,37 @@ chk(dentro.d === true && dentro.f === false, 'ponto dentro/fora de setor desenha
 console.log('Encontrei a vítima (condição só para os responsáveis)');
 const anM = await usuario(null, true);
 const pM = await rpc(anM, 'ingressar', { p_token: op.token_militar, p_nome: 'Cb Militar', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+console.log('Mapa do civil: integrantes do próprio grupo (migração 015)');
+{
+  // posições recentes para os civis do grupo, o militar sem grupo e o responsável do grupo
+  await db.query(`update public.participantes set ultima_lat = -22.9, ultima_lng = -43.2, ultima_precisao = 8,
+                    ultima_posicao_em = now(), rastreando = true, removido = false, liberado_em = null
+                  where id = any($1::uuid[])`, [[pA.participante_id, pB.participante_id, pC.participante_id, pM.participante_id]]);
+  const grupoDe = async (pid) => (await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1`, [pid])).rows[0].n;
+  chk((await grupoDe(pM.participante_id)) === 0 && (await grupoDe(pA.participante_id)) === 1, 'pré-condição: militar sem grupo; civil no grupo G1');
+  const porId = (lista) => Object.fromEntries((lista || []).map((x) => [x.id, x]));
+  const eqA = await rpc(anA, 'equipe_no_mapa', { p_participante: pA.participante_id });
+  const vistosA = porId(eqA);
+  chk(vistosA[pB.participante_id] && vistosA[pB.participante_id].tipo === 'civil', 'civil vê o integrante civil do próprio grupo (responsável do grupo)', eqA);
+  chk(vistosA[pB.participante_id] && vistosA[pB.participante_id].nome === 'Beto' && vistosA[pB.participante_id].grupo_papel === 'responsavel', 'nome e papel no grupo para quem é do mesmo grupo');
+  chk(vistosA[pB.participante_id] && vistosA[pB.participante_id].grupo_cor === '#3b82f6' && vistosA[pB.participante_id].grupo_nome === 'Polícia Civil', 'cor e nome do grupo em comum');
+  chk(vistosA[pM.participante_id] && vistosA[pM.participante_id].nome === null && vistosA[pM.participante_id].grupo_id === null, 'militar sem grupo continua visível, sem nome nem grupo (como antes)');
+  chk(!vistosA[pC.participante_id], 'civil de OUTRO grupo não aparece para o civil do G1', Object.keys(vistosA));
+  chk(!vistosA[pA.participante_id], 'a própria pessoa não aparece na lista dela');
+  const eqC = await rpc(anC, 'equipe_no_mapa', { p_participante: pC.participante_id });
+  chk(!porId(eqC)[pA.participante_id] && !porId(eqC)[pB.participante_id], 'civil de outro grupo NÃO vê integrantes do G1', Object.keys(porId(eqC)));
+  chk(porId(eqC)[pM.participante_id] && porId(eqC)[pM.participante_id].nome === null, 'quem está no G2 vê o militar sem grupo, sem nome');
+  const texto = JSON.stringify(eqA) + JSON.stringify(eqC);
+  chk(!/cpf|telefone|trilha/i.test(texto) && !texto.includes('52998224725') && !texto.includes('21998765432'), 'nenhum CPF, telefone ou trilha na resposta');
+  await db.query(`update public.participantes set rastreando = false where id = $1`, [pB.participante_id]);
+  const eqA2 = await rpc(anA, 'equipe_no_mapa', { p_participante: pA.participante_id });
+  chk(!porId(eqA2)[pB.participante_id], 'integrante do grupo que parou de compartilhar some do mapa do colega');
+  await db.query(`update public.participantes set rastreando = true where id = $1`, [pB.participante_id]);
+  chk(/participante_invalido/.test(await erroDe(rpc(anC, 'equipe_no_mapa', { p_participante: pA.participante_id }))), 'não consulta o mapa em nome de outro participante');
+  const g1 = await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1`, [pC.participante_id]);
+  chk(g1.rows[0].n === 1, 'pré-condição: civil do G2 segue no grupo');
+}
+
 const cidV = '33333333-3333-4333-8333-333333333333';
 const neutra = await rpc(anM, 'participante_registrar_vitima', { p_participante: pM.participante_id, p_condicao: 'obito',
   p_lat: -22.91, p_lng: -43.21, p_precisao: 8, p_posicao_em: new Date().toISOString(), p_client_id: cidV });
@@ -469,5 +500,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–014 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–015 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

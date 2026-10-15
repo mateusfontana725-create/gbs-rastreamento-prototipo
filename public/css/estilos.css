@@ -313,6 +313,8 @@ body.no-painel { overflow: hidden; }
 .simbolo-civil { border-radius: 50%; background: var(--civil); }
 /* O marcador do civil continua VERDE; só a trilha é roxa (tons por participante). */
 .simbolo-civil { background-color: var(--civil) !important; }
+/* Participante em grupo: a cor do grupo vence só o preenchimento; formato e letra do tipo continuam */
+.simbolo.em-grupo { background-color: var(--cor-grupo) !important; }
 .simbolo > span { display: block; line-height: 1; }
 /* responsável: losango ciano */
 .simbolo-responsavel {
@@ -541,10 +543,6 @@ path.circulo-precisao { stroke: #e8edf2; fill: #e8edf2; }
 /* =====================================================================
  * RESPONSÁVEIS: botão "Minha posição", equipe e alerta no painel
  * ===================================================================== */
-.ico-pos { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid currentColor; flex: none; }
-.btn-minha-pos.ligado { background: var(--responsavel); border-color: var(--responsavel); color: #031417; }
-.btn-minha-pos.ligado .ico-pos { background: currentColor; animation: pulso 2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .btn-minha-pos.ligado .ico-pos { animation: none; } }
 
 .lista-equipe { list-style: none; margin: 0 0 16px; padding: 0; border: 1px solid var(--borda); border-radius: var(--raio); }
 .lista-equipe li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--borda); }
@@ -662,8 +660,7 @@ path.circulo-precisao { stroke: #e8edf2; fill: #e8edf2; }
   .comandos { grid-template-columns: 1fr; }
   .status-grade { grid-template-columns: 1fr; }
   .painel-acoes .btn { font-size: .72rem; padding: 0 4px; }
-  .ico-pos { display: none; }
-  .btn-gigante { font-size: 1.1rem; }
+   .btn-gigante { font-size: 1.1rem; }
 }
 
 /* Celular deitado: mapa e lista lado a lado, topo em uma linha só */
@@ -860,8 +857,6 @@ a.tel { color: var(--civil-texto); font-weight: 800; text-decoration: none; bord
 .btn-msgs.tem-novas { border-color: var(--responsavel); color: var(--responsavel-texto); }
 .btn-msgs.pulsar { animation: pulsar-msg 1s ease-in-out 3; }
 @keyframes pulsar-msg { 50% { box-shadow: 0 0 0 4px rgba(6, 182, 212, .55); } }
-.indicador-pos { display: none; position: absolute; top: -4px; right: -4px; width: 11px; height: 11px; border-radius: 50%; background: var(--responsavel); box-shadow: 0 0 0 2px var(--barra); }
-.ferramentas.compartilhando .indicador-pos { display: block; }
 .ferramentas { position: relative; }
 
 /* Menu suspenso de ferramentas */
@@ -889,11 +884,8 @@ a.tel { color: var(--civil-texto); font-weight: 800; text-decoration: none; bord
 .menu-item[disabled] { opacity: .45; cursor: not-allowed; }
 .menu-item > span:not([class]) { flex: 1; }
 .ico-item { width: 18px; text-align: center; color: var(--texto-2); flex: none; font-size: .95rem; }
-.menu-item .ico-pos, .menu-item .ico-camera, .menu-item .ico-msg { margin: 0 2px; color: var(--texto-2); }
+.menu-item .ico-camera, .menu-item .ico-msg { margin: 0 2px; color: var(--texto-2); }
 .menu-estado { margin-left: auto; color: var(--texto-3); font-size: .78rem; font-weight: 600; white-space: nowrap; }
-.menu-item.btn-minha-pos.ligado { background: var(--responsavel-claro); color: var(--responsavel-texto); }
-.menu-item.btn-minha-pos.ligado .ico-pos { color: var(--responsavel); background: currentColor; animation: pulso 2s ease-in-out infinite; }
-.menu-item.btn-minha-pos.ligado .menu-estado { color: var(--responsavel-texto); }
 .menu-perigo { color: var(--perigo-texto); }
 .menu-perigo .ico-item { color: var(--perigo); }
 .menu-perigo:hover { background: var(--perigo-claro); }
@@ -1524,9 +1516,6 @@ body.conversa-aberta { overflow: hidden; }
 
 /* Painel: menu Ferramentas — ações perigosas no fim, separadas */
 .menu-nota { margin: 0 14px 6px 42px; color: var(--texto-3); font-size: .76rem; line-height: 1.35; }
-.menu-item.btn-minha-pos.parcial { background: var(--alerta-claro); color: var(--alerta-texto); }
-.menu-item.btn-minha-pos.parcial .menu-estado { color: var(--alerta-texto); }
-.menu-item.btn-minha-pos.bloqueado .menu-estado { color: var(--perigo-texto); }
 .menu-zona-perigo { margin-top: 18px; border-top: 2px dashed rgba(239, 68, 68, .55); padding-top: 12px; }
 .menu-zona-perigo h3 { color: var(--perigo-texto); }
 .menu-zona-perigo .menu-item { flex-wrap: wrap; row-gap: 2px; }
@@ -1678,9 +1667,11 @@ body.conversa-aberta { overflow: hidden; }
 .faixa-filtro span { flex: 1 1 260px; }
 body:not(.lateral-oculta) .faixa-filtro { left: calc((100% - var(--larg-lateral)) / 2); width: min(560px, calc(100% - var(--larg-lateral) - 120px)); }
 .selo-grupo { color: var(--texto); background: var(--superficie-3); border: 1px solid var(--cor-grupo, var(--borda-forte)); box-shadow: inset 4px 0 0 var(--cor-grupo, transparent); }
+/* Responsável do grupo: distintivo branco com estrela (a forma não depende da cor do grupo) */
 .mk.resp-grupo .simbolo::after {
-  content: "★"; position: absolute; right: -9px; top: -10px; color: #facc15; font-size: 13px; line-height: 1;
-  text-shadow: 0 0 2px #000, 0 0 2px #000;
+  content: "★"; position: absolute; right: -11px; top: -12px; width: 17px; height: 17px; border-radius: 50%;
+  display: grid; place-items: center; background: #fff; color: #000; font-size: 11px; line-height: 1;
+  box-shadow: 0 0 0 1.5px #000;
 }
 .linha-grupo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--borda); }
 .linha-grupo:first-child { border-top: 0; }
@@ -1923,3 +1914,6 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 
 /* Visor da foto: data, hora e setor em destaque */
 .visor-quando { margin: -4px 0 8px; font-family: var(--mono); font-weight: 800; color: var(--acento); }
+
+/* Mapa do civil: cor de grupo na legenda (a cor vem do grupo do próprio participante) */
+.lg-grupo-cor { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid #fff; vertical-align: middle; }

@@ -30,6 +30,12 @@
     responsavel: ['#0891b2', '#0e7490', '#06b6d4', '#155e75'],
   };
 
+  // Cores dos GRUPOS: escolhidas para não se confundir com as cores reservadas
+  // (militar, civil, responsável, ajuda, seleção, trilhas), com o fundo do mapa
+  // (vegetação e água) nem entre si. Com mais grupos do que cores, a cor se repete
+  // e o nome do grupo aparece na legenda e no marcador.
+  var GRUPO_CORES = ['#ec4899', '#fb923c', '#6366f1', '#a3e635', '#f8fafc', '#a16207'];
+
   // Tipos exibidos no painel. "responsavel" = militar responsável com o painel aberto
   // (só os responsáveis da operação veem esses marcadores).
   var TIPOS = {
@@ -253,7 +259,8 @@
     $('ficha-centralizar').addEventListener('click', function () { centralizar(est.selecionado); });
     $('ficha-trilha').addEventListener('click', function () { alternarTrilha(est.selecionado); });
     $('ficha-remover').addEventListener('click', removerParticipante);
-    $('btn-minha-pos').addEventListener('click', garantirMinhaPosicao);
+    $('gps-alerta-tentar').addEventListener('click', garantirMinhaPosicao);
+    $('gps-alerta-como').addEventListener('click', mostrarComoLiberarMinha);
     $('btn-minha-conta').addEventListener('click', abrirMinhaConta);
     $('form-resp').addEventListener('submit', cadastrarResponsavel);
     $('resp-gerar').addEventListener('click', function () { $('resp-senha').value = gerarSenha(); });
@@ -301,7 +308,6 @@
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
-    $('menu-central').addEventListener('click', function () { abrirCentral('msgs'); });
     $('btn-excluir-op').addEventListener('click', function () { excluirOperacao(est.op); });
     document.querySelectorAll('[data-camada]').forEach(function (b) {
       b.addEventListener('click', function () { trocarCamada(b.getAttribute('data-camada')); });
@@ -313,7 +319,6 @@
     $('ficha-estatisticas').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirEstatisticas(est.selecionado); });
     $('ficha-exportar').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirExportar(est.selecionado); });
     $('opt-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
-    $('menu-enquadrar').addEventListener('click', enquadrarTodos);
     $('menu-diag-gps').addEventListener('click', function () { fecharMenu(false); abrirDiagnosticoGps(); });
     // Lista lateral: ocultar / reabrir
     $('btn-ocultar-lateral').addEventListener('click', function () { definirLateral(false); });
@@ -956,7 +961,7 @@
       // respeitando a permissão do navegador e a escolha de desligar nesta operação.
       iniciarMinhaPosicaoAuto();
     }
-    atualizarBotaoMinhaPos();
+    atualizarEstadoGps();
     if (est.abrirConvite) {
       est.abrirConvite = false;
       abrirConvite();
@@ -1116,7 +1121,6 @@
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
     $('btn-encerrar').hidden = op.status !== 'ativa';
     $('btn-convite').hidden = op.status !== 'ativa';
-    $('btn-minha-pos').hidden = op.status !== 'ativa';
     $('btn-registrar-foto').hidden = op.status !== 'ativa';
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
@@ -1182,28 +1186,17 @@
     });
     new Botoes().addTo(mapa);
 
+    // Legenda compacta: começa SEMPRE recolhida (um toque em "Legenda" abre e fecha).
+    // A identificação mostra só os tipos que estão na operação; a lista de grupos é
+    // gerada dos grupos cadastrados (sem grupos fantasmas nem cores sem grupo).
     var Legenda = L.Control.extend({
       options: { position: 'bottomleft' },
       onAdd: function () {
         var div = L.DomUtil.create('div', 'legenda');
-        // Em telas pequenas a legenda começa recolhida para não cobrir o mapa.
-        var aberta = !window.matchMedia || !window.matchMedia('(max-width: 860px)').matches;
-        div.innerHTML = '<details' + (aberta ? ' open' : '') + '><summary>Legenda</summary>' +
-          '<div><span class="simbolo simbolo-militar"><span>M</span></span> Militar (vermelho) — trilha contínua</div>' +
-          '<div><span class="simbolo simbolo-civil"><span>C</span></span> Civil (verde) — trilha <b style="color:#d8a6ff">roxa</b> tracejada</div>' +
-          '<div><span class="simbolo simbolo-responsavel"><span>R</span></span> Responsável (ciano) — trilha pontilhada</div>' +
-          '<div><span class="antigo"><span class="simbolo simbolo-civil" style="background:#6b7280">C</span></span> Última posição antiga (+2 min)</div>' +
-          '<div><span class="mk-foto mk-foto-legenda"><span class="ico-camera"></span></span> Foto registrada no local</div>' +
-          '<div><span class="mk-relato mk-relato-legenda"><span>P</span></span> Relato do participante</div>' +
-          '<div><span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span> Ponto de interesse (letra = categoria)</div>' +
-          '<div><span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span> Base (círculo = raio de chegada)</div>' +
-          '<div><span class="mk-local mk-local-legenda" aria-hidden="true">◎</span> Local da operação</div>' +
-          '<div><span class="setor-legenda"></span> Setor de busca (tracejado = pendente)</div>' +
-          '<div><span class="lg-linha-rota"></span> Rota até o destino (por caminhos)</div>' +
-          '<div><span class="lg-lacuna"></span> Falha: trecho sem posições (○ início · ● fim)</div>' +
-          '<div><span class="lg-estrela" aria-hidden="true">★</span> Responsável de um grupo</div>' +
-          '</details>';
+        div.innerHTML = '<details class="legenda-det"><summary>▤ Legenda</summary><div class="legenda-corpo"></div></details>';
+        est.legendaCorpo = div.querySelector('.legenda-corpo');
         L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
         return div;
       },
     });
@@ -1274,6 +1267,49 @@
         });
       },
     });
+  }
+
+  function linhaLegenda(icone, rotulo, detalhe) {
+    return '<div class="legenda-linha">' + icone + '<span><b>' + rotulo + '</b>' + (detalhe ? ' <small>' + detalhe + '</small>' : '') + '</span></div>';
+  }
+
+  function renderizarLegenda() {
+    var corpo = est.legendaCorpo;
+    if (!corpo || !est.participantes || !est.membros) return;
+    var presentes = { militar: false, civil: false, responsavel: false };
+    est.participantes.forEach(function (p) { if (!p.dados.removido) presentes[tipoDe(p.dados)] = true; });
+    var linhas = [];
+    if (presentes.militar) linhas.push(linhaLegenda('<span class="simbolo simbolo-militar"><span>M</span></span>', 'Militar', 'quadrado · trilha contínua'));
+    if (presentes.civil) linhas.push(linhaLegenda('<span class="simbolo simbolo-civil"><span>C</span></span>', 'Civil', 'círculo · trilha tracejada'));
+    if (presentes.responsavel) linhas.push(linhaLegenda('<span class="simbolo simbolo-responsavel"><span>R</span></span>', 'Responsável da operação', 'losango ciano · cor própria, nunca a do grupo'));
+    var temRespGrupo = false;
+    est.membros.forEach(function (mapa) { mapa.forEach(function (m) { if (m.papel === 'responsavel') temRespGrupo = true; }); });
+    if (temRespGrupo) linhas.push(linhaLegenda('<span class="lg-resp-grupo"><span class="simbolo simbolo-militar em-grupo" style="--cor-grupo:' + GRUPO_CORES[0] + ';background:' + GRUPO_CORES[0] + '"><span>M</span></span></span>', 'Responsável do grupo', 'distintivo ★ branco · cor do grupo'));
+    if (est.participantes.size) {
+      var ultimas = Array.from(est.participantes.values()).some(function (p) { return !p.dados.removido && posicaoAntiga(p); });
+      if (ultimas) linhas.push(linhaLegenda('<span class="antigo"><span class="simbolo simbolo-civil" style="background:#6b7280"><span>·</span></span></span>', 'Última posição antiga', 'mais de 2 min sem atualizar'));
+    }
+    var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    var listaGrupos = grupos.length
+      ? '<ul class="legenda-grupos">' + grupos.map(function (g) {
+        var n = est.membros.has(g.id) ? est.membros.get(g.id).size : 0;
+        return '<li><span class="legenda-cor" style="background:' + C.esc(g.cor) + '"></span><span class="legenda-grupo-nome">' + C.esc(g.nome) + '</span><small class="muted">' + n + ' integrante' + (n === 1 ? '' : 's') + '</small></li>';
+      }).join('') + '</ul>'
+      : '<p class="muted legenda-vazio">Nenhum grupo cadastrado nesta operação.</p>';
+    corpo.innerHTML =
+      '<h4 class="legenda-titulo">Participantes</h4>' +
+      (linhas.join('') || '<p class="muted legenda-vazio">Nenhum participante ainda.</p>') +
+      '<h4 class="legenda-titulo">Grupos ativos</h4>' + listaGrupos +
+      '<p class="legenda-nota">Quem está num grupo usa a cor do grupo no marcador e na trilha.</p>' +
+      '<h4 class="legenda-titulo">No mapa</h4>' +
+      linhaLegenda('<span class="mk-foto mk-foto-legenda"><span class="ico-camera"></span></span>', 'Foto', 'registrada no local') +
+      linhaLegenda('<span class="mk-relato mk-relato-legenda"><span>P</span></span>', 'Relato', 'do participante') +
+      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span>', 'Ponto de interesse', 'a letra é a categoria') +
+      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span>', 'Base', 'círculo = raio de chegada') +
+      linhaLegenda('<span class="mk-local mk-local-legenda" aria-hidden="true">◎</span>', 'Local da operação', '') +
+      linhaLegenda('<span class="setor-legenda"></span>', 'Setor de busca', 'tracejado = pendente') +
+      linhaLegenda('<span class="lg-linha-rota"></span>', 'Rota até o destino', 'por caminhos') +
+      linhaLegenda('<span class="lg-lacuna"></span>', 'Falha', 'trecho sem posições (○ início · ● fim)');
   }
 
   function marcadoresDe(tipo) {
@@ -1792,7 +1828,7 @@
         var cor = PALETA[tipo][cont[tipo]++ % PALETA[tipo].length];
         if (p.cor !== cor) {
           p.cor = cor;
-          if (p.trilha) p.trilha.setStyle({ color: cor, dashArray: TIPOS[tipo].trilha });
+          if (p.trilha) p.trilha.setStyle({ color: corDoParticipante(p), dashArray: TIPOS[tipo].trilha });
           if (p.marcador) { p.marcador.setIcon(criarIcone(p)); }
           if (p.li) p.li = null; // força recriar o item da lista
         }
@@ -1800,6 +1836,7 @@
     $('lista-part').innerHTML = '';
     $('lista-removidos').innerHTML = '';
     est.listaSuja = true;
+    renderizarLegenda();
   }
 
   function tipoDe(d) {
@@ -1810,13 +1847,28 @@
     return Boolean(est.usuario && p.dados.user_id === est.usuario.id);
   }
 
+  // Grupo que define a cor do participante no mapa. Responsáveis da operação
+  // mantêm a identificação própria (ciano) e nunca recebem a cor de um grupo.
+  function grupoDoParticipante(p) {
+    if (!p || tipoDe(p.dados) === 'responsavel') return null;
+    return gruposDe(p.id)[0] || null;
+  }
+
+  function corDoParticipante(p) {
+    var g = grupoDoParticipante(p);
+    return g ? g.cor : p.cor;
+  }
+
   function nomeExibido(p) {
     return ehEu(p) ? p.dados.nome + ' (você)' : p.dados.nome;
   }
 
   function htmlSimbolo(p) {
     var t = tipoDe(p.dados);
-    return '<div class="simbolo simbolo-' + t + (ehEu(p) ? ' simbolo-eu' : '') + '" style="background:' + p.cor + '"><span>' + TIPOS[t].letra + '</span></div>';
+    var g = grupoDoParticipante(p);
+    var cor = g ? g.cor : p.cor;
+    return '<div class="simbolo simbolo-' + t + (ehEu(p) ? ' simbolo-eu' : '') + (g ? ' em-grupo' : '') +
+      '" style="--cor-grupo:' + cor + ';background:' + cor + '"><span>' + TIPOS[t].letra + '</span></div>';
   }
 
   function htmlSeloTipo(d) {
@@ -1932,7 +1984,8 @@
     if (naoLidasDe(p.id).length) c.push('msg-nova');
     if (est.selecionado === p.id) c.push('selecionado');
     if (ehEu(p)) c.push('eu');
-    if (gruposDe(p.id).some(function (g) { return g.papel === 'responsavel'; })) c.push('resp-grupo');
+    var principal = gruposDe(p.id)[0];
+    if (principal && principal.papel === 'responsavel') c.push('resp-grupo');
     return c.join(' ');
   }
 
@@ -1972,6 +2025,15 @@
     var atual = p.marcador.getLatLng();
     if (atual.lat !== pos.lat || atual.lng !== pos.lng) p.marcador.setLatLng([pos.lat, pos.lng]);
     atualizarAparenciaMarcador(p);
+  }
+
+  // Cor do grupo no símbolo e na trilha. Só refaz o símbolo quando o HTML muda (sem piscar).
+  function atualizarIdentidade(p) {
+    if (p.marcador) {
+      var html = criarIcone(p).options.html;
+      if (p._iconeHtml !== html) { p.marcador.setIcon(criarIcone(p)); p._iconeHtml = html; }
+    }
+    if (p.trilha) p.trilha.setStyle({ color: corDoParticipante(p) });
   }
 
   function atualizarAparenciaMarcador(p) {
@@ -2086,7 +2148,7 @@
     }
     if (!p.trilha) {
       p.trilha = L.polyline(segs, {
-        color: p.cor,
+        color: corDoParticipante(p),
         weight: pesoTrilha(p),
         opacity: tipo === 'civil' ? 0.95 : 0.85,
         dashArray: TIPOS[tipo].trilha,
@@ -2636,7 +2698,7 @@
     var aviso = $('ficha-cmd-aviso');
     aviso.hidden = !eu && podeEnviar && (e.cod === 'conectado' || e.cod === 'instavel' || e.cod === 'parado');
     aviso.textContent = eu
-      ? 'Esta é a sua ficha. Para compartilhar sua localização com os outros responsáveis, use Ferramentas → Minha posição.'
+      ? 'Esta é a sua ficha. Sua localização é compartilhada automaticamente com os outros responsáveis.'
       : !podeEnviar ? 'Não é possível enviar mensagens: ' + (d.removido ? 'participante removido.' : 'operação encerrada.')
       : ehResp ? 'Este responsável está com o painel fechado ou sem conexão. A mensagem será entregue quando ele abrir o painel da operação.'
       : 'Atenção: o participante está sem conexão. A mensagem ficará aguardando e só será entregue quando o celular dele reconectar.';
@@ -5235,7 +5297,7 @@
       if (!p.trilhaVisivel) return;
       trilhaDe(p).segmentos.forEach(function (seg) {
         if (seg.length < 2) return;
-        trilhas.features.push({ type: 'Feature', properties: { cor: p.cor }, geometry: { type: 'LineString', coordinates: seg.map(function (q) { return [q[1], q[0]]; }) } });
+        trilhas.features.push({ type: 'Feature', properties: { cor: corDoParticipante(p) }, geometry: { type: 'LineString', coordinates: seg.map(function (q) { return [q[1], q[0]]; }) } });
       });
     });
     if (m.getSource('setores')) {
@@ -5286,7 +5348,7 @@
   /* ------------------------------------------------------------------ */
   /* Presença e posição do próprio responsável                            */
   /* ------------------------------------------------------------------ */
-  // Registra este responsável no mapa da operação (sem posição até ele ligar "Minha posição").
+  // Registra este responsável no mapa da operação (sem posição até o aparelho enviar a primeira localização).
   async function entrarComoResponsavel() {
     if (!est.op || est.op.status !== 'ativa') return;
     var opId = est.op.id;
@@ -5312,22 +5374,26 @@
   };
 
   // O botão só aparece como "ligado" com a permissão concedida E coordenadas chegando.
-  function atualizarBotaoMinhaPos() {
-    var b = $('btn-minha-pos');
-    if (!b) return;
+  // Sem chave nem texto permanente no menu: só avisa quando a localização deste aparelho
+  // tem um problema que exige ação (bloqueada no navegador ou sem GPS). Some sozinho ao resolver.
+  var AVISO_GPS = {
+    bloqueada: 'A localização está bloqueada neste navegador. Sem ela, sua posição não chega à equipe.',
+    indisponivel: 'Este aparelho não oferece localização. Sem ela, sua posição não chega à equipe.',
+    outro_aparelho: 'Sua posição já é enviada por outro aparelho seu. Para enviar por este, use o botão abaixo.',
+  };
+  function atualizarEstadoGps() {
     var e = est.minhaPosEstado;
-    var ativa = e === 'ativa';
-    b.classList.toggle('ligado', ativa);
-    b.classList.toggle('parcial', e === 'sem_sinal' || e === 'iniciando');
-    b.classList.toggle('bloqueado', e === 'bloqueada' || e === 'indisponivel');
-    $('ferramentas').classList.toggle('compartilhando', ativa);
-    var txt = TEXTO_MINHA_POS[e] || e;
-    if (ativa && est.gpsMeu === 'fraco') txt = 'ligada · sinal fraco';
-    $('minha-pos-estado').textContent = txt;
-    b.title = e === 'bloqueada' ? 'A localização está bloqueada para este site no navegador. Toque para ver como liberar.'
-      : est.compartilhando ? 'Sua posição está sendo compartilhada com a equipe da operação (sempre ligada).'
-        : e === 'outro_aparelho' ? 'Outro aparelho seu já envia a sua posição. Toque para enviar por este.'
-          : 'Toque para tentar ligar o envio da sua posição de novo.';
+    var texto = AVISO_GPS[e] || '';
+    var caixa = $('gps-alerta');
+    if (caixa) {
+      caixa.hidden = !texto;
+      $('gps-alerta-texto').textContent = texto;
+      $('gps-alerta-como').hidden = e !== 'bloqueada';
+      $('gps-alerta-tentar').textContent = e === 'outro_aparelho' ? 'Usar este aparelho' : 'Tentar de novo';
+    }
+    $('ferramentas').classList.toggle('alerta-gps', Boolean(texto));
+    if (texto && est.avisoGpsFeito !== e) UI.aviso(texto, 'erro', 8000);
+    est.avisoGpsFeito = texto ? e : null;
   }
 
   function chaveMinhaPosAqui() { return 'gbs-minha-pos-aqui:' + (est.op ? est.op.id : ''); }
@@ -5350,19 +5416,19 @@
     if (!est.op || est.op.status !== 'ativa') return;
     if (!('geolocation' in navigator) || !window.isSecureContext) {
       est.minhaPosEstado = 'indisponivel';
-      atualizarBotaoMinhaPos();
+      atualizarEstadoGps();
       return;
     }
     await verificarPermissaoMinha();
     if (est.permissaoMinha === 'denied') {
       est.minhaPosEstado = 'bloqueada';
-      atualizarBotaoMinhaPos();
+      atualizarEstadoGps();
       return;
     }
     if (!est.meuPart) await entrarComoResponsavel();
     if (outroAparelhoCompartilhando()) {
       est.minhaPosEstado = 'outro_aparelho';
-      atualizarBotaoMinhaPos();
+      atualizarEstadoGps();
       return;
     }
     ligarMinhaPosicao(true);
@@ -5382,7 +5448,7 @@
         } else if (est.permissaoMinha === 'denied' && est.compartilhando) {
           pararMinhaPosicao(true);
           est.minhaPosEstado = 'bloqueada';
-          atualizarBotaoMinhaPos();
+          atualizarEstadoGps();
         }
       };
     }
@@ -5391,7 +5457,7 @@
     }
   }
 
-  // "Minha posição" não liga nem desliga: mostra o estado e, se o envio parou
+  // A localização do responsável não tem liga/desliga: se o envio parou
   // (bloqueio, falha, outro aparelho), tenta de novo neste aparelho.
   async function garantirMinhaPosicao() {
     if (est.iniciandoMinhaPos) return;
@@ -5427,7 +5493,7 @@
     var opId = est.op.id;
     est.iniciandoMinhaPos = true;
     est.minhaPosEstado = 'iniciando';
-    atualizarBotaoMinhaPos();
+    atualizarEstadoGps();
     prepararAudio();
     try {
       if (!est.meuPart) await entrarComoResponsavel();
@@ -5444,8 +5510,7 @@
       if (!teste.ok && teste.codigo === 1) {
         est.minhaPosEstado = 'bloqueada';
         est.permissaoMinha = 'denied';
-        if (!automatico) mostrarComoLiberarMinha();
-        else UI.aviso('Sua localização está bloqueada neste navegador. Veja em Ferramentas › Minha posição.', 'erro', 8000);
+        if (!automatico) mostrarComoLiberarMinha();   // no automático, o aviso do menu Ferramentas basta
         return;
       }
       est.compartilhando = true;
@@ -5469,7 +5534,7 @@
       UI.aviso(e.message, 'erro');
     } finally {
       est.iniciandoMinhaPos = false;
-      atualizarBotaoMinhaPos();
+      atualizarEstadoGps();
     }
   }
 
@@ -5510,7 +5575,7 @@
         }
       });
     }
-    atualizarBotaoMinhaPos();
+    atualizarEstadoGps();
   }
 
   // Fila offline da "Minha posição" (a mesma da página do participante).
@@ -5572,7 +5637,7 @@
       est.minhaPosEstado = 'sem_sinal';
     }
     est.filtroMeu.registrar(null, false, err.code === 1 ? 'negado' : err.code === 2 ? 'indisponivel' : 'sem_sinal');
-    atualizarBotaoMinhaPos();
+    atualizarEstadoGps();
   }
 
   // Envio em lote: o ponto só é marcado como enviado quando o servidor confirma.
@@ -5644,7 +5709,7 @@
         if (part) C.rpc('sinal_vida', { p_participante: part, p_rastreando: false, p_gps: null }).catch(function () {});
       });
     }
-    if (!silencioso) atualizarBotaoMinhaPos();
+    if (!silencioso) atualizarEstadoGps();
   }
 
   // Diagnóstico das leituras do GPS deste aparelho (não é enviado a ninguém).
@@ -6156,6 +6221,7 @@
   function aplicarMudancaGrupos() {
     est.participantes.forEach(function (p) {
       atualizarAparenciaMarcador(p);
+      atualizarIdentidade(p);
       if (est.filtroGrupo) { atualizarMarcador(p); desenharTrilha(p); }
     });
     est.listaSuja = true;
@@ -6163,6 +6229,7 @@
     if (est.selecionado) atualizarFicha();
     if (est.filtroGrupo) { desenharDestinosGrupo(); atualizarFaixaFiltro(); }
     renderizarControleGrupos();
+    renderizarLegenda();
     atualizarMenu();
     if (est.renderGruposAberto) est.renderGruposAberto();
   }
@@ -6413,9 +6480,12 @@
   function abrirFormGrupo(g) {
     var novo = !g;
     var usadas = new Set(Array.from(est.grupos.values()).map(function (x) { return x.cor.toLowerCase(); }));
-    var corPadrao = g ? g.cor : (CORES_SETOR.filter(function (c) { return !usadas.has(c.toLowerCase()); })[0] || CORES_SETOR[0]);
+    var corPadrao = g ? g.cor : (GRUPO_CORES.filter(function (c) { return !usadas.has(c.toLowerCase()); })[0] || GRUPO_CORES[0]);
+    // grupos antigos com outra cor continuam mostrando a cor que já têm
+    var opcoesCor = GRUPO_CORES.slice();
+    if (g && opcoesCor.indexOf(g.cor) < 0) opcoesCor.push(g.cor);
     var nome = UI.el('input', { classe: 'campo', id: 'grupo-nome', maxlength: '60', value: g ? g.nome : '', placeholder: 'Ex.: Polícia Civil' });
-    var cores = UI.el('div', { classe: 'cores-setor', role: 'radiogroup', 'aria-label': 'Cor do grupo' }, CORES_SETOR.map(function (c) {
+    var cores = UI.el('div', { classe: 'cores-setor', role: 'radiogroup', 'aria-label': 'Cor do grupo' }, opcoesCor.map(function (c) {
       return UI.el('label', { classe: 'cor-opcao', title: c }, [
         UI.el('input', { type: 'radio', name: 'grupo-cor', value: c, checked: c.toLowerCase() === corPadrao.toLowerCase() ? true : null }),
         UI.el('span', { style: 'background:' + c }),

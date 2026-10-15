@@ -349,3 +349,61 @@ body.lateral-oculta:not(.gaveta) #mapa .leaflet-top.leaflet-right { top: 94px; }
 .info-ponto-rotulo { flex-basis: 100%; font-family: var(--fonte-titulo); font-weight: 600; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: #4b5563; }
 @media (pointer: coarse) { .info-ponto .btn { min-height: 44px; } }
 body.gaveta.info-ponto-aberto #mapa .leaflet-top, body.gaveta.info-ponto-aberto .camadas-mapa { visibility: hidden; }
+
+/* =====================================================================
+ * LEGENDA COMPACTA (recolhida por padrão; grupos gerados dos cadastrados)
+ * ===================================================================== */
+.legenda { max-width: min(300px, calc(100vw - 24px)); }
+.legenda-det > summary {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; cursor: pointer;
+  list-style: none; border: 1px solid var(--borda-forte); border-radius: var(--raio); background: var(--vidro);
+  font-family: var(--fonte-titulo); font-weight: 600; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--texto-2);
+  box-shadow: var(--sombra);
+}
+.legenda-det > summary::-webkit-details-marker { display: none; }
+.legenda-det > summary:hover { border-color: #4a5763; color: var(--texto); }
+.legenda-det > summary:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.legenda-det[open] > summary { border-color: var(--acento); color: #fcd34d; margin-bottom: 6px; }
+.legenda .legenda-corpo {
+  display: grid; gap: 4px; max-height: min(52vh, 420px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px 10px; background: var(--vidro); border: 1px solid var(--borda-forte); border-radius: var(--raio); box-shadow: var(--sombra);
+}
+.legenda-titulo {
+  margin: 6px 0 2px; font-family: var(--fonte-titulo); font-weight: 600; font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: var(--texto-3);
+}
+.legenda-titulo:first-child { margin-top: 0; }
+.legenda-linha { display: flex; align-items: center; gap: 8px; font-size: .78rem; line-height: 1.3; }
+.legenda-linha > span:last-child { min-width: 0; }
+.legenda-linha small { color: var(--texto-3); }
+.legenda-vazio, .legenda-nota { margin: 0; font-size: .74rem; line-height: 1.35; }
+.legenda-nota { color: var(--texto-3); }
+.legenda-grupos { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.legenda-grupos li { display: flex; align-items: center; gap: 8px; font-size: .8rem; }
+.legenda-grupo-nome { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.legenda-cor { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #000; flex: none; }
+/* distintivo ★ do responsável do grupo (o mesmo do marcador, em tamanho de legenda) */
+.lg-resp-grupo { position: relative; display: inline-flex; flex: none; margin: 0 4px 0 0; }
+.lg-resp-grupo::after {
+  content: "★"; position: absolute; right: -6px; top: -6px; width: 12px; height: 12px; border-radius: 50%;
+  display: grid; place-items: center; background: #fff; color: #000; font-size: 8px; line-height: 1; box-shadow: 0 0 0 1px #000;
+}
+.legenda .simbolo { flex: none; }
+@media (max-width: 599px) {
+  .legenda { max-width: min(260px, calc(100vw - 20px)); }
+  .legenda-corpo { max-height: 40vh; }
+}
+
+/* Alerta de GPS no menu: só aparece com problema real (bloqueio ou aparelho sem localização) */
+.menu-alerta {
+  margin: 0 8px 6px; padding: 8px 10px; border: 1px solid rgba(239, 68, 68, .55); border-left: 3px solid var(--perigo);
+  border-radius: 2px; background: var(--perigo-claro); color: var(--perigo-texto);
+}
+.menu-alerta p { margin: 0 0 6px; font-size: .84rem; line-height: 1.35; }
+.menu-alerta-acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+/* ponto vermelho no botão Ferramentas: só enquanto houver o problema */
+.ferramentas.alerta-gps #btn-ferramentas::after {
+  content: ""; position: absolute; top: -4px; right: -4px; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--perigo); box-shadow: 0 0 0 2px var(--barra);
+}
+/* celular: com a janela do ponto aberta, a legenda e a escala (embaixo) também saem da frente */
+body.gaveta.info-ponto-aberto #mapa .leaflet-bottom { visibility: hidden; }

@@ -634,6 +634,7 @@
     }
     if (r.pontos.length) {
       estado.ultimoAceito = r.ponto;
+      atualizarMinhaTrilha(r.pontos);
       var rapido = r.rapido;
       // Cada ponto tem um id único gerado aqui: o reenvio nunca duplica no servidor.
       // Primeiro é gravado no aparelho (IndexedDB); depois enviado.
@@ -1091,12 +1092,21 @@
     atualizarMeuMarcador();
   }
 
+  // Cor de quem é do seu grupo (o primeiro grupo, por nome, igual ao painel); sem grupo, a cor padrão.
+  function corMinha() {
+    var g = (estado.grupos || [])[0];
+    return g ? g.cor : '#3b82f6';
+  }
+
+  // Sua trilha: os últimos pontos aceitos nesta sessão (a lista completa fica no aparelho e no servidor).
+  var MAX_TRILHA_TELA = 300;
+
   function atualizarMeuMarcador() {
     var l = estado.ultimaLeitura;
     if (!estado.mapa || !l) return;
     var ll = [l.lat, l.lng];
     if (!estado.meuMarcador) {
-      estado.meuCirculo = L.circle(ll, { radius: l.prec || 0, color: '#3b82f6', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(estado.mapa);
+      estado.meuCirculo = L.circle(ll, { radius: l.prec || 0, color: corMinha(), weight: 1, fillOpacity: 0.12, interactive: false }).addTo(estado.mapa);
       estado.meuMarcador = L.marker(ll, {
         icon: L.divIcon({ className: 'mk-eu-wrap', html: '<div class="mk-eu"></div><div class="mk-eu-rotulo">Você</div>', iconSize: [0, 0] }),
         keyboard: false, zIndexOffset: 1000, title: 'Você está aqui',
@@ -1108,6 +1118,34 @@
       estado.meuCirculo.setLatLng(ll);
       estado.meuCirculo.setRadius(l.prec || 0);
       if (estado.seguindo && !estado.mapa.getBounds().pad(-0.2).contains(ll)) estado.mapa.panTo(ll);
+    }
+    pintarMinhaCor();
+  }
+
+  // Marcador, círculo e trilha na cor do grupo (ou na padrão). Chamado também quando os grupos mudam.
+  function pintarMinhaCor() {
+    var cor = corMinha();
+    var temGrupo = Boolean((estado.grupos || [])[0]);
+    var lgGrupo = $('lg-grupo');
+    if (lgGrupo) {
+      lgGrupo.hidden = !temGrupo;
+      if (temGrupo) lgGrupo.querySelector('i').style.background = cor;
+    }
+    if (estado.meuCirculo) estado.meuCirculo.setStyle({ color: cor });
+    var el = estado.meuMarcador && estado.meuMarcador.getElement();
+    var pastilha = el && el.querySelector('.mk-eu');
+    if (pastilha) pastilha.style.background = cor;
+    if (estado.linhaMinha) estado.linhaMinha.setStyle({ color: cor });
+  }
+
+  function atualizarMinhaTrilha(pontos) {
+    if (!estado.mapa || !pontos || !pontos.length) return;
+    estado.trilhaMinha = (estado.trilhaMinha || []).concat(pontos.map(function (p) { return [p.lat, p.lng]; }));
+    if (estado.trilhaMinha.length > MAX_TRILHA_TELA) estado.trilhaMinha = estado.trilhaMinha.slice(-MAX_TRILHA_TELA);
+    if (!estado.linhaMinha) {
+      estado.linhaMinha = L.polyline(estado.trilhaMinha, { color: corMinha(), weight: 4, opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
+    } else {
+      estado.linhaMinha.setLatLngs(estado.trilhaMinha);
     }
   }
 
@@ -1203,6 +1241,7 @@
     try {
       var lista = await C.rpc('meus_grupos', { p_participante: estado.part.participante_id }, 12000);
       estado.grupos = Array.isArray(lista) ? lista : [];
+      pintarMinhaCor();
       atualizarUI();
     } catch (e) {
       if (e.codigo === 'funcao_ausente') estado.semGrupos = true;   // servidor sem a migração 008
@@ -1223,29 +1262,36 @@
     p.hidden = !texto;
   }
 
+  // Integrantes do grupo em comum vêm com a cor do grupo (mesma regra do painel do responsável).
   function desenharEquipe(lista) {
     var vistos = new Set();
     (lista || []).forEach(function (b) {
       if (b.lat == null || b.lng == null) return;
       vistos.add(b.id);
       var resp = b.tipo === 'responsavel';
+      var civil = b.tipo === 'civil';
       var antigo = b.idade_s > EQUIPE_ATUAL_S;
-      var nome = resp ? 'Responsável' : 'Bombeiro';
-      var html = '<div class="mk mk-equipe ' + (resp ? 'responsavel' : 'militar') + (antigo ? ' antigo' : '') + '">' +
-        '<div class="simbolo simbolo-' + (resp ? 'responsavel' : 'militar') + '"><span>' + (resp ? 'R' : 'M') + '</span></div>' +
-        (antigo ? '<div class="mk-rotulo">' + textoIdade(b.idade_s) + '</div>' : '') + '</div>';
-      var texto = nome + ' — ' + (antigo ? 'última posição conhecida ' + textoIdade(b.idade_s) + ' (pode não estar mais aí)' : 'posição atual');
+      var tipoCss = resp ? 'responsavel' : civil ? 'civil' : 'militar';
+      var letra = resp ? 'R' : civil ? 'C' : 'M';
+      var cor = b.grupo_cor || null;
+      var nome = b.nome ? b.nome : civil ? 'Integrante' : resp ? 'Responsável' : 'Bombeiro';
+      var rotulo = b.grupo_id ? C.esc(b.nome || '') + (antigo ? ' · ' + textoIdade(b.idade_s) : '') : (antigo ? textoIdade(b.idade_s) : '');
+      var html = '<div class="mk mk-equipe ' + tipoCss + (antigo ? ' antigo' : '') + (b.grupo_papel === 'responsavel' ? ' resp-grupo' : '') + '">' +
+        '<div class="simbolo simbolo-' + tipoCss + (cor ? ' em-grupo' : '') + '"' + (cor ? ' style="--cor-grupo:' + cor + ';background:' + cor + '"' : '') + '><span>' + letra + '</span></div>' +
+        (rotulo ? '<div class="mk-rotulo">' + rotulo + '</div>' : '') + '</div>';
+      var grupo = b.grupo_nome ? ' · grupo ' + b.grupo_nome + (b.grupo_papel === 'responsavel' ? ' (responsável)' : '') : '';
+      var texto = nome + grupo + ' — ' + (antigo ? 'última posição conhecida ' + textoIdade(b.idade_s) + ' (pode não estar mais aí)' : 'posição atual');
       var mk = estado.equipe.get(b.id);
       if (!mk) {
         mk = L.marker([b.lat, b.lng], { icon: L.divIcon({ className: 'mk-wrap', html: html, iconSize: [0, 0] }), title: texto, keyboard: false, zIndexOffset: resp ? 200 : 100 });
-        mk.bindPopup(texto);
+        mk.bindPopup(C.esc(texto));   // o popup lê HTML: nomes escapados
         mk.addTo(estado.mapa);
         mk._gbsHtml = html;
         estado.equipe.set(b.id, mk);
       } else {
         mk.setLatLng([b.lat, b.lng]);
         if (mk._gbsHtml !== html) { mk.setIcon(L.divIcon({ className: 'mk-wrap', html: html, iconSize: [0, 0] })); mk._gbsHtml = html; }
-        mk.setPopupContent(texto);
+        mk.setPopupContent(C.esc(texto));
         if (mk.getElement()) mk.getElement().title = texto;
       }
     });
@@ -1254,7 +1300,7 @@
     });
     var nota = $('mapa-nota');
     nota.hidden = vistos.size > 0;
-    nota.textContent = 'Nenhum bombeiro com localização no mapa agora.';
+    nota.textContent = 'Nenhum integrante com localização no mapa agora.';
     // Na primeira vez, mostra você e a equipe juntos.
     if (!estado.jaEnquadrou && vistos.size && estado.ultimaLeitura) {
       estado.jaEnquadrou = true;

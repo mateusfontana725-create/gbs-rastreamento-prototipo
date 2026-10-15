@@ -150,12 +150,19 @@
         <div class="ferramentas" id="ferramentas">
           <button class="btn btn-barra btn-pequeno btn-ferramentas" type="button" id="btn-ferramentas" aria-label="Ferramentas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-ferramentas" title="Ferramentas da operação e do mapa">
             <span class="ico-menu" aria-hidden="true"></span><span class="rotulo-longo">Ferramentas</span>
-            <span class="indicador-pos" aria-hidden="true"></span>
           </button>
           <div class="menu-ferramentas" id="menu-ferramentas" role="region" aria-label="Ferramentas" hidden>
             <div class="menu-cabeca">
               <strong>Ferramentas</strong>
               <button class="btn btn-pequeno" type="button" id="menu-fechar" aria-label="Fechar o menu de ferramentas">Fechar</button>
+            </div>
+            <!-- Só aparece com problema real na localização deste aparelho (não é um status permanente) -->
+            <div class="menu-alerta" id="gps-alerta" role="alert" hidden>
+              <p id="gps-alerta-texto"></p>
+              <div class="menu-alerta-acoes">
+                <button class="btn btn-pequeno" type="button" id="gps-alerta-tentar">Tentar de novo</button>
+                <button class="btn btn-pequeno" type="button" id="gps-alerta-como">Como liberar</button>
+              </div>
             </div>
             <!-- Grupos por função (recolhíveis; o estado fica lembrado no aparelho).
                  As camadas do mapa e o modo 3D ficam no painel "Camadas", sobre o mapa. -->
@@ -172,14 +179,6 @@
               <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino a participantes</span></button>
-              <button class="menu-item btn-minha-pos" type="button" id="btn-minha-pos" title="Sua posição é compartilhada com os outros responsáveis desta operação">
-                <span class="ico-pos" aria-hidden="true"></span><span>Minha posição</span><small class="menu-estado" id="minha-pos-estado">ligando…</small>
-              </button>
-              <p class="menu-nota" id="minha-pos-nota">Sempre ligada para todos os responsáveis: liga sozinha ao abrir a operação (o navegador precisa permitir a localização). Funciona com o painel aberto e a tela ligada: em segundo plano ou com a tela bloqueada o celular pode pausar o envio.</p>
-            </details>
-            <details class="menu-grupo" data-grupo="comunicacao" open>
-              <summary><h3 id="mg-comunicacao">Comunicação</h3></summary>
-              <button class="menu-item" type="button" id="menu-central"><span class="ico-msg" aria-hidden="true"></span><span>Mensagens, relatos e fotos</span></button>
             </details>
             <details class="menu-grupo" data-grupo="registros" open>
               <summary><h3 id="mg-registros">Registros e ocorrências</h3></summary>
@@ -195,7 +194,6 @@
             </details>
             <details class="menu-grupo" data-grupo="mapa">
               <summary><h3 id="mg-mapa">Mapa e navegação</h3></summary>
-              <button class="menu-item" type="button" id="menu-enquadrar"><span class="ico-item" aria-hidden="true">⤢</span><span>Enquadrar todos no mapa</span></button>
               <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
               <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
               <p class="menu-sol" id="menu-sol" hidden></p>

@@ -66,9 +66,10 @@ mapa e toca um alarme no painel.
   já tem acesso ao painel). Qualquer responsável da operação também pode adicionar; **só o criador remove**.
 - Todos veem o mesmo mapa, os mesmos participantes e mensagens, e podem enviar orientações (a
   mensagem mostra ao participante quem a enviou).
-- **Minha posição** (em **Ferramentas**): a localização do responsável é **sempre compartilhada** durante a
-  operação (não há opção de desligar). Enquanto está ligada, um ponto ciano aparece no botão **Ferramentas**.
-  Os outros responsáveis o veem como um losango ciano **R**; civis e militares de campo **não** veem.
+- **Localização do responsável**: é **sempre compartilhada** durante a operação, sem liga/desliga no menu.
+  Os outros responsáveis a veem como um losango ciano **R**; civis e militares de campo **não** veem.
+  Só aparece um aviso (no menu **Ferramentas** e com um ponto vermelho no botão) quando a localização
+  está bloqueada no navegador ou o aparelho não tem GPS.
 - Pela ficha de outro responsável é possível mandar ATENÇÃO, CONFIRME ou mensagem livre; ela chega
   como alerta no painel dele, com confirmação de leitura.
 
@@ -81,7 +82,8 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   (amarelo) ou "O GPS do celular está desligado" (vermelho). Sem horários, precisão ou contadores técnicos.
 - **Mapa**: mostra **você** (ponto azul, com o círculo de precisão) e os **bombeiros** da operação —
   militares de campo (quadrado vermelho **M**) e o **responsável** (losango ciano **R**, só quando ele
-  liga "Minha posição"). Outros civis **não** aparecem, nem nomes, CPF ou telefone. A posição de um
+  está compartilhando). Civis de outros grupos **não** aparecem; quem está no **seu grupo** aparece com a
+  cor do grupo, com nome, sem CPF nem telefone (ver "Grupos no mapa do participante"). A posição de um
   bombeiro com mais de 2 minutos aparece apagada e com "há X min"; com mais de 15 minutos, some do
   mapa (nunca é mostrada como atual). Atualiza a cada 15 s. O botão **📍 Onde estou** volta para a
   sua posição.
@@ -201,6 +203,22 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   fica lembrado ao recarregar.
 - Na lista, cada pessoa tem o selo dos grupos (★ = responsável do grupo); no mapa, o responsável do grupo
   tem uma ★ no marcador.
+- **Cor do grupo no mapa**: quem está num grupo tem o **marcador** e a **trilha** na cor do grupo (o
+  primeiro grupo, por nome, se houver mais de um). A forma continua dizendo o tipo: **quadrado** = militar,
+  **círculo** = civil, **losango ciano** = responsável da operação. O **responsável do grupo** recebe um
+  **distintivo branco com ★** no canto do marcador, que não depende da cor. O **responsável da operação**
+  nunca recebe a cor de um grupo.
+- **Paleta dos grupos** (novos grupos): rosa, laranja, índigo, lima, branco e ocre, escolhidas para não
+  se confundir com o vermelho dos militares, o verde dos civis, o ciano dos responsáveis, o amarelo de
+  pedido de ajuda, o âmbar da seleção e as trilhas roxas e azuis. Grupos que já existiam mantêm a cor salva.
+- **Legenda**: começa **recolhida** (um toque em **▤ Legenda** abre e fecha). Mostra só os tipos presentes
+  na operação, o distintivo do responsável do grupo, a lista **Grupos ativos** (gerada dos grupos cadastrados,
+  com a cor e a quantidade de integrantes) e os símbolos do mapa.
+- **Grupos no mapa do participante**: cada civil vê, além de si mesmo, os **integrantes dos grupos em comum**
+  (civis, militares ou responsáveis), na cor do grupo, com o nome, a última posição e a atualização a cada
+  15 s. Ele **não** vê quem está só em outro grupo; militares e responsáveis **sem grupo** continuam visíveis
+  como antes, sem nome. Quem não está compartilhando a posição some do mapa dos colegas. A própria trilha
+  do participante aparece no mapa (últimos 300 pontos desta sessão), na cor do grupo.
 - **Quem vê o quê (RLS)**: os responsáveis da operação veem todos os grupos e links; cada participante vê
   **somente os grupos de que faz parte** e o próprio papel (no celular: "Grupo X (responsável)"). Ninguém
   em campo lê os links nem a lista de membros.
@@ -358,16 +376,16 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 
 - Ao abrir ou criar uma operação ativa, **Minha posição liga automaticamente** — usando a permissão de
   localização do navegador (se ela ainda não foi dada, o navegador pergunta).
-- O item **Ferramentas → Minha posição** mostra o estado real: *ligando…*, **ligada** (só depois de a
+- O **estado** da localização não tem item no menu. Só aparece um aviso quando há problema real: *bloqueada no navegador* (o aviso traz **Como liberar**) ou *sem GPS neste aparelho*. O estado real continua o mesmo: *ligando…*, **ligada** (só depois de a
   permissão ser concedida **e** chegar coordenada), *ligada · procurando sinal*, *bloqueada no navegador*
   (tocar mostra como liberar) ou *sem envio · toque para tentar* (falha de conexão).
 - **Não existe desligar**: o item não é uma chave. Tocar nele com a posição ligada só confirma o estado;
-  com o envio parado (bloqueio, falha, outro aparelho), tenta ligar de novo neste aparelho. Escolhas
+  com o envio parado (bloqueio ou falha), o aviso do menu oferece **Tentar de novo**. Escolhas
   "desligada" guardadas por versões antigas do painel são ignoradas. Nunca há dois observadores de GPS nem
   envios duplicados.
 - Se o mesmo responsável está com o painel aberto em **dois aparelhos** e um deles já compartilha, o
   outro mostra *enviada por outro aparelho seu* e não liga sozinho (a trilha não "pula" entre os dois);
-  tocar em **Minha posição** passa o envio para o aparelho atual.
+  o aviso do menu **Ferramentas** oferece **Usar este aparelho**, que passa o envio para este aparelho.
 - Limite: funciona com o painel **aberto e a tela ligada**. Em segundo plano ou com a tela bloqueada o
   navegador pode pausar o GPS (seção 8).
 
@@ -458,17 +476,17 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - O menu **Ferramentas** é organizado em grupos recolhíveis (o aberto/fechado fica lembrado no aparelho):
   - **Operação**: Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis;
   - **Participantes e equipes**: Convidar participantes, Grupos, Deslocamentos de grupos, Enviar destino
-    a participantes, Minha posição;
-  - **Comunicação**: Mensagens, relatos e fotos;
+    a participantes;
   - **Registros e ocorrências**: Vítimas (fichas), Registrar foto, Marcar ponto de interesse;
   - **Setores de busca**: Novo setor por raio, Novo setor desenhando a área, Lista de setores e pontos;
-  - **Mapa e navegação**: Enquadrar todos, Ir para coordenada, Medir distância e área, Exportar, Importar;
+  - **Mapa e navegação**: Ir para coordenada, Medir distância e área, Exportar, Importar (o **⤢** do mapa
+    enquadra todos);
   - **Configurações e manutenção**: Formato das coordenadas, Diagnóstico do GPS;
   - **Encerrar ou excluir · ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
     quem pode; confirmação reforçada: lista o que será apagado e exige **digitar o nome da operação**).
   - O menu fecha só por ação intencional: ao escolher uma **ação** (abre janela, inicia desenho…), em
-    **Fechar**, com Esc ou tocando fora. Abrir/fechar um grupo, a chave **Minha posição** e o seletor de
+    **Fechar**, com Esc ou tocando fora. Abrir/fechar um grupo e o seletor de
     coordenadas **não** fecham o menu.
   - "Legenda" e "Lista de participantes" saíram do menu: a **legenda** fica sempre no mapa e abre/fecha
     tocando nela; a **lista** tem os botões **» Ocultar** e **« Participantes**.
@@ -763,7 +781,10 @@ rastreamento-sar/
      (job `gbs-verificar-retornos`). Sem `pg_cron`, o alerta só é verificado com algum painel aberto.
    O painel e a página do participante funcionam com o banco ainda sem essas migrações (as funções novas
    ficam indisponíveis, com aviso).
-   O `schema.sql` completo já inclui da 003 à 014 (seções 10 a 21).
+   - **015** (`015_grupos_no_mapa_civil.sql`): `equipe_no_mapa` passa a incluir os **integrantes dos grupos em
+     comum** de quem consulta (com nome, grupo e papel, sem CPF, telefone ou trilha). Militares e responsáveis
+     **sem grupo** continuam visíveis; quem está em outro grupo só aparece para o próprio grupo.
+   O `schema.sql` completo já inclui da 003 à 015 (seções 10 a 22).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -918,13 +939,14 @@ identidades anônimas sem participação há mais de 7 dias são removidas. A li
 | Tipo civil/militar | decidido **no servidor** pelo token usado; alterar o navegador não transforma um civil em militar |
 | Autorização no backend | nenhuma tabela aceita gravação direta do navegador; toda escrita passa por funções que validam dono, operação ativa e dados |
 | Separação entre operações | RLS: o responsável só lê as operações em que está na equipe; o participante só lê o próprio cadastro e as próprias mensagens |
-| Coordenadas não públicas | participantes **não leem** posições nem trilhas pela base de dados. O mapa do participante usa só a função `equipe_no_mapa`, que devolve a **última posição** dos militares e responsáveis da **mesma operação** (sem nome, CPF, telefone ou trilha; posições com mais de 15 min não vão; responsáveis só quando compartilham "Minha posição"), e nunca a de outros civis |
+| Coordenadas não públicas | participantes **não leem** posições nem trilhas pela base de dados. O mapa do participante usa só a função `equipe_no_mapa`, que devolve a **última posição** dos militares e responsáveis **sem grupo** da mesma operação (sem nome, CPF, telefone ou trilha) e dos **integrantes dos grupos em comum** de quem consulta (com nome e grupo, sem CPF ou telefone); posições com mais de 15 min não vão, e quem não está compartilhando some; nunca a de civis de outros grupos |
 | Mensagens e relatos | o participante só lê a própria conversa; os responsáveis leem as da operação. Envio só pela função `participante_enviar_mensagem` (valida participante, operação ativa, tipo, texto ≤ 1000 caracteres, coordenadas; limite de 20 por minuto; reenvio sem duplicar) |
 | Fotos | bucket **privado**: não existe link público. A imagem só é vista por **link temporário assinado (1 h)**, gerado apenas para os responsáveis da operação ou para o próprio autor. O envio só é aceito na pasta `operação/participante/` do próprio participante, com a operação ativa, JPEG até 10 MB; o registro (`registrar_foto`) confere que o arquivo existe e valida as coordenadas |
 | Setores, pontos e destinos | leitura só pelos responsáveis da operação (RLS); gravação só pelas funções, que conferem a equipe da operação; excluir só por quem criou o registro, quem criou a operação ou um administrador; participantes recebem só o próprio setor, pontos de encontro/risco e o próprio destino (`mapa_do_participante`, `meu_destino` e a política `destinos_ler_participante`, que só libera a linha do próprio participante — inclusive no tempo real); um destino só é enviado a participante da mesma operação |
 | Rota por caminhos | a chave do openrouteservice fica só na variável `ORS_API_KEY` da Vercel; `/api/rota` exige login (participante ativo, só para si; ou responsável ativo), limita a 20 cálculos/min por pessoa, valida coordenadas e distância e não grava nada |
 | Fichas de vítimas | tabela `vitimas` e bucket privado `vitimas`: leitura, envio e visualização da foto **só pelos responsáveis da operação** (RLS no banco e regras no Storage); participantes não têm política de leitura; gravação só por `salvar_vitima`/`definir_foto_vitima` (confere que o arquivo existe na pasta da própria ficha); apagadas com a retenção ou a exclusão da operação |
 | Cadastro da operação | só responsáveis da operação editam (`atualizar_operacao`); tipo, acionamento (não pode estar no futuro), coordenadas e tamanhos validados no servidor; `info_operacao` continua entregando ao participante só o nome |
+| Grupos no mapa do civil | migração 015: `equipe_no_mapa` cruza só os grupos em comum com quem consulta; nenhum colega de outro grupo sai na resposta, e a resposta não tem CPF, telefone nem trilha |
 | Grupos | RLS: responsáveis da operação leem grupos, membros e links; o participante lê **só os grupos de que é membro ativo** e a própria linha de membro (função `eh_membro_grupo`, security definer, sem recursão); os links ficam em `grupo_convites`, que só os responsáveis leem; o link do grupo nunca concede o papel de responsável; chaves compostas garantem que grupo e pessoa são da mesma operação |
 | Deslocamentos e alertas | `missoes`, `missao_membros` e `alertas`: leitura só pelos responsáveis da operação; eventos calculados no servidor a partir das posições gravadas (o celular não informa "cheguei"); finalizar a busca: só o responsável da operação ou o responsável do grupo da missão; cada evento gera um alerta só (chave única); `verificar_retornos` sem operação só roda pelo agendador (`pg_cron`) |
 | Fila offline | o celular só marca um ponto como enviado quando o servidor confirma o id; usuário e operação de cada ponto vêm sempre da sessão no servidor (os ids guardados no aparelho são só para diagnóstico) |

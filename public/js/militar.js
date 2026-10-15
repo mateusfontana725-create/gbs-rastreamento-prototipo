@@ -172,7 +172,7 @@
     grupos: new Map(),          // id → grupo
     membros: new Map(),         // grupo_id → Map(participante_id → vínculo {papel, origem…})
     semGrupos: false,           // banco sem a migração 008
-    filtroGrupo: null,          // grupo mostrado sozinho no mapa (ícone de olho) — não fica lembrado
+    filtroGrupos: new Set(),    // grupos ligados no mapa (ícone de olho; vários ao mesmo tempo). Vazio = todos. Não fica lembrado
     controleGrupos: null,
     camadaDestinosGrupo: null,
     timerGrupos: null,
@@ -1013,7 +1013,7 @@
     est.grupos = new Map();
     est.membros = new Map();
     est.semGrupos = false;
-    est.filtroGrupo = null;
+    est.filtroGrupos = new Set();
     est.controleGrupos = est.camadaDestinosGrupo = null;
     est.missoes = new Map();
     est.missaoMembros = new Map();
@@ -1089,7 +1089,7 @@
     est.alertas = new Map();
     est.vitimasLoc = new Map();
     est.permanencias = new Map();
-    est.filtroGrupo = null;   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
+    est.filtroGrupos = new Set();   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
     renderizarControleGrupos();
     mostrarFaixaAlerta();
@@ -1518,7 +1518,7 @@
     });
     if (!pts.length && est.op && est.op.local_lat != null) pts.push([est.op.local_lat, est.op.local_lng]);
     if (!pts.length) {
-      UI.aviso(est.filtroGrupo ? 'Nenhum membro deste grupo com posição ainda.' : 'Nenhum participante com posição ainda.');
+      UI.aviso(filtroAtivo() ? 'Nenhum membro dos grupos mostrados tem posição ainda.' : 'Nenhum participante com posição ainda.');
       return;
     }
     if (pts.length === 1) est.mapa.setView(pts[0], Math.max(est.mapa.getZoom(), 16));
@@ -2451,7 +2451,7 @@
       while (ul.children.length > par[1].length) ul.removeChild(ul.lastChild);
     });
     $('lista-vazia').hidden = lista.length > 0;
-    var noFiltro = est.filtroGrupo ? ativos.filter(visivelNoFiltro).length : null;
+    var noFiltro = filtroAtivo() ? ativos.filter(visivelNoFiltro).length : null;
     $('qtd-part').textContent = noFiltro == null ? String(ativos.length) : noFiltro + ' de ' + ativos.length;
     $('qtd-removidos').textContent = String(fora.length);
     $('grupo-removidos').hidden = fora.length === 0;
@@ -2482,7 +2482,7 @@
     renderizarLista();
     if (est.selecionado) atualizarFicha();
     atualizarPilula();
-    if (est.filtroGrupo) desenharDestinosGrupo();
+    if (filtroAtivo()) desenharDestinosGrupo();
     if (est.permanencias.size && !$('painel-areas').hidden) renderizarAreas();   // "há X min" anda sozinho
   }
 
@@ -3996,7 +3996,7 @@
     est.destinos = new Map();
     lista.forEach(function (d) { if (!d.encerrado_em) est.destinos.set(d.participante_id, d); });
     if (est.selecionado) atualizarFicha();
-    if (est.filtroGrupo) desenharDestinosGrupo();
+    if (filtroAtivo()) desenharDestinosGrupo();
   }
 
   function limparAreasDoMapa() {
@@ -6203,7 +6203,7 @@
         mem.get(m.grupo_id).set(m.participante_id, m);
       });
       est.membros = mem;
-      if (est.filtroGrupo && !est.grupos.has(est.filtroGrupo)) filtrarGrupo(null, true);
+      est.filtroGrupos.forEach(function (gid) { if (!est.grupos.has(gid)) est.filtroGrupos.delete(gid); });
       aplicarMudancaGrupos();
     } catch (e) {
       if (ehTabelaAusente(e)) { est.semGrupos = true; renderizarControleGrupos(); }
@@ -6220,12 +6220,12 @@
     est.participantes.forEach(function (p) {
       atualizarAparenciaMarcador(p);
       atualizarIdentidade(p);
-      if (est.filtroGrupo) { atualizarMarcador(p); desenharTrilha(p); }
+      if (filtroAtivo()) { atualizarMarcador(p); desenharTrilha(p); }
     });
     est.listaSuja = true;
     renderizarLista();
     if (est.selecionado) atualizarFicha();
-    if (est.filtroGrupo) desenharDestinosGrupo();
+    if (filtroAtivo()) desenharDestinosGrupo();
     renderizarControleGrupos();
     renderizarLegenda();
     atualizarMenu();
@@ -6255,25 +6255,48 @@
     return membrosDe(gid).filter(function (x) { return !x.p.dados.removido && tipoDe(x.p.dados) !== 'responsavel'; });
   }
 
-  // Filtro do ícone de olho: só os membros do grupo escolhido ficam no mapa e na lista.
+  // Filtro do ícone de olho: os membros dos grupos LIGADOS ficam no mapa e na lista
+  // (vários grupos ao mesmo tempo). Nenhum grupo ligado = todos.
+  function filtroAtivo() { return est.filtroGrupos.size > 0; }
+
   function visivelNoFiltro(p) {
-    if (!est.filtroGrupo) return true;
-    var m = est.membros.get(est.filtroGrupo);
-    return Boolean(m && m.has(p.id));
+    if (!filtroAtivo()) return true;
+    var visivel = false;
+    est.filtroGrupos.forEach(function (gid) {
+      var m = est.membros.get(gid);
+      if (m && m.has(p.id)) visivel = true;
+    });
+    return visivel;
   }
 
   // Aviso sobre alguém escondido pelo filtro (os alertas continuam sempre).
   function sufixoFiltro(pid) {
-    if (!est.filtroGrupo) return '';
+    if (!filtroAtivo()) return '';
     var p = est.participantes.get(pid);
-    return p && !visivelNoFiltro(p) ? ' — fora do grupo mostrado no mapa (toque em "Mostrar todos")' : '';
+    return p && !visivelNoFiltro(p) ? ' — fora dos grupos mostrados no mapa' : '';
   }
 
-  // id: grupo a mostrar sozinho, ou null para restaurar a visualização completa.
+  // Liga ou desliga um grupo no mapa (o olho). Ao ligar, o mapa se ajusta aos grupos mostrados.
+  function alternarGrupoFiltro(gid) {
+    if (est.filtroGrupos.has(gid)) est.filtroGrupos.delete(gid);
+    else est.filtroGrupos.add(gid);
+    aplicarFiltroGrupos(est.filtroGrupos.has(gid));
+  }
+
+  // Alertas e mensagens de um grupo: liga esse grupo junto com os que já estão ligados.
+  function ligarGrupoFiltro(gid, silencioso) {
+    if (!est.grupos.has(gid)) return;
+    est.filtroGrupos.add(gid);
+    aplicarFiltroGrupos(!silencioso);
+  }
+
+  function mostrarTodosGrupos() {
+    est.filtroGrupos.clear();
+    aplicarFiltroGrupos(false);
+  }
+
   // Não fica lembrado ao recarregar (para ninguém esquecer pessoas escondidas).
-  function filtrarGrupo(id, silencioso) {
-    if (id && !est.grupos.has(id)) id = null;
-    est.filtroGrupo = id;
+  function aplicarFiltroGrupos(enquadrar) {
     est.participantes.forEach(function (p) { atualizarMarcador(p); desenharTrilha(p); });
     if (est.selecionado) {
       var sel = est.participantes.get(est.selecionado);
@@ -6283,40 +6306,45 @@
     renderizarLista();
     desenharDestinosGrupo();
     renderizarControleGrupos();
-    if (id && !silencioso) enquadrarGrupo(id);
+    if (enquadrar && filtroAtivo()) enquadrarGrupos(Array.from(est.filtroGrupos));
   }
 
-  function enquadrarGrupo(gid) {
+  // Enquadra os membros (com posição e destino) dos grupos indicados.
+  function enquadrarGrupos(gids) {
     if (!est.mapa) return;
     var pts = [];
-    membrosDe(gid).forEach(function (x) {
-      var pos = posicaoAtual(x.p);
-      if (pos && !x.p.dados.removido) pts.push([pos.lat, pos.lng]);
-      var d = est.destinos.get(x.p.id);
-      if (d) pts.push([d.lat, d.lng]);
+    gids.forEach(function (gid) {
+      membrosDe(gid).forEach(function (x) {
+        var pos = posicaoAtual(x.p);
+        if (pos && !x.p.dados.removido) pts.push([pos.lat, pos.lng]);
+        var d = est.destinos.get(x.p.id);
+        if (d) pts.push([d.lat, d.lng]);
+      });
     });
-    if (!pts.length) { UI.aviso('Nenhum membro deste grupo com posição ainda.'); return; }
+    if (!pts.length) { UI.aviso('Nenhum membro desses grupos com posição ainda.'); return; }
     if (pts.length === 1) est.mapa.setView(pts[0], Math.max(est.mapa.getZoom(), 16));
     else est.mapa.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 17 });
   }
 
-  // Com o filtro ligado: o destino de cada membro do grupo (🧭) e a linha até ele.
+  // Com o filtro ligado: o destino de cada membro dos grupos mostrados (🧭) e a linha até ele, na cor do grupo.
   function desenharDestinosGrupo() {
     var camada = est.camadaDestinosGrupo;
     if (!camada) return;
     camada.clearLayers();
-    var g = est.filtroGrupo && est.grupos.get(est.filtroGrupo);
-    if (!g) return;
-    membrosDe(g.id).forEach(function (x) {
-      var d = est.destinos.get(x.p.id);
-      if (!d || x.p.dados.removido) return;
-      var nome = nomeExibido(x.p);
-      L.marker([d.lat, d.lng], {
-        icon: L.divIcon({ className: 'mk-destino-wrap', html: '<div class="mk-destino">🧭</div>', iconSize: [0, 0] }),
-        keyboard: false, zIndexOffset: 400, title: 'Destino de ' + nome + ': ' + d.nome,
-      }).bindTooltip('Destino de ' + C.esc(nome) + ': ' + C.esc(d.nome)).addTo(camada);
-      var pos = posicaoAtual(x.p);
-      if (pos) L.polyline([[pos.lat, pos.lng], [d.lat, d.lng]], { color: g.cor, weight: 2, dashArray: '4 8', opacity: 0.75, interactive: false }).addTo(camada);
+    est.filtroGrupos.forEach(function (gid) {
+      var g = est.grupos.get(gid);
+      if (!g) return;
+      membrosDe(g.id).forEach(function (x) {
+        var d = est.destinos.get(x.p.id);
+        if (!d || x.p.dados.removido) return;
+        var nome = nomeExibido(x.p);
+        L.marker([d.lat, d.lng], {
+          icon: L.divIcon({ className: 'mk-destino-wrap', html: '<div class="mk-destino">🧭</div>', iconSize: [0, 0] }),
+          keyboard: false, zIndexOffset: 400, title: 'Destino de ' + nome + ': ' + d.nome,
+        }).bindTooltip('Destino de ' + C.esc(nome) + ': ' + C.esc(d.nome)).addTo(camada);
+        var pos = posicaoAtual(x.p);
+        if (pos) L.polyline([[pos.lat, pos.lng], [d.lat, d.lng]], { color: g.cor, weight: 2, dashArray: '4 8', opacity: 0.75, interactive: false }).addTo(camada);
+      });
     });
   }
 
@@ -6333,7 +6361,7 @@
     div.innerHTML = '';
     if (!grupos.length) return;
     var ul = UI.el('ul', { classe: 'lista-grupos-mapa' }, grupos.map(function (g) {
-      var ativo = est.filtroGrupo === g.id;
+      var ativo = est.filtroGrupos.has(g.id);
       var n = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; }).length;
       var rot = ativo ? 'Mostrar todos de novo' : 'Mostrar só o grupo ' + g.nome + ' no mapa';
       return UI.el('li', { classe: ativo ? 'ativo' : '' }, [
@@ -6342,12 +6370,15 @@
         UI.el('small', { classe: 'muted', title: n + ' pessoa(s) ativa(s)', texto: String(n) }),
         UI.el('button', { classe: 'btn btn-pequeno btn-olho' + (ativo ? ' btn-ativo' : ''), type: 'button', 'data-grupo': g.id,
           'aria-pressed': String(ativo), 'aria-label': rot, title: rot, texto: ativo ? '👁 ✓' : '👁',
-          onclick: function () { filtrarGrupo(ativo ? null : g.id); } }),
+          onclick: function () { alternarGrupoFiltro(g.id); } }),
       ]);
     }));
-    // Com o filtro ligado, o título avisa mesmo com o controle recolhido (sem faixa flutuante no mapa).
-    var filtrado = grupos.some(function (g) { return est.filtroGrupo === g.id; });
-    div.appendChild(UI.el('details', { open: aberto ? true : null }, [UI.el('summary', { texto: 'Grupos (' + grupos.length + ')' + (filtrado ? ' · filtrado' : '') }), ul]));
+    // Com grupos ligados, o título avisa mesmo com o controle recolhido (sem faixa flutuante no mapa).
+    var ligados = est.filtroGrupos.size;
+    var titulo = 'Grupos (' + grupos.length + ')' + (ligados === 1 ? ' · filtrado' : ligados > 1 ? ' · ' + ligados + ' filtrados' : '');
+    var conteudo = [UI.el('summary', { texto: titulo }), ul];
+    if (ligados) conteudo.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Mostrar todos', onclick: mostrarTodosGrupos }));
+    div.appendChild(UI.el('details', { open: aberto ? true : null }, conteudo));
     if (focoGrupo) { var b = div.querySelector('[data-grupo="' + focoGrupo + '"]'); if (b) b.focus(); }
   }
 
@@ -6431,7 +6462,7 @@
       corpo.appendChild(UI.el('ul', { classe: 'lista-grupos' }, grupos.map(function (g) {
         var mem = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; });
         var resp = mem.filter(function (x) { return x.m.papel === 'responsavel'; }).map(function (x) { return x.p.dados.nome; });
-        var ativo = est.filtroGrupo === g.id;
+        var ativo = est.filtroGrupos.has(g.id);
         return UI.el('li', { classe: 'item-grupo', 'data-grupo': g.id }, [
           UI.el('div', { classe: 'item-grupo-topo' }, [
             UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
@@ -6440,8 +6471,8 @@
               ' · link: ' + (g.permite_militar ? 'militares ou civis' : 'civis') }),
           ]),
           UI.el('div', { classe: 'acoes-linha' }, [
-            UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando só este' : '👁 Só este no mapa',
-              onclick: function () { filtrarGrupo(ativo ? null : g.id); render(); } }),
+            UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando no mapa' : '👁 Mostrar no mapa',
+              onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { fechar(); abrirMembrosGrupo(g.id); } }),
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { fechar(); abrirLinkGrupo(g.id); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: function () { fechar(); escolherDestino([], g.id); } }) : null,
@@ -6643,7 +6674,7 @@
       await C.rpc('excluir_grupo', { p_id: g.id });
       est.grupos.delete(g.id);
       est.membros.delete(g.id);
-      if (est.filtroGrupo === g.id) filtrarGrupo(null);
+      est.filtroGrupos.delete(g.id);
       aplicarMudancaGrupos();
       UI.aviso('Grupo excluído.', 'ok');
     } catch (e) {
@@ -6878,13 +6909,13 @@
 
   function verAlertaNoMapa(a) {
     if (!est.mapa) return;
-    if (a.grupo_id && est.grupos.has(a.grupo_id)) filtrarGrupo(a.grupo_id, true);
+    if (a.grupo_id && est.grupos.has(a.grupo_id)) ligarGrupoFiltro(a.grupo_id, true);
     if (a.lat != null) {
       est.mapa.setView([a.lat, a.lng], Math.max(est.mapa.getZoom(), 16));
       var marca = L.circleMarker([a.lat, a.lng], { radius: 18, color: a.nivel === 'critico' ? '#ef4444' : '#facc15', weight: 3, fill: false, className: 'pulso-alerta', interactive: false }).addTo(est.mapa);
       setTimeout(function () { marca.remove(); }, 8000);
     } else if (a.grupo_id) {
-      enquadrarGrupo(a.grupo_id);
+      enquadrarGrupos([a.grupo_id]);
     }
     if (telaPequena()) fecharCentral();
   }
@@ -7009,7 +7040,7 @@
 
   function verMissaoNoMapa(m) {
     if (!est.mapa) return;
-    if (m.grupo_id && est.grupos.has(m.grupo_id)) filtrarGrupo(m.grupo_id, true);
+    if (m.grupo_id && est.grupos.has(m.grupo_id)) ligarGrupoFiltro(m.grupo_id, true);
     var pts = [[m.lat, m.lng]];
     if (m.base_lat != null) pts.push([m.base_lat, m.base_lng]);
     (est.missaoMembros.get(m.id) || []).forEach(function (x) {

@@ -196,8 +196,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   grupo, sempre como **membro**; como civil, a não ser que o grupo permita militares. **Gerar novo link**
   invalida o anterior na hora. O papel de responsável só é dado pelo painel.
 - **No mapa, controle "Grupos"** (canto superior direito): cada grupo tem um **ícone de olho 👁**. Tocar
-  mostra **só as pessoas (marcador e trilha) e os destinos do grupo**; tocar de novo, ou em **Mostrar
-  todos**, restaura a visualização completa. O olho ligado fica destacado e o título do controle mostra **· filtrado**; não aparece nenhum aviso nem faixa no mapa.
+  mostra **só as pessoas (marcador e trilha) e os destinos do grupo**. **Vários olhos podem ficar ligados
+  ao mesmo tempo**: o mapa mostra a união dos grupos ligados (ex.: dois grupos na tela). Tocar de novo
+  desliga um grupo; **Mostrar todos** restaura a visualização completa. O olho ligado fica destacado e o
+  título do controle mostra **· filtrado** (ou **· N filtrados**); não aparece nenhum aviso nem faixa no mapa.
   Setores, pontos de interesse, fotos e relatos continuam visíveis; **pedidos de ajuda, pedidos de saída e
   alertas de quem está fora do grupo continuam tocando** e avisam "fora do grupo mostrado". O filtro não
   fica lembrado ao recarregar.

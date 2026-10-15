@@ -406,3 +406,5 @@ body.gaveta.info-ponto-aberto #mapa .leaflet-top, body.gaveta.info-ponto-aberto 
 }
 /* celular: com a janela do ponto aberta, a legenda e a escala (embaixo) também saem da frente */
 body.gaveta.info-ponto-aberto #mapa .leaflet-bottom { visibility: hidden; }
+/* botão ligado (ex.: olho de grupo) continua destacado mesmo com o mouse em cima */
+.btn.btn-ativo:hover { background: #fbbf24; border-color: #fbbf24; color: #0a0d10; }

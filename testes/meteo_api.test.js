@@ -116,7 +116,7 @@ const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
     assert.ok(r.body.avisos.some((t) => /RainViewer/.test(t) && /licença/i.test(t)));
   });
 
-  await teste('grade: 9×9 em ordem de linhas, cobrindo ~30 km ao redor do centro', async () => {
+  await teste('grade: n × n em ordem de linhas, cobrindo 2 × meia-largura ao redor do centro', async () => {
     const g = carregar().montarGrade(-25.4, -49.2, 15, 9);
     assert.strictEqual(g.pontos.length, 81);
     assert.ok(Math.abs(g.pontos[0].lat - g.lat0) < 1e-4 && Math.abs(g.pontos[0].lng - g.lng0) < 1e-4);
@@ -133,12 +133,12 @@ const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
         return json(Array.from({ length: n }, (_, i) => ({ current: { temperature_2m: 15 + i, wind_speed_10m: 8, wind_direction_10m: 270 } })));
       },
     });
-    const r = resposta(); await carregar()(Object.assign(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade', raio: '15' }, 't')), r);
+    const r = resposta(); await carregar()(Object.assign(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade' }, 't')), r);
     assert.strictEqual(r.code, 200);
     assert.strictEqual(r.body.ok, true);
-    assert.strictEqual(r.body.grade.pontos.length, 81);
+    assert.strictEqual(r.body.grade.pontos.length, 169);   // 13 × 13 (padrão: 50 km de cada lado)
     assert.strictEqual(r.body.grade.pontos[0].temperatura, 15);
-    assert.strictEqual(r.body.grade.pontos[80].temperatura, 95);
+    assert.strictEqual(r.body.grade.pontos[168].temperatura, 183);
     assert.ok(!JSON.stringify(r.body).includes('apikey'));
   });
   await teste('grade com resposta incompleta da fonte: falha sem inventar pontos', async () => {

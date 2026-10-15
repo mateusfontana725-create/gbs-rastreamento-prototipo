@@ -10,6 +10,8 @@
 // As chaves ficam só no servidor (variáveis da Vercel). Cache em memória por instância para não repetir consultas.
 
 const TIMEOUT_MS = 8000;
+const GRADE_N = 13;          // pontos por lado da grade (13 × 13 = 169)
+const GRADE_MEIA_MAX_KM = 120;
 const TTL = { radar: 5 * 60e3, previsao: 15 * 60e3, alertas: 10 * 60e3 };
 const cache = new Map();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -129,21 +131,22 @@ function montarGrade(lat, lng, meiaKm, n) {
 // Open-Meteo aceita várias coordenadas numa só chamada; a resposta vem como lista, na mesma ordem.
 // (formato de múltiplas localizações conforme a documentação do Open-Meteo; não verificado ao vivo)
 async function gradeOpenMeteo(lat, lng, meiaKm) {
-  const g = montarGrade(lat, lng, meiaKm, 9);
+  const g = montarGrade(lat, lng, meiaKm, GRADE_N);
   const chave = (process.env.OPEN_METEO_API_KEY || '').trim();
   const base = chave ? 'https://customer-api.open-meteo.com/v1/forecast' : 'https://api.open-meteo.com/v1/forecast';
   // Vírgulas literais, como na documentação do Open-Meteo para várias coordenadas.
   let url = base + '?latitude=' + g.pontos.map((p) => p.lat).join(',') + '&longitude=' + g.pontos.map((p) => p.lng).join(',') +
-    '&current=temperature_2m,wind_speed_10m,wind_direction_10m';
+    '&current=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation';
   if (chave) url += '&apikey=' + encodeURIComponent(chave);
   const j = await getJson(url);
   const lista = Array.isArray(j) ? j : [j];
   if (lista.length !== g.pontos.length) throw new Error('grade incompleta');
+  // Precipitação de cada ponto: mostra onde já chove e a que distância da operação.
   return {
     lat0: g.lat0, lng0: g.lng0, dlat: g.dlat, dlng: g.dlng, nLin: g.nLin, nCol: g.nCol,
     pontos: lista.map(function (x, i) {
       const c = x.current || {};
-      return { lat: g.pontos[i].lat, lng: g.pontos[i].lng, temperatura: c.temperature_2m, vento: c.wind_speed_10m, direcao: c.wind_direction_10m };
+      return { lat: g.pontos[i].lat, lng: g.pontos[i].lng, temperatura: c.temperature_2m, vento: c.wind_speed_10m, direcao: c.wind_direction_10m, precipitacao: c.precipitation };
     }),
   };
 }
@@ -172,7 +175,7 @@ module.exports = async (req, res) => {
   const latR = Math.round(lat * 100) / 100, lngR = Math.round(lng * 100) / 100;
 
   if (grade) {
-    const meia = Math.min(40, Math.max(5, Number(req.query.raio) || 15));
+    const meia = Math.min(GRADE_MEIA_MAX_KM, Math.max(10, Number(req.query.raio) || 50));
     const chaveG = 'grade:' + latR + ',' + lngR + ',' + meia;
     const r = await comCache(chaveG, TTL.previsao, function () { return gradeOpenMeteo(latR, lngR, meia); });
     return res.status(200).json({

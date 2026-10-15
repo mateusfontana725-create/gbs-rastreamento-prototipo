@@ -209,7 +209,40 @@
     return PARADAS_VENTO[PARADAS_VENTO.length - 1][1];
   }
 
+  // Direção cardinal de um rumo em graus (ex.: 45 → "NE").
+  function direcaoCardeal(rumo) {
+    var nomes = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
+    return nomes[Math.round(((rumo % 360) + 360) % 360 / 45) % 8];
+  }
+
+  // Ponto da grade com chuva mais próxima do centro da operação (ou null).
+  function chuvaMaisProxima(pontos, latC, lngC) {
+    var melhor = null;
+    (pontos || []).forEach(function (p) {
+      if (p.precipitacao == null || p.precipitacao < LIMIARES.mmParaChegada) return;
+      var d = distanciaM(latC, lngC, p.lat, p.lng);
+      if (!melhor || d < melhor.distanciaM) {
+        melhor = { lat: p.lat, lng: p.lng, precipitacao: p.precipitacao, distanciaM: d, rumo: rumoGraus(latC, lngC, p.lat, p.lng) };
+      }
+    });
+    return melhor;
+  }
+
+  // Alerta de chuva na área: a distância e a direção ajudam a decidir se dá tempo de sair.
+  // Não há direção de deslocamento: só a posição atual (modelo), sem extrapolação.
+  function alertaChuvaProxima(chuva) {
+    if (!chuva) return null;
+    var km = chuva.distanciaM / 1000;
+    var forte = intensidadeChuva(chuva.precipitacao);
+    var nivel = km <= 10 && forte === 'intensa' ? 'alerta' : km <= 25 && forte !== 'fraca' ? 'atencao' : 'informativo';
+    return { chave: 'chuva-proxima', tipo: 'chuva', nivel: nivel,
+      titulo: 'Chuva a ~' + Math.round(km) + ' km ' + direcaoCardeal(chuva.rumo) + ' da operação',
+      detalhe: chuva.precipitacao.toFixed(1) + ' mm/h no ponto mais próximo (modelo, sem direção de deslocamento)',
+      fonte: 'Open-Meteo', eta: null };
+  }
+
   var API = {
+    direcaoCardeal: direcaoCardeal, chuvaMaisProxima: chuvaMaisProxima, alertaChuvaProxima: alertaChuvaProxima,
     componentesVento: componentesVento, interpolar: interpolar, corTemperatura: corTemperatura, corVento: corVento,
     PARADAS_TEMP: PARADAS_TEMP, PARADAS_VENTO: PARADAS_VENTO,
     LIMIARES: LIMIARES, intensidadeChuva: intensidadeChuva, distanciaM: distanciaM, rumoGraus: rumoGraus,

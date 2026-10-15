@@ -596,3 +596,33 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .meteo-escala { margin: 6px 0; }
 .meteo-barra { height: 10px; border-radius: 2px; border: 1px solid var(--borda-forte); }
 .meteo-escala-rotulos { display: flex; justify-content: space-between; font-size: .7rem; color: var(--texto-3); margin-top: 2px; }
+
+/* Painel de meteorologia, versão enxuta: alertas primeiro, camadas em chips, valores em cartões */
+.meteo-painel { width: min(calc(100vw - 20px), 380px); max-height: 52vh; padding: 12px; gap: 0; }
+.meteo-cabeca { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.meteo-cabeca strong { font-size: .95rem; }
+.meteo-status { font-size: .74rem; color: var(--texto-3); margin: 2px 0 0; }
+.meteo-alertas { display: grid; gap: 6px; }
+.meteo-item { padding: 7px 9px; }
+.meteo-item strong { display: block; font-size: .9rem; line-height: 1.25; }
+.meteo-mais { margin: 6px 0 0; }
+.meteo-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 6px; }
+.meteo-chip { min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--borda-forte); background: var(--superficie-2); color: var(--texto-2); font-weight: 600; font-size: .8rem; cursor: pointer; }
+.meteo-chip[aria-pressed="true"] { border-color: var(--acento); color: var(--texto); box-shadow: inset 0 -2px 0 var(--acento); }
+.meteo-legenda { display: grid; gap: 6px; margin-bottom: 6px; }
+.meteo-legenda-linha { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--texto-2); margin: 0; }
+.meteo-swatch-radar { width: 18px; height: 10px; border-radius: 2px; background: linear-gradient(to right, #7dd3fc, #2563eb, #facc15, #dc2626); flex: none; }
+.meteo-radar-controle { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; flex-wrap: wrap; }
+.meteo-radar-controle input[type="range"] { flex: 1; min-width: 120px; }
+.meteo-agora { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0; }
+.meteo-stat { background: var(--superficie-2); border: 1px solid var(--borda); border-radius: 4px; padding: 6px 8px; display: grid; gap: 2px; }
+.meteo-stat span { font-size: .68rem; color: var(--texto-3); text-transform: uppercase; letter-spacing: .04em; }
+.meteo-stat strong { font-size: .95rem; }
+.meteo-previsao { font-size: .8rem; margin: 4px 0 8px; color: var(--texto-2); }
+.meteo-ajustes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--borda); padding-top: 8px; }
+.meteo-mais-info { margin-top: 8px; border-top: 1px solid var(--borda); padding-top: 6px; }
+.meteo-mais-info summary { cursor: pointer; font-size: .8rem; color: var(--texto-2); }
+.meteo-detalhe { font-size: .74rem; color: var(--texto-3); margin: 4px 0; }
+.meteo-nota { font-size: .68rem; color: var(--texto-3); margin: 8px 0 0; }
+.meteo-bloco { display: none; }
+@media (max-width: 599px) { .meteo-painel { max-height: 46vh; } }

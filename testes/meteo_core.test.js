@@ -108,5 +108,26 @@ teste('escalas de cor: frio azul, quente vermelho, nulo sem cor', () => {
   assert.deepStrictEqual(M.corVento(0), M.PARADAS_VENTO[0][1]);
 });
 
+console.log('Meteorologia: chuva na área e distância');
+teste('chuva mais próxima: distância e direção a partir do centro, ignorando pontos secos', () => {
+  const pts = [{ lat: -25.5, lng: -49.2, precipitacao: 0 }, { lat: -25.4, lng: -49.0, precipitacao: 3 }, { lat: -25.7, lng: -49.2, precipitacao: 6 }];
+  const c = M.chuvaMaisProxima(pts, -25.4, -49.2);
+  assert.ok(Math.abs(c.lng + 49.0) < 1e-9, 'escolhe o ponto molhado mais próximo, não o seco');
+  assert.strictEqual(M.direcaoCardeal(c.rumo), 'L');
+  assert.ok(Math.abs(c.distanciaM - M.distanciaM(-25.4, -49.2, -25.4, -49.0)) < 1e-6);
+});
+teste('nenhum ponto com chuva: sem alerta de chuva na área', () => {
+  assert.strictEqual(M.chuvaMaisProxima([{ lat: 0, lng: 0, precipitacao: 0 }], -25, -49), null);
+  assert.strictEqual(M.alertaChuvaProxima(null), null);
+});
+teste('alerta de chuva na área: nível pela distância e intensidade, sem prometer deslocamento', () => {
+  const perto = M.alertaChuvaProxima({ distanciaM: 8000, precipitacao: 12, rumo: 0, lat: 0, lng: 0 });
+  assert.strictEqual(perto.nivel, 'alerta');
+  assert.ok(/8 km N/.test(perto.titulo), perto.titulo);
+  assert.strictEqual(M.alertaChuvaProxima({ distanciaM: 20000, precipitacao: 3, rumo: 90 }).nivel, 'atencao');
+  assert.strictEqual(M.alertaChuvaProxima({ distanciaM: 60000, precipitacao: 3, rumo: 90 }).nivel, 'informativo');
+  assert.ok(/sem direção de deslocamento/.test(perto.detalhe));
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes de meteorologia passaram.');

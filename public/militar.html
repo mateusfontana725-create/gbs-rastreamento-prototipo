@@ -363,11 +363,59 @@
               <button class="camada-item" type="button" id="opt-fotos" aria-pressed="true"><span class="camada-sinal sinal-foto" aria-hidden="true"></span><span>Fotos</span></button>
               <button class="camada-item" type="button" id="opt-local" aria-pressed="true"><span class="camada-sinal sinal-local" aria-hidden="true"></span><span>Local da operação</span></button>
               <button class="camada-item" type="button" id="opt-nomes" aria-pressed="true"><span class="camada-sinal sinal-nome" aria-hidden="true">Aa</span><span>Nomes no mapa</span></button>
+              <button class="camada-item" type="button" id="opt-meteo" aria-pressed="false"><span class="camada-sinal sinal-meteo" aria-hidden="true">☂</span><span>Meteorologia</span></button>
             </div>
           </section>
         </div>
       </div>
 
+
+      <!-- Meteorologia (js/meteo.js): aviso no mapa e painel com radar, previsão e alertas -->
+      <div class="meteo-aviso" id="meteo-aviso" role="status" hidden>
+        <span id="meteo-aviso-texto"></span>
+        <span class="meteo-aviso-botoes">
+          <button class="btn btn-pequeno" type="button" id="meteo-aviso-ver">Ver</button>
+          <button class="btn btn-pequeno" type="button" id="meteo-aviso-ocultar">Ocultar</button>
+        </span>
+      </div>
+      <section class="meteo-painel" id="meteo-painel" role="region" aria-label="Meteorologia" hidden>
+        <div class="meteo-cabeca">
+          <strong>Meteorologia</strong>
+          <button class="btn btn-pequeno" type="button" id="meteo-fechar" aria-label="Fechar o painel de meteorologia">Fechar</button>
+        </div>
+        <p class="meteo-status" id="meteo-status"></p>
+        <div class="meteo-linha">
+          <button class="btn btn-pequeno" type="button" id="meteo-atualizar">Atualizar</button>
+          <button class="btn btn-pequeno" type="button" id="meteo-som" aria-pressed="true">🔔 Som ligado</button>
+          <label class="meteo-raio-rotulo">Área de monitoramento
+            <select class="campo" id="meteo-raio">
+              <option value="5">5 km</option><option value="10">10 km</option><option value="20">20 km</option>
+            </select>
+          </label>
+        </div>
+        <div class="meteo-alertas" id="meteo-alertas"></div>
+        <p class="muted" id="meteo-alertas-vazio" hidden></p>
+        <div class="meteo-bloco" id="meteo-radar-bloco" hidden>
+          <h4>Radar de precipitação (observado)</h4>
+          <div class="meteo-linha">
+            <button class="btn btn-pequeno" type="button" id="meteo-play" aria-label="Animar o radar">▶</button>
+            <input type="range" id="meteo-range" min="0" max="0" value="0" aria-label="Quadro do radar">
+          </div>
+          <p class="muted" id="meteo-radar-hora"></p>
+          <p class="meteo-legenda">Tons claros = chuva fraca; tons escuros e vermelhos = chuva intensa (escala do provedor).</p>
+        </div>
+        <div class="meteo-bloco">
+          <h4>Previsão (modelo)</h4>
+          <p id="meteo-previsao" class="meteo-previsao"></p>
+        </div>
+        <p class="muted meteo-fontes" id="meteo-fontes" hidden></p>
+        <details class="meteo-bloco">
+          <summary>Histórico da operação</summary>
+          <ul class="meteo-historico" id="meteo-historico"></ul>
+          <p class="muted" id="meteo-historico-vazio" hidden>Nenhum alerta registrado ainda.</p>
+        </details>
+        <p class="meteo-nota">Orientação de cautela: não substitui os alertas oficiais nem a decisão do comando da operação. Raios e granizo não são medidos por estas fontes.</p>
+      </section>
 
       <!-- Barra do modo de desenho (setores, pontos, destino) -->
       <div class="barra-desenho" id="barra-desenho" role="status" hidden>
@@ -576,5 +624,7 @@
   <script src="js/relatorio.js"></script>
   <script src="js/militar.js"></script>
   <script src="js/ferramentas.js"></script>
+  <script src="js/meteo-core.js"></script>
+  <script src="js/meteo.js"></script>
 </body>
 </html>

@@ -332,6 +332,42 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
    - se a verificação falhar, o celular mostra um aviso em vez de ficar em silêncio. Se o servidor ainda não
      tiver a migração 004, a página usa a consulta antiga (`mapa_do_participante`) e continua recebendo.
 
+### Meteorologia: radar, previsão e alertas
+
+Camada **Meteorologia** no painel de camadas (Camadas operacionais), com o aviso no mapa e um painel próprio.
+Nenhum dado é simulado no aplicativo: tudo vem de `/api/meteo` (servidor). Quando uma fonte falha, o painel diz qual,
+e o mapa e o rastreamento continuam funcionando.
+
+> **Estado da integração:** o código foi testado com respostas de exemplo no formato documentado das fontes. Ainda
+> **não foi verificado contra as APIs reais** (o ambiente de desenvolvimento não tinha acesso a elas). Confirme a
+> resposta real de cada fonte depois de publicar, em Preview, antes de usar em operação.
+
+- **Radar de precipitação** (RainViewer): quadros recentes com horário, linha do tempo e animação (▶). Cada quadro
+  é **observado** pelo radar. Não há extrapolação do radar nesta versão.
+- **Previsão** (Open-Meteo) para o centro da operação: temperatura, vento e rajadas agora, e a chegada prevista da
+  chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). É previsão de modelo, não extrapolação do radar.
+- **Alertas**: níveis Informativo, Atenção, Alerta e Crítico, com fonte, horário, validade e estado (novo, atualizado,
+  ativo, expirado). Alertas oficiais do INMET (formato CAP) têm prioridade. Os indicativos calculados (chuva, rajada,
+  tempestade e granizo a partir do código do modelo) são rotulados como tal. O som toca só para Alerta e Crítico,
+  com no máximo um toque a cada 10 min por alerta, e precisa de um toque da pessoa (regra do navegador).
+- **Não são usados**: raios (a política da rede Blitzortung proíbe usar os dados para sistemas de aviso) e medições
+  de granizo ou frente fria. Estas fontes não medem isso.
+- **Monitoramento**: a leitura acontece ao abrir a operação e a cada 5 min, só com a aba visível. Ocultar o aviso
+  não para o monitoramento. O endpoint exige o login de um responsável e tem cache de 5 a 15 min por fonte.
+
+**Licenças (confirme antes do uso operacional):** RainViewer é gratuito só para fins pessoais e educacionais; Open-Meteo
+é gratuito só para uso não comercial e exige plano (chave) para produção. O endpoint inclui esses avisos na resposta.
+
+**Variáveis de ambiente (Vercel → Settings → Environment Variables, em Production e Preview):**
+
+| Nome | Obrigatória? | Para quê |
+|---|---|---|
+| `METEO_ALERTAS_URL` | não | URL do feed de alertas do INMET no formato CAP (JSON). Sem ela, o painel mostra "alertas oficiais não configurados". O endereço ainda não foi verificado: confirme no catálogo WIS2 do INMET antes de definir |
+| `OPEN_METEO_API_KEY` | não | chave do plano comercial do Open-Meteo, para uso em produção. Sem ela, usa o endpoint gratuito não comercial |
+
+O radar (RainViewer) não exige chave. Nada disso aparece no navegador: as chaves ficam só no servidor.
+A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainviewer.com`.
+
 ### Rota por caminhos (serviço de roteamento)
 
 - **Serviço escolhido: openrouteservice** (HeiGIT/Universidade de Heidelberg), sobre dados do
@@ -689,6 +725,7 @@ rastreamento-sar/
 │   ├── config.js               entrega ao navegador só a URL e a chave PÚBLICA (de variáveis de ambiente)
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
 │   ├── responsaveis.js         cria login e redefine senha de responsáveis (só administradores; chave SECRETA)
+│   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
 ├── supabase/
 │   ├── schema.sql              instalação completa e idempotente (inclui todas as migrações)

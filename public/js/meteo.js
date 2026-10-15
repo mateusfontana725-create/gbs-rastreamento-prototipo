@@ -1,0 +1,333 @@
+/* =====================================================================
+ * meteo.js — camada "Meteorologia" do painel do responsável.
+ *   - radar de precipitação (RainViewer): quadros recentes, linha do tempo e animação
+ *   - previsão para o centro da operação (Open-Meteo) e chegada estimada da chuva
+ *   - alertas oficiais (INMET/CAP, quando configurado) e alertas indicativos
+ *   - aviso no mapa (pode ser ocultado sem parar o monitoramento), histórico e som
+ * Os dados vêm de /api/meteo (servidor). Nada é simulado: se uma fonte falhar, o aviso diz isso
+ * e o mapa e o rastreamento continuam funcionando.
+ * ===================================================================== */
+(function () {
+  'use strict';
+  var C = window.Comunicacao, P = window.Painel, Core = window.MeteoCore;
+  if (!P || !Core || !window.L) return;
+  function $(id) { return document.getElementById(id); }
+
+  var CHAVE_LIG = 'gbs-meteo-ligada', CHAVE_SOM = 'gbs-meteo-som', CHAVE_RAIO = 'gbs-meteo-raio';
+  var CHAVE_HIST = 'gbs-meteo-historico:';
+  var INTERVALO_MS = 5 * 60e3, LIMITE_DESATUALIZADO_MIN = 20, MIN_ENTRE_SONS_MS = 10 * 60e3;
+  var NIVEIS = { informativo: 'Informativo', atencao: 'Atenção', alerta: 'Alerta', critico: 'Crítico' };
+  var ESTADOS = { novo: 'novo', atualizado: 'atualizado', mantido: 'ativo', expirado: 'expirado' };
+
+  function lerLocal(k, padrao) { try { return C.local.ler(k, padrao); } catch (e) { return padrao; } }
+  function gravarLocal(k, v) { try { C.local.gravar(k, v); } catch (e) { /* sem armazenamento: vale só nesta página */ } }
+  function hora(t) { return t ? new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—'; }
+
+  var est = {
+    ligada: Boolean(lerLocal(CHAVE_LIG, false)),
+    som: lerLocal(CHAVE_SOM, true) !== false,
+    raioKm: Number(lerLocal(CHAVE_RAIO, 10)) || 10,
+    opId: null,
+    alertas: [],         // alertas ativos na última leitura
+    estados: [],         // inclui os expirados desta leitura
+    historico: [],
+    previsao: null,
+    quadros: [], host: null, quadro: 0, tocando: null,
+    atualizadoEm: null,   // última leitura bem-sucedida (ISO)
+    fontes: null,
+    camadaRadar: null, circulo: null, ultimoSom: {}, ctx: null, timer: null, buscando: false,
+  };
+
+  /* ------------------------------ camada e painel ------------------------------ */
+  function mapa() { return P.mapa(); }
+
+  function atualizarBotao() {
+    var b = $('opt-meteo');
+    if (b) b.setAttribute('aria-pressed', String(est.ligada));
+  }
+
+  function ligar(valor) {
+    est.ligada = valor;
+    gravarLocal(CHAVE_LIG, valor);
+    atualizarBotao();
+    if (valor) { prepararSom(); $('meteo-painel').hidden = false; }
+    else { parar(); $('meteo-painel').hidden = true; }
+    aplicarCamada();
+    desenharSituacao();
+  }
+
+  // Radar e área de monitoramento só aparecem com a camada ligada. A previsão e os alertas continuam.
+  function aplicarCamada() {
+    var m = mapa();
+    if (!m) return;
+    if (est.ligada && est.quadros.length) {
+      if (!est.camadaRadar) {
+        est.camadaRadar = L.tileLayer(urlQuadro(est.quadro), { tileSize: 512, opacity: 0.6, zIndex: 400,
+          attribution: 'Radar © RainViewer', maxNativeZoom: 7 });
+      } else est.camadaRadar.setUrl(urlQuadro(est.quadro));
+      est.camadaRadar.addTo(m);
+    } else if (est.camadaRadar) {
+      m.removeLayer(est.camadaRadar);
+    }
+    desenharArea();
+  }
+
+  function urlQuadro(i) {
+    var q = est.quadros[i];
+    return q ? est.host + q.path + '/512/{z}/{x}/{y}/2/1_1.png' : '';
+  }
+
+  function desenharArea() {
+    var m = mapa(), op = P.op();
+    if (!m || !op || op.local_lat == null) return;
+    if (est.circulo) { m.removeLayer(est.circulo); est.circulo = null; }
+    if (!est.ligada) return;
+    est.circulo = L.circle([op.local_lat, op.local_lng], { radius: est.raioKm * 1000, color: '#38bdf8', weight: 2,
+      dashArray: '6 6', fillOpacity: 0.04, interactive: false, className: 'meteo-area' }).addTo(m);
+  }
+
+  function parar() {
+    if (est.tocando) { clearInterval(est.tocando); est.tocando = null; }
+    var b = $('meteo-play');
+    if (b) { b.textContent = '▶'; b.setAttribute('aria-label', 'Animar o radar'); }
+  }
+
+  function tocar() {
+    if (est.tocando) { parar(); return; }
+    if (est.quadros.length < 2) return;
+    var b = $('meteo-play');
+    b.textContent = '❚❚';
+    b.setAttribute('aria-label', 'Pausar a animação');
+    est.tocando = setInterval(function () {
+      mostrarQuadro((est.quadro + 1) % est.quadros.length);
+    }, 700);
+  }
+
+  function mostrarQuadro(i) {
+    est.quadro = i;
+    $('meteo-range').value = String(i);
+    var q = est.quadros[i];
+    $('meteo-radar-hora').textContent = q ? 'Radar observado · ' + hora(q.t) : 'Sem quadros de radar';
+    if (est.camadaRadar) est.camadaRadar.setUrl(urlQuadro(i));
+  }
+
+  /* ------------------------------ leitura ------------------------------ */
+  function op() { return P.op(); }
+
+  // Troca de operação: limpa o estado e carrega o histórico daquela operação.
+  function trocarOperacao() {
+    var o = op();
+    var id = o ? o.id : null;
+    if (id === est.opId) return;
+    est.opId = id;
+    est.alertas = []; est.estados = []; est.previsao = null; est.quadros = []; est.atualizadoEm = null;
+    est.historico = id ? (lerLocal(CHAVE_HIST + id, []) || []) : [];
+    est.ultimoSom = {};
+  }
+
+  async function consultar() {
+    trocarOperacao();
+    var o = op();
+    if (!o || o.local_lat == null || est.buscando) { desenharSituacao(); return; }
+    est.buscando = true;
+    try {
+      var sessao = (await C.cliente.auth.getSession()).data.session;
+      if (!sessao) throw new Error('Sessão expirada. Entre novamente.');
+      var r = await fetch('/api/meteo?lat=' + o.local_lat + '&lng=' + o.local_lng, { headers: { Authorization: 'Bearer ' + sessao.access_token } });
+      var d = await r.json().catch(function () { return {}; });
+      if (!r.ok) throw new Error(d.mensagem || 'Serviço meteorológico indisponível (' + (d.erro || r.status) + ').');
+      processar(d);
+    } catch (e) {
+      est.erro = e.message;
+    } finally {
+      est.buscando = false;
+      desenharSituacao();
+    }
+  }
+
+  function processar(d) {
+    est.erro = null;
+    est.fontes = d.fontes || null;
+    est.atualizadoEm = d.atualizadoEm || est.atualizadoEm;
+    est.previsao = d.previsao || est.previsao;
+    if (d.radar && d.radar.quadros && d.radar.quadros.length) {
+      var anterior = est.quadros.length;
+      est.quadros = d.radar.quadros;
+      est.host = d.radar.host;
+      $('meteo-range').max = String(est.quadros.length - 1);
+      if (!anterior || est.quadro >= est.quadros.length - 1) mostrarQuadro(est.quadros.length - 1);
+    }
+    var antigos = est.alertas;
+    var novos = Core.analisar(d.previsao, d.alertas || [], Date.now());
+    var mudancas = Core.compararLeituras(antigos, novos);
+    est.alertas = novos;
+    est.estados = mudancas;
+    mudancas.forEach(function (a) {
+      if (a.estado === 'mantido') return;
+      registrar(a);
+      var anterior = antigos.filter(function (x) { return x.chave === a.chave; })[0];
+      if (a.estado !== 'expirado' && Core.deveNotificar(anterior, a)) avisarSom(a);
+    });
+    aplicarCamada();
+    desenharAviso();
+  }
+
+  // Histórico da operação: novos, atualizados e expirados (máximo de 50 registros).
+  function registrar(a) {
+    est.historico.unshift({ quando: new Date().toISOString(), chave: a.chave, titulo: a.titulo, nivel: a.nivel, estado: a.estado, fonte: a.fonte });
+    est.historico = est.historico.slice(0, 50);
+    if (est.opId) gravarLocal(CHAVE_HIST + est.opId, est.historico);
+  }
+
+  /* ------------------------------ som ------------------------------ */
+  function prepararSom() {
+    if (!est.som || est.ctx) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) { try { est.ctx = new AC(); } catch (e) { est.ctx = null; } }
+  }
+
+  function avisarSom(a) {
+    if (!est.som || (a.nivel !== 'alerta' && a.nivel !== 'critico')) return;
+    var agora = Date.now();
+    if (est.ultimoSom[a.chave] && agora - est.ultimoSom[a.chave] < MIN_ENTRE_SONS_MS) return;
+    est.ultimoSom[a.chave] = agora;
+    if (!est.ctx) return;   // o navegador só toca som depois de um toque da pessoa
+    try {
+      var c = est.ctx;
+      [0, 0.45].forEach(function (dt) {
+        var o = c.createOscillator(), g = c.createGain();
+        o.frequency.value = a.nivel === 'critico' ? 1000 : 760;
+        g.gain.value = 0.12;
+        o.connect(g); g.connect(c.destination);
+        o.start(c.currentTime + dt); o.stop(c.currentTime + dt + 0.3);
+      });
+    } catch (e) { /* som indisponível: o aviso visual continua */ }
+  }
+
+  /* ------------------------------ textos e telas ------------------------------ */
+  function desenharAviso() {
+    var aviso = $('meteo-aviso');
+    var ativos = est.alertas.filter(function (a) { return a.nivel === 'alerta' || a.nivel === 'critico'; });
+    var principal = ativos.sort(function (a, b) { return Core.RANK[b.nivel] - Core.RANK[a.nivel]; })[0];
+    if (!principal || est.avisoOculto) { aviso.hidden = true; return; }
+    aviso.hidden = false;
+    aviso.className = 'meteo-aviso meteo-' + principal.nivel;
+    $('meteo-aviso-texto').textContent = NIVEIS[principal.nivel] + ': ' + principal.titulo;
+  }
+
+  function desenharSituacao() {
+    var p = $('meteo-painel');
+    if (!p) return;
+    var o = op();
+    var desat = Core.desatualizado(est.atualizadoEm, Date.now(), LIMITE_DESATUALIZADO_MIN);
+    var st = $('meteo-status');
+    if (!o || o.local_lat == null) st.textContent = 'Defina o local da operação para o monitoramento.';
+    else if (est.erro) st.textContent = 'Não foi possível atualizar: ' + est.erro;
+    else if (!est.atualizadoEm) st.textContent = 'Carregando dados meteorológicos…';
+    else st.textContent = (desat ? 'Dados desatualizados · ' : 'Atualizado às ' + hora(est.atualizadoEm) + ' · ') + 'centro da operação, área de ' + est.raioKm + ' km';
+    st.className = 'meteo-status' + (desat || est.erro ? ' meteo-desat' : '');
+
+    var lista = $('meteo-alertas');
+    lista.innerHTML = '';
+    var mostrar = est.estados.filter(function (a) { return a.estado !== 'expirado'; });
+    mostrar.forEach(function (a) {
+      lista.appendChild(elementoAlerta(a));
+    });
+    $('meteo-alertas-vazio').hidden = mostrar.length > 0 || !est.atualizadoEm;
+    $('meteo-alertas-vazio').textContent = 'Nenhum alerta ativo para a área da operação.';
+
+    desenharFontes();
+    desenharPrevisao();
+    desenharHistorico();
+    $('meteo-som').setAttribute('aria-pressed', String(est.som));
+    $('meteo-som').textContent = est.som ? '🔔 Som ligado' : '🔕 Som desligado';
+    $('meteo-raio').value = String(est.raioKm);
+    $('meteo-radar-bloco').hidden = !est.quadros.length;
+    desenharAviso();
+  }
+
+  function elementoAlerta(a) {
+    var div = document.createElement('div');
+    div.className = 'meteo-item meteo-' + a.nivel;
+    var cab = document.createElement('div');
+    cab.className = 'meteo-item-cab';
+    var nivel = document.createElement('span'); nivel.className = 'meteo-selo'; nivel.textContent = NIVEIS[a.nivel];
+    var est2 = document.createElement('span'); est2.className = 'meteo-selo meteo-estado'; est2.textContent = ESTADOS[a.estado] || a.estado;
+    cab.appendChild(nivel); cab.appendChild(est2);
+    var titulo = document.createElement('strong'); titulo.textContent = a.titulo;
+    var det = document.createElement('p'); det.className = 'meteo-detalhe'; det.textContent = a.detalhe || '';
+    var fonte = document.createElement('p'); fonte.className = 'meteo-fonte';
+    var txt = 'Fonte: ' + a.fonte;
+    if (a.eta) txt += ' · chegada prevista ~' + hora(a.eta.t) + ' (±' + a.eta.incertezaMin + ' min, previsão de modelo)';
+    if (a.inicio || a.fim) txt += ' · válido ' + (a.inicio ? hora(a.inicio) : '') + (a.fim ? ' até ' + hora(a.fim) : '');
+    if (a.tipo === 'oficial') txt += ' · consulte o comando e o alerta oficial';
+    fonte.textContent = txt;
+    div.appendChild(cab); div.appendChild(titulo); div.appendChild(det); div.appendChild(fonte);
+    return div;
+  }
+
+  function desenharFontes() {
+    var f = est.fontes;
+    var linhas = [];
+    if (f) {
+      Object.keys(f).forEach(function (k) {
+        var x = f[k];
+        var txt = x.nome + ': ' + (x.ok ? 'ok' + (x.obtidoEm ? ' às ' + hora(x.obtidoEm) : '') : (x.status === 'nao_configurado' ? 'não configurado' : 'indisponível'));
+        linhas.push(txt + (x.erro && !x.ok && x.status !== 'nao_configurado' ? ' (' + x.erro + ')' : ''));
+      });
+    }
+    $('meteo-fontes').textContent = linhas.join(' · ');
+    $('meteo-fontes').hidden = !linhas.length;
+  }
+
+  function desenharPrevisao() {
+    var pv = est.previsao, bloco = $('meteo-previsao');
+    if (!pv || !pv.atual) { bloco.textContent = 'Previsão indisponível.'; return; }
+    var a = pv.atual;
+    var partes = [];
+    if (a.temperatura != null) partes.push(Math.round(a.temperatura) + ' °C');
+    if (a.vento != null) partes.push('vento ' + Math.round(a.vento) + ' km/h');
+    if (a.rajada != null) partes.push('rajadas ' + Math.round(a.rajada) + ' km/h');
+    var chegada = Core.previsaoChegada(pv.horas, Date.now());
+    var linha = 'Agora: ' + partes.join(' · ');
+    if (chegada) linha += '. Chuva prevista por volta de ' + hora(chegada.t) + ' (±' + chegada.incertezaMin + ' min).';
+    else linha += '. Sem chuva prevista pelo modelo nas próximas horas.';
+    bloco.textContent = linha + ' Previsão de modelo, não extrapolação do radar.';
+  }
+
+  function desenharHistorico() {
+    var ul = $('meteo-historico');
+    ul.innerHTML = '';
+    est.historico.slice(0, 12).forEach(function (h) {
+      var li = document.createElement('li');
+      li.textContent = hora(h.quando) + ' · ' + (ESTADOS[h.estado] || h.estado) + ' · ' + h.titulo;
+      ul.appendChild(li);
+    });
+    $('meteo-historico-vazio').hidden = est.historico.length > 0;
+  }
+
+  /* ------------------------------ ligação com a interface ------------------------------ */
+  function iniciar() {
+    atualizarBotao();
+    $('opt-meteo').addEventListener('click', function () { ligar(!est.ligada); });
+    $('meteo-fechar').addEventListener('click', function () { $('meteo-painel').hidden = true; });
+    $('meteo-aviso-ver').addEventListener('click', function () { $('meteo-painel').hidden = false; desenharSituacao(); });
+    $('meteo-aviso-ocultar').addEventListener('click', function () { est.avisoOculto = true; desenharAviso(); });
+    $('meteo-range').addEventListener('input', function () { parar(); mostrarQuadro(Number(this.value)); });
+    $('meteo-play').addEventListener('click', tocar);
+    $('meteo-som').addEventListener('click', function () { est.som = !est.som; gravarLocal(CHAVE_SOM, est.som); if (est.som) prepararSom(); desenharSituacao(); });
+    $('meteo-raio').addEventListener('change', function () { est.raioKm = Number(this.value); gravarLocal(CHAVE_RAIO, est.raioKm); desenharArea(); desenharSituacao(); });
+    $('meteo-atualizar').addEventListener('click', function () { consultar(); });
+
+    if (est.ligada) { $('meteo-painel').hidden = false; }
+    // Monitoramento: primeira leitura logo após abrir a operação, depois a cada 5 min (só com a aba visível).
+    setTimeout(consultar, 2500);
+    est.timer = setInterval(function () { if (document.visibilityState === 'visible') consultar(); }, INTERVALO_MS);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') consultar(); });
+    // Aguarda o mapa existir antes de desenhar a camada.
+    var tent = setInterval(function () { if (mapa()) { clearInterval(tent); aplicarCamada(); } }, 500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+  window.MeteoPainel = { consultar: consultar, estado: function () { return est; } };
+})();

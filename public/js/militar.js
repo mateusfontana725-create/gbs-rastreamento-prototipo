@@ -473,10 +473,37 @@
     return (cad ? cad + ' — ' : '') + t;
   }
 
-  // Ação da linha em forma de ícone: o nome completo fica na dica (title) e para leitores de tela.
-  function icone(simbolo, rotulo, onclick, classeExtra) {
-    return UI.el('button', { classe: 'btn btn-icone' + (classeExtra ? ' ' + classeExtra : ''), type: 'button', texto: simbolo, title: rotulo, 'aria-label': rotulo, onclick: onclick });
+  // Menu "⋮" da linha: abre as funções disponíveis para aquela linha. Um menu aberto por vez;
+  // fecha ao escolher uma função, ao clicar fora ou com Esc.
+  var menuLinhaAberto = null;
+  function menuLinha(itens) {
+    var gatilho = UI.el('button', { classe: 'btn btn-icone', type: 'button', texto: '⋮', title: 'Mais opções', 'aria-label': 'Mais opções', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+    var lista = UI.el('div', { classe: 'menu-linha', role: 'menu', hidden: true }, itens.map(function (it) {
+      return UI.el('button', { classe: 'menu-linha-item' + (it.perigo ? ' perigo' : ''), type: 'button', role: 'menuitem', texto: it.texto,
+        onclick: function () { fechar(); it.acao(); } });
+    }));
+    function fechar() {
+      lista.hidden = true;
+      gatilho.setAttribute('aria-expanded', 'false');
+      if (menuLinhaAberto === fechar) menuLinhaAberto = null;
+    }
+    gatilho.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var abrir = lista.hidden;
+      if (menuLinhaAberto) menuLinhaAberto();
+      lista.hidden = !abrir;
+      gatilho.setAttribute('aria-expanded', String(abrir));
+      if (abrir) menuLinhaAberto = fechar;
+    });
+    return UI.el('div', { classe: 'menu-linha-wrap' }, [gatilho, lista]);
   }
+
+  document.addEventListener('click', function (ev) {
+    if (menuLinhaAberto && !ev.target.closest('.menu-linha-wrap')) menuLinhaAberto();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && menuLinhaAberto) menuLinhaAberto();
+  });
 
   function abrirOperacao(op) {
     location.hash = '#op=' + op.id;
@@ -516,27 +543,19 @@
         ? UI.el('span', { classe: 'selo selo-ok', texto: 'Ativa' })
         : UI.el('span', { classe: 'selo selo-neutro', texto: 'Encerrada' });
       var semPainel = Boolean(op.dados_apagados_em);
-      var acoes = UI.el('div', { classe: 'op-acoes' });
-      if (!semPainel) {
-        acoes.appendChild(icone(op.status === 'ativa' ? '▶' : '◉', op.status === 'ativa' ? 'Abrir painel' : 'Ver dados', function () { abrirOperacao(op); }));
-      }
+      // Funções desta operação, no menu ⋮ da linha
+      var funcoes = [];
+      if (!semPainel) funcoes.push({ texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver dados', acao: function () { abrirOperacao(op); } });
       if (window.Relatorio) {
-        acoes.appendChild(icone('☰', 'Diário da operação', function () { window.Relatorio.abrirDiario(op); }));
-        acoes.appendChild(icone('▤', 'Relatório final (PDF)', function () { window.Relatorio.abrirRelatorio(op); }));
-      }
-      if (op.status !== 'ativa' && !semPainel) {
-        acoes.appendChild(icone('⌫', 'Apagar dados agora', function () { apagarDados(op); }, 'btn-perigo'));
+        funcoes.push({ texto: 'Diário da operação', acao: function () { window.Relatorio.abrirDiario(op); } });
+        funcoes.push({ texto: 'Relatório final (PDF)', acao: function () { window.Relatorio.abrirRelatorio(op); } });
       }
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
-      if (incompleta) {
-        acoes.appendChild(icone('✎', 'Completar cadastro', function () {
-          window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } });
-        }));
-      }
-      if (podeExcluir(op)) {
-        acoes.appendChild(icone('✕', 'Excluir operação', function () { excluirOperacao(op); }, 'btn-perigo'));
-      }
+      if (incompleta) funcoes.push({ texto: 'Completar cadastro', acao: function () { window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } }); } });
+      if (op.status !== 'ativa' && !semPainel) funcoes.push({ texto: 'Apagar dados agora', perigo: true, acao: function () { apagarDados(op); } });
+      if (podeExcluir(op)) funcoes.push({ texto: 'Excluir operação', perigo: true, acao: function () { excluirOperacao(op); } });
+      var acoes = UI.el('div', { classe: 'op-acoes' }, funcoes.length ? [menuLinha(funcoes)] : []);
       var deEquipe = est.usuario && op.responsavel_id !== est.usuario.id
         ? UI.el('span', { classe: 'selo selo-responsavel', title: 'Você foi adicionado como responsável', texto: 'Equipe' }) : null;
       var seloIncompleto = incompleta ? UI.el('span', { classe: 'selo selo-alerta', title: 'Falta tipo e/ou data e hora do acionamento', texto: 'Cadastro incompleto' }) : null;
@@ -6075,15 +6094,14 @@
     var ul = $('lista-resp');
     ul.innerHTML = '';
     (lista || []).forEach(function (r) {
-      var acoes = UI.el('div', { classe: 'op-acoes' });
+      var funcoes = [];
       if (!r.eu) {
-        acoes.appendChild(icone('↻', 'Redefinir senha', function () { redefinirSenha(r); }));
-        acoes.appendChild(icone('★', r.admin ? 'Tirar administrador' : 'Tornar administrador', function () { alterarAdmin(r); }));
-        acoes.appendChild(r.ativo
-          ? icone('⊘', 'Desativar acesso', function () { alterarAtivo(r); }, 'btn-perigo')
-          : icone('✓', 'Reativar acesso', function () { alterarAtivo(r); }, 'btn-ok'));
+        funcoes.push({ texto: 'Redefinir senha', acao: function () { redefinirSenha(r); } });
+        funcoes.push({ texto: r.admin ? 'Tirar administrador' : 'Tornar administrador', acao: function () { alterarAdmin(r); } });
+        funcoes.push({ texto: r.ativo ? 'Desativar acesso' : 'Reativar acesso', perigo: r.ativo, acao: function () { alterarAtivo(r); } });
       }
-      acoes.appendChild(icone('✎', 'Renomear', function () { renomearResponsavel(r); }));
+      funcoes.push({ texto: 'Renomear', acao: function () { renomearResponsavel(r); } });
+      var acoes = UI.el('div', { classe: 'op-acoes' }, [menuLinha(funcoes)]);
       var li = UI.el('li', { classe: (r.ativo ? '' : 'inativo ') + 'clicavel', tabindex: '0' }, [
         UI.el('div', { classe: 'op-info' }, [
           UI.el('strong', null, [

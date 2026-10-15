@@ -522,3 +522,20 @@ html[data-tema="claro"] .btn.btn-icone.btn-ok { color: #15803d; }
 .modal:has(.detalhe-resp) { width: min(480px, 100%); }
 .detalhe-resp .muted, .detalhe-resp .ajuda { margin: 0 0 6px; }
 .op-acoes .btn.btn-icone { flex: 0 0 auto; }
+
+/* Menu "⋮" da linha (operações e responsáveis): as funções aparecem ao tocar nos três pontos */
+.menu-linha-wrap { position: relative; flex: none; }
+.menu-linha {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 220px; padding: 4px;
+  display: flex; flex-direction: column; background: var(--superficie); border: 1px solid var(--borda-forte);
+  border-top: 2px solid var(--acento); border-radius: var(--raio); box-shadow: 0 12px 30px rgba(0, 0, 0, .55);
+}
+.menu-linha[hidden] { display: none; }
+.menu-linha-item {
+  display: block; width: 100%; min-height: 40px; padding: 8px 12px; border: 0; border-radius: 2px; background: transparent;
+  color: var(--texto); text-align: left; font-family: var(--fonte); font-weight: 600; font-size: .92rem; cursor: pointer; white-space: nowrap;
+}
+.menu-linha-item:hover, .menu-linha-item:focus-visible { background: var(--superficie-3); outline: none; }
+.menu-linha-item.perigo { color: var(--perigo-texto); }
+.menu-linha-item.perigo:hover { background: var(--perigo-claro); }
+@media (pointer: coarse) { .menu-linha-item { min-height: 46px; } }

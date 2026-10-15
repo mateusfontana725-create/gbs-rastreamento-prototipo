@@ -300,8 +300,8 @@
     atual.importados.forEach(function (imp) {
       if (!imp.visivel) return;
       var d = imp.dados;
-      d.areas.forEach(function (a) { L.polygon(a.pts, { color: COR_IMPORT, weight: 2, fillOpacity: 0.08, dashArray: '4 4', className: 'importado' }).bindTooltip(a.nome).addTo(atual.camadaImport); });
-      d.linhas.forEach(function (l) { L.polyline(l.pts, { color: COR_IMPORT, weight: 3, opacity: 0.9, className: 'importado' }).bindTooltip(l.nome).addTo(atual.camadaImport); });
+      d.areas.forEach(function (a) { L.polygon(a.pts, { color: COR_IMPORT, weight: 2, fillOpacity: 0.08, dashArray: '4 4', className: 'importado' }).bindTooltip(C.esc(a.nome)).addTo(atual.camadaImport); });
+      d.linhas.forEach(function (l) { L.polyline(l.pts, { color: COR_IMPORT, weight: 3, opacity: 0.9, className: 'importado' }).bindTooltip(C.esc(l.nome)).addTo(atual.camadaImport); });
       d.pontos.forEach(function (p) {
         L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'mk-import-wrap', html: '<div class="mk-import"></div><div class="mk-import-rotulo">' + C.esc(p.nome) + '</div>', iconSize: [0, 0] }), title: p.nome })
           .bindPopup(function () { return infoImportado(p); }).addTo(atual.camadaImport);

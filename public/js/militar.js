@@ -1282,8 +1282,8 @@
     });
   }
 
-  function linhaLegenda(icone, rotulo, detalhe) {
-    return '<div class="legenda-linha">' + icone + '<span><b>' + rotulo + '</b>' + (detalhe ? ' <small>' + detalhe + '</small>' : '') + '</span></div>';
+  function linhaLegenda(icone, rotulo) {
+    return '<div class="legenda-linha">' + icone + '<span><b>' + rotulo + '</b></span></div>';
   }
 
   function renderizarLegenda() {
@@ -1292,15 +1292,15 @@
     var presentes = { militar: false, civil: false, responsavel: false };
     est.participantes.forEach(function (p) { if (!p.dados.removido) presentes[tipoDe(p.dados)] = true; });
     var linhas = [];
-    if (presentes.militar) linhas.push(linhaLegenda('<span class="simbolo simbolo-militar"><span>M</span></span>', 'Militar', 'quadrado · trilha contínua'));
-    if (presentes.civil) linhas.push(linhaLegenda('<span class="simbolo simbolo-civil"><span>C</span></span>', 'Civil', 'círculo · trilha tracejada'));
-    if (presentes.responsavel) linhas.push(linhaLegenda('<span class="simbolo simbolo-responsavel"><span>R</span></span>', 'Responsável da operação', 'losango vermelho com R · nunca a cor do grupo'));
+    if (presentes.militar) linhas.push(linhaLegenda('<span class="simbolo simbolo-militar"><span>M</span></span>', 'Militar'));
+    if (presentes.civil) linhas.push(linhaLegenda('<span class="simbolo simbolo-civil"><span>C</span></span>', 'Civil'));
+    if (presentes.responsavel) linhas.push(linhaLegenda('<span class="simbolo simbolo-responsavel"><span>R</span></span>', 'Responsável da operação'));
     var temRespGrupo = false;
     est.membros.forEach(function (mapa) { mapa.forEach(function (m) { if (m.papel === 'responsavel') temRespGrupo = true; }); });
-    if (temRespGrupo) linhas.push(linhaLegenda('<span class="lg-resp-grupo"><span class="simbolo simbolo-militar em-grupo" style="--cor-grupo:' + GRUPO_CORES[0] + ';background:' + GRUPO_CORES[0] + '"><span>M</span></span></span>', 'Responsável do grupo', 'distintivo ★ branco · cor do grupo'));
+    if (temRespGrupo) linhas.push(linhaLegenda('<span class="lg-resp-grupo"><span class="simbolo simbolo-militar em-grupo" style="--cor-grupo:' + GRUPO_CORES[0] + ';background:' + GRUPO_CORES[0] + '"><span>M</span></span></span>', 'Responsável do grupo'));
     if (est.participantes.size) {
       var ultimas = Array.from(est.participantes.values()).some(function (p) { return !p.dados.removido && posicaoAntiga(p); });
-      if (ultimas) linhas.push(linhaLegenda('<span class="antigo"><span class="simbolo simbolo-civil" style="background:#6b7280"><span>·</span></span></span>', 'Última posição antiga', 'mais de 2 min sem atualizar'));
+      if (ultimas) linhas.push(linhaLegenda('<span class="antigo"><span class="simbolo simbolo-civil" style="background:#6b7280"><span>·</span></span></span>', 'Última posição antiga'));
     }
     var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
     var listaGrupos = grupos.length
@@ -1313,16 +1313,15 @@
       '<h4 class="legenda-titulo">Participantes</h4>' +
       (linhas.join('') || '<p class="muted legenda-vazio">Nenhum participante ainda.</p>') +
       '<h4 class="legenda-titulo">Grupos ativos</h4>' + listaGrupos +
-      '<p class="legenda-nota">Quem está num grupo usa a cor do grupo no marcador e na trilha.</p>' +
-      '<h4 class="legenda-titulo">No mapa</h4>' +
-      linhaLegenda('<span class="mk-foto mk-foto-legenda"><span class="ico-camera"></span></span>', 'Foto', 'registrada no local') +
-      linhaLegenda('<span class="mk-relato mk-relato-legenda"><span>P</span></span>', 'Relato', 'do participante') +
-      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span>', 'Ponto de interesse', 'a letra é a categoria') +
-      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span>', 'Base', 'círculo = raio de chegada') +
-      linhaLegenda('<span class="mk-local mk-local-legenda" aria-hidden="true">◎</span>', 'Local da operação', '') +
-      linhaLegenda('<span class="setor-legenda"></span>', 'Setor de busca', 'tracejado = pendente') +
-      linhaLegenda('<span class="lg-linha-rota"></span>', 'Rota até o destino', 'por caminhos') +
-      linhaLegenda('<span class="lg-lacuna"></span>', 'Falha', 'trecho sem posições (○ início · ● fim)');
+            '<h4 class="legenda-titulo">No mapa</h4>' +
+      linhaLegenda('<span class="mk-foto mk-foto-legenda"><span class="ico-camera"></span></span>', 'Foto') +
+      linhaLegenda('<span class="mk-relato mk-relato-legenda"><span>P</span></span>', 'Relato') +
+      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span>', 'Ponto de interesse') +
+      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span>', 'Base') +
+      linhaLegenda('<span class="mk-local mk-local-legenda" aria-hidden="true">◎</span>', 'Local da operação') +
+      linhaLegenda('<span class="setor-legenda"></span>', 'Setor de busca') +
+      linhaLegenda('<span class="lg-linha-rota"></span>', 'Rota até o destino') +
+      linhaLegenda('<span class="lg-lacuna"></span>', 'Falha');
   }
 
   function marcadoresDe(tipo) {

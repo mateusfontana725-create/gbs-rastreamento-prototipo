@@ -24,7 +24,7 @@
   <section id="tela-login" class="tela-centro" hidden>
     <form id="form-login" class="cartao cartao-login" novalidate>
       <div class="marca">
-        <div class="marca-icone" aria-hidden="true">GBS</div>
+        <img class="marca-icone marca-brasao" src="img/brasao-cbmpr.png" alt="Corpo de Bombeiros Militar do Paraná" width="44" height="44">
         <div>
           <h1>Painel do Responsável</h1>
           <small>Rastreamento GBS · Acesso restrito</small>
@@ -57,7 +57,7 @@
   <section id="tela-operacoes" hidden>
     <header class="barra-topo">
       <div class="marca">
-        <div class="marca-icone" aria-hidden="true">GBS</div>
+        <img class="marca-icone marca-brasao" src="img/brasao-cbmpr.png" alt="Corpo de Bombeiros Militar do Paraná" width="44" height="44">
         <div><h1>Operações de busca</h1><small id="usuario-nome"></small></div>
       </div>
       <div class="barra-espaco"></div>
@@ -74,8 +74,22 @@
           <!-- o cadastro abre num modal (militar.js: abrirNovaOperacao) -->
           <button class="btn btn-primario" type="button" id="btn-nova-op">+ Nova operação</button>
         </div>
+        <div class="filtros" role="search" aria-label="Filtrar operações">
+          <input class="campo filtro-busca" id="ops-busca" type="search" placeholder="Buscar por nome, local ou descrição" aria-label="Buscar operação">
+          <select class="campo" id="ops-situacao" aria-label="Situação">
+            <option value="">Todas as situações</option><option value="ativa">Ativas</option><option value="encerrada">Encerradas</option>
+          </select>
+          <select class="campo" id="ops-criador" aria-label="Criada por" hidden>
+            <option value="">Todos os responsáveis</option><option value="eu">Criadas por mim</option><option value="outros">Criadas por outros</option>
+          </select>
+          <select class="campo" id="ops-periodo" aria-label="Período do acionamento">
+            <option value="">Qualquer data</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option>
+          </select>
+          <button class="btn btn-pequeno" type="button" id="ops-limpar">Limpar</button>
+        </div>
+        <p class="muted contagem" id="ops-contagem" aria-live="polite"></p>
         <ul class="lista-ops" id="lista-ops"></ul>
-        <p class="muted" id="ops-vazio" hidden>Nenhuma operação criada ainda.</p>
+        <p class="muted" id="ops-vazio" hidden></p>
       </div>
     </div>
   </section>
@@ -85,7 +99,7 @@
     <header class="barra-topo">
       <a class="btn btn-barra btn-pequeno" href="#" title="Voltar para as operações" aria-label="Voltar para as operações">◀</a>
       <div class="marca">
-        <div class="marca-icone" aria-hidden="true">GBS</div>
+        <img class="marca-icone marca-brasao" src="img/brasao-cbmpr.png" alt="Corpo de Bombeiros Militar do Paraná" width="44" height="44">
         <div><h1>Responsáveis</h1><small>Quem pode acessar o painel</small></div>
       </div>
       <div class="barra-espaco"></div>
@@ -138,7 +152,19 @@
           <!-- o cadastro abre num modal (militar.js: abrirCadastroResponsavel) -->
           <button class="btn btn-primario" type="button" id="btn-novo-resp">+ Cadastrar responsável</button>
         </div>
+        <div class="filtros" role="search" aria-label="Filtrar responsáveis">
+          <input class="campo filtro-busca" id="resp-busca" type="search" placeholder="Buscar por nome ou e-mail" aria-label="Buscar responsável">
+          <select class="campo" id="resp-situacao" aria-label="Situação">
+            <option value="">Todos</option><option value="ativos">Com acesso</option><option value="desativados">Desativados</option>
+          </select>
+          <select class="campo" id="resp-papel" aria-label="Papel">
+            <option value="">Todos os papéis</option><option value="admin">Administradores</option><option value="comuns">Responsáveis comuns</option>
+          </select>
+          <button class="btn btn-pequeno" type="button" id="resp-limpar">Limpar</button>
+        </div>
+        <p class="muted contagem" id="resp-contagem" aria-live="polite"></p>
         <ul class="lista-resp" id="lista-resp"></ul>
+        <p class="muted" id="resp-vazio" hidden></p>
       </div>
     </div>
   </section>

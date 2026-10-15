@@ -263,6 +263,21 @@
     $('gps-alerta-como').addEventListener('click', mostrarComoLiberarMinha);
     $('btn-minha-conta').addEventListener('click', abrirMinhaConta);
     $('btn-novo-resp').addEventListener('click', abrirCadastroResponsavel);
+    // filtros das listas (cada mudança reaplica sobre o que já está carregado)
+    ['ops-busca', 'ops-situacao', 'ops-criador', 'ops-periodo'].forEach(function (id) {
+      $(id).addEventListener(id === 'ops-busca' ? 'input' : 'change', renderizarOperacoes);
+    });
+    $('ops-limpar').addEventListener('click', function () {
+      $('ops-busca').value = ''; $('ops-situacao').value = ''; $('ops-criador').value = ''; $('ops-periodo').value = '';
+      renderizarOperacoes();
+    });
+    ['resp-busca', 'resp-situacao', 'resp-papel'].forEach(function (id) {
+      $(id).addEventListener(id === 'resp-busca' ? 'input' : 'change', desenharResponsaveis);
+    });
+    $('resp-limpar').addEventListener('click', function () {
+      $('resp-busca').value = ''; $('resp-situacao').value = ''; $('resp-papel').value = '';
+      desenharResponsaveis();
+    });
     $('resp-cred-fechar').addEventListener('click', function () { $('resp-credenciais').hidden = true; $('resp-cred-texto').textContent = ''; });
     $('resp-cred-copiar').addEventListener('click', function () { copiarTexto($('resp-cred-texto').textContent); });
     $('btn-equipe').addEventListener('click', abrirEquipe);
@@ -527,17 +542,59 @@
       ul.appendChild(UI.el('li', { classe: 'erro-form', texto: e.message }));
       return;
     }
-    ul.innerHTML = '';
-    $('ops-vazio').hidden = ops.length > 0;
     // Administrador vê todas as operações: mostra quem criou cada uma (nomes só para o admin).
     var admin = Boolean(est.responsavel && est.responsavel.admin);
     $('ops-titulo').textContent = admin ? 'Operações (todas)' : 'Minhas operações';
+    $('ops-criador').hidden = !admin;
     var nomes = {};
     if (admin) {
       try {
         ((await C.rpc('admin_listar_responsaveis', {})) || []).forEach(function (r) { nomes[r.user_id] = r.nome; });
       } catch (e) { /* sem os nomes, a lista segue sem o "criada por" */ }
     }
+    est.listaOps = ops;
+    est.nomesCriadores = nomes;
+    renderizarOperacoes();
+  }
+
+  // Sem acento e sem maiúsculas: "petropolis" encontra "Petrópolis".
+  function semAcento(t) {
+    return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  // Filtros da lista de operações (sobre o que já foi carregado, sem nova consulta).
+  function filtrarOperacoes(ops) {
+    var busca = semAcento($('ops-busca').value.trim());
+    var situacao = $('ops-situacao').value;
+    var criador = $('ops-criador').hidden ? '' : $('ops-criador').value;
+    var dias = Number($('ops-periodo').value) || 0;
+    var agora = Date.now();
+    return ops.filter(function (op) {
+      if (busca && semAcento([op.codigo, op.local_endereco, op.descricao].join(' ')).indexOf(busca) === -1) return false;
+      if (situacao && op.status !== situacao) return false;
+      if (criador === 'eu' && op.responsavel_id !== est.usuario.id) return false;
+      if (criador === 'outros' && op.responsavel_id === est.usuario.id) return false;
+      if (dias) {
+        var ref = C.paraMs(op.acionado_em || op.criada_em);
+        if (!ref || agora - ref > dias * 86400000) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderizarOperacoes() {
+    var ul = $('lista-ops');
+    var todas = est.listaOps || [];
+    var ops = filtrarOperacoes(todas);
+    var admin = Boolean(est.responsavel && est.responsavel.admin);
+    var nomes = est.nomesCriadores || {};
+    ul.innerHTML = '';
+    var vazio = !todas.length ? 'Nenhuma operação criada ainda.' : !ops.length ? 'Nenhuma operação com esses filtros.' : '';
+    $('ops-vazio').textContent = vazio;
+    $('ops-vazio').hidden = !vazio;
+    $('ops-contagem').textContent = !todas.length ? '' : ops.length === todas.length
+      ? todas.length + (todas.length === 1 ? ' operação' : ' operações')
+      : ops.length + ' de ' + todas.length + ' operações';
     ops.forEach(function (op) {
       var selo = op.status === 'ativa'
         ? UI.el('span', { classe: 'selo selo-ok', texto: 'Ativa' })
@@ -6091,9 +6148,37 @@
   }
 
   function renderizarResponsaveis(lista) {
+    est.listaResp = lista || [];
+    desenharResponsaveis();
+  }
+
+  // Filtros da lista de responsáveis (sobre a lista carregada).
+  function filtrarResponsaveis(lista) {
+    var busca = semAcento($('resp-busca').value.trim());
+    var situacao = $('resp-situacao').value;
+    var papel = $('resp-papel').value;
+    return lista.filter(function (r) {
+      if (busca && semAcento((r.nome || '') + ' ' + (r.email || '')).indexOf(busca) === -1) return false;
+      if (situacao === 'ativos' && !r.ativo) return false;
+      if (situacao === 'desativados' && r.ativo) return false;
+      if (papel === 'admin' && !r.admin) return false;
+      if (papel === 'comuns' && r.admin) return false;
+      return true;
+    });
+  }
+
+  function desenharResponsaveis() {
     var ul = $('lista-resp');
+    var todos = est.listaResp || [];
+    var lista = filtrarResponsaveis(todos);
     ul.innerHTML = '';
-    (lista || []).forEach(function (r) {
+    var vazio = !todos.length ? 'Nenhum responsável cadastrado.' : !lista.length ? 'Nenhum responsável com esses filtros.' : '';
+    $('resp-vazio').textContent = vazio;
+    $('resp-vazio').hidden = !vazio;
+    $('resp-contagem').textContent = !todos.length ? '' : lista.length === todos.length
+      ? todos.length + (todos.length === 1 ? ' responsável' : ' responsáveis')
+      : lista.length + ' de ' + todos.length + ' responsáveis';
+    lista.forEach(function (r) {
       var funcoes = [];
       if (!r.eu) {
         funcoes.push({ texto: 'Redefinir senha', acao: function () { redefinirSenha(r); } });

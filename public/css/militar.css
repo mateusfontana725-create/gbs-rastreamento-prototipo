@@ -539,3 +539,18 @@ html[data-tema="claro"] .btn.btn-icone.btn-ok { color: #15803d; }
 .menu-linha-item.perigo { color: var(--perigo-texto); }
 .menu-linha-item.perigo:hover { background: var(--perigo-claro); }
 @media (pointer: coarse) { .menu-linha-item { min-height: 46px; } }
+
+/* Brasão no cabeçalho do painel (no lugar do quadrado GBS) */
+img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none; border-radius: 0; object-fit: contain; flex: none; }
+@media (max-width: 599px) { img.marca-brasao { width: 40px; height: 40px; } }
+
+/* Filtros das listas (operações e responsáveis) */
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 6px; }
+.filtros .campo { width: auto; flex: 1 1 150px; min-height: 40px; font-size: .92rem; padding: 6px 10px; }
+.filtros .filtro-busca { flex: 2 1 240px; }
+.filtros .btn { flex: none; }
+.contagem { margin: 0 0 4px; font-size: .8rem; font-family: var(--mono); }
+@media (max-width: 599px) {
+  .filtros .campo, .filtros .filtro-busca { flex: 1 1 100%; }
+  .filtros .btn { flex: 1 1 100%; }
+}

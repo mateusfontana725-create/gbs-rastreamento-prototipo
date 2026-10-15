@@ -3,6 +3,7 @@
 // Ações (corpo JSON):
 //   { "acao": "criar", "nome": "...", "email": "...", "senha": "...", "admin": false }
 //   { "acao": "senha", "user_id": "<uuid>", "senha": "..." }      (redefinir senha)
+//   { "acao": "excluir", "user_id": "<uuid>" }                    (excluir responsável e o login)
 //
 // Segurança:
 //   1. Quem chama envia o próprio token de login (Authorization: Bearer <token>).
@@ -11,6 +12,8 @@
 //      ou trocar a senha. A chave secreta nunca vai para o navegador.
 //   Ativar/desativar e dar/tirar administrador são feitos direto no banco pelo
 //   painel (funções admin_*), sem passar por aqui.
+//   Excluir: primeiro a função admin_excluir_responsavel (com o login da própria
+//   pessoa) confere as regras e remove o cadastro; só depois o login é apagado.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -130,6 +133,34 @@ module.exports = async (req, res) => {
         if (/password/i.test(JSON.stringify(pj))) return res.status(400).json({ erro: 'senha_fraca' });
         return res.status(502).json({ erro: 'falha_supabase' });
       }
+      return res.status(200).json({ ok: true });
+    }
+
+    // 2c. Excluir responsável: o banco confere as regras (não é você, tem histórico?) e tira o
+    //     cadastro; em seguida o login é apagado. Se o login não puder ser apagado, o acesso
+    //     ao painel já foi removido e a resposta avisa isso.
+    if (acao === 'excluir') {
+      const userId = String(corpo.user_id || '');
+      if (!UUID_RE.test(userId)) return res.status(400).json({ erro: 'responsavel_nao_encontrado' });
+      const x = await fetch(`${url}/rest/v1/rpc/admin_excluir_responsavel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: chavePublica, Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ p_user: userId }),
+      });
+      if (!x.ok) {
+        const xj = await x.json().catch(() => ({}));
+        const msg = String(xj.message || '');
+        if (/responsavel_com_registros/.test(msg)) return res.status(409).json({ erro: 'responsavel_com_registros' });
+        if (/nao_pode_alterar_a_si/.test(msg)) return res.status(400).json({ erro: 'nao_pode_alterar_a_si' });
+        if (/responsavel_nao_encontrado/.test(msg)) return res.status(404).json({ erro: 'responsavel_nao_encontrado' });
+        if (/sem_permissao/.test(msg)) return res.status(403).json({ erro: 'sem_permissao' });
+        return res.status(502).json({ erro: 'falha_supabase' });
+      }
+      const d = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: cabecalhosServico(chaveSecreta),
+      });
+      if (!d.ok && d.status !== 404) return res.status(502).json({ erro: 'login_nao_apagado' });
       return res.status(200).json({ ok: true });
     }
 

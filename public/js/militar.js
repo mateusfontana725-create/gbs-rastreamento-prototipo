@@ -6092,6 +6092,9 @@
     responsavel_nao_encontrado: 'Responsável não encontrado.',
     variaveis_de_ambiente_ausentes: 'Servidor sem a chave secreta do Supabase (variável SUPABASE_SECRET_KEY no Vercel).',
     falha_supabase: 'O Supabase recusou a operação. Tente de novo em instantes.',
+    responsavel_com_registros: 'Esta pessoa tem operações, mensagens ou localizações de vítimas registradas, que não podem ser apagadas. Desative o acesso em vez de excluir.',
+    nao_pode_alterar_a_si: 'Você não pode alterar ou excluir o seu próprio acesso.',
+    login_nao_apagado: 'O acesso ao painel foi removido, mas o login não pôde ser apagado. Apague-o em Authentication → Users no Supabase.',
     falha_rede: 'Falha de comunicação com o Supabase.',
   };
 
@@ -6186,6 +6189,7 @@
         funcoes.push({ texto: r.ativo ? 'Desativar acesso' : 'Reativar acesso', perigo: r.ativo, acao: function () { alterarAtivo(r); } });
       }
       funcoes.push({ texto: 'Renomear', acao: function () { renomearResponsavel(r); } });
+      if (!r.eu) funcoes.push({ texto: 'Excluir responsável', perigo: true, acao: function () { excluirResponsavel(r); } });
       var acoes = UI.el('div', { classe: 'op-acoes' }, [menuLinha(funcoes)]);
       var li = UI.el('li', { classe: (r.ativo ? '' : 'inativo ') + 'clicavel', tabindex: '0' }, [
         UI.el('div', { classe: 'op-info' }, [
@@ -6226,6 +6230,7 @@
       acoes.push(acao(r.ativo ? 'Desativar acesso' : 'Reativar acesso', function () { alterarAtivo(r); }, r.ativo ? 'btn-perigo' : 'btn-ok'));
     }
     acoes.push(acao('Renomear', function () { renomearResponsavel(r); }));
+    if (!r.eu) acoes.push(acao('Excluir responsável', function () { excluirResponsavel(r); }, 'btn-perigo'));
     fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-resp' }, [
       UI.el('h2', { id: 'modal-titulo', texto: r.nome }),
       UI.el('p', { classe: 'muted', texto: r.email || '' }),
@@ -6288,6 +6293,25 @@
       UI.aviso('Alteração salva.', 'ok');
     } catch (e) {
       UI.aviso(e.message, 'erro', 7000);
+    }
+  }
+
+  // Exclusão definitiva: o banco recusa quem é você ou tem histórico (operações, mensagens, localizações).
+  async function excluirResponsavel(r) {
+    var ok = await UI.confirmar({
+      titulo: 'Excluir ' + r.nome,
+      texto: 'O login e o acesso ao painel de ' + r.nome + ' serão apagados e não podem ser recuperados. '
+        + 'Se a pessoa já criou operações, enviou mensagens ou registrou localizações de vítimas, a exclusão é recusada: nesse caso, desative o acesso.',
+      ok: 'Excluir definitivamente',
+      perigo: true,
+    });
+    if (!ok) return;
+    try {
+      await chamarApiResponsaveis({ acao: 'excluir', user_id: r.user_id });
+      renderizarResponsaveis(await C.rpc('admin_listar_responsaveis'));
+      UI.aviso('Responsável excluído.', 'ok');
+    } catch (e) {
+      UI.aviso(e.message, 'erro', 8000);
     }
   }
 

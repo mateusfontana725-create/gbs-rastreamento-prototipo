@@ -793,7 +793,11 @@ rastreamento-sar/
      as operações, não só as que criou ou das quais foi adicionado; a regra fica em `dono_operacao`, usada pelas
      políticas e pelas funções do painel. Os demais responsáveis seguem como antes. Na lista de operações, o
      administrador vê o título **Operações (todas)** e o nome de quem criou cada operação de outro responsável.
-   O `schema.sql` completo já inclui da 003 à 016 (seções 10 a 23).
+   - **017** (`017_excluir_responsavel.sql`): nova função `admin_excluir_responsavel` (só administradores). Exclui o
+     cadastro do responsável, mas **recusa** quem não pode ser apagado: você mesmo e quem já tem histórico (operação
+     criada, mensagem enviada ou localização de vítima registrada). Nesses casos, use **Desativar acesso**. O login
+     é apagado logo depois pela função de servidor `/api/responsaveis` (ação `excluir`).
+   O `schema.sql` completo já inclui da 003 à 017 (seções 10 a 24).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -892,8 +896,12 @@ encerrada, e o token fica após o `#` (não é enviado aos servidores nem aparec
 - **+ Cadastrar responsável** (modal): nome/posto, e-mail (será o login) e senha provisória (o botão **Gerar** cria uma
   senha aleatória). O login é criado na hora, sem e-mail de confirmação. O painel mostra os dados de
   acesso para copiar e repassar ao colega. Marque **Também é administrador** se ele puder cadastrar outros.
-- Cada linha tem um botão **⋮** que abre o menu com as funções (redefinir senha, tornar/tirar administrador, desativar/reativar acesso, renomear); clicar na linha abre os detalhes com as mesmas ações. **Redefinir senha** (quem esqueceu), **Desativar/Reativar acesso** (corta ou devolve o acesso na
+- Cada linha tem um botão **⋮** que abre o menu com as funções (redefinir senha, tornar/tirar administrador, desativar/reativar acesso, renomear, excluir); clicar na linha abre os detalhes com as mesmas ações. **Redefinir senha** (quem esqueceu), **Desativar/Reativar acesso** (corta ou devolve o acesso na
   hora; o histórico das operações é mantido), **Tornar/Tirar administrador** e **Renomear**.
+- **Excluir responsável** (vermelho, pede confirmação): apaga o login e o acesso de forma definitiva. Não é
+  permitido excluir a si mesmo nem quem já tem **histórico** (operação criada, mensagem enviada ou localização de
+  vítima registrada), para não apagar registros da operação; a tela mostra o motivo e sugere desativar. Para quem
+  só entrou por engano ou não deve mais ter acesso e não tem histórico, excluir é a opção.
 - Um administrador não consegue desativar nem tirar o próprio acesso de administrador (evita
   ficar sem nenhum administrador).
 - **Minha conta** (todos os responsáveis): trocar a própria senha.
@@ -941,7 +949,7 @@ identidades anônimas sem participação há mais de 7 dias são removidas. A li
 |---|---|
 | Consentimento explícito | o GPS só é solicitado depois do toque em INICIAR, com aviso claro sobre localização, CPF e celular; o encerramento é pedido ao responsável, que libera a saída |
 | Dados pessoais (LGPD) | CPF e celular são vistos **só pelos responsáveis da operação**, validados no servidor, guardados só com dígitos, exibidos mascarados por padrão e **apagados junto com a operação** pela política de retenção. Recomenda-se registrar a finalidade (identificação e contato em operação de busca) no controle de tratamento de dados da corporação |
-| Cadastro de responsáveis | só administradores ativos; a criação do login e a troca de senha passam pela função de servidor `/api/responsaveis`, que confere o administrador com o login dele e só então usa a chave secreta (que nunca vai ao navegador). Desativar um responsável corta o acesso a todas as operações na hora |
+| Cadastro de responsáveis | só administradores ativos; excluir só quem não tem histórico (migração 017); a criação do login e a troca de senha passam pela função de servidor `/api/responsaveis`, que confere o administrador com o login dele e só então usa a chave secreta (que nunca vai ao navegador). Desativar um responsável corta o acesso a todas as operações na hora |
 | Vários responsáveis | o acesso a cada operação vale para o criador e para quem ele (ou a equipe) adicionar; todos precisam continuar cadastrados em `responsaveis`. Remover alguém da equipe corta o acesso na hora |
 | Acesso restrito ao painel | login por e-mail/senha **e** cadastro na tabela `responsaveis`; o link público não concede acesso |
 | Ingresso seguro | tokens aleatórios de 64 caracteres hexadecimais (244 bits), separados para civis e militares |

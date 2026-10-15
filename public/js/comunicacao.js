@@ -75,6 +75,7 @@
     relatorio_nao_apaga: 'Relatórios gerados não podem ser apagados.',
     arquivo_nao_enviado: 'O PDF não chegou ao servidor. Tente gerar de novo.',
     operacao_com_registros: 'Esta operação já tem atividade registrada no diário e não pode ser excluída: o diário e os relatórios são o documento da operação. Os dados pessoais são apagados pela retenção.',
+    permanencia_invalida: 'Limite de permanência inválido: de 10 min a 12 h, ou desligado.',
     gps_config_invalida: 'Intervalo do GPS de 5 a 300 s e limite de falha de 30 a 3600 s (maior que o intervalo).',
     'Invalid login credentials': 'E-mail ou senha incorretos.',
     'Email not confirmed': 'E-mail ainda não confirmado no Supabase.',

@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–012) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–013) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -249,6 +249,90 @@ chk(/permission denied/.test(await erroDe(como(null, `select public.participante
 const pubV = (await db.query(`select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'vitima_localizacoes'`)).rows;
 chk(pubV.length === 1, 'vitima_localizacoes publicada no Realtime');
 
+console.log('Tempo de permanência em setor');
+{
+  const opP = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP PERMANENCIA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre', acionado_em: new Date(Date.now() - 6 * 3600e3).toISOString() }) });
+  await db.query(`update public.operacoes set criada_em = now() - interval '5 hours' where id = $1`, [opP.id]);
+  chk(opP.permanencia_limite_min === 60, 'limite padrão de permanência: 60 min', opP.permanencia_limite_min);
+  const setorP = await rpc(resp1, 'salvar_setor', { p_operacao: opP.id, p_id: null, p_dados: JSON.stringify({ nome: 'Mata', forma: 'circulo', centro_lat: -23.5, centro_lng: -46.6, raio_m: 300 }) });
+  const [uS, uG1, uG2] = [await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+  const solo = await rpc(uS, 'ingressar', { p_token: opP.token_militar, p_nome: 'Solo', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const g1 = await rpc(uG1, 'ingressar', { p_token: opP.token_militar, p_nome: 'Gama', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const g2m = await rpc(uG2, 'ingressar', { p_token: opP.token_civil, p_nome: 'Delta', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const grpP = await rpc(resp1, 'salvar_grupo', { p_operacao: opP.id, p_id: null, p_dados: JSON.stringify({ nome: 'Equipe Alfa' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: grpP.id, p_participante: g1.participante_id, p_papel: 'responsavel' });
+  await rpc(resp1, 'definir_membro', { p_grupo: grpP.id, p_participante: g2m.participante_id, p_papel: 'membro' });
+  const T0 = Date.now() - 150 * 60e3;
+  const DENTRO = [-23.5005, -46.6003], FORA = [-23.51, -46.6];
+  const minT = (m) => T0 + m * 60e3;
+  async function trilha(u, pid, pts) {
+    return rpc(u, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: JSON.stringify(pts.map(([m, onde]) => pt(n++, onde[0], onde[1], minT(m)))) });
+  }
+  const alertasP = async () => (await db.query(`select tipo, titulo, texto, grupo_id, participante_id, chave from public.alertas where operacao_id = $1 and tipo = 'permanencia_setor' order by id`, [opP.id])).rows;
+  const perms = async (pid) => (await db.query(`select id, entrou_em, saiu_em, avisado_min from public.setor_permanencias where participante_id = $1 order by entrou_em`, [pid])).rows;
+
+  // pessoa sozinha: entra (2 pontos dentro), fica 65 min
+  await trilha(uS, solo.participante_id, [[0, FORA], [1, DENTRO], [2, DENTRO]]);
+  let ps = await perms(solo.participante_id);
+  chk(ps.length === 1 && !ps[0].saiu_em && Math.abs(Date.parse(ps[0].entrou_em) - minT(1)) < 1500, 'entrada no setor pela trilha: começa no 1º ponto dentro', ps);
+  const passos = []; for (let m = 7; m <= 55; m += 6) passos.push([m, DENTRO]);
+  await trilha(uS, solo.participante_id, passos);
+  chk((await alertasP()).length === 0, 'antes de 1 h no setor: sem alerta');
+  await trilha(uS, solo.participante_id, [[63, DENTRO], [64, FORA], [65, DENTRO], [66, DENTRO]]);   // 1 ponto fora (oscilação) não é saída
+  let al = await alertasP();
+  chk(al.length === 1 && al[0].participante_id === solo.participante_id && /Solo/.test(al[0].titulo) && /1 h/.test(al[0].titulo) && /Avalie a troca/.test(al[0].texto),
+    'passou de 1 h: um alerta para o responsável avaliar a troca', al);
+  for (let m = 67; m <= 75; m += 2) await trilha(uS, solo.participante_id, [[m, DENTRO]]);
+  chk((await alertasP()).length === 1, 'novos pontos no setor não repetem o alerta');
+  await trilha(uS, solo.participante_id, [[76, DENTRO]]);   // reenvio do mesmo trecho com outros pontos não duplica
+  ps = await perms(solo.participante_id);
+  chk(ps.length === 1 && !ps[0].saiu_em && ps[0].avisado_min === 60, 'continua a mesma permanência (avisado até 60 min)', ps);
+  // sai (3 pontos fora) e volta em 3 min: mesma permanência (não zera o tempo)
+  await trilha(uS, solo.participante_id, [[77, FORA], [77.5, FORA], [78, FORA]]);
+  ps = await perms(solo.participante_id);
+  chk(ps.length === 1 && ps[0].saiu_em && Math.abs(Date.parse(ps[0].saiu_em) - minT(77)) < 1500, 'saída: 3 pontos fora; termina no 1º ponto fora', ps);
+  await trilha(uS, solo.participante_id, [[80, DENTRO], [80.5, DENTRO]]);
+  ps = await perms(solo.participante_id);
+  chk(ps.length === 1 && !ps[0].saiu_em, 'voltou em menos de 5 min: a permanência continua (oscilação na borda)', ps);
+  const resto = []; for (let m = 85; m <= 122; m += 6) resto.push([m, DENTRO]);
+  await trilha(uS, solo.participante_id, resto);
+  al = await alertasP();
+  chk(al.length === 2 && /2 h/.test(al[1].titulo), '2× o limite: um segundo alerta (um por limite atingido)', al.map((a) => a.titulo));
+
+  // grupo: dois membros no setor → UM alerta do grupo
+  // os dois celulares enviam ao mesmo tempo (lotes intercalados)
+  for (let m = 70; m <= 136; m += 6) {
+    await trilha(uG1, g1.participante_id, m === 70 ? [[69, FORA], [m, DENTRO]] : [[m, DENTRO]]);
+    await trilha(uG2, g2m.participante_id, m === 70 ? [[69, FORA], [m, DENTRO]] : [[m, DENTRO]]);
+  }
+  al = (await alertasP()).filter((a) => a.grupo_id === grpP.id);
+  chk(al.length === 1 && /Equipe Alfa/.test(al[0].titulo) && /Gama/.test(al[0].texto) && /Delta/.test(al[0].texto), 'grupo no mesmo setor: um alerta só, listando os membros', al);
+
+  // configuração do limite
+  chk(/sem_permissao/.test(await erroDe(rpc(uS, 'configurar_permanencia', { p_operacao: opP.id, p_limite_min: 30 }))), 'participante não muda o limite');
+  chk(/permanencia_invalida/.test(await erroDe(rpc(resp1, 'configurar_permanencia', { p_operacao: opP.id, p_limite_min: 5 }))), 'limite fora de 10–720 min: recusado');
+  const cfg = await rpc(resp1, 'configurar_permanencia', { p_operacao: opP.id, p_limite_min: 0 });
+  chk(cfg.permanencia_limite_min === 0, 'responsável desliga o alerta (0)');
+  await trilha(uG1, g1.participante_id, [[140, DENTRO], [145, DENTRO]]);
+  chk((await alertasP()).length === 3, 'desligado: não gera novos alertas');
+  await rpc(resp1, 'configurar_permanencia', { p_operacao: opP.id, p_limite_min: 45 });
+  const dlim = (await db.query(`select titulo from public.diario where operacao_id = $1 and tipo = 'permanencia_limite' order by id`, [opP.id])).rows;
+  chk(dlim.length === 2 && /45 min/.test(dlim[1].titulo), 'mudança do limite registrada no diário', dlim);
+  const dal = (await db.query(`select categoria from public.diario where operacao_id = $1 and tipo = 'alerta_permanencia_setor'`, [opP.id])).rows;
+  chk(dal.length === 3 && dal.every((x) => x.categoria === 'alerta'), 'alertas de permanência entram no diário como Alerta', dal);
+
+  // leitura (RLS) e deslocamentos continuam funcionando com o novo gancho
+  chk((await como(resp1, `select count(*)::int n from public.setor_permanencias where operacao_id = $1`, [opP.id])).rows[0].n >= 3, 'responsável lê as permanências');
+  chk((await como(uS, `select count(*)::int n from public.setor_permanencias`)).rows[0].n === 0, 'participante não lê as permanências');
+  chk((await como(resp2, `select count(*)::int n from public.setor_permanencias where operacao_id = $1`, [opP.id])).rows[0].n === 0, 'responsável de outra operação não lê');
+  chk(/permission denied/.test(await erroDe(como(resp1, `select * from public.setor_presenca`))), 'estado interno (setor_presenca) não é lido pelo navegador');
+  const pub = (await db.query(`select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'setor_permanencias'`)).rows;
+  chk(pub.length === 1, 'setor_permanencias publicada no Realtime');
+  const gancho = (await db.query(`select prosrc from pg_proc where proname = 'apos_posicoes'`)).rows;
+  chk(gancho.length === 1 && /apos_posicoes_missoes/.test(gancho[0].prosrc) && /avaliar_permanencia/.test(gancho[0].prosrc), 'gancho apos_posicoes chama deslocamentos e permanência');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opP.id });
+}
+
 console.log('Diário da operação');
 const tipos = async () => (await como(resp1, `select tipo from public.diario where operacao_id = $1`, [op.id])).rows.map((r) => r.tipo);
 let td = await tipos();
@@ -324,5 +408,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–012 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–013 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -238,6 +238,7 @@
     linha('Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '— não marcado');
     linha('Descrição', op.descricao || '—');
     if (op.gps_intervalo_s) linha('GPS', 'ponto pelo menos a cada ' + op.gps_intervalo_s + ' s · falha acima de ' + op.gps_lacuna_s + ' s sem ponto');
+    if ('permanencia_limite_min' in op) linha('Permanência no setor', op.permanencia_limite_min ? 'alerta depois de ' + textoMinutos(op.permanencia_limite_min) + ' no mesmo setor' : 'alerta desligado');
     linha('Criada', dataHora(op.criada_em));
     if (op.atualizado_por_nome) linha('Alterada', dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome);
     var editavel = opcoes.editavel !== false;
@@ -253,8 +254,18 @@
     ]));
   }
 
+  function textoMinutos(m) { return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); }
+
   function editarDados(op, opcoes) {
     var nome = UI.el('input', { classe: 'campo', id: 'dados-nome', maxlength: '80', value: op.codigo });
+    // Alerta de tempo de permanência em setor (migração 013): 0 = desligado
+    var temPerm = 'permanencia_limite_min' in op;
+    var opcoesPerm = [0, 30, 45, 60, 90, 120, 180, 240];
+    if (temPerm && opcoesPerm.indexOf(op.permanencia_limite_min) === -1) opcoesPerm.push(op.permanencia_limite_min);
+    var perm = UI.el('select', { classe: 'campo', id: 'dados-permanencia' }, opcoesPerm.sort(function (a, b) { return a - b; }).map(function (m) {
+      return UI.el('option', { value: String(m), selected: m === op.permanencia_limite_min ? true : null,
+        texto: m ? 'Depois de ' + textoMinutos(m) + (m === 60 ? ' (padrão)' : '') : 'Desligado' });
+    }));
     var campos = camposOperacao(op, { prefixo: 'dados' });
     var temGps = op.gps_intervalo_s != null;
     var intervalo = UI.el('input', { classe: 'campo', id: 'dados-gps-intervalo', type: 'number', min: '5', max: '300', step: '1', inputmode: 'numeric', value: String(op.gps_intervalo_s || 15) });
@@ -272,6 +283,11 @@
           UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-gps-lacuna', texto: 'Falha acima de (s sem ponto)' }), lacuna]),
         ]),
         UI.el('small', { classe: 'muted', texto: 'Andando ou de carro os pontos continuam mais frequentes. Intervalos maiores que o limite aparecem tracejados no mapa, com início e fim marcados.' }),
+      ]) : null,
+      temPerm ? UI.el('fieldset', { classe: 'grupo-gps' }, [
+        UI.el('legend', { texto: 'Tempo de permanência em setor' }),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-permanencia', texto: 'Alertar quando uma pessoa ou grupo estiver no mesmo setor' }), perm]),
+        UI.el('small', { classe: 'muted', texto: 'Calculado pela trilha GPS: conta da entrada à saída do setor. Um alerta por limite atingido (1×, 2×…), para avaliar a troca da equipe.' }),
       ]) : null,
       erro,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
@@ -300,6 +316,9 @@
       try {
         var atual = await C.rpc('atualizar_operacao', { p_operacao: op.id, p_dados: dados });
         if (mudouGps) atual = await C.rpc('configurar_gps_operacao', { p_operacao: op.id, p_intervalo_s: gi, p_lacuna_s: gl });
+        if (temPerm && Number(perm.value) !== op.permanencia_limite_min) {
+          atual = await C.rpc('configurar_permanencia', { p_operacao: op.id, p_limite_min: Number(perm.value) });
+        }
         fechar(true);
         UI.aviso('Dados da operação salvos.', 'ok');
         if (opcoes.aoSalvar) opcoes.aoSalvar(atual);

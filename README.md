@@ -508,6 +508,22 @@ se for necessário: (1) gerar e hospedar os próprios ladrilhos/arquivo PMTiles 
 OSM e do IBGE) ou (2) contratar um provedor que permita cache offline (ex.: MapTiler, Thunderforest, com
 chave própria).
 
+### Tempo de permanência em setor
+
+- Quando uma pessoa ou um grupo fica no **mesmo setor** mais tempo do que o limite da operação (padrão
+  **1 h**), o responsável recebe um alerta para **avaliar a troca da equipe** (som + aviso clicável que leva
+  ao mapa; fica também na aba **Alertas** da Comunicação e no diário).
+- O tempo é calculado **no servidor, pela trilha GPS** (horário do GPS), a cada lote de posições recebido:
+  começa no 1º de **2 pontos seguidos dentro** do setor e termina no 1º de **3 pontos seguidos fora**. Voltar
+  ao setor até 5 min depois de sair continua a mesma permanência (a oscilação do GPS na borda não zera o
+  tempo). Pontos com precisão pior que 150 m não contam.
+- **Um alerta por limite atingido** (1×, 2×, 3× o limite), nunca a cada ponto. Membros do mesmo grupo no
+  mesmo setor geram **um alerta do grupo**, listando quem está lá e há quanto tempo.
+- **Configurar**: **Ferramentas → Dados da operação → Editar → Tempo de permanência em setor** (30 min a 4 h,
+  ou **Desligado**; o banco aceita de 10 min a 12 h). A mudança fica registrada no diário.
+- A ficha do participante mostra **"No setor X há Y"** (em amarelo acima do limite) e a lista de setores
+  mostra quantas pessoas estão em cada setor e há quanto tempo. Tudo em tempo real.
+
 ### Vítima localizada ("Encontrei a vítima")
 
 - No celular de campo, **ENCONTREI ALGO → Encontrei a vítima** (em destaque): escolhe **Viva** ou **Morta**,
@@ -624,7 +640,8 @@ rastreamento-sar/
 │       ├── 009_trilha_offline.sql             envio em lote com confirmação e intervalo do GPS
 │       ├── 010_missoes_alertas.sql            destino para grupos, alertas e controle de retorno
 │       ├── 011_vitima_localizada.sql          "Encontrei a vítima" (condição só para responsáveis)
-│       └── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
+│       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
+│       └── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 ├── testes/
 │   ├── filtro_gps.test.js      teste do filtro de GPS e do desenho das falhas (node, sem dependências)
 │   ├── coords.test.js          teste das conversões de coordenadas (UTM, MGRS, GMS, rumo, sol)
@@ -695,12 +712,15 @@ rastreamento-sar/
      alimentam o diário, `diario_adicionar`, `diario_editar`, `definir_resultado`, `relatorio_operacao`,
      `registrar_relatorio`, bucket privado **`relatorios`** (PDF; sem regra de exclusão) e `excluir_operacao`
      só para operações sem atividade; preenche o diário das operações existentes.
+   - **013** (`013_permanencia_setor.sql`): `operacoes.permanencia_limite_min` (padrão 60), `setor_permanencias`
+     (RLS: só responsáveis; Realtime), `configurar_permanencia`, alerta `permanencia_setor`; o gancho
+     `apos_posicoes` passa a chamar os deslocamentos (`apos_posicoes_missoes`) e a permanência.
    - **Alerta de retorno atrasado sem painel aberto**: ative **Database → Extensions → pg_cron** e rode a
      migração 010 (ou o `schema.sql`) de novo — ela agenda `select public.verificar_retornos()` a cada minuto
      (job `gbs-verificar-retornos`). Sem `pg_cron`, o alerta só é verificado com algum painel aberto.
    O painel e a página do participante funcionam com o banco ainda sem essas migrações (as funções novas
    ficam indisponíveis, com aviso).
-   O `schema.sql` completo já inclui da 003 à 012 (seções 10 a 19).
+   O `schema.sql` completo já inclui da 003 à 013 (seções 10 a 20).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

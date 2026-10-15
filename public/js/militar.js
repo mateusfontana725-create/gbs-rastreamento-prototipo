@@ -179,6 +179,9 @@
     // "Encontrei a vítima": registros com a condição (só responsáveis leem)
     vitimasLoc: new Map(),      // mensagem_id → registro
     semVitimaLoc: false,        // banco sem a migração 011
+    // tempo de permanência em setor (calculado no servidor pela trilha GPS)
+    permanencias: new Map(),    // id → permanência aberta (pessoa ainda no setor)
+    semPermanencia: false,      // banco sem a migração 013
   };
 
   /* ------------------------------------------------------------------ */
@@ -849,6 +852,8 @@
     est.alertaFaixa = null;
     est.vitimasLoc = new Map();
     est.semVitimaLoc = false;
+    est.permanencias = new Map();
+    est.semPermanencia = false;
     $('faixa-alerta').hidden = true;
     clearInterval(est.timerRetornos);
     clearInterval(est.timerAlarmeCritico);
@@ -912,6 +917,7 @@
     est.missaoMembros = new Map();
     est.alertas = new Map();
     est.vitimasLoc = new Map();
+    est.permanencias = new Map();
     est.filtroGrupo = null;   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
     $('faixa-filtro').hidden = true;
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
@@ -1289,6 +1295,8 @@
       if (!est.op || est.op.id !== opId) return;
       await carregarVitimasLoc();
       if (!est.op || est.op.id !== opId) return;
+      await carregarPermanencias();
+      if (!est.op || est.op.id !== opId) return;
       await carregarMissoes(true);
       if (!est.op || est.op.id !== opId) return;
 
@@ -1358,6 +1366,8 @@
       await carregarGrupos();
       if (!est.op || est.op.id !== opId) return;
       await carregarVitimasLoc();
+      if (!est.op || est.op.id !== opId) return;
+      await carregarPermanencias();
       if (!est.op || est.op.id !== opId) return;
       await carregarMissoes(false);
       if (!est.op || est.op.id !== opId) return;
@@ -1454,6 +1464,9 @@
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grupo_membros', filter: filtro }, agendarGrupos)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'missoes', filter: filtro }, agendarMissoes)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'missao_membros', filter: filtro }, agendarMissoes)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'setor_permanencias', filter: filtro }, function (ev) {
+          if (ev.new && ev.new.id) receberPermanencias([ev.new]);
+        })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vitima_localizacoes', filter: filtro }, function (ev) {
           if (ev.new && ev.new.id) receberVitimasLoc([ev.new]);
         })
@@ -2169,6 +2182,7 @@
     if (est.selecionado) atualizarFicha();
     atualizarPilula();
     if (est.filtroGrupo) desenharDestinosGrupo();
+    if (est.permanencias.size && !$('painel-areas').hidden) renderizarAreas();   // "há X min" anda sozinho
   }
 
   /* ------------------------------------------------------------------ */
@@ -2274,6 +2288,12 @@
     var gpsRuim = d.rastreando && ['sem_sinal', 'negado', 'indisponivel'].indexOf(d.gps_estado) !== -1;
     $('ficha-pos').textContent = posTxt + (gpsRuim ? ' · ' + textoGps(d.gps_estado) : '');
     $('ficha-pos').classList.toggle('antiga', !pos || posicaoAntiga(p) || gpsRuim);
+    var perm = textoPermanenciaParticipante(p.id);
+    $('ficha-permanencia').hidden = !perm;
+    if (perm) {
+      $('ficha-permanencia').textContent = '⏱ ' + perm.texto;
+      $('ficha-permanencia').classList.toggle('acima', perm.acima);
+    }
     var destino = est.destinos.get(p.id);
     var caixaDest = $('ficha-destino');
     caixaDest.hidden = !destino;
@@ -4742,6 +4762,10 @@
         UI.el('span', { classe: 'item-area-txt' }, [
           UI.el('strong', { texto: d.nome }),
           UI.el('small', { classe: 'muted', texto: nomeResponsavelSetor(d) + ' · ' + formatarArea(areaSetorM2(d)) }),
+          (function () {
+            var r = resumoPermanenciaSetor(d.id);
+            return r ? UI.el('small', { classe: 'permanencia-setor' + (r.acima ? ' acima' : ''), texto: '⏱ ' + r.texto }) : null;
+          })(),
         ]),
         UI.el('span', { classe: 'selo ' + STATUS_SETOR[d.status].selo, texto: STATUS_SETOR[d.status].rotulo }),
       ])]));
@@ -6401,6 +6425,61 @@
     return UI.el('span', { classe: 'selo selo-condicao', texto: est.semVitimaLoc ? 'Condição indisponível (migração 011)' : 'Carregando condição…' });
   }
 
+  /* ---------- Tempo de permanência em setor -------------------------- */
+  async function carregarPermanencias() {
+    if (!est.op || est.semPermanencia) return;
+    var opId = est.op.id;
+    try {
+      var r = await C.consultar(C.cliente.from('setor_permanencias').select('*').eq('operacao_id', opId).is('saiu_em', null).limit(1000));
+      if (!est.op || est.op.id !== opId) return;
+      est.permanencias = new Map();
+      receberPermanencias(r || []);
+    } catch (e) {
+      if (ehTabelaAusente(e)) est.semPermanencia = true;
+    }
+  }
+
+  function receberPermanencias(lista) {
+    lista.forEach(function (r) {
+      if (!est.op || r.operacao_id !== est.op.id) return;
+      if (r.saiu_em) est.permanencias.delete(r.id);
+      else est.permanencias.set(r.id, r);
+    });
+    if (est.selecionado && !$('ficha').hidden) atualizarFicha();
+    if (!$('painel-areas').hidden) renderizarAreas();
+  }
+
+  function limitePermanencia() { return est.op && est.op.permanencia_limite_min ? est.op.permanencia_limite_min : 0; }
+  function minutosNoSetor(r) { return Math.max(0, Math.floor((C.agora() - C.paraMs(r.entrou_em)) / 60000)); }
+  function textoMin(m) { return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60 < 10 ? '0' : '') + (m % 60) + ' min' : ''); }
+
+  // "No setor A1 há 47 min" (pela trilha GPS)
+  function textoPermanenciaParticipante(pid) {
+    var lim = limitePermanencia(), partes = [], acima = false;
+    est.permanencias.forEach(function (r) {
+      if (r.participante_id !== pid) return;
+      var s = est.setores.get(r.setor_id);
+      var m = minutosNoSetor(r);
+      if (lim && m >= lim) acima = true;
+      partes.push((s ? s.d.nome : 'setor') + ' há ' + textoMin(m));
+    });
+    if (!partes.length) return null;
+    return { texto: 'No setor ' + partes.join(' · ') + (acima ? ' — acima do limite de ' + textoMin(lim) : ''), acima: acima };
+  }
+
+  function resumoPermanenciaSetor(setorId) {
+    var lim = limitePermanencia(), n = 0, maior = 0;
+    est.permanencias.forEach(function (r) {
+      if (r.setor_id !== setorId) return;
+      var p = est.participantes.get(r.participante_id);
+      if (p && (p.dados.removido || p.dados.liberado_em)) return;
+      n++;
+      maior = Math.max(maior, minutosNoSetor(r));
+    });
+    if (!n) return null;
+    return { texto: n + ' pessoa(s) no setor agora · há até ' + textoMin(maior), acima: Boolean(lim && maior >= lim) };
+  }
+
   // a: linha de "alertas". silencioso: sem som (carga inicial / atualização). deCarga: veio da consulta periódica.
   function receberAlerta(a, silencioso, deCarga) {
     var antigo = est.alertas.get(a.id);
@@ -6409,6 +6488,9 @@
       if (a.nivel === 'critico') {
         alarme();
         try { if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 800]); } catch (e) { /* ignora */ }
+      } else if (a.tipo === 'permanencia_setor') {
+        bipeCurto();
+        avisoClicavel('⏱ ' + a.titulo + '. Avalie a troca da equipe. Toque para ver no mapa.', function () { verAlertaNoMapa(a); });
       } else {
         bipeCurto();
         UI.aviso('🔔 ' + a.titulo + ': ' + a.texto, 'ok', 10000);

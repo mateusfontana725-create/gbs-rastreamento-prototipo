@@ -412,7 +412,7 @@ body.gaveta.info-ponto-aberto #mapa .leaflet-bottom { visibility: hidden; }
 /* =====================================================================
  * TEMA CLARO (painel do responsável; Ferramentas → Configurações → Tema)
  * Só vale com html[data-tema="claro"]. O escuro segue como está, e a página
- * do participante não usa este bloco. A barra do topo continua escura.
+ * do participante não usa este bloco. A barra do topo segue o tema (clara aqui).
  * ===================================================================== */
 html[data-tema="claro"] {
   color-scheme: light;
@@ -426,6 +426,8 @@ html[data-tema="claro"] {
   --borda: #d5dde5;
   --borda-forte: #9aa7b4;
   --vidro: rgba(255, 255, 255, .96);
+  --barra: #ffffff;
+  --barra-texto: #111827;
   --sombra: 0 1px 2px rgba(15, 23, 42, .12), 0 6px 18px rgba(15, 23, 42, .12);
   --militar-texto: #b91c1c;
   --civil-texto: #15803d;
@@ -478,7 +480,6 @@ html[data-tema="claro"] .btn:hover { background: #e3e9ef; border-color: #7d8a97;
 html[data-tema="claro"] .btn-escuro,
 html[data-tema="claro"] .acao-foto { background: #1f2933; border-color: #1f2933; color: #ffffff; }
 html[data-tema="claro"] .btn-escuro:hover { background: #374151; border-color: #374151; }
-html[data-tema="claro"] .btn-barra { color: #f8fafc; border-color: #4b5563; }
 html[data-tema="claro"] .btn-ativo:hover,
 html[data-tema="claro"] .btn.btn-ativo:hover { background: #d97706; border-color: #d97706; color: #ffffff; }
 /* avisos, modais e o fundo de modais */
@@ -493,13 +494,14 @@ html[data-tema="claro"] .menu-ferramentas { background: #ffffff; }
 .menu-tema .seg { flex: 1 1 200px; max-width: 260px; }
 .menu-tema .seg-opcao { min-height: 36px; }
 @media (pointer: coarse) { .menu-tema .seg-opcao { min-height: 44px; } }
-/* barra do topo continua escura no tema claro: botões e textos claros sobre ela */
-html[data-tema="claro"] .btn.btn-barra { background: transparent; color: #f8fafc; border-color: #4b5563; }
-html[data-tema="claro"] .btn.btn-barra:hover { background: #1f2933; color: #ffffff; border-color: #6b7280; }
+/* barra do topo no tema claro: fundo claro (--barra) e textos e botões escuros sobre ele */
+html[data-tema="claro"] .btn.btn-barra { background: transparent; color: var(--texto-2); border-color: var(--borda-forte); }
+html[data-tema="claro"] .btn.btn-barra:hover { background: var(--superficie-3); color: var(--texto); border-color: var(--texto-3); }
+html[data-tema="claro"] .barra-topo .marca h1,
+html[data-tema="claro"] .painel-topo .titulo-op strong { color: var(--texto); }
 html[data-tema="claro"] .barra-topo small,
-html[data-tema="claro"] .painel-topo .titulo-op span { color: #9ca3af; }
-html[data-tema="claro"] .painel-topo .titulo-op strong { color: #ffffff; }
-html[data-tema="claro"] .pilula-conexao { color: #e5e7eb; border-color: #4b5563; }
+html[data-tema="claro"] .painel-topo .titulo-op span { color: var(--texto-3); }
+html[data-tema="claro"] .pilula-conexao { background: var(--superficie); color: var(--texto-2); border-color: var(--borda-forte); }
 
 /* Listas de operações e responsáveis: ações da linha em ícone; a linha inteira é clicável */
 .btn.btn-icone { width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; font-size: 1.05rem; line-height: 1; }

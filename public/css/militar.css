@@ -115,7 +115,6 @@ body.gaveta .lateral-cabeca { border-radius: 6px 6px 0 0; }
 .leaflet-bar a:last-child { border-bottom-left-radius: var(--raio) !important; border-bottom-right-radius: var(--raio) !important; }
 .legenda, .controle-grupos { border-radius: var(--raio); background: var(--vidro); }
 .legenda summary, .controle-grupos summary { font-weight: 600; letter-spacing: .1em; font-size: 11px; }
-.faixa-filtro { border-radius: var(--raio); border-width: 1px; box-shadow: var(--sombra), inset 3px 0 0 var(--cor-grupo, var(--acento)); }
 .btn-reabrir { background: var(--vidro); }
 
 /* =====================================================================

@@ -243,7 +243,6 @@
     $('menu-grupos').addEventListener('click', abrirGrupos);
     $('menu-missoes').addEventListener('click', abrirMissoes);
     $('opt-local').addEventListener('click', function () { definirPrefMapa('local', !est.prefsMapa.local); });
-    $('faixa-filtro-todos').addEventListener('click', function () { filtrarGrupo(null); });
     $('faixa-alerta-ciente').addEventListener('click', function () { if (est.alertaFaixa) reconhecerAlerta(est.alertaFaixa.id); });
     $('faixa-alerta-mapa').addEventListener('click', function () { if (est.alertaFaixa) verAlertaNoMapa(est.alertaFaixa); });
     $('aba-alertas').addEventListener('click', function () { mostrarAbaCentral('alertas'); });
@@ -1016,7 +1015,6 @@
     est.semGrupos = false;
     est.filtroGrupo = null;
     est.controleGrupos = est.camadaDestinosGrupo = null;
-    $('faixa-filtro').hidden = true;
     est.missoes = new Map();
     est.missaoMembros = new Map();
     est.semMissoes = false;
@@ -1092,7 +1090,6 @@
     est.vitimasLoc = new Map();
     est.permanencias = new Map();
     est.filtroGrupo = null;   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
-    $('faixa-filtro').hidden = true;
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
     renderizarControleGrupos();
     mostrarFaixaAlerta();
@@ -6228,7 +6225,7 @@
     est.listaSuja = true;
     renderizarLista();
     if (est.selecionado) atualizarFicha();
-    if (est.filtroGrupo) { desenharDestinosGrupo(); atualizarFaixaFiltro(); }
+    if (est.filtroGrupo) desenharDestinosGrupo();
     renderizarControleGrupos();
     renderizarLegenda();
     atualizarMenu();
@@ -6286,20 +6283,7 @@
     renderizarLista();
     desenharDestinosGrupo();
     renderizarControleGrupos();
-    atualizarFaixaFiltro();
     if (id && !silencioso) enquadrarGrupo(id);
-  }
-
-  function atualizarFaixaFiltro() {
-    var faixa = $('faixa-filtro');
-    var g = est.filtroGrupo && est.grupos.get(est.filtroGrupo);
-    if (!g) { faixa.hidden = true; return; }
-    var ativos = Array.from(est.participantes.values()).filter(function (p) { return !p.dados.removido; });
-    var n = ativos.filter(visivelNoFiltro).length;
-    $('faixa-filtro-texto').textContent = 'Mostrando só o grupo ' + g.nome + ' (' + n + ' de ' + ativos.length + ' pessoas e os destinos delas). ' +
-      'Pedidos de ajuda e alertas de quem está fora do grupo continuam aparecendo.';
-    faixa.style.setProperty('--cor-grupo', g.cor);
-    faixa.hidden = false;
   }
 
   function enquadrarGrupo(gid) {
@@ -6361,7 +6345,9 @@
           onclick: function () { filtrarGrupo(ativo ? null : g.id); } }),
       ]);
     }));
-    div.appendChild(UI.el('details', { open: aberto ? true : null }, [UI.el('summary', { texto: 'Grupos (' + grupos.length + ')' }), ul]));
+    // Com o filtro ligado, o título avisa mesmo com o controle recolhido (sem faixa flutuante no mapa).
+    var filtrado = grupos.some(function (g) { return est.filtroGrupo === g.id; });
+    div.appendChild(UI.el('details', { open: aberto ? true : null }, [UI.el('summary', { texto: 'Grupos (' + grupos.length + ')' + (filtrado ? ' · filtrado' : '') }), ul]));
     if (focoGrupo) { var b = div.querySelector('[data-grupo="' + focoGrupo + '"]'); if (b) b.focus(); }
   }
 

@@ -1660,13 +1660,6 @@ body.conversa-aberta { overflow: hidden; }
 .lista-grupos-mapa li.ativo { background: var(--alerta-claro); outline: 1px solid var(--acento); }
 .grupo-mapa-nome { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-olho { min-height: 32px; min-width: 40px; padding: 2px 6px; font-size: 14px; }
-.faixa-filtro {
-  position: absolute; z-index: 1150; left: 50%; top: 10px; transform: translateX(-50%); width: min(620px, calc(100% - 140px));
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border-radius: 10px;
-  background: rgba(18, 23, 28, .96); color: var(--texto); border: 2px solid var(--cor-grupo, var(--acento)); box-shadow: var(--sombra); font-weight: 700; font-size: .9rem;
-}
-.faixa-filtro span { flex: 1 1 260px; }
-body:not(.lateral-oculta) .faixa-filtro { left: calc((100% - var(--larg-lateral)) / 2); width: min(560px, calc(100% - var(--larg-lateral) - 120px)); }
 .selo-grupo { color: var(--texto); background: var(--superficie-3); border: 1px solid var(--cor-grupo, var(--borda-forte)); box-shadow: inset 4px 0 0 var(--cor-grupo, transparent); }
 /* Responsável do grupo: distintivo branco com estrela (a forma não depende da cor do grupo) */
 .mk.resp-grupo .simbolo::after {
@@ -1741,7 +1734,6 @@ body:not(.lateral-oculta) .faixa-filtro { left: calc((100% - var(--larg-lateral)
 #nav-finalizar { flex-basis: 100%; }
 @media (max-width: 600px) {
   .ops-topo .btn { flex: 1 1 100%; }
-  .faixa-filtro, body:not(.lateral-oculta) .faixa-filtro { left: 50%; width: calc(100% - 24px); top: 56px; }
   .grupo-duplo-largo { grid-template-columns: 1fr 110px; }
 }
 
@@ -1853,7 +1845,6 @@ body.gaveta .painel-corpo[data-gaveta="cheia"] #mapa .leaflet-bottom { visibilit
   #faixa-alerta-meta { font-size: .7rem; }
   .faixa-alerta-botoes { flex-direction: column; gap: 6px; }
   .faixa-alerta-botoes .btn { min-width: 92px; padding: 0 8px; }
-  .faixa-filtro { padding: 6px 10px; gap: 6px; }
 }
 
 /* Abas que não cabem: quebram linha em vez de sair da tela */

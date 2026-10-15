@@ -197,7 +197,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   invalida o anterior na hora. O papel de responsável só é dado pelo painel.
 - **No mapa, controle "Grupos"** (canto superior direito): cada grupo tem um **ícone de olho 👁**. Tocar
   mostra **só as pessoas (marcador e trilha) e os destinos do grupo**; tocar de novo, ou em **Mostrar
-  todos**, restaura a visualização completa. Uma faixa mostra "Mostrando só o grupo X (n de N pessoas)".
+  todos**, restaura a visualização completa. O olho ligado fica destacado e o título do controle mostra **· filtrado**; não aparece nenhum aviso nem faixa no mapa.
   Setores, pontos de interesse, fotos e relatos continuam visíveis; **pedidos de ajuda, pedidos de saída e
   alertas de quem está fora do grupo continuam tocando** e avisam "fora do grupo mostrado". O filtro não
   fica lembrado ao recarregar.
@@ -1065,7 +1065,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 35 | Criar uma operação nova preenchendo tipo "Outras" (com o texto), acionamento, endereço, ponto no mapa e descrição | o painel abre com o ◎ do local no mapa; **Dados da operação** mostra tudo; uma operação antiga aparece com "Cadastro incompleto" e pode ser completada |
 | 36 | **Vítimas → Nova ficha** com foto; abrir o mesmo painel com outro responsável e, num celular de participante, tentar ler `vitimas` | o outro responsável vê a ficha (tempo real); o participante não recebe nenhuma linha nem consegue abrir a foto |
 | 37 | Criar os grupos "Polícia Civil" e "Bombeiros", adicionar pessoas, marcar um responsável ★ e enviar o link do grupo a um celular novo | quem entra pelo link aparece no grupo (selo na lista); no celular, "Grupo Polícia Civil"; ele não vê o outro grupo |
-| 38 | No controle **Grupos** do mapa, tocar no 👁 de um grupo e depois de novo | só as pessoas, trilhas e destinos do grupo ficam visíveis, com a faixa "Mostrando só…"; um pedido de ajuda de fora do grupo continua tocando; o segundo toque restaura tudo |
+| 38 | No controle **Grupos** do mapa, tocar no 👁 de um grupo e depois de novo | só as pessoas, trilhas e destinos do grupo ficam visíveis, sem aviso no mapa, com o olho destacado e o título "· filtrado"; um pedido de ajuda de fora do grupo continua tocando; o segundo toque restaura tudo |
 | 39 | Marcar uma **Base**, enviar o centro de um setor ao grupo (só o responsável), andar até o setor, tocar **BUSCA NO SETOR CONCLUÍDA** no celular do responsável do grupo e voltar à base | alertas: início do deslocamento, chegada ao setor, busca finalizada e equipe na base, em tempo real; o celular passa a mostrar "Volte para a base" |
 | 40 | Repetir com prazo de retorno de 5 min e um membro que não volta (ou com o celular em modo avião) | ao vencer o prazo, faixa vermelha "EQUIPE PODE ESTAR PERDIDA" com o alarme repetindo até **Ciente**, mesmo com o painel fechado durante o prazo (com `pg_cron` ativo) |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |

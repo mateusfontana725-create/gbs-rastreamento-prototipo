@@ -483,7 +483,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Setores de busca**: Novo setor por raio, Novo setor desenhando a área, Lista de setores e pontos;
   - **Mapa e navegação**: Ir para coordenada, Medir distância e área, Exportar, Importar (o **⤢** do mapa
     enquadra todos);
-  - **Configurações e manutenção**: Formato das coordenadas, Diagnóstico do GPS;
+  - **Configurações e manutenção**: Formato das coordenadas, **Tema** (Escuro ou Claro; o padrão é o escuro e a escolha fica no aparelho), Diagnóstico do GPS;
   - **Encerrar ou excluir · ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
     quem pode; confirmação reforçada: lista o que será apagado e exige **digitar o nome da operação**).
@@ -608,7 +608,7 @@ chave própria).
 
 ### Relatório final (PDF)
 
-- **Cabeçalho**: a partir da segunda página, a **logo do Corpo de Bombeiros Militar do Paraná** (`public/img/logo-cbmpr.png`, carregada no navegador e embutida no PDF) fica à esquerda, com o código da operação e a marca "DOCUMENTO RESTRITO" à direita. A capa segue com o layout próprio.
+- **Capa e cabeçalho**: a **logo do Corpo de Bombeiros Militar do Paraná** aparece no topo da capa e, a partir da segunda página, no cabeçalho (`public/img/logo-cbmpr.png`, carregada no navegador e embutida no PDF) fica à esquerda, com o código da operação e a marca "DOCUMENTO RESTRITO" à direita. A **mesma logo** aparece no topo da capa, acima do título.
 - **Ferramentas → Relatório final (PDF)** (ou **Relatório** na lista de operações). Só responsáveis da operação
   (o banco confere em `relatorio_operacao`).
 - Registre o **resultado** (vítima localizada com vida / em óbito / não localizada / outro, com descrição).
@@ -629,7 +629,7 @@ chave própria).
 - Só operações **sem atividade registrada** (criadas por engano) podem ser excluídas. Com atividade no diário
   (pessoas, setores iniciados, deslocamentos, relatos, observações, resultado ou relatório), o banco recusa:
   o diário e os relatórios são o documento da operação, e os dados pessoais saem pela retenção.
-- Disponível para **quem criou a operação** e para **administradores** que façam parte dela: na lista de
+- Disponível para **quem criou a operação** e para **administradores** (que alcançam **todas** as operações, inclusive para excluir): na lista de
   operações (botão **Excluir operação**) e em **Ferramentas → Excluir operação**. Os demais nem veem o
   botão, e o banco recusa a exclusão se alguém tentar por fora. Participantes nunca podem excluir.
 - A janela de confirmação lista tudo o que será apagado e exige **digitar o nome da operação**.
@@ -787,7 +787,11 @@ rastreamento-sar/
    - **015** (`015_grupos_no_mapa_civil.sql`): `equipe_no_mapa` passa a incluir os **integrantes dos grupos em
      comum** de quem consulta (com nome, grupo e papel, sem CPF, telefone ou trilha). Militares e responsáveis
      **sem grupo** continuam visíveis; quem está em outro grupo só aparece para o próprio grupo.
-   O `schema.sql` completo já inclui da 003 à 015 (seções 10 a 22).
+   - **016** (`016_admin_todas_operacoes.sql`): o **administrador** (`responsaveis.admin` ativo) passa a acessar **todas**
+     as operações, não só as que criou ou das quais foi adicionado; a regra fica em `dono_operacao`, usada pelas
+     políticas e pelas funções do painel. Os demais responsáveis seguem como antes. Na lista de operações, o
+     administrador vê o título **Operações (todas)** e o nome de quem criou cada operação de outro responsável.
+   O `schema.sql` completo já inclui da 003 à 016 (seções 10 a 23).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

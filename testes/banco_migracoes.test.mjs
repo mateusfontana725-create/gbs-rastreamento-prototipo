@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -467,7 +467,12 @@ chk(sd && sd.inicio_em && sd.fim_em, 'setor no relatório com início e fim da v
 chk(relat.participantes.every((p) => !p.cpf || /^\*\*\*\.\d{3}\.\d{3}-\*\*$/.test(p.cpf)), 'CPF mascarado no relatório', relat.participantes.map((p) => p.cpf));
 chk(/sem_permissao/.test(await erroDe(rpc(anA, 'relatorio_operacao', { p_operacao: op.id }))), 'participante NÃO gera relatório');
 const opR2 = await rpc(resp2, 'criar_operacao', { p_codigo: 'OP R2', p_retencao_horas: 0 });
-chk(/sem_permissao/.test(await erroDe(rpc(resp1, 'relatorio_operacao', { p_operacao: opR2.id }))), 'responsável de outra operação NÃO gera relatório');
+const opSoR1 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP SO R1', p_retencao_horas: 0 });
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'relatorio_operacao', { p_operacao: opSoR1.id }))), 'responsável comum NÃO gera relatório de operação de outro responsável');
+chk((await rpc(resp1, 'relatorio_operacao', { p_operacao: opR2.id })).operacao.codigo === 'OP R2', 'administrador gera relatório de qualquer operação');
+const opsAdm = (await como(resp1, `select count(*)::int n from public.operacoes`)).rows[0].n;
+const opsResp2 = (await como(resp2, `select count(*)::int n from public.operacoes`)).rows[0].n;
+chk(opsAdm >= 3 && opsResp2 < opsAdm, 'administrador lista todas as operações; responsável comum só as que criou ou em que foi adicionado', { opsAdm, opsResp2 });
 const pdfCam = op.id + '/44444444-4444-4444-8444-444444444444.pdf';
 chk(/arquivo_nao_enviado/.test(await erroDe(rpc(resp1, 'registrar_relatorio', { p_operacao: op.id, p_caminho: pdfCam, p_paginas: 12, p_bytes: 1000, p_sha256: 'a'.repeat(64) }))), 'registrar relatório sem o PDF no Storage: recusado');
 chk(/row-level security/.test(await erroDe(como(anA, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [pdfCam]))), 'participante não envia PDF ao bucket relatorios');
@@ -500,5 +505,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–015 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–016 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

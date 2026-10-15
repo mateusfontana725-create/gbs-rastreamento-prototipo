@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
   <link rel="stylesheet" href="css/estilos.css">
   <link rel="stylesheet" href="css/militar.css">
+  <script src="js/tema.js"></script>
 </head>
 <body>
 
@@ -69,7 +70,7 @@
     <div class="conteudo">
       <div class="cartao secao">
         <div class="ops-topo">
-          <h2>Minhas operações</h2>
+          <h2 id="ops-titulo">Minhas operações</h2>
           <!-- o cadastro abre num modal (militar.js: abrirNovaOperacao) -->
           <button class="btn btn-primario" type="button" id="btn-nova-op">+ Nova operação</button>
         </div>
@@ -208,6 +209,13 @@
                   <option value="dec">Graus decimais</option><option value="gms">Graus, min, seg</option><option value="gmd">Graus e min decimais</option>
                   <option value="utm">UTM</option><option value="mgrs">MGRS</option>
                 </select></label>
+              <div class="menu-tema" role="group" aria-label="Tema do aplicativo">
+                <span class="menu-tema-rotulo">Tema</span>
+                <div class="seg">
+                  <button class="seg-opcao" type="button" data-tema="escuro" aria-pressed="true">Escuro</button>
+                  <button class="seg-opcao" type="button" data-tema="claro" aria-pressed="false">Claro</button>
+                </div>
+              </div>
               <button class="menu-item" type="button" id="menu-diag-gps"><span class="ico-item" aria-hidden="true">⌁</span><span>Diagnóstico do GPS</span></button>
             </details>
             <!-- Ações que não podem ser desfeitas: sempre no fim, separadas, com confirmação -->

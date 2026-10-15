@@ -320,6 +320,11 @@
     $('ficha-exportar').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirExportar(est.selecionado); });
     $('opt-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
     $('menu-diag-gps').addEventListener('click', function () { fecharMenu(false); abrirDiagnosticoGps(); });
+    // Tema escuro ou claro (Ferramentas → Configurações). Os botões marcam o tema atual e o menu continua aberto.
+    document.querySelectorAll('.menu-tema [data-tema]').forEach(function (b) {
+      b.addEventListener('click', function () { definirTema(b.getAttribute('data-tema')); });
+    });
+    atualizarBotoesTema();
     // Lista lateral: ocultar / reabrir
     $('btn-ocultar-lateral').addEventListener('click', function () { definirLateral(false); });
     $('btn-mostrar-lateral').addEventListener('click', function () { definirLateral(true); });
@@ -489,6 +494,15 @@
     }
     ul.innerHTML = '';
     $('ops-vazio').hidden = ops.length > 0;
+    // Administrador vê todas as operações: mostra quem criou cada uma (nomes só para o admin).
+    var admin = Boolean(est.responsavel && est.responsavel.admin);
+    $('ops-titulo').textContent = admin ? 'Operações (todas)' : 'Minhas operações';
+    var nomes = {};
+    if (admin) {
+      try {
+        ((await C.rpc('admin_listar_responsaveis', {})) || []).forEach(function (r) { nomes[r.user_id] = r.nome; });
+      } catch (e) { /* sem os nomes, a lista segue sem o "criada por" */ }
+    }
     ops.forEach(function (op) {
       var selo = op.status === 'ativa'
         ? UI.el('span', { classe: 'selo selo-ok', texto: 'Ativa' })
@@ -521,6 +535,7 @@
         UI.el('div', { classe: 'op-info' }, [
           UI.el('strong', null, [op.codigo + ' ', selo, deEquipe ? ' ' : null, deEquipe, seloIncompleto ? ' ' : null, seloIncompleto]),
           UI.el('span', { texto: descricaoOp(op) }),
+          admin && op.responsavel_id !== est.usuario.id ? UI.el('span', { classe: 'muted', texto: 'Criada por ' + (nomes[op.responsavel_id] || 'outro responsável') }) : null,
         ]),
         acoes,
       ]));
@@ -1430,6 +1445,23 @@
     var em3d = !$('visao-3d').hidden;
     $('modo-2d').setAttribute('aria-pressed', String(!em3d));
     $('menu-3d').setAttribute('aria-pressed', String(em3d));
+  }
+
+  // Tema do painel: "escuro" (padrão) ou "claro". Fica salvo neste aparelho.
+  var CHAVE_TEMA = 'gbs-painel-tema';
+  function definirTema(tema) {
+    var valor = tema === 'claro' ? 'claro' : 'escuro';
+    document.documentElement.setAttribute('data-tema', valor);
+    try { localStorage.setItem(CHAVE_TEMA, valor); } catch (e) { /* sem armazenamento: vale só nesta página */ }
+    atualizarBotoesTema();
+    if (est.mapa) setTimeout(function () { est.mapa.invalidateSize({ pan: false }); }, 60);
+  }
+
+  function atualizarBotoesTema() {
+    var atual = document.documentElement.getAttribute('data-tema') || 'escuro';
+    document.querySelectorAll('.menu-tema [data-tema]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-tema') === atual));
+    });
   }
 
   function todasTrilhasVisiveis() {

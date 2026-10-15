@@ -189,8 +189,10 @@
       [String(d.diario.length), 'registros no diário'],
       [String(d.fotos.length), 'fotos'],
     ];
-    return [
-      { text: 'RELATÓRIO FINAL DE OPERAÇÃO', style: 'sobretitulo', margin: [0, 30, 0, 6] },
+    // Logo do Corpo de Bombeiros também na capa (acima do título), como no cabeçalho das páginas
+    var topo = recursos.logo ? [{ image: recursos.logo, width: 180, margin: [0, 26, 0, 22] }] : [];
+    return topo.concat([
+      { text: 'RELATÓRIO FINAL DE OPERAÇÃO', style: 'sobretitulo', margin: [0, recursos.logo ? 0 : 30, 0, 6] },
       { canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 14] },
       { text: op.codigo, style: 'tituloCapa' },
       { text: [tipoOperacao(op), vazio(op.local_endereco) ? '' : '  ·  ' + op.local_endereco].join(''), style: 'subtituloCapa', margin: [0, 6, 0, 22] },
@@ -228,7 +230,7 @@
           dataHora(op.dados_apagados_em) + ', conforme a política de retenção. Este relatório foi montado com o cadastro, o diário e o resultado, que são preservados.',
           style: 'nota', fillColor: COR.fundo, margin: [8, 6, 8, 6] }]] }, layout: 'noBorders',
       } : null,
-    ].filter(Boolean);
+    ].filter(Boolean));
   }
 
   function bloco(rotulo, valor) {

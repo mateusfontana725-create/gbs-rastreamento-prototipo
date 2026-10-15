@@ -72,8 +72,10 @@
     if (!m || !window.MeteoMapa) return;
     var quer = est.ligada && est.radar && est.quadros.length > 0;
     if (!est.camadaRadar) {
-      est.camadaRadar = L.tileLayer(urlQuadro(est.quadro), { tileSize: 512, opacity: 0.6, zIndex: 400,
-        attribution: 'Radar © RainViewer', maxNativeZoom: 7 });
+      // Tiles de 512 px do RainViewer: zoomOffset -1 faz o Leaflet pedir o mesmo tile que o provedor usa
+      // (sem isso o pedido cai em outra região). maxNativeZoom 8 limita a URL ao zoom 7, que o provedor serve.
+      est.camadaRadar = L.tileLayer(urlQuadro(est.quadro), { tileSize: 512, zoomOffset: -1, maxNativeZoom: 8,
+        opacity: 0.6, zIndex: 400, attribution: 'Radar © RainViewer' });
       est.camadaRadar.on('tileload', function () { est.tilesOk++; desenharRadarEstado(); });
       est.camadaRadar.on('tileerror', function () { est.tilesErro++; desenharRadarEstado(); });
     }

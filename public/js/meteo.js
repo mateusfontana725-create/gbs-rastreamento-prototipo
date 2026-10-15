@@ -91,7 +91,7 @@
     desenharArea();
   }
 
-  // Tile do radar sobre a operação (zoom 6): endereço para abrir numa aba e conferir a resposta do provedor.
+  // Tile do radar sobre a operação: endereço para abrir numa aba e conferir a resposta do provedor.
   function tileDaOperacao(lat, lng, z) {
     var n = Math.pow(2, z), r = lat * Math.PI / 180;
     return { x: Math.floor((lng + 180) / 360 * n),
@@ -103,7 +103,8 @@
     if (!a) return;
     var q = est.quadros[est.quadro];
     if (!q || !est.host || !o || o.local_lat == null) { a.hidden = true; return; }
-    var t = tileDaOperacao(o.local_lat, o.local_lng, 6);
+    // Mesmo zoom que o mapa usa para o radar (maxNativeZoom), para testar exatamente o tile que aparece.
+    var t = tileDaOperacao(o.local_lat, o.local_lng, 7);
     a.href = est.host + q.path + '/512/' + t.z + '/' + t.x + '/' + t.y + '/2/1_1.png';
     a.hidden = false;
   }

@@ -606,6 +606,7 @@ chave própria).
 
 ### Relatório final (PDF)
 
+- **Cabeçalho**: a partir da segunda página, a **logo do Corpo de Bombeiros Militar do Paraná** (`public/img/logo-cbmpr.png`, carregada no navegador e embutida no PDF) fica à esquerda, com o código da operação e a marca "DOCUMENTO RESTRITO" à direita. A capa segue com o layout próprio.
 - **Ferramentas → Relatório final (PDF)** (ou **Relatório** na lista de operações). Só responsáveis da operação
   (o banco confere em `relatorio_operacao`).
 - Registre o **resultado** (vítima localizada com vida / em óbito / não localizada / outro, com descrição).

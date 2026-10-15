@@ -500,14 +500,22 @@
         subject: 'Relatório final de operação de busca e salvamento',
         creator: 'Rastreamento GBS',
       },
+      // Cabeçalho das páginas seguintes à capa: logo do Corpo de Bombeiros à esquerda e
+      // código da operação à direita (sem a logo, sai só o nome da corporação).
       header: function (pagina) {
         if (pagina === 1) return null;
+        var marca = recursos.logo
+          ? { image: recursos.logo, width: 112 }
+          : { text: 'CORPO DE BOMBEIROS MILITAR', fontSize: 8, bold: true, color: COR.texto };
         return {
-          margin: [40, 22, 40, 0],
+          margin: [40, 14, 40, 0],
           stack: [
             { columns: [
-              { text: op.codigo, fontSize: 8, bold: true, color: COR.texto },
-              { text: 'RELATÓRIO FINAL  ·  DOCUMENTO RESTRITO', fontSize: 7.5, color: COR.acento, bold: true, alignment: 'right', characterSpacing: 0.6 },
+              marca,
+              { width: '*', stack: [
+                { text: op.codigo, fontSize: 8, bold: true, color: COR.texto, alignment: 'right' },
+                { text: 'RELATÓRIO FINAL  ·  DOCUMENTO RESTRITO', fontSize: 7.5, color: COR.acento, bold: true, alignment: 'right', characterSpacing: 0.6, margin: [0, 2, 0, 0] },
+              ] },
             ] },
             { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 0.5, lineColor: COR.linha }] },
           ],

@@ -493,6 +493,23 @@
   var BASE_VENDOR = (function () {
     try { return new URL('../vendor/pdfmake/', document.currentScript.src).href; } catch (e) { return 'vendor/pdfmake/'; }
   })();
+  var BASE_IMG = (function () {
+    try { return new URL('../img/', document.currentScript.src).href; } catch (e) { return 'img/'; }
+  })();
+  // Logo do Corpo de Bombeiros para o cabeçalho do relatório (data URL). Sem ela, o PDF sai com o texto.
+  async function carregarLogo() {
+    try {
+      var r = await fetch(BASE_IMG + 'logo-cbmpr.png');
+      if (!r.ok) return null;
+      var blob = await r.blob();
+      return await new Promise(function (resolve) {
+        var leitor = new FileReader();
+        leitor.onload = function () { resolve(leitor.result); };
+        leitor.onerror = function () { resolve(null); };
+        leitor.readAsDataURL(blob);
+      });
+    } catch (e) { return null; }
+  }
   function carregarScript(src) {
     return new Promise(function (resolve, reject) {
       var s = document.createElement('script');
@@ -554,6 +571,7 @@
         if (fv) recursos.fotosVitimas[dados.vitimas[v].id] = fv;
       }
     }
+    recursos.logo = await carregarLogo();
     progresso('Montando o documento…');
     return RP.montarDocumento(dados, recursos);
   }

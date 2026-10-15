@@ -213,8 +213,18 @@
     }).filter(function (q) { return numOk(q[0], q[1]); });
   }
 
+  // Filhos diretos de um elemento (sem descer para dentro de outras geometrias).
+  function diretos(el, nome) {
+    return Array.prototype.filter.call(el.children || [], function (c) { return c.localName === nome; });
+  }
+
   function lerKml(doc) {
     var r = vazio();
+    function addArea(nome, txt) {
+      var pts = lerCoordsKml(txt);
+      if (pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts.pop();
+      if (pts.length >= 3) r.areas.push({ nome: nome, pts: pts });
+    }
     filhos(doc, 'Placemark').forEach(function (pm, i) {
       var nome = textoDe(pm, 'name') || 'Item ' + (i + 1);
       var desc = textoDe(pm, 'description').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
@@ -229,10 +239,10 @@
       filhos(pm, 'Polygon').forEach(function (pg) {
         var anel = filhos(pg, 'outerBoundaryIs')[0];
         var cs = anel ? filhos(anel, 'coordinates')[0] : null;
-        var pts = cs ? lerCoordsKml(cs.textContent) : [];
-        if (pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts.pop();
-        if (pts.length >= 3) r.areas.push({ nome: nome, pts: pts });
+        addArea(nome, cs ? cs.textContent : '');
       });
+      // AlpineQuest e alguns outros apps gravam a área como <LinearRing> solto no Placemark (sem <Polygon>).
+      diretos(pm, 'LinearRing').forEach(function (lr) { addArea(nome, textoDe(lr, 'coordinates')); });
       filhos(pm, 'Track').forEach(function (tk) {   // gx:Track
         var pts = filhos(tk, 'coord').map(function (c) { var p = c.textContent.trim().split(/\s+/); return [Number(p[1]), Number(p[0])]; })
           .filter(function (q) { return numOk(q[0], q[1]); });

@@ -213,9 +213,10 @@
     }).filter(function (q) { return numOk(q[0], q[1]); });
   }
 
-  // Filhos diretos de um elemento (sem descer para dentro de outras geometrias).
-  function diretos(el, nome) {
-    return Array.prototype.filter.call(el.children || [], function (c) { return c.localName === nome; });
+  // true se o elemento está dentro de um ancestral com esse nome, antes de chegar em 'limite'.
+  function dentroDe(el, limite, nome) {
+    for (var a = el.parentNode; a && a !== limite; a = a.parentNode) if (a.localName === nome) return true;
+    return false;
   }
 
   function lerKml(doc) {
@@ -241,8 +242,11 @@
         var cs = anel ? filhos(anel, 'coordinates')[0] : null;
         addArea(nome, cs ? cs.textContent : '');
       });
-      // AlpineQuest e alguns outros apps gravam a área como <LinearRing> solto no Placemark (sem <Polygon>).
-      diretos(pm, 'LinearRing').forEach(function (lr) { addArea(nome, textoDe(lr, 'coordinates')); });
+      // AlpineQuest e alguns outros apps gravam a área como <LinearRing> solto (direto ou dentro de
+      // <MultiGeometry>), sem <Polygon>. O anel de dentro de um Polygon já foi lido acima.
+      filhos(pm, 'LinearRing').forEach(function (lr) {
+        if (!dentroDe(lr, pm, 'Polygon')) addArea(nome, textoDe(lr, 'coordinates'));
+      });
       filhos(pm, 'Track').forEach(function (tk) {   // gx:Track
         var pts = filhos(tk, 'coord').map(function (c) { var p = c.textContent.trim().split(/\s+/); return [Number(p[1]), Number(p[0])]; })
           .filter(function (q) { return numOk(q[0], q[1]); });
@@ -320,6 +324,16 @@
     throw new Error('O KMZ não contém um arquivo .kml.');
   }
 
+  // Quando nada é reconhecido, mostra quais elementos o arquivo tem (para diagnosticar o formato).
+  function resumoTags(texto) {
+    var nomes = ['Placemark', 'Point', 'LineString', 'LinearRing', 'Polygon', 'MultiGeometry', 'Track', 'coordinates', 'coord', 'wpt', 'trk', 'rte', 'Feature'];
+    var partes = nomes.map(function (n) {
+      var m = texto.match(new RegExp('<(?:[\\w.-]+:)?' + n + '[\\s>/]', 'g'));
+      return m ? n + ' ' + m.length : null;
+    }).filter(Boolean);
+    return partes.length ? ' Elementos no arquivo: ' + partes.join(', ') + '.' : ' Nenhum elemento de mapa (GPX, KML, GeoJSON) foi encontrado.';
+  }
+
   // Lê um File (ou { name, text }) e devolve os objetos encontrados.
   async function importar(arquivo) {
     if (arquivo.size > LIMITE_BYTES) throw new Error('Arquivo grande demais (máximo de 8 MB).');
@@ -344,7 +358,7 @@
     r.linhas.forEach(function (l) { vert += l.pts.length; });
     r.areas.forEach(function (a) { vert += a.pts.length; });
     if (vert > LIMITE_VERTICES) throw new Error('Arquivo com pontos demais (' + vert + '). O limite é ' + LIMITE_VERTICES + '.');
-    if (!r.pontos.length && !r.linhas.length && !r.areas.length) throw new Error('Nenhum ponto, trilha ou área encontrado no arquivo.');
+    if (!r.pontos.length && !r.linhas.length && !r.areas.length) throw new Error('Nenhum ponto, trilha ou área encontrado no arquivo.' + resumoTags(texto));
     r.vertices = vert;
     return r;
   }

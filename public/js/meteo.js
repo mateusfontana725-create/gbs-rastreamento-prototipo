@@ -91,6 +91,23 @@
     desenharArea();
   }
 
+  // Tile do radar sobre a operação (zoom 6): endereço para abrir numa aba e conferir a resposta do provedor.
+  function tileDaOperacao(lat, lng, z) {
+    var n = Math.pow(2, z), r = lat * Math.PI / 180;
+    return { x: Math.floor((lng + 180) / 360 * n),
+      y: Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n), z: z };
+  }
+
+  function desenharTesteTile() {
+    var a = $('meteo-teste-tile'), o = op();
+    if (!a) return;
+    var q = est.quadros[est.quadro];
+    if (!q || !est.host || !o || o.local_lat == null) { a.hidden = true; return; }
+    var t = tileDaOperacao(o.local_lat, o.local_lng, 6);
+    a.href = est.host + q.path + '/512/' + t.z + '/' + t.x + '/' + t.y + '/2/1_1.png';
+    a.hidden = false;
+  }
+
   function urlQuadro(i) {
     var q = est.quadros[i];
     return q ? est.host + q.path + '/512/{z}/{x}/{y}/2/1_1.png' : '';
@@ -295,6 +312,7 @@
     desenharGradeEstado();
     desenharHistorico();
     desenharRadarEstado();
+    desenharTesteTile();
     desenharAviso();
   }
 

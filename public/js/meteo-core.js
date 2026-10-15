@@ -162,7 +162,56 @@
     return estados;
   }
 
+  // Vento: direção é de onde o vento vem (convenção meteorológica). Componentes para onde ele vai.
+  function componentesVento(velocidade, direcaoGraus) {
+    var r = (direcaoGraus || 0) * Math.PI / 180;
+    return { u: -velocidade * Math.sin(r), v: -velocidade * Math.cos(r) };
+  }
+
+  // Grade regular: { lat0, lng0, dlat, dlng, nLin, nCol, valores } com valores em ordem de linhas
+  // (linha = latitude crescente, coluna = longitude crescente). Devolve null fora da grade.
+  function interpolar(g, lat, lng) {
+    var fi = (lat - g.lat0) / g.dlat, fj = (lng - g.lng0) / g.dlng;
+    if (!isFinite(fi) || !isFinite(fj) || fi < 0 || fj < 0 || fi > g.nLin - 1 || fj > g.nCol - 1) return null;
+    var i0 = Math.min(Math.floor(fi), g.nLin - 2), j0 = Math.min(Math.floor(fj), g.nCol - 2);
+    var ti = fi - i0, tj = fj - j0;
+    function v(i, j) { return g.valores[i * g.nCol + j]; }
+    var a = v(i0, j0), b = v(i0, j0 + 1), c = v(i0 + 1, j0), d = v(i0 + 1, j0 + 1);
+    if (a == null || b == null || c == null || d == null) return null;
+    return (a * (1 - ti) + c * ti) * (1 - tj) + (b * (1 - ti) + d * ti) * tj;
+  }
+
+  // Escala de temperatura no estilo dos mapas de vento: frio em azul, quente em vermelho.
+  var PARADAS_TEMP = [[-5, [59, 130, 246]], [5, [56, 189, 248]], [15, [74, 222, 128]], [22, [250, 204, 21]], [30, [249, 115, 22]], [38, [220, 38, 38]]];
+  function corTemperatura(t) {
+    if (t == null || !isFinite(t)) return null;
+    if (t <= PARADAS_TEMP[0][0]) return PARADAS_TEMP[0][1];
+    for (var i = 1; i < PARADAS_TEMP.length; i++) {
+      if (t <= PARADAS_TEMP[i][0]) {
+        var a = PARADAS_TEMP[i - 1], b = PARADAS_TEMP[i], k = (t - a[0]) / (b[0] - a[0]);
+        return [0, 1, 2].map(function (c) { return Math.round(a[1][c] + (b[1][c] - a[1][c]) * k); });
+      }
+    }
+    return PARADAS_TEMP[PARADAS_TEMP.length - 1][1];
+  }
+
+  // Escala de velocidade do vento (km/h) para as partículas: calmo claro, forte em magenta.
+  var PARADAS_VENTO = [[0, [186, 230, 253]], [15, [56, 189, 248]], [30, [129, 140, 248]], [50, [236, 72, 153]]];
+  function corVento(kmh) {
+    if (kmh == null || !isFinite(kmh)) return PARADAS_VENTO[0][1];
+    if (kmh <= PARADAS_VENTO[0][0]) return PARADAS_VENTO[0][1];
+    for (var i = 1; i < PARADAS_VENTO.length; i++) {
+      if (kmh <= PARADAS_VENTO[i][0]) {
+        var a = PARADAS_VENTO[i - 1], b = PARADAS_VENTO[i], k = (kmh - a[0]) / (b[0] - a[0]);
+        return [0, 1, 2].map(function (c) { return Math.round(a[1][c] + (b[1][c] - a[1][c]) * k); });
+      }
+    }
+    return PARADAS_VENTO[PARADAS_VENTO.length - 1][1];
+  }
+
   var API = {
+    componentesVento: componentesVento, interpolar: interpolar, corTemperatura: corTemperatura, corVento: corVento,
+    PARADAS_TEMP: PARADAS_TEMP, PARADAS_VENTO: PARADAS_VENTO,
     LIMIARES: LIMIARES, intensidadeChuva: intensidadeChuva, distanciaM: distanciaM, rumoGraus: rumoGraus,
     nivelDeSeveridade: nivelDeSeveridade, maior: maior, previsaoChegada: previsaoChegada, analisar: analisar,
     desatualizado: desatualizado, deveNotificar: deveNotificar, compararLeituras: compararLeituras, RANK: RANK,

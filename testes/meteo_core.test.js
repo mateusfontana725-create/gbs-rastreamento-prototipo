@@ -85,5 +85,28 @@ teste('estados entre leituras: novo, atualizado, mantido e expirado', () => {
   assert.deepStrictEqual(e, { x: 'atualizado', z: 'novo', y: 'expirado' });
 });
 
+console.log('Meteorologia: vento e temperatura');
+teste('componentes do vento: direção é de onde vem; vento de oeste empurra para leste', () => {
+  const c = M.componentesVento(10, 270);
+  assert.ok(Math.abs(c.u - 10) < 1e-9 && Math.abs(c.v) < 1e-9, JSON.stringify(c));
+  const n = M.componentesVento(10, 0);   // vem do norte: vai para o sul
+  assert.ok(Math.abs(n.v + 10) < 1e-9);
+});
+teste('interpolação bilinear no centro da grade e nulo fora dela', () => {
+  const g = { lat0: -25, lng0: -50, dlat: 0.1, dlng: 0.1, nLin: 3, nCol: 3, valores: [10, 11, 12, 20, 21, 22, 30, 31, 32] };
+  assert.ok(Math.abs(M.interpolar(g, -24.9, -49.9) - 21) < 1e-9);
+  assert.strictEqual(M.interpolar(g, -30, -49), null);
+});
+teste('interpolação com ponto ausente na grade devolve nulo (não inventa valor)', () => {
+  const g = { lat0: 0, lng0: 0, dlat: 1, dlng: 1, nLin: 2, nCol: 2, valores: [1, null, 3, 4] };
+  assert.strictEqual(M.interpolar(g, 0.5, 0.5), null);
+});
+teste('escalas de cor: frio azul, quente vermelho, nulo sem cor', () => {
+  assert.deepStrictEqual(M.corTemperatura(-10), M.PARADAS_TEMP[0][1]);
+  assert.deepStrictEqual(M.corTemperatura(40), M.PARADAS_TEMP[M.PARADAS_TEMP.length - 1][1]);
+  assert.strictEqual(M.corTemperatura(null), null);
+  assert.deepStrictEqual(M.corVento(0), M.PARADAS_VENTO[0][1]);
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes de meteorologia passaram.');

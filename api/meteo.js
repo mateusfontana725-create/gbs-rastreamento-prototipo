@@ -109,6 +109,45 @@ async function ehResponsavel(token) {
   return (await r.json()) === true;
 }
 
+// Grade de pontos ao redor da operação (n × n, em ordem de linhas: latitude crescente, depois longitude).
+// Usada para desenhar vento e temperatura no mapa. meia = metade da largura, em km.
+function montarGrade(lat, lng, meiaKm, n) {
+  const dLat = meiaKm / 111.32;
+  const dLng = meiaKm / (111.32 * Math.cos(lat * Math.PI / 180));
+  const pontos = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      pontos.push({
+        lat: Math.round((lat - dLat + (2 * dLat * i) / (n - 1)) * 10000) / 10000,
+        lng: Math.round((lng - dLng + (2 * dLng * j) / (n - 1)) * 10000) / 10000,
+      });
+    }
+  }
+  return { lat0: lat - dLat, lng0: lng - dLng, dlat: (2 * dLat) / (n - 1), dlng: (2 * dLng) / (n - 1), nLin: n, nCol: n, pontos: pontos };
+}
+
+// Open-Meteo aceita várias coordenadas numa só chamada; a resposta vem como lista, na mesma ordem.
+// (formato de múltiplas localizações conforme a documentação do Open-Meteo; não verificado ao vivo)
+async function gradeOpenMeteo(lat, lng, meiaKm) {
+  const g = montarGrade(lat, lng, meiaKm, 9);
+  const chave = (process.env.OPEN_METEO_API_KEY || '').trim();
+  const base = chave ? 'https://customer-api.open-meteo.com/v1/forecast' : 'https://api.open-meteo.com/v1/forecast';
+  // Vírgulas literais, como na documentação do Open-Meteo para várias coordenadas.
+  let url = base + '?latitude=' + g.pontos.map((p) => p.lat).join(',') + '&longitude=' + g.pontos.map((p) => p.lng).join(',') +
+    '&current=temperature_2m,wind_speed_10m,wind_direction_10m';
+  if (chave) url += '&apikey=' + encodeURIComponent(chave);
+  const j = await getJson(url);
+  const lista = Array.isArray(j) ? j : [j];
+  if (lista.length !== g.pontos.length) throw new Error('grade incompleta');
+  return {
+    lat0: g.lat0, lng0: g.lng0, dlat: g.dlat, dlng: g.dlng, nLin: g.nLin, nCol: g.nCol,
+    pontos: lista.map(function (x, i) {
+      const c = x.current || {};
+      return { lat: g.pontos[i].lat, lng: g.pontos[i].lng, temperatura: c.temperature_2m, vento: c.wind_speed_10m, direcao: c.wind_direction_10m };
+    }),
+  };
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({ erro: 'metodo_nao_permitido' });
@@ -125,11 +164,24 @@ module.exports = async (req, res) => {
   if (autorizado !== true) return res.status(403).json({ erro: 'sem_permissao' });
 
   const lat = Number(req.query && req.query.lat), lng = Number(req.query && req.query.lng);
+  const grade = req.query && req.query.tipo === 'grade';
   if (!isFinite(lat) || !isFinite(lng) || lat < -35 || lat > 6 || lng < -75 || lng > -28) {
     return res.status(400).json({ erro: 'posicao_invalida', mensagem: 'Serviço disponível para operações no Brasil.' });
   }
   // Arredonda para agrupar consultas parecidas no cache (≈ 1 km).
   const latR = Math.round(lat * 100) / 100, lngR = Math.round(lng * 100) / 100;
+
+  if (grade) {
+    const meia = Math.min(40, Math.max(5, Number(req.query.raio) || 15));
+    const chaveG = 'grade:' + latR + ',' + lngR + ',' + meia;
+    const r = await comCache(chaveG, TTL.previsao, function () { return gradeOpenMeteo(latR, lngR, meia); });
+    return res.status(200).json({
+      atualizadoEm: new Date().toISOString(),
+      fonte: 'Open-Meteo',
+      ok: r.ok, obtidoEm: r.obtidoEm, erro: r.erro || null,
+      grade: r.ok ? r.dados : null,
+    });
+  }
 
   const [radar, previsao, inmet] = await Promise.all([
     comCache('radar', TTL.radar, radarRainViewer),
@@ -156,3 +208,5 @@ module.exports = async (req, res) => {
     avisos: avisos,
   });
 };
+
+module.exports.montarGrade = montarGrade;

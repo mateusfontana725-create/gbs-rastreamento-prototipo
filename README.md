@@ -344,6 +344,10 @@ e o mapa e o rastreamento continuam funcionando.
 
 - **Radar de precipitação** (RainViewer): quadros recentes com horário, linha do tempo e animação (▶). Cada quadro
   é **observado** pelo radar. Não há extrapolação do radar nesta versão.
+- **Vento e temperatura no mapa** (estilo dos mapas de vento): partículas animadas seguindo a direção e a velocidade
+  do vento, e um campo colorido de temperatura, sobre uma área de ~30 km ao redor da operação. Vêm de uma grade de
+  81 pontos (Open-Meteo), atualizada junto com a previsão. Mostram a **previsão de modelo** (vento e temperatura
+  atuais), não observação. Ligue em **Vento** e **Temperatura** dentro da camada Meteorologia.
 - **Previsão** (Open-Meteo) para o centro da operação: temperatura, vento e rajadas agora, e a chegada prevista da
   chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). É previsão de modelo, não extrapolação do radar.
 - **Alertas**: níveis Informativo, Atenção, Alerta e Crítico, com fonte, horário, validade e estado (novo, atualizado,

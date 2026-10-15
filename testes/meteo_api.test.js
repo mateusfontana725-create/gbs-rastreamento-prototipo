@@ -116,6 +116,38 @@ const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
     assert.ok(r.body.avisos.some((t) => /RainViewer/.test(t) && /licença/i.test(t)));
   });
 
+  await teste('grade: 9×9 em ordem de linhas, cobrindo ~30 km ao redor do centro', async () => {
+    const g = carregar().montarGrade(-25.4, -49.2, 15, 9);
+    assert.strictEqual(g.pontos.length, 81);
+    assert.ok(Math.abs(g.pontos[0].lat - g.lat0) < 1e-4 && Math.abs(g.pontos[0].lng - g.lng0) < 1e-4);
+    assert.ok(Math.abs(g.pontos[80].lat - (g.lat0 + 8 * g.dlat)) < 1e-3);
+    const km = (g.pontos[8].lng - g.pontos[0].lng) * 111.32 * Math.cos(-25.4 * Math.PI / 180);
+    assert.ok(Math.abs(km - 30) < 0.5, 'largura ' + km);
+  });
+  await teste('endpoint de grade: vento e temperatura da grade inteira, sem chave no retorno', async () => {
+    ambiente({}); delete process.env.OPEN_METEO_API_KEY;
+    global.fetch = fetchFalso({
+      'rpc/eh_responsavel': ok(true),
+      'open-meteo.com': (url) => {
+        const n = url.split('latitude=')[1].split('&')[0].split(',').length;
+        return json(Array.from({ length: n }, (_, i) => ({ current: { temperature_2m: 15 + i, wind_speed_10m: 8, wind_direction_10m: 270 } })));
+      },
+    });
+    const r = resposta(); await carregar()(Object.assign(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade', raio: '15' }, 't')), r);
+    assert.strictEqual(r.code, 200);
+    assert.strictEqual(r.body.ok, true);
+    assert.strictEqual(r.body.grade.pontos.length, 81);
+    assert.strictEqual(r.body.grade.pontos[0].temperatura, 15);
+    assert.strictEqual(r.body.grade.pontos[80].temperatura, 95);
+    assert.ok(!JSON.stringify(r.body).includes('apikey'));
+  });
+  await teste('grade com resposta incompleta da fonte: falha sem inventar pontos', async () => {
+    ambiente({}); global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'open-meteo.com': ok([{ current: { temperature_2m: 1 } }]) });
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade' }, 't'), r);
+    assert.strictEqual(r.body.ok, false);
+    assert.strictEqual(r.body.grade, null);
+  });
+
   if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
   console.log('\nTodos os testes do endpoint de meteorologia passaram.');
 })();

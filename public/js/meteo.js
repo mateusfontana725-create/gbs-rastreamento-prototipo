@@ -37,6 +37,9 @@
     fontes: null,
     camadaRadar: null, circulo: null, ultimoSom: {}, ctx: null, timer: null, buscando: false,
     tilesOk: 0, tilesErro: 0,   // contagem dos tiles do radar no quadro atual (diagnóstico)
+    vento: Boolean(lerLocal('gbs-meteo-vento', false)),
+    temp: Boolean(lerLocal('gbs-meteo-temp', false)),
+    grade: null, gradeEm: null, gradeErro: null, camadaVento: null, camadaTemp: null,
   };
 
   /* ------------------------------ camada e painel ------------------------------ */
@@ -51,7 +54,7 @@
     est.ligada = valor;
     gravarLocal(CHAVE_LIG, valor);
     atualizarBotao();
-    if (valor) { prepararSom(); $('meteo-painel').hidden = false; }
+    if (valor) { prepararSom(); $('meteo-painel').hidden = false; if (est.vento || est.temp) buscarGrade(); }
     else { parar(); $('meteo-painel').hidden = true; }
     aplicarCamada();
     desenharSituacao();
@@ -72,7 +75,59 @@
     } else if (est.camadaRadar) {
       m.removeLayer(est.camadaRadar);
     }
+    aplicarGradeCamadas();
     desenharArea();
+  }
+
+  // Vento (partículas) e temperatura (campo) sobre a grade de pontos ao redor da operação.
+  function aplicarGradeCamadas() {
+    var m = mapa();
+    if (!m || !window.MeteoMapa) return;
+    if (!est.camadaVento) est.camadaVento = MeteoMapa.criarVento();
+    if (!est.camadaTemp) est.camadaTemp = MeteoMapa.criarTemperatura();
+    var vento = est.ligada && est.vento, temp = est.ligada && est.temp;
+    [[est.camadaVento, vento], [est.camadaTemp, temp]].forEach(function (par) {
+      var camada = par[0], quer = par[1];
+      if (quer && !m.hasLayer(camada)) camada.addTo(m);
+      if (!quer && m.hasLayer(camada)) m.removeLayer(camada);
+      if (quer && est.grade) camada.setGrade(est.grade);
+    });
+    $('meteo-escala-vento').hidden = !vento;
+    $('meteo-escala-temp').hidden = !temp;
+  }
+
+  async function buscarGrade() {
+    var o = op();
+    if (!o || o.local_lat == null || !est.ligada || !(est.vento || est.temp)) return;
+    try {
+      var sessao = (await C.cliente.auth.getSession()).data.session;
+      if (!sessao) throw new Error('Sessão expirada.');
+      var r = await fetch('/api/meteo?tipo=grade&raio=15&lat=' + o.local_lat + '&lng=' + o.local_lng, { headers: { Authorization: 'Bearer ' + sessao.access_token } });
+      var d = await r.json().catch(function () { return {}; });
+      if (!r.ok || !d.ok) throw new Error(d.erro || d.mensagem || 'grade indisponível');
+      est.grade = d.grade; est.gradeEm = d.obtidoEm; est.gradeErro = null;
+    } catch (e) {
+      est.gradeErro = e.message;
+    }
+    aplicarGradeCamadas();
+    desenharGradeEstado();
+  }
+
+  function desenharGradeEstado() {
+    var el = $('meteo-grade-estado');
+    if (!el) return;
+    if (!est.ligada || !(est.vento || est.temp)) { el.textContent = ''; return; }
+    if (est.gradeErro) el.textContent = 'Vento e temperatura indisponíveis: ' + est.gradeErro;
+    else if (!est.grade) el.textContent = 'Carregando vento e temperatura…';
+    else el.textContent = 'Vento e temperatura (previsão de modelo, Open-Meteo) · área de ~30 km' + (est.gradeEm ? ' · ' + hora(est.gradeEm) : '');
+    el.className = 'muted meteo-radar-tiles' + (est.gradeErro ? ' meteo-desat' : '');
+  }
+
+  function montarEscalas() {
+    var t = Core.PARADAS_TEMP.map(function (p) { return 'rgb(' + p[1].join(',') + ') ' + ((p[0] + 5) / 43 * 100).toFixed(1) + '%'; });
+    $('meteo-barra-temp').style.background = 'linear-gradient(to right, ' + t.join(', ') + ')';
+    var v = Core.PARADAS_VENTO.map(function (p) { return 'rgb(' + p[1].join(',') + ') ' + (p[0] / 50 * 100).toFixed(1) + '%'; });
+    $('meteo-barra-vento').style.background = 'linear-gradient(to right, ' + v.join(', ') + ')';
   }
 
   function urlQuadro(i) {
@@ -190,6 +245,7 @@
       if (a.estado !== 'expirado' && Core.deveNotificar(anterior, a)) avisarSom(a);
     });
     aplicarCamada();
+    if (est.ligada && (est.vento || est.temp)) buscarGrade();
     desenharAviso();
   }
 
@@ -266,6 +322,7 @@
     $('meteo-radar-bloco').hidden = !est.quadros.length;
     desenharAviso();
     desenharRadarEstado();
+    desenharGradeEstado();
   }
 
   function elementoAlerta(a) {
@@ -340,6 +397,19 @@
     $('meteo-som').addEventListener('click', function () { est.som = !est.som; gravarLocal(CHAVE_SOM, est.som); if (est.som) prepararSom(); desenharSituacao(); });
     $('meteo-raio').addEventListener('change', function () { est.raioKm = Number(this.value); gravarLocal(CHAVE_RAIO, est.raioKm); desenharArea(); desenharSituacao(); });
     $('meteo-atualizar').addEventListener('click', function () { consultar(); });
+    montarEscalas();
+    function marcar(id, valor) { $(id).setAttribute('aria-pressed', String(valor)); }
+    marcar('meteo-vento', est.vento); marcar('meteo-temp', est.temp);
+    $('meteo-vento').addEventListener('click', function () {
+      est.vento = !est.vento; gravarLocal('gbs-meteo-vento', est.vento); marcar('meteo-vento', est.vento);
+      if (est.vento && est.ligada) buscarGrade(); else aplicarGradeCamadas();
+      desenharGradeEstado();
+    });
+    $('meteo-temp').addEventListener('click', function () {
+      est.temp = !est.temp; gravarLocal('gbs-meteo-temp', est.temp); marcar('meteo-temp', est.temp);
+      if (est.temp && est.ligada) buscarGrade(); else aplicarGradeCamadas();
+      desenharGradeEstado();
+    });
 
     if (est.ligada) { $('meteo-painel').hidden = false; }
     // Monitoramento: primeira leitura logo após abrir a operação, depois a cada 5 min (só com a aba visível).

@@ -592,3 +592,7 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .camada-sinal.sinal-meteo { color: #38bdf8; }
 .meteo-area { pointer-events: none; }
 .meteo-radar-tiles { font-size: .74rem; margin: 4px 0 0; }
+.meteo-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+.meteo-escala { margin: 6px 0; }
+.meteo-barra { height: 10px; border-radius: 2px; border: 1px solid var(--borda-forte); }
+.meteo-escala-rotulos { display: flex; justify-content: space-between; font-size: .7rem; color: var(--texto-3); margin-top: 2px; }

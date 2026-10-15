@@ -406,6 +406,22 @@
           <p class="meteo-legenda">Tons claros = chuva fraca; tons escuros e vermelhos = chuva intensa (escala do provedor).</p>
         </div>
         <div class="meteo-bloco">
+          <h4>Vento e temperatura</h4>
+          <div class="meteo-linha">
+            <button class="btn btn-pequeno" type="button" id="meteo-vento" aria-pressed="false">💨 Vento</button>
+            <button class="btn btn-pequeno" type="button" id="meteo-temp" aria-pressed="false">🌡 Temperatura</button>
+          </div>
+          <div class="meteo-escala" id="meteo-escala-temp" hidden>
+            <div class="meteo-barra" id="meteo-barra-temp"></div>
+            <div class="meteo-escala-rotulos"><span>-5 °C</span><span>38 °C</span></div>
+          </div>
+          <div class="meteo-escala" id="meteo-escala-vento" hidden>
+            <div class="meteo-barra" id="meteo-barra-vento"></div>
+            <div class="meteo-escala-rotulos"><span>0 km/h</span><span>50+ km/h</span></div>
+          </div>
+          <p class="muted meteo-radar-tiles" id="meteo-grade-estado"></p>
+        </div>
+        <div class="meteo-bloco">
           <h4>Previsão (modelo)</h4>
           <p id="meteo-previsao" class="meteo-previsao"></p>
         </div>
@@ -626,6 +642,7 @@
   <script src="js/militar.js"></script>
   <script src="js/ferramentas.js"></script>
   <script src="js/meteo-core.js"></script>
+  <script src="js/meteo-mapa.js"></script>
   <script src="js/meteo.js"></script>
 </body>
 </html>

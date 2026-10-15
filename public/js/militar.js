@@ -244,8 +244,8 @@
     $('btn-convite').addEventListener('click', abrirConvite);
     $('btn-encerrar').addEventListener('click', encerrarOperacao);
     $('btn-apagar-faixa').addEventListener('click', function () { apagarDados(est.op); });
-    $('btn-trilhas-on').addEventListener('click', function () { definirTodasTrilhas(true); });
-    $('btn-trilhas-off').addEventListener('click', function () { definirTodasTrilhas(false); });
+    // um botão só: o texto diz o que o toque vai fazer
+    $('btn-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
     $('busca').addEventListener('input', function () { est.listaSuja = true; renderizarLista(); });
     $('btn-recolher').addEventListener('click', alternarLateral);
     iniciarGaveta();
@@ -253,7 +253,7 @@
     $('ficha-centralizar').addEventListener('click', function () { centralizar(est.selecionado); });
     $('ficha-trilha').addEventListener('click', function () { alternarTrilha(est.selecionado); });
     $('ficha-remover').addEventListener('click', removerParticipante);
-    $('btn-minha-pos').addEventListener('click', alternarMinhaPosicao);
+    $('btn-minha-pos').addEventListener('click', garantirMinhaPosicao);
     $('btn-minha-conta').addEventListener('click', abrirMinhaConta);
     $('form-resp').addEventListener('submit', cadastrarResponsavel);
     $('resp-gerar').addEventListener('click', function () { $('resp-senha').value = gerarSenha(); });
@@ -1415,7 +1415,10 @@
     $('opt-pontos').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pontos)));
     $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomes)));
     $('opt-coord').value = est.prefsMapa.coord || 'dec';
-    $('opt-trilhas').setAttribute('aria-pressed', String(todasTrilhasVisiveis()));
+    var trilhasVisiveis = todasTrilhasVisiveis();
+    $('opt-trilhas').setAttribute('aria-pressed', String(trilhasVisiveis));
+    $('btn-trilhas').setAttribute('aria-pressed', String(trilhasVisiveis));
+    $('btn-trilhas').textContent = trilhasVisiveis ? 'Ocultar trilhas' : 'Mostrar trilhas';
     $('opt-local').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.local)));
     $('menu-grupos-qtd').textContent = est.grupos.size ? String(est.grupos.size) : '';
     var ativas = missoesAtivas().length;
@@ -5299,13 +5302,13 @@
   }
 
   var TEXTO_MINHA_POS = {
-    desligada: 'desligada',
+    desligada: 'sem envio · toque para tentar',
     iniciando: 'ligando…',
     ativa: 'ligada',
     sem_sinal: 'ligada · procurando sinal',
     bloqueada: 'bloqueada no navegador',
     indisponivel: 'indisponível',
-    outro_aparelho: 'desligada · outro aparelho seu já compartilha',
+    outro_aparelho: 'enviada por outro aparelho seu',
   };
 
   // O botão só aparece como "ligado" com a permissão concedida E coordenadas chegando.
@@ -5314,7 +5317,6 @@
     if (!b) return;
     var e = est.minhaPosEstado;
     var ativa = e === 'ativa';
-    b.setAttribute('aria-pressed', String(est.compartilhando || est.iniciandoMinhaPos));
     b.classList.toggle('ligado', ativa);
     b.classList.toggle('parcial', e === 'sem_sinal' || e === 'iniciando');
     b.classList.toggle('bloqueado', e === 'bloqueada' || e === 'indisponivel');
@@ -5323,11 +5325,11 @@
     if (ativa && est.gpsMeu === 'fraco') txt = 'ligada · sinal fraco';
     $('minha-pos-estado').textContent = txt;
     b.title = e === 'bloqueada' ? 'A localização está bloqueada para este site no navegador. Toque para ver como liberar.'
-      : est.compartilhando ? 'Sua posição está sendo compartilhada com a equipe da operação. Toque para desligar.'
-        : 'Ligar o compartilhamento da sua posição';
+      : est.compartilhando ? 'Sua posição está sendo compartilhada com a equipe da operação (sempre ligada).'
+        : e === 'outro_aparelho' ? 'Outro aparelho seu já envia a sua posição. Toque para enviar por este.'
+          : 'Toque para tentar ligar o envio da sua posição de novo.';
   }
 
-  function chaveMinhaPosOff() { return 'gbs-minha-pos-off:' + (est.op ? est.op.id : ''); }
   function chaveMinhaPosAqui() { return 'gbs-minha-pos-aqui:' + (est.op ? est.op.id : ''); }
 
   // O mesmo responsável com o painel aberto em dois aparelhos (ex.: computador do
@@ -5342,8 +5344,8 @@
     return Boolean(d.rastreando && recente && !aqui);
   }
 
-  // Ao abrir (ou criar) uma operação ativa: liga sozinha, se o responsável não
-  // desligou nesta operação e se o navegador não bloqueou a localização.
+  // Ao abrir (ou criar) uma operação ativa: a posição do responsável liga sempre
+  // (não há opção de desligar), a menos que o navegador bloqueie a localização.
   async function iniciarMinhaPosicaoAuto() {
     if (!est.op || est.op.status !== 'ativa') return;
     if (!('geolocation' in navigator) || !window.isSecureContext) {
@@ -5352,11 +5354,6 @@
       return;
     }
     await verificarPermissaoMinha();
-    if (C.local.ler(chaveMinhaPosOff(), false)) {
-      est.minhaPosEstado = 'desligada';
-      atualizarBotaoMinhaPos();
-      return;
-    }
     if (est.permissaoMinha === 'denied') {
       est.minhaPosEstado = 'bloqueada';
       atualizarBotaoMinhaPos();
@@ -5380,7 +5377,7 @@
       r.status.onchange = function () {
         est.permissaoMinha = r.status.state;
         if (!est.op || est.op.status !== 'ativa') return;
-        if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && !C.local.ler(chaveMinhaPosOff(), false)) {
+        if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada') {
           ligarMinhaPosicao(true);
         } else if (est.permissaoMinha === 'denied' && est.compartilhando) {
           pararMinhaPosicao(true);
@@ -5389,17 +5386,17 @@
         }
       };
     }
-    if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && est.op && est.op.status === 'ativa' &&
-        !C.local.ler(chaveMinhaPosOff(), false)) {
+    if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && est.op && est.op.status === 'ativa') {
       ligarMinhaPosicao(true);
     }
   }
 
-  async function alternarMinhaPosicao() {
-    if (est.compartilhando || est.iniciandoMinhaPos) {
-      C.local.gravar(chaveMinhaPosOff(), true);   // escolha respeitada nesta operação
-      pararMinhaPosicao(false);
-      UI.aviso('Sua posição deixou de ser compartilhada.');
+  // "Minha posição" não liga nem desliga: mostra o estado e, se o envio parou
+  // (bloqueio, falha, outro aparelho), tenta de novo neste aparelho.
+  async function garantirMinhaPosicao() {
+    if (est.iniciandoMinhaPos) return;
+    if (est.compartilhando) {
+      UI.aviso('Sua posição está sendo compartilhada com a equipe (fica sempre ligada durante a operação).', 'ok');
       return;
     }
     if (!est.op || est.op.status !== 'ativa') return;
@@ -5407,7 +5404,6 @@
       UI.aviso('Este navegador não oferece localização (é preciso abrir o painel por https://).', 'erro', 7000);
       return;
     }
-    C.local.apagar(chaveMinhaPosOff());
     await verificarPermissaoMinha();
     if (est.permissaoMinha === 'denied') { mostrarComoLiberarMinha(); return; }
     ligarMinhaPosicao(false);
@@ -5420,7 +5416,7 @@
       UI.el('ol', { classe: 'perm-passos' }, inst.passos.map(function (t) { return UI.el('li', { texto: t }); })),
       UI.el('div', { classe: 'modal-acoes' }, [
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Verificar de novo', onclick: function () { fechar(); C.local.apagar(chaveMinhaPosOff()); ligarMinhaPosicao(false); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Verificar de novo', onclick: function () { fechar(); ligarMinhaPosicao(false); } }),
       ]),
     ]));
   }
@@ -5445,7 +5441,6 @@
         );
       });
       if (!est.op || est.op.id !== opId || est.op.status !== 'ativa') return;   // trocou de operação nesse meio-tempo
-      if (C.local.ler(chaveMinhaPosOff(), false)) return;                     // desligou enquanto esperava
       if (!teste.ok && teste.codigo === 1) {
         est.minhaPosEstado = 'bloqueada';
         est.permissaoMinha = 'denied';
@@ -5467,7 +5462,7 @@
       pedirTelaLigada();
       enviarMeuSinal();
       UI.aviso(est.minhaPosEstado === 'ativa'
-        ? 'Sua posição está sendo compartilhada com a equipe' + (automatico ? ' (ligada automaticamente — desligue em Ferramentas)' : '') + '. Mantenha o painel aberto.'
+        ? 'Sua posição está sendo compartilhada com a equipe. Mantenha o painel aberto.'
         : 'Compartilhamento ligado, mas ainda sem sinal de GPS.', est.minhaPosEstado === 'ativa' ? 'ok' : 'erro', 7000);
     } catch (e) {
       est.minhaPosEstado = 'desligada';
@@ -7034,6 +7029,15 @@
     alarme: function () { alarme(); },
     iniciarDesenho: iniciarDesenhoExterno,
     marcarPonto: function (lat, lng, extra) { abrirFormPontoInt(Object.assign({ lat: lat, lng: lng }, extra || {})); },
+    // Celular: recolhe a lista (gaveta) para a janela do ponto caber; devolve a altura que ainda cobre o mapa.
+    liberarMapa: function () {
+      if (!gaveta.ativa) return 0;
+      if (gaveta.estado !== 'mini') definirGaveta('mini', false);
+      return alturasGaveta().mini;
+    },
+    // menu do toque longo / botão direito: setor com centro no ponto, ou área começando nele
+    setorRaioEm: function (lat, lng) { iniciarDesenho('raio'); if (est.desenho) aoClicarNoMapa({ latlng: { lat: lat, lng: lng } }); },
+    setorDesenhoDesde: function (lat, lng) { iniciarDesenho('poligono'); if (est.desenho) aoClicarNoMapa({ latlng: { lat: lat, lng: lng } }); },
     enviarDestino: function (lat, lng, nome) { abrirEnviarDestino({ nome: nome || 'Ponto marcado no mapa', lat: lat, lng: lng }); },
     criarSetor: function (pontos, nome) { abrirFormSetor(Object.assign({ forma: 'poligono', pontos: pontos }, nome ? { nome: nome.slice(0, 60) } : {})); },
     salvarPonto: function (dados) { return C.rpc('salvar_ponto', { p_operacao: est.op.id, p_id: null, p_dados: dados }).then(function (r) { aplicarPontos([r]); return r; }); },

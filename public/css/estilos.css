@@ -1836,7 +1836,7 @@ body.gaveta .gaveta-alca span { width: 48px; height: 5px; border-radius: 3px; ba
 body.gaveta .gaveta-alca:focus-visible { outline: 3px solid var(--acento); outline-offset: -3px; border-radius: 12px 12px 0 0; }
 body.gaveta .btn-recolher, body.gaveta .btn-ocultar, body.gaveta #btn-mostrar-lateral { display: none !important; }
 /* as trilhas de todos ficam no painel Camadas, sobre o mapa */
-body.gaveta #btn-trilhas-on, body.gaveta #btn-trilhas-off { display: none; }
+body.gaveta #btn-trilhas { display: none; }
 body.gaveta .lateral-ferramentas { margin-top: 6px; }
 body.gaveta .lateral[data-gaveta="mini"] .lateral-ferramentas,
 body.gaveta .lateral[data-gaveta="mini"] .lista-participantes,
@@ -1896,7 +1896,7 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
   #faixa-alerta-texto { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #faixa-alerta-meta { display: none; }
   .faixa-alerta-botoes { flex: none; }
-  #btn-trilhas-on, #btn-trilhas-off { display: none; }
+  #btn-trilhas { display: none; }
   .lateral-cabeca { padding: 8px 10px; }
   .lateral-ferramentas { margin-top: 6px; }
 }

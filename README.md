@@ -66,8 +66,8 @@ mapa e toca um alarme no painel.
   já tem acesso ao painel). Qualquer responsável da operação também pode adicionar; **só o criador remove**.
 - Todos veem o mesmo mapa, os mesmos participantes e mensagens, e podem enviar orientações (a
   mensagem mostra ao participante quem a enviou).
-- **Minha posição** (em **Ferramentas**): o responsável compartilha a própria localização.
-  Enquanto está ligada, um ponto ciano aparece no botão **Ferramentas**.
+- **Minha posição** (em **Ferramentas**): a localização do responsável é **sempre compartilhada** durante a
+  operação (não há opção de desligar). Enquanto está ligada, um ponto ciano aparece no botão **Ferramentas**.
   Os outros responsáveis o veem como um losango ciano **R**; civis e militares de campo **não** veem.
 - Pela ficha de outro responsável é possível mandar ATENÇÃO, CONFIRME ou mensagem livre; ela chega
   como alerta no painel dele, com confirmação de leitura.
@@ -354,17 +354,20 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   **"Reincluído · aguardando o celular voltar"**.
 - Sem reinclusão, quem foi removido não consegue voltar sozinho pelo link.
 
-### Localização do responsável (liga sozinha)
+### Localização do responsável (sempre ligada)
 
 - Ao abrir ou criar uma operação ativa, **Minha posição liga automaticamente** — usando a permissão de
   localização do navegador (se ela ainda não foi dada, o navegador pergunta).
 - O item **Ferramentas → Minha posição** mostra o estado real: *ligando…*, **ligada** (só depois de a
   permissão ser concedida **e** chegar coordenada), *ligada · procurando sinal*, *bloqueada no navegador*
-  (tocar mostra como liberar) ou *desligada*.
-- Desligar é respeitado: ao reabrir **a mesma operação** ela continua desligada; numa **operação nova**
-  liga de novo sozinha. Nunca há dois observadores de GPS nem envios duplicados.
+  (tocar mostra como liberar) ou *sem envio · toque para tentar* (falha de conexão).
+- **Não existe desligar**: o item não é uma chave. Tocar nele com a posição ligada só confirma o estado;
+  com o envio parado (bloqueio, falha, outro aparelho), tenta ligar de novo neste aparelho. Escolhas
+  "desligada" guardadas por versões antigas do painel são ignoradas. Nunca há dois observadores de GPS nem
+  envios duplicados.
 - Se o mesmo responsável está com o painel aberto em **dois aparelhos** e um deles já compartilha, o
-  outro não liga sozinho (a trilha não "pula" entre os dois).
+  outro mostra *enviada por outro aparelho seu* e não liga sozinho (a trilha não "pula" entre os dois);
+  tocar em **Minha posição** passa o envio para o aparelho atual.
 - Limite: funciona com o painel **aberto e a tela ligada**. Em segundo plano ou com a tela bloqueada o
   navegador pode pausar o GPS (seção 8).
 
@@ -500,7 +503,11 @@ Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na 
   Para passar por rádio, use UTM ou MGRS (mesmo sistema das cartas militares e da maioria dos GPS).
 - **Toque longo no mapa** (ou botão direito): coordenadas do ponto **em todos os formatos** (com botão
   copiar), **altitude aproximada** (modelo de terreno), **distância e rumo** a partir da sua posição e
-  atalhos: **Marcar ponto aqui**, **Enviar como destino**, **Medir daqui** e **Anéis aqui**.
+  atalhos: **Marcar ponto aqui**, **Enviar como destino**, **Medir daqui** e **Anéis aqui**, e a seção
+  **Setor de busca**: **Setor por raio aqui** (o ponto vira o centro; abre o formulário com o raio e a
+  prévia do círculo) e **Desenhar setor daqui** (o ponto vira o 1º canto; continue tocando nos outros e
+  em **Concluir**). Só aparece enquanto a operação ainda tem os dados. No celular a lista recolhe e os
+  controles do mapa somem enquanto a janela está aberta, para ela caber inteira.
 - **Ir para coordenada**: digite em qualquer formato (ex.: `23K 708263 7515869`, `23K QR 08262 15869`,
   `22°27'02,9"S 42°58'34,3"O`, `-22.4508, -42.9762` — o mesmo ponto). Mostra a prévia nos outros formatos antes de ir e marca o
   alvo no mapa. Texto inválido não é aceito.
@@ -864,7 +871,7 @@ encerrada, e o token fica após o `#` (não é enviado aos servidores nem aparec
 
 **Responsável**: login → **Nova operação** (nome/código e política de retenção) → **Convidar** →
 acompanhar o mapa. Na lista: **◎** centraliza o participante, **Trilha** mostra/oculta a trilha dele.
-**Mostrar trilhas / Ocultar trilhas** atuam em todos. Toque no nome ou no marcador para abrir a
+O botão único **Ocultar trilhas / Mostrar trilhas** (o texto diz o que o toque faz) atua em todos. Toque no nome ou no marcador para abrir a
 **ficha** (dados, precisão, conversa, fotos, histórico de posições, comandos e estado das mensagens). Os comandos
 RETORNE, ATENÇÃO, MUDE A ROTA e PARE pedem confirmação antes do envio, e o texto pode ser complementado
 (ex.: "Retorne ao PC 2"). No mapa, **⤢** enquadra todos e a legenda abre/fecha nela mesma; nomes,
@@ -1002,7 +1009,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 3 | Aguardar até 20 s | o marcador verde **C** aparece no mapa, na posição real |
 | 4 | Civil caminha por 2–3 minutos | a trilha tracejada verde é desenhada |
 | 5 | Observar o painel | horário "há X s" e posição atualizam sozinhos |
-| 6 | Tocar em **Trilha** na lista; depois **Ocultar trilhas** e **Mostrar trilhas** | a trilha some/volta; o marcador continua andando e o histórico da ficha continua crescendo |
+| 6 | Tocar em **Trilha** na lista; depois no botão **Ocultar trilhas** (vira **Mostrar trilhas**) e de novo | a trilha some/volta; o marcador continua andando e o histórico da ficha continua crescendo |
 | 7 | Tocar no nome ou no marcador | abre a ficha com coordenadas, precisão, horários e histórico |
 | 8 | Na ficha, enviar **PARE** | o operador confirma o envio; o painel mostra "Enviada" |
 | 9 | No celular do civil | alerta em tela cheia com vibração; ao tocar **CONFIRMAR**, o painel mostra "Recebida pelo aparelho" e depois "Confirmada às …" |
@@ -1028,7 +1035,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 27 | Enviar um destino a um civil com a página dele aberta | o cartão **IR ATÉ** aparece em poucos segundos, sem recarregar; a ficha mostra "✓ recebido no celular" |
 | 28 | Remover um civil e depois tocar em **Reincluir** | o celular dele mostra "Os bombeiros chamaram você de volta"; ao tocar, volta ao mesmo registro e a trilha continua |
 | 29 | No celular do civil, negar a localização e depois liberar pelas configurações | a página explica os passos e continua sozinha ao liberar (ou em VERIFICAR DE NOVO), sem novo cadastro |
-| 30 | Abrir uma operação nova no painel do celular | "Minha posição" liga sozinha (depois da permissão); desligar e religar não duplica |
+| 30 | Abrir uma operação nova no painel do celular | "Minha posição" liga sozinha (depois da permissão) e não tem opção de desligar; tocar nela não duplica o envio |
 | 31 | Andar 5 min em rua e 5 min em mata, com o painel aberto | a trilha acompanha (pontos a cada poucos segundos); na ficha, coluna "Chegou" com poucos segundos |
 | 32 | Ir de carro por 2–3 km com a página do civil aberta | a trilha segue o percurso do carro quase em tempo real, sem "saltos" descartados |
 | 33 | Enviar um destino "A pé" e depois trocar para "Carro" no celular | rota azul por ruas, com tempo e instruções; ao trocar, recalcula pelas vias de carro; ao sair da rota, recalcula |

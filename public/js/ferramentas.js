@@ -109,6 +109,7 @@
     var alt = UI.el('span', { classe: 'muted', texto: 'consultando…' });
     var deMim = UI.el('span', { classe: 'muted', texto: 'calculando…' });
     var ativa = P.op() && P.op().status === 'ativa';
+    var podeDesenhar = P.op() && !P.op().dados_apagados_em;
     var caixa = UI.el('div', { classe: 'info-ponto' }, [
       UI.el('strong', { texto: 'Ponto no mapa' }),
       P.blocoCoordenadas(lat, lng),
@@ -120,13 +121,32 @@
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📏 Medir daqui', onclick: function () { mapa.closePopup(); medir([lat, lng]); } }),
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '◎ Anéis aqui', onclick: function () { mapa.closePopup(); alternarAneis({ id: 'p' + lat + ',' + lng, lat: lat, lng: lng, nome: 'Ponto' }); } }),
       ]),
+      podeDesenhar && P.setorRaioEm ? UI.el('div', { classe: 'info-ponto-acoes info-ponto-setor' }, [
+        UI.el('span', { classe: 'info-ponto-rotulo', texto: 'Setor de busca' }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'info-setor-raio', texto: '◯ Setor por raio aqui', title: 'Novo setor com o centro neste ponto', onclick: function () { mapa.closePopup(); P.setorRaioEm(lat, lng); } }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'info-setor-desenho', texto: '⬠ Desenhar setor daqui', title: 'Novo setor desenhando a área; este ponto é o primeiro canto', onclick: function () { mapa.closePopup(); P.setorDesenhoDesde(lat, lng); } }),
+      ]) : null,
     ]);
-    L.popup({ maxWidth: 320, className: 'popup-info-ponto' }).setLatLng([lat, lng]).setContent(caixa).openOn(mapa);
-    P.altitudeEm(lat, lng).then(function (m) { alt.textContent = m == null ? 'indisponível' : '≈ ' + Math.round(m).toLocaleString('pt-BR') + ' m (modelo de terreno)'; });
+    // No celular a lista (gaveta) cobre a parte de baixo do mapa: a janela cabe na área visível e rola por dentro.
+    var cobertoBaixo = P.liberarMapa ? P.liberarMapa() : 0;
+    var visivel = mapa.getSize().y - cobertoBaixo;
+    // celular: os controles do mapa somem enquanto a janela está aberta (não ficam por cima dela)
+    var celular = cobertoBaixo > 0;
+    var pop = L.popup({ maxWidth: 320, maxHeight: Math.max(160, visivel - (celular ? 80 : 130)), className: 'popup-info-ponto',
+      autoPanPaddingTopLeft: L.point(10, celular ? 10 : 56), autoPanPaddingBottomRight: L.point(10, cobertoBaixo + 12) });
+    if (celular) {
+      document.body.classList.add('info-ponto-aberto');
+      pop.on('remove', function () { document.body.classList.remove('info-ponto-aberto'); });
+    }
+    pop.setLatLng([lat, lng]).setContent(caixa).openOn(mapa);
+    // o texto chega depois e pode aumentar a janela: reajusta para continuar inteira na tela
+    function reajustar() { if (pop.isOpen()) pop.update(); }
+    P.altitudeEm(lat, lng).then(function (m) { alt.textContent = m == null ? 'indisponível' : '≈ ' + Math.round(m).toLocaleString('pt-BR') + ' m (modelo de terreno)'; reajustar(); });
     P.minhaPosicao().then(function (r) {
-      if (!r || !r.ok) { deMim.textContent = 'sem a sua localização'; return; }
+      if (!r || !r.ok) { deMim.textContent = 'sem a sua localização'; reajustar(); return; }
       var d = G.distancia(r.lat, r.lng, lat, lng), b = Co.rumo(r.lat, r.lng, lat, lng);
       deMim.textContent = fmtDist(d) + ' · rumo ' + Math.round(b) + '° (' + Co.cardeal(b) + ')';
+      reajustar();
     });
   }
 

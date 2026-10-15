@@ -161,13 +161,20 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   O mapa para escolher o ponto abre por cima do formulário, sem perder o que já foi preenchido.
 - **Ferramentas → Dados da operação**: ver e editar tudo (inclusive o nome) e o **intervalo do GPS** (ver
   "Trilhas GPS"). O local aparece no mapa como **◎ laranja** ("Local da operação", camada própria em
-  **Camadas do mapa**); tocar nele abre os dados.
+  no painel **Camadas**); tocar nele abre os dados.
 - **Operações antigas** (criadas só com o nome) continuam válidas: a lista mostra o selo **Cadastro
   incompleto** e o botão **Completar cadastro**. Nada é preenchido sozinho.
 - O participante continua vendo só o **nome** da operação (endereço e descrição não vão ao celular).
 
 ### Ficha da vítima
 
+- **Na criação da operação**: a seção recolhível **Vítimas (opcional)** do modal **+ Nova operação**
+  aceita uma ou mais fichas (**+ Adicionar vítima**), com os mesmos campos e a mesma validação da ficha.
+  Tudo é conferido **antes** de criar a operação; cancelar não grava nada. Criada a operação, as fichas são
+  salvas uma a uma; se alguma falhar, o modal continua aberto só para elas (**Tentar salvar de novo** ou
+  **Seguir sem elas**) — a operação não é criada de novo, ficha salva não é reenviada e, antes de repetir,
+  o painel confere no servidor se a tentativa anterior já tinha gravado (sem duplicar). A foto é
+  adicionada depois, na ficha.
 - **Ferramentas → Vítimas (fichas)**: uma ou mais fichas por operação, com **foto**, **nome** (ou "Não
   identificada"), **idade**, **características físicas**, **roupas** e **observações**.
 - A foto é reduzida no aparelho (máx. 1600 px, JPEG) e guardada no bucket **privado `vitimas`** do
@@ -227,7 +234,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 
 ### Setores de busca (áreas)
 
-- **Criar** (menu **Ferramentas → Áreas e pontos**):
+- **Criar** (menu **Ferramentas → Setores de busca**):
   - **Novo setor por raio**: toque no centro do setor no mapa, informe o raio em metros (5 m a 50 km);
     o círculo aparece na hora e a área aproximada é calculada.
   - **Novo setor desenhando a área**: toque nos cantos da área (mínimo 3; há **Desfazer**) e em
@@ -241,7 +248,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   ◇ cria um canto novo; tocar num canto remove; no círculo, arrastar o centro e mudar o raio),
   **Excluir** (com confirmação) e **Enviar o centro como destino**.
 - Os setores ficam **abaixo** das trilhas e dos marcadores (não escondem participantes nem trilhas) e
-  podem ser ocultados em **Camadas do mapa → Setores de busca**.
+  podem ser ocultados no painel **Camadas → Setores**.
 - **Área delimitada × área percorrida**: criar um setor ou alguém passar perto dele **não** o marca como
   vasculhado. Os detalhes mostram, separado, **"Percorrido (estimativa pelos rastros GPS)"**: a parte do
   setor que ficou a até 25 m de algum rastro (rastros com precisão pior que 100 m não contam). É só uma
@@ -418,32 +425,48 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 
 ### Mapa topográfico e relevo em 3D
 
-- **Camadas do mapa → Topográfico (curvas de nível)**: OpenTopoMap, com curvas de nível, cotas de altitude
+- **Camadas → Tipo de mapa → Topográfico** (curvas de nível): OpenTopoMap, com curvas de nível, cotas de altitude
   e sombreamento do relevo. Trilhas, marcadores, setores, pontos, fotos e relatos continuam por cima, e o
   zoom vai até 19 (acima de 17 o servidor não tem ladrilhos e eles são ampliados).
-- **Visualização → Relevo em 3D**: abre uma tela com **relevo 3D real**, calculado a partir de um **modelo
+- **Camadas → Visualização → Relevo 3D**: abre uma tela com **relevo 3D real**, calculado a partir de um **modelo
   digital de terreno** (Terrain Tiles da AWS — SRTM e outras fontes; resolução de cerca de 30 m no
   Brasil), com **exagero vertical de 1,5×** (informado na tela). Inclina e gira com dois dedos (ou botão
   direito do mouse); tocar no terreno mostra a **altitude aproximada**. Mostra setores, trilhas,
   participantes e pontos **do momento em que foi aberto** (botão **Atualizar posições**). É carregado só
-  quando aberto (biblioteca MapLibre GL, ~800 KB) e precisa de WebGL; sem suporte, a tela avisa e o mapa
-  normal continua funcionando. O mapa principal (Leaflet) não foi trocado.
+  quando aberto (biblioteca MapLibre GL, ~800 KB) e precisa de WebGL: sem suporte, o botão **Relevo 3D**
+  fica desativado com o aviso "indisponível neste aparelho"; se a biblioteca não carregar (sem internet),
+  a tela do 3D explica e o mapa normal continua funcionando. **Plano 2D** fica marcado enquanto o 3D está
+  fechado. O mapa principal (Leaflet) não foi trocado.
 
 ### Organização do painel
 
-- A barra superior tem só **Mensagens** e **Ferramentas** (☰). O menu Ferramentas agrupa:
-  - **Operação**: Minha posição, Registrar foto, Convidar participantes, Equipe de responsáveis,
-    Mensagens/relatos/fotos, Diagnóstico do GPS;
-  - **Áreas e pontos**: Novo setor por raio, Novo setor desenhando a área, Marcar ponto de interesse,
-    Enviar destino a participantes, Lista de setores e pontos;
-  - **Camadas do mapa**: Mapa (OpenStreetMap), Topográfico (curvas de nível), Satélite, Setores de busca,
-    Pontos de interesse, Fotos no mapa, Relatos no mapa, Trilhas de todos;
-  - **Visualização**: Relevo em 3D, Enquadrar todos, Nomes no mapa;
-  - **Ferramentas de mapa**: Ir para coordenada, Medir distância e área, Exportar, Importar, Anéis de
-    distância e o **Formato das coordenadas** (ver "Ferramentas de mapa");
-  - **Encerrar ou excluir** — sempre **no fim**, separado por uma linha tracejada vermelha:
+- **Identidade visual** do painel do responsável (`public/css/militar.css`, só na página militar):
+  tipografia **IBM Plex** (Sans, Sans Condensed e Mono, arquivos locais em `public/vendor/fontes`, licença
+  OFL — sem CDN de fontes), cantos retos, sombras discretas, vermelho só para o crítico e âmbar para o que
+  está selecionado/ligado. A página do participante não muda.
+- A barra superior tem só **Mensagens** e **Ferramentas** (☰).
+- **Painel Camadas** (botão sobre o mapa, canto superior direito, ao lado da lista): separa
+  **Tipo de mapa** (Mapa · Topográfico · Satélite), **Visualização** (Plano 2D · Relevo 3D) e **Camadas
+  operacionais** (Trilhas, Setores, Pontos de interesse, Relatos, Fotos, Local da operação, Nomes no mapa),
+  cada uma com sinal próprio e chave liga/desliga. O botão mostra o resumo (ex.: "Satélite · 2 ocultas").
+  Escolher uma opção **não fecha** o painel. No celular e no tablet ele abre como folha compacta (camadas
+  em duas colunas) e fecha ao tocar no mapa, em ✕ ou com Esc; no computador fica aberto enquanto se usa o
+  mapa. As preferências continuam gravadas no aparelho, como antes.
+- O menu **Ferramentas** é organizado em grupos recolhíveis (o aberto/fechado fica lembrado no aparelho):
+  - **Operação**: Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis;
+  - **Participantes e equipes**: Convidar participantes, Grupos, Deslocamentos de grupos, Enviar destino
+    a participantes, Minha posição;
+  - **Comunicação**: Mensagens, relatos e fotos;
+  - **Registros e ocorrências**: Vítimas (fichas), Registrar foto, Marcar ponto de interesse;
+  - **Setores de busca**: Novo setor por raio, Novo setor desenhando a área, Lista de setores e pontos;
+  - **Mapa e navegação**: Enquadrar todos, Ir para coordenada, Medir distância e área, Exportar, Importar;
+  - **Configurações e manutenção**: Formato das coordenadas, Diagnóstico do GPS;
+  - **Encerrar ou excluir · ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
     quem pode; confirmação reforçada: lista o que será apagado e exige **digitar o nome da operação**).
+  - O menu fecha só por ação intencional: ao escolher uma **ação** (abre janela, inicia desenho…), em
+    **Fechar**, com Esc ou tocando fora. Abrir/fechar um grupo, a chave **Minha posição** e o seletor de
+    coordenadas **não** fecham o menu.
   - "Legenda" e "Lista de participantes" saíram do menu: a **legenda** fica sempre no mapa e abre/fecha
     tocando nela; a **lista** tem os botões **» Ocultar** e **« Participantes**.
 - **Trilhas**: militares em vermelho (contínua), responsáveis em ciano (pontilhada) e **civis em roxo**
@@ -462,7 +485,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   Tocar na alça (traço no topo da lista) alterna; arrastar ajusta e encaixa na altura mais próxima (um gesto
   rápido vai para a próxima). Pelo teclado: seta para cima/baixo. A legenda e a escala sobem junto com a
   gaveta. Ao desenhar um setor ou marcar um ponto, a gaveta recolhe sozinha. A altura escolhida fica
-  lembrada. Os botões de trilhas ficam em **Ferramentas → Camadas do mapa → Trilhas de todos**.
+  lembrada. O botão de trilhas fica no painel **Camadas → Trilhas**, sobre o mapa.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.

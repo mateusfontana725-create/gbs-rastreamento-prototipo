@@ -46,6 +46,7 @@
   var CHAVE_AJUDA_VISTA = 'sar-militar-ajuda-vista';
   var CHAVE_LATERAL = 'gbs-painel-lateral-oculta';
   var CHAVE_PREFS_MAPA = 'gbs-painel-mapa';
+  var CHAVE_GRUPOS_MENU = 'gbs-painel-menu-grupos';
   var CHAVE_GAVETA = 'gbs-painel-gaveta';
 
   // Relatos de campo enviados pelos participantes (mensagens com categoria).
@@ -263,13 +264,26 @@
     $('btn-ferramentas').addEventListener('click', function () { alternarMenu(); });
     $('menu-fechar').addEventListener('click', function () { fecharMenu(true); });
     $('menu-ferramentas').addEventListener('click', function (ev) {
-      // fecha ao escolher uma opção (na captura: antes de a ação desabilitar o botão)
+      // Fecha só ao escolher uma AÇÃO (na captura: antes de a ação desabilitar o botão).
+      // Chaves liga/desliga, escolhas, seletores e os títulos dos grupos mudam algo
+      // no próprio menu: ele continua aberto até o usuário fechar (Fechar, Esc ou tocar fora).
       var item = ev.target.closest('.menu-item');
-      if (item && !item.disabled && !item.classList.contains('menu-select')) fecharMenu(false);
+      if (item && !item.disabled && ehAcaoDoMenu(item)) fecharMenu(false);
     }, true);
     document.addEventListener('pointerdown', function (ev) {
       if (!$('menu-ferramentas').hidden && !$('ferramentas').contains(ev.target)) fecharMenu(false);
     });
+    iniciarGruposMenu();
+    // Painel "Camadas" sobre o mapa: tipo de mapa, 2D/3D e camadas operacionais
+    $('btn-camadas').addEventListener('click', function () { if ($('camadas-painel').hidden) abrirCamadas(); else fecharCamadas(true); });
+    $('camadas-fechar').addEventListener('click', function () { fecharCamadas(true); });
+    document.addEventListener('pointerdown', function (ev) {
+      // no celular/tablet o painel é uma folha temporária: tocar no mapa fecha; no computador fica aberto
+      if ($('camadas-painel').hidden || $('camadas-mapa').contains(ev.target) || !camadasCompacto()) return;
+      fecharCamadas(false);
+    });
+    $('modo-2d').addEventListener('click', fecharRelevo3D);
+    iniciarModo3D();
     $('btn-registrar-foto').addEventListener('click', function () { abrirRegistrarFoto(); });
     // Áreas e pontos
     $('menu-setor-raio').addEventListener('click', function () { iniciarDesenho('raio'); });
@@ -332,6 +346,7 @@
       if (est.desenho) cancelarDesenho();
       else if (!$('visao-3d').hidden) fecharRelevo3D();
       else if (!$('menu-ferramentas').hidden) fecharMenu(true);
+      else if (!$('camadas-painel').hidden) fecharCamadas(true);
       else if (!$('painel-areas').hidden) fecharAreas();
       else if (!$('ficha').hidden) fecharFicha();
       else if (!$('central').hidden) fecharCentral();
@@ -514,11 +529,12 @@
     var retencao = UI.el('select', { classe: 'campo', id: 'nova-retencao' }, [
       ['0', 'Ao encerrar'], ['24', '24 h após encerrar'], ['72', '3 dias após encerrar'], ['168', '7 dias após encerrar'], ['720', '30 dias após encerrar'],
     ].map(function (o) { return UI.el('option', { value: o[0], selected: o[0] === '72' ? true : null, texto: o[1] }); }));
+    var vitimas = secaoVitimasNovaOp();
     var erro = UI.el('p', { classe: 'erro-form', id: 'nova-erro', role: 'alert', hidden: true });
+    var status = UI.el('div', { classe: 'nova-op-status', id: 'nova-status', role: 'status', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'btn-criar', texto: 'Criar operação' });
-    var form = UI.el('form', { classe: 'form-nova-op', id: 'form-nova', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),
-      UI.el('p', { classe: 'muted', texto: 'Campos com * são obrigatórios. O restante pode ser completado depois em Ferramentas → Dados da operação.' }),
+    var cancelar = UI.el('button', { classe: 'btn', type: 'button', id: 'nova-cancelar', texto: 'Cancelar', onclick: function () { fechar(); } });
+    var dadosOp = UI.el('fieldset', { classe: 'nova-op-dados', id: 'nova-op-dados' }, [
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'nova-codigo', texto: 'Nome ou código da operação *' }), codigo]),
       campos.elemento,
       UI.el('div', { classe: 'grupo' }, [
@@ -526,59 +542,206 @@
         retencao,
         UI.el('small', { classe: 'muted', texto: 'Participantes, trilhas, mensagens e fotos. O diário e os relatórios ficam guardados.' }),
       ]),
+    ]);
+    var form = UI.el('form', { classe: 'form-nova-op', id: 'form-nova', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),
+      UI.el('p', { classe: 'muted', texto: 'Campos com * são obrigatórios. O restante pode ser completado depois em Ferramentas → Dados da operação.' }),
+      dadosOp,
+      vitimas.elemento,
+      status,
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [
-        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
-        btn,
+      UI.el('div', { classe: 'modal-acoes' }, [cancelar, btn]),
+    ]);
+    // ctx.op: a operação já criada (a partir daí o formulário só tenta salvar as vítimas que faltam)
+    var ctx = { op: null, foi: false };
+    function irParaOperacao() {
+      if (ctx.foi || !ctx.op) return;
+      ctx.foi = true;
+      est.abrirConvite = true;
+      location.hash = '#op=' + ctx.op.id;
+    }
+    form.addEventListener('submit', function (ev) {
+      criarOperacao(ev, { codigo: codigo, campos: campos, retencao: retencao, vitimas: vitimas, dadosOp: dadosOp, erro: erro, status: status, btn: btn, cancelar: cancelar, ctx: ctx,
+        fechar: function () { fechar(true); }, irParaOperacao: irParaOperacao });
+    });
+    // Fechar depois de criada (Esc, "Seguir sem elas"…) sempre leva à operação: nada se perde.
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () { irParaOperacao(); } });
+    setTimeout(function () { codigo.focus(); }, 40);
+  }
+
+  // Vítimas cadastradas junto com a operação: os mesmos campos e a mesma validação da
+  // ficha (Cadastro.camposVitima). Nada é salvo antes de a operação existir.
+  function secaoVitimasNovaOp() {
+    var itens = [];
+    var seq = 0;
+    var lista = UI.el('div', { classe: 'nova-vitimas-lista', id: 'nova-vitimas-lista' });
+    var qtd = UI.el('span', { classe: 'nova-vitimas-qtd', id: 'nova-vitimas-qtd' });
+    var add = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'nova-add-vitima', texto: '+ Adicionar vítima' });
+    var caixa = UI.el('details', { classe: 'nova-vitimas', id: 'nova-vitimas' }, [
+      UI.el('summary', null, [UI.el('span', { texto: 'Vítimas (opcional)' }), qtd]),
+      UI.el('div', { classe: 'nova-vitimas-corpo' }, [
+        UI.el('p', { classe: 'ajuda', texto: 'Cadastre agora quem está sendo procurado (uma ficha por pessoa). A foto e outras vítimas podem ser adicionadas depois em Ferramentas → Vítimas.' }),
+        lista,
+        UI.el('div', { classe: 'nova-vitimas-acoes' }, [add]),
       ]),
     ]);
-    form.addEventListener('submit', function (ev) { criarOperacao(ev, { codigo: codigo, campos: campos, retencao: retencao, erro: erro, btn: btn, fechar: function () { fechar(true); } }); });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
-    setTimeout(function () { codigo.focus(); }, 40);
+    function renumerar() {
+      itens.forEach(function (it, i) { it.titulo.textContent = 'Vítima ' + (i + 1); });
+      qtd.textContent = itens.length ? String(itens.length) : '';
+    }
+    function adicionar() {
+      seq += 1;
+      var campos = window.Cadastro.camposVitima(null, 'nova-vitima-' + seq);
+      var it = { campos: campos, salva: false };
+      it.titulo = UI.el('strong');
+      it.estado = UI.el('small', { classe: 'nova-vitima-estado muted' });
+      it.remover = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Remover', onclick: function () {
+        if (it.salva) return;
+        itens = itens.filter(function (x) { return x !== it; });
+        it.bloco.remove();
+        renumerar();
+        add.focus();
+      } });
+      it.bloco = UI.el('div', { classe: 'nova-vitima' }, [
+        UI.el('div', { classe: 'nova-vitima-topo' }, [UI.el('div', null, [it.titulo, ' ', it.estado]), it.remover]),
+      ].concat(campos.elementos));
+      itens.push(it);
+      lista.appendChild(it.bloco);
+      renumerar();
+      caixa.open = true;
+      campos.nome.focus();
+    }
+    add.addEventListener('click', adicionar);
+    return {
+      elemento: caixa,
+      itens: function () { return itens.slice(); },
+      pendentes: function () { return itens.filter(function (it) { return !it.salva; }); },
+      // null = todas certas; senão o texto do erro (o foco vai para o campo)
+      validar: function () {
+        for (var i = 0; i < itens.length; i++) {
+          var it = itens[i];
+          if (it.salva) continue;
+          var inv = it.campos.validar(it.campos.ler());
+          if (inv) { caixa.open = true; inv.campo.focus(); return 'Vítima ' + (i + 1) + ': ' + inv.texto; }
+        }
+        return null;
+      },
+      marcar: function (it, situacao, texto) {
+        it.bloco.classList.toggle('salva', situacao === 'salva');
+        it.bloco.classList.toggle('falhou', situacao === 'falhou');
+        it.estado.textContent = texto || '';
+        if (situacao === 'salva') { it.salva = true; it.campos.bloquear(true); it.remover.hidden = true; }
+      },
+    };
   }
 
   async function criarOperacao(ev, f) {
     ev.preventDefault();
     var erro = f.erro;
     erro.hidden = true;
-    var codigo = f.codigo.value.trim();
-    if (codigo.length < 2) {
-      erro.textContent = 'Informe o nome ou código da operação.';
-      erro.hidden = false;
-      f.codigo.focus();
-      return;
-    }
-    var dados;
-    try {
-      dados = f.campos.ler();
-    } catch (e) {
-      erro.textContent = e.message;
-      erro.hidden = false;
-      return;
-    }
     var btn = f.btn;
-    btn.disabled = true;
-    var args = { p_codigo: codigo, p_retencao_horas: Number(f.retencao.value), p_dados: dados };
-    try {
-      var op;
-      try {
-        op = await C.rpc('criar_operacao', args);
-      } catch (e1) {
-        if (e1.codigo !== 'funcao_ausente') throw e1;
-        // banco sem a migração 007: cria só com o nome (o cadastro fica para depois)
-        delete args.p_dados;
-        op = await C.rpc('criar_operacao', args);
-        UI.aviso('Operação criada só com o nome: o servidor ainda não tem o cadastro completo (migração 007).', 'erro', 9000);
+    if (!f.ctx.op) {
+      var codigo = f.codigo.value.trim();
+      if (codigo.length < 2) {
+        erro.textContent = 'Informe o nome ou código da operação.';
+        erro.hidden = false;
+        f.codigo.focus();
+        return;
       }
-      f.fechar();
-      est.abrirConvite = true;
-      location.hash = '#op=' + op.id;
-    } catch (e) {
-      erro.textContent = e.message;
-      erro.hidden = false;
-    } finally {
-      btn.disabled = false;
+      var dados;
+      try {
+        dados = f.campos.ler();
+      } catch (e) {
+        erro.textContent = e.message;
+        erro.hidden = false;
+        return;
+      }
+      // as vítimas são conferidas ANTES de criar: um erro de digitação não deixa operação pela metade
+      var invalida = f.vitimas.validar();
+      if (invalida) { erro.textContent = invalida; erro.hidden = false; return; }
+      btn.disabled = true;
+      var args = { p_codigo: codigo, p_retencao_horas: Number(f.retencao.value), p_dados: dados };
+      try {
+        var op;
+        try {
+          op = await C.rpc('criar_operacao', args);
+        } catch (e1) {
+          if (e1.codigo !== 'funcao_ausente') throw e1;
+          // banco sem a migração 007: cria só com o nome (o cadastro fica para depois)
+          delete args.p_dados;
+          op = await C.rpc('criar_operacao', args);
+          UI.aviso('Operação criada só com o nome: o servidor ainda não tem o cadastro completo (migração 007).', 'erro', 9000);
+        }
+        f.ctx.op = op;
+      } catch (e) {
+        erro.textContent = e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+        return;
+      }
+      // a partir daqui a operação existe: os dados dela não são mais editáveis neste modal
+      f.dadosOp.disabled = true;
+    } else {
+      var invalida2 = f.vitimas.validar();
+      if (invalida2) { erro.textContent = invalida2; erro.hidden = false; return; }
+      btn.disabled = true;
     }
+    var falhas = await salvarVitimasNovaOp(f.ctx.op, f.vitimas);
+    var salvas = f.vitimas.itens().filter(function (it) { return it.salva; }).length;
+    if (!falhas.length) {
+      f.fechar();
+      if (salvas) UI.aviso('Operação criada com ' + salvas + (salvas > 1 ? ' fichas de vítima.' : ' ficha de vítima.'), 'ok');
+      f.irParaOperacao();
+      return;
+    }
+    // Operação criada, mas alguma ficha falhou: o modal fica aberto só para as vítimas.
+    f.status.hidden = false;
+    f.status.innerHTML = '';
+    f.status.appendChild(UI.el('p', { classe: 'nota', texto: 'A operação "' + f.ctx.op.codigo + '" foi criada' + (salvas ? ' e ' + salvas + (salvas > 1 ? ' fichas foram salvas' : ' ficha foi salva') : '') +
+      '. ' + (falhas.length > 1 ? falhas.length + ' fichas não foram salvas' : '1 ficha não foi salva') + ': ' + falhas[0] +
+      '. Tente de novo ou siga sem elas (dá para cadastrar depois em Ferramentas → Vítimas).' }));
+    btn.textContent = 'Tentar salvar de novo';
+    btn.disabled = false;
+    f.cancelar.textContent = 'Seguir sem elas';
+  }
+
+  // Salva, uma por vez, as fichas que ainda não foram salvas. Uma ficha salva nunca é
+  // reenviada; antes de repetir, confere no servidor se a tentativa anterior já gravou
+  // (resposta perdida por falta de sinal) para não duplicar.
+  async function salvarVitimasNovaOp(op, vitimas) {
+    var pend = vitimas.pendentes();
+    var falhas = [];
+    if (!pend.length) return falhas;
+    var existentes = [];
+    if (pend.some(function (it) { return it.tentou; })) {
+      try {
+        existentes = (await C.consultar(C.cliente.from('vitimas').select('id,nome,idade,caracteristicas,roupas,observacoes').eq('operacao_id', op.id))) || [];
+      } catch (e) { existentes = []; }
+    }
+    function igual(a, b) {
+      return a.nome === b.nome && (a.idade == null ? null : Number(a.idade)) === b.idade && (a.caracteristicas || '') === b.caracteristicas &&
+        (a.roupas || '') === b.roupas && (a.observacoes || '') === b.observacoes;
+    }
+    for (var i = 0; i < pend.length; i++) {
+      var it = pend[i];
+      var dados = it.campos.ler();
+      var ja = it.tentou ? existentes.findIndex(function (x) { return igual(x, dados); }) : -1;
+      if (ja >= 0) {
+        existentes.splice(ja, 1);
+        vitimas.marcar(it, 'salva', '✓ salva');
+        continue;
+      }
+      vitimas.marcar(it, null, 'salvando…');
+      it.tentou = true;
+      try {
+        await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: dados });
+        vitimas.marcar(it, 'salva', '✓ salva');
+      } catch (e) {
+        vitimas.marcar(it, 'falhou', '✕ não salva');
+        falhas.push(e.message);
+      }
+    }
+    return falhas;
   }
 
   // Ferramentas → Dados da operação (ver e editar o cadastro e o GPS).
@@ -816,6 +979,7 @@
     est.alertaAtual = null;
     if ($('alerta-cmd')) $('alerta-cmd').hidden = true;
     fecharMenu(false);
+    fecharCamadas(false);
     fecharCentral();
     fecharLightbox();
     cancelarDesenho();
@@ -994,7 +1158,7 @@
       maxZoom: 19,
       attribution: 'Imagens &copy; Esri, Maxar, Earthstar Geographics',
     });
-    // As camadas de fundo são escolhidas no menu "Ferramentas" (Camadas do mapa).
+    // As camadas de fundo são escolhidas no painel "Camadas", sobre o mapa.
     est.camadasBase = { osm: osm, topo: topo, satelite: satelite };
     est.camadaAtual = est.camadasBase[est.prefsMapa.camada] ? est.prefsMapa.camada : 'osm';
     est.camadasBase[est.camadaAtual].addTo(mapa);
@@ -1170,6 +1334,70 @@
     if (devolverFoco) $('btn-ferramentas').focus();
   }
 
+  // Ação = item que faz algo fora do menu (abre janela, inicia desenho…). Chaves
+  // (aria-pressed), escolhas (role="radio") e o seletor de coordenadas não são ações.
+  function ehAcaoDoMenu(item) {
+    return !item.classList.contains('menu-select') && !item.hasAttribute('aria-pressed') && item.getAttribute('role') !== 'radio';
+  }
+
+  // Grupos do menu: abertos/fechados como o usuário deixou (neste aparelho).
+  function iniciarGruposMenu() {
+    var salvos = C.local.ler(CHAVE_GRUPOS_MENU) || {};
+    document.querySelectorAll('#menu-ferramentas details.menu-grupo[data-grupo]').forEach(function (d) {
+      var nome = d.getAttribute('data-grupo');
+      if (typeof salvos[nome] === 'boolean') d.open = salvos[nome];
+      d.addEventListener('toggle', function () {
+        var atual = C.local.ler(CHAVE_GRUPOS_MENU) || {};
+        atual[nome] = d.open;
+        C.local.gravar(CHAVE_GRUPOS_MENU, atual);
+      });
+    });
+  }
+
+  /* ---------- Painel "Camadas" sobre o mapa -------------------------- */
+  function camadasCompacto() {
+    return Boolean(window.matchMedia && window.matchMedia('(max-width: 860px), (pointer: coarse)').matches);
+  }
+
+  function abrirCamadas() {
+    atualizarMenu();
+    if (camadasCompacto()) fecharMenu(false);
+    $('camadas-painel').hidden = false;
+    $('btn-camadas').setAttribute('aria-expanded', 'true');
+    var marcado = $('camadas-painel').querySelector('[data-camada][aria-checked="true"]');
+    if (marcado) setTimeout(function () { marcado.focus(); }, 20);
+  }
+
+  function fecharCamadas(devolverFoco) {
+    var p = $('camadas-painel');
+    if (!p || p.hidden) return;
+    p.hidden = true;
+    $('btn-camadas').setAttribute('aria-expanded', 'false');
+    if (devolverFoco) $('btn-camadas').focus();
+  }
+
+  // 2D/3D: o botão do 3D só fica ativo se o aparelho tem gráficos 3D (WebGL).
+  function iniciarModo3D() {
+    var nota = $('nota-3d');
+    if (suportaWebGL()) {
+      nota.className = 'camadas-nota';
+      nota.textContent = 'O relevo 3D abre em tela cheia e precisa de internet.';
+    } else {
+      $('menu-3d').disabled = true;
+      $('menu-3d').title = 'Indisponível neste aparelho (sem WebGL)';
+      nota.className = 'camadas-nota aviso-3d';
+      nota.textContent = 'Relevo 3D indisponível: este aparelho ou navegador não tem gráficos 3D (WebGL). Para ver o relevo, use o tipo de mapa Topográfico.';
+    }
+    nota.hidden = false;
+    atualizarModoVisao();
+  }
+
+  function atualizarModoVisao() {
+    var em3d = !$('visao-3d').hidden;
+    $('modo-2d').setAttribute('aria-pressed', String(!em3d));
+    $('menu-3d').setAttribute('aria-pressed', String(em3d));
+  }
+
   function todasTrilhasVisiveis() {
     var todas = true;
     est.participantes.forEach(function (p) { if (!p.trilhaVisivel) todas = false; });
@@ -1192,6 +1420,11 @@
     $('menu-grupos-qtd').textContent = est.grupos.size ? String(est.grupos.size) : '';
     var ativas = missoesAtivas().length;
     $('menu-missoes-qtd').textContent = ativas ? ativas + ' ativo(s)' : '';
+    // resumo no botão "Camadas": mapa de fundo e quantas camadas estão ocultas
+    var nomesBase = { osm: 'Mapa', topo: 'Topográfico', satelite: 'Satélite' };
+    var ocultas = $('camadas-painel').querySelectorAll('.camada-item[aria-pressed="false"]').length;
+    $('camadas-resumo').textContent = (nomesBase[est.camadaAtual] || '') + (ocultas ? ' · ' + ocultas + (ocultas > 1 ? ' ocultas' : ' oculta') : '');
+    $('btn-camadas').setAttribute('aria-label', 'Camadas do mapa: ' + $('camadas-resumo').textContent);
   }
 
   /* ---------- Lista lateral: ocultar e reabrir ----------------------- */
@@ -1909,6 +2142,7 @@
     est.listaSuja = true;
     renderizarLista();
     if (est.selecionado === id) atualizarFicha();
+    atualizarMenu();
   }
 
   function definirTodasTrilhas(visivel) {
@@ -4890,7 +5124,10 @@
       document.head.appendChild(css);
       var sc = document.createElement('script');
       sc.src = MAPLIBRE.js; sc.integrity = MAPLIBRE.jsSri; sc.crossOrigin = 'anonymous';
-      sc.onload = function () { resolve(); };
+      sc.onload = function () {
+        if (window.maplibregl) resolve();
+        else { carregandoMapLibre = null; reject(new Error('a biblioteca 3D não respondeu')); }
+      };
       sc.onerror = function () { carregandoMapLibre = null; reject(new Error('não foi possível carregar a biblioteca 3D')); };
       document.head.appendChild(sc);
     });
@@ -4913,14 +5150,16 @@
   async function abrirRelevo3D() {
     if (!est.mapa) return;
     fecharMenu(false);
+    fecharCamadas(false);
     cancelarDesenho();
     var caixa = $('visao-3d');
     caixa.hidden = false;
     document.body.classList.add('visao-3d-aberta');
+    atualizarModoVisao();
     var nota = $('visao-3d-nota');
     nota.textContent = 'Carregando o relevo em 3D…';
     if (!suportaWebGL()) {
-      nota.textContent = 'Este aparelho ou navegador não tem suporte a gráficos 3D (WebGL). Use o mapa "Topográfico (curvas de nível)" no menu Ferramentas.';
+      nota.textContent = 'Este aparelho ou navegador não tem suporte a gráficos 3D (WebGL). Use o tipo de mapa "Topográfico" no painel Camadas, sobre o mapa.';
       return;
     }
     try {
@@ -5033,6 +5272,7 @@
     if (!caixa || caixa.hidden) return;
     caixa.hidden = true;
     document.body.classList.remove('visao-3d-aberta');
+    atualizarModoVisao();
     if (est.visao3d) {
       try { est.visao3d.mapa.remove(); } catch (e) { /* ignora */ }
       est.visao3d = null;

@@ -1,0 +1,345 @@
+/* =====================================================================
+ * Rastreamento GBS — identidade do painel do responsável (comando)
+ * Carregado só por militar.html, DEPOIS de estilos.css: ajusta os tokens e
+ * a composição sem mexer na página do participante (civil.html).
+ * Linguagem: técnica e sóbria — tipografia IBM Plex (local, sem CDN),
+ * cantos retos, sombras discretas, vermelho só para o que é crítico e
+ * âmbar para seleção/estado ativo. O mapa é a área principal.
+ * ===================================================================== */
+
+/* Fontes locais (SIL Open Font License — ver vendor/fontes/LICENSE-IBM-Plex-OFL.txt) */
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 600; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 700 900; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans Condensed"; font-style: normal; font-weight: 500; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-condensed-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans Condensed"; font-style: normal; font-weight: 600; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-condensed-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans Condensed"; font-style: normal; font-weight: 700 900; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-condensed-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../vendor/fontes/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("../vendor/fontes/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600 900; font-display: swap; src: url("../vendor/fontes/ibm-plex-mono-latin-600-normal.woff2") format("woff2"); }
+
+/* ---------- Tokens --------------------------------------------------- */
+:root {
+  --fundo: #0b0f12;
+  --superficie: #11161a;
+  --superficie-2: #161c21;
+  --superficie-3: #1c2329;
+  --texto: #e6ebf0;
+  --texto-2: #b3bec8;
+  --texto-3: #8693a0;
+  --borda: #232b32;
+  --borda-forte: #34404a;
+  --barra: #080b0d;
+  --raio: 4px;
+  --sombra: 0 1px 2px rgba(0, 0, 0, .45), 0 6px 18px rgba(0, 0, 0, .32);
+  --fonte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --fonte-titulo: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --vidro: rgba(14, 18, 22, .94);     /* fundo dos controles sobre o mapa */
+}
+
+body {
+  font-size: 15px;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .016) 1px, transparent 1px);
+}
+.marca h1, .secao h2, .lateral-cabeca h2, .modal h2, .titulo-secao, .rotulo,
+.painel-topo .titulo-op strong, .op-destaque .val, .tela-centro .cartao-login h1 {
+  font-weight: 700; letter-spacing: .06em;
+}
+
+/* ---------- Botões e campos: cantos retos, borda fina ----------------- */
+.btn {
+  border-width: 1px; border-radius: var(--raio); font-weight: 600; letter-spacing: .07em;
+  font-size: .9rem; transition: background-color .12s, border-color .12s;
+}
+.btn:hover { background: #222a31; border-color: #4a5763; }
+.btn:focus-visible, .campo:focus-visible, .lista-item:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.btn-pequeno { border-width: 1px; font-size: .8rem; }
+.btn-gigante { border-radius: var(--raio); font-size: 1.1rem; letter-spacing: .1em; }
+.btn-barra { background: transparent; }
+.btn-barra:hover { background: var(--superficie-2); }
+.campo { border-width: 1px; min-height: 46px; font-size: 1rem; padding: 9px 12px; }
+.campo:focus { border-color: var(--acento); box-shadow: 0 0 0 1px var(--acento); }
+.rotulo { font-weight: 600; font-size: .78rem; letter-spacing: .08em; color: var(--texto-3); }
+.opcao-tipo span { border-width: 1px; font-weight: 600; min-height: 50px; }
+.cartao { border-radius: var(--raio); box-shadow: none; }
+.selo { border-radius: 2px; border-width: 1px; font-weight: 600; }
+.nota { border-radius: 2px; border-left-width: 3px; }
+.aviso { border-radius: var(--raio); border-left-width: 3px; font-weight: 600; }
+.modal { border-radius: var(--raio); border-top-width: 3px; box-shadow: 0 18px 48px rgba(0, 0, 0, .62); }
+.modal-fundo { background: rgba(3, 5, 7, .78); }
+.secao h2 { border-left-width: 3px; font-size: 1rem; }
+.cartao-login { border-top-width: 3px; }
+
+/* ---------- Barra superior ------------------------------------------- */
+/* No lugar da faixa zebrada: uma linha fina, com o trecho vermelho sob a marca */
+.barra-topo::after {
+  height: 2px; background: linear-gradient(90deg, var(--primaria) 0 132px, var(--borda-forte) 132px);
+}
+.barra-topo { min-height: 54px; padding-bottom: 10px; gap: 8px; }
+.marca-icone { border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2); font-weight: 700; }
+.marca small { font-weight: 500; letter-spacing: .08em; }
+.painel-topo .titulo-op strong { font-size: 1.05rem; }
+.painel-topo .titulo-op span { font-family: var(--mono); font-size: .72rem; letter-spacing: 0; }
+.pilula-conexao { border-radius: 2px; font-weight: 500; font-size: .7rem; }
+
+/* ---------- Lista de operações --------------------------------------- */
+.lista-ops li { padding: 12px 0; }
+.op-info strong { font-weight: 700; letter-spacing: .05em; }
+.op-info span { font-size: .85rem; }
+
+/* ---------- Lista lateral e ficha ------------------------------------ */
+.lateral-cabeca { background: var(--superficie); }
+.lateral-cabeca h2 { font-size: .9rem; letter-spacing: .1em; }
+.resumo b { font-weight: 600; }
+.lista-item { padding: 9px 12px; }
+.lista-item.selecionado { background: rgba(245, 158, 11, .08); box-shadow: inset 3px 0 0 var(--acento); }
+.li-nome { font-weight: 600; }
+.ficha { box-shadow: -6px 0 20px rgba(0, 0, 0, .5); }
+.ficha-cabeca { border-top-width: 2px; }
+.ficha-cabeca h2 { font-weight: 700; }
+.ficha-bloco h3 { font-weight: 600; color: var(--texto-3); letter-spacing: .12em; border-bottom: 1px solid var(--borda); padding-bottom: 4px; }
+.dados dt { font-size: .74rem; letter-spacing: .06em; }
+.dados dd { font-weight: 500; }
+.msgs li { border-radius: var(--raio); }
+.comandos .btn { font-size: .88rem; }
+body.gaveta .lateral { border-radius: 6px 6px 0 0; }
+body.gaveta .lateral-cabeca { border-radius: 6px 6px 0 0; }
+
+/* ---------- Controles do Leaflet sobre o mapa ------------------------- */
+.leaflet-bar { border-radius: var(--raio) !important; box-shadow: var(--sombra) !important; }
+.leaflet-bar a:first-child { border-top-left-radius: var(--raio) !important; border-top-right-radius: var(--raio) !important; }
+.leaflet-bar a:last-child { border-bottom-left-radius: var(--raio) !important; border-bottom-right-radius: var(--raio) !important; }
+.legenda, .controle-grupos { border-radius: var(--raio); background: var(--vidro); }
+.legenda summary, .controle-grupos summary { font-weight: 600; letter-spacing: .1em; font-size: 11px; }
+.faixa-filtro { border-radius: var(--raio); border-width: 1px; box-shadow: var(--sombra), inset 3px 0 0 var(--cor-grupo, var(--acento)); }
+.btn-reabrir { background: var(--vidro); }
+
+/* =====================================================================
+ * MENU FERRAMENTAS — grupos por função, recolhíveis
+ * ===================================================================== */
+.menu-ferramentas {
+  width: 320px; border-radius: var(--raio); border-top-width: 2px; padding: 0 0 6px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .68);
+}
+.menu-cabeca { padding: 8px 10px 8px 14px; background: var(--superficie-2); }
+.menu-cabeca strong { font-weight: 700; font-size: .85rem; letter-spacing: .12em; }
+.menu-grupo { padding: 0; }
+.menu-grupo > summary {
+  display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px;
+  list-style: none; cursor: pointer; user-select: none;
+}
+.menu-grupo > summary::-webkit-details-marker { display: none; }
+.menu-grupo > summary::after {
+  content: ""; width: 6px; height: 6px; margin-right: 2px; flex: none;
+  border-right: 1.5px solid var(--texto-3); border-bottom: 1.5px solid var(--texto-3);
+  transform: rotate(-45deg); transition: transform .15s;
+}
+.menu-grupo[open] > summary::after { transform: rotate(45deg); }
+.menu-grupo > summary:hover { background: var(--superficie-2); }
+.menu-grupo > summary:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+.menu-grupo h3, .menu-grupo > summary h3 {
+  flex: 1; padding: 0; font-weight: 600; font-size: .7rem; letter-spacing: .14em; color: var(--texto-3);
+}
+.menu-grupo[open] > summary h3 { color: var(--texto-2); }
+.menu-grupo[open] { padding-bottom: 4px; }
+.menu-item { min-height: 40px; font-weight: 500; font-size: .92rem; gap: 10px; }
+.menu-item:hover { background: var(--superficie-2); }
+.menu-item:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+.ico-item { color: var(--texto-3); font-size: .9rem; font-family: var(--fonte); }
+.menu-estado { font-family: var(--mono); font-weight: 500; font-size: .7rem; }
+.menu-nota { margin: 0 14px 6px 42px; font-size: .74rem; }
+.menu-nota b { color: var(--texto-2); font-weight: 600; }
+.menu-sol { margin: 0 14px 6px 42px; }
+/* ações definitivas: separadas por linha vermelha, sem enfeite */
+.menu-zona-perigo { margin-top: 8px; padding: 6px 0 2px; border-top: 1px solid rgba(239, 68, 68, .5); background: rgba(239, 68, 68, .035); }
+.menu-zona-perigo h3 { padding: 4px 14px; font-size: .68rem; letter-spacing: .14em; }
+.menu-item.menu-excluir { border-radius: var(--raio); }
+@media (prefers-reduced-motion: reduce) { .menu-grupo > summary::after { transition: none; } }
+
+/* =====================================================================
+ * PAINEL "CAMADAS" SOBRE O MAPA
+ * Tipo de mapa · modo de visualização (2D / 3D) · camadas operacionais
+ * ===================================================================== */
+.camadas-mapa {
+  position: absolute; z-index: 1120; top: 10px; right: 10px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  max-height: calc(100% - 20px); pointer-events: none;
+}
+.camadas-mapa > * { pointer-events: auto; }
+/* no computador (e celular deitado) a lista fica à direita: o painel acompanha a borda do mapa */
+@media (min-width: 861px), (orientation: landscape) and (max-height: 540px) {
+  body:not(.lateral-oculta) .camadas-mapa { right: calc(var(--larg-lateral) + 10px); }
+}
+/* lista oculta: o botão "Participantes" ocupa o canto; Camadas fica logo abaixo */
+body.lateral-oculta:not(.gaveta) .camadas-mapa { top: 58px; max-height: calc(100% - 68px); }
+/* lista da gaveta em tela cheia: nada sobre ela */
+body.gaveta .painel-corpo[data-gaveta="cheia"] .camadas-mapa { visibility: hidden; }
+
+/* os controles do canto direito do mapa (Grupos) descem para não ficar sob o botão */
+#mapa .leaflet-top.leaflet-right { top: 48px; }
+body.lateral-oculta:not(.gaveta) #mapa .leaflet-top.leaflet-right { top: 94px; }
+
+.camadas-botao {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px 0 10px;
+  background: var(--vidro); color: var(--texto); border: 1px solid var(--borda-forte); border-radius: var(--raio);
+  box-shadow: var(--sombra); cursor: pointer;
+  font-family: var(--fonte-titulo); font-weight: 600; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase;
+}
+.camadas-botao:hover { border-color: #4a5763; background: rgba(28, 35, 41, .96); }
+.camadas-botao:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.camadas-botao[aria-expanded="true"] { border-color: var(--acento); color: #fcd34d; }
+.camadas-resumo {
+  font-family: var(--mono); font-size: .68rem; font-weight: 500; letter-spacing: 0; text-transform: none;
+  color: var(--texto-3); padding-left: 8px; border-left: 1px solid var(--borda-forte);
+}
+.camadas-resumo:empty { display: none; }
+.ico-camadas { position: relative; display: inline-block; width: 16px; height: 14px; flex: none; }
+.ico-camadas::before, .ico-camadas::after {
+  content: ""; position: absolute; left: 3px; width: 9px; height: 9px;
+  border: 1.5px solid currentColor; background: var(--superficie); transform: scaleY(.62) rotate(45deg);
+}
+.ico-camadas::before { top: 4px; opacity: .7; }
+.ico-camadas::after { top: -1px; }
+
+.camadas-painel {
+  width: 300px; max-width: calc(100vw - 20px); min-height: 0; flex: 0 1 auto; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--superficie); color: var(--texto); border: 1px solid var(--borda-forte); border-top: 2px solid var(--primaria);
+  border-radius: var(--raio); box-shadow: 0 12px 32px rgba(0, 0, 0, .6);
+}
+.camadas-cabeca {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 6px 6px 12px; background: var(--superficie-2); border-bottom: 1px solid var(--borda);
+}
+.camadas-cabeca strong { font-family: var(--fonte-titulo); font-weight: 700; font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; }
+.camadas-fechar { min-height: 32px; min-width: 36px; padding: 0 8px; }
+.camadas-secao { padding: 10px 12px; border-bottom: 1px solid var(--borda); }
+.camadas-secao:last-child { border-bottom: 0; }
+.camadas-secao h4 {
+  margin: 0 0 7px; font-family: var(--fonte-titulo); font-weight: 600; font-size: .68rem;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--texto-3);
+}
+.camadas-nota { margin: 7px 0 0; font-size: .74rem; line-height: 1.35; color: var(--texto-3); }
+.camadas-nota.aviso-3d { color: var(--alerta-texto); }
+
+/* controle segmentado (uma escolha por vez) */
+.seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  border: 1px solid var(--borda-forte); border-radius: var(--raio); overflow: hidden; background: #0a0d10;
+}
+.seg-opcao {
+  min-height: 36px; padding: 0 6px; border: 0; border-left: 1px solid var(--borda-forte); background: transparent;
+  color: var(--texto-2); cursor: pointer; font-family: var(--fonte); font-weight: 500; font-size: .84rem; white-space: nowrap;
+}
+.seg-opcao:first-child { border-left: 0; }
+.seg-opcao:hover:not(:disabled) { background: var(--superficie-3); color: var(--texto); }
+.seg-opcao[aria-checked="true"], .seg-opcao[aria-pressed="true"] {
+  background: rgba(245, 158, 11, .14); color: #fcd34d; font-weight: 600; box-shadow: inset 0 -2px 0 var(--acento);
+}
+.seg-opcao:disabled { cursor: not-allowed; color: var(--texto-3); opacity: .55; }
+.seg-opcao:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; position: relative; }
+
+/* camadas liga/desliga: sinal da camada, nome e chave de estado */
+.camadas-lista { display: grid; gap: 1px; }
+.camada-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 3px 6px;
+  background: transparent; border: 0; border-radius: 2px; color: var(--texto-3); text-align: left; cursor: pointer;
+  font-family: var(--fonte); font-weight: 500; font-size: .88rem;
+}
+.camada-item > span:not([class]) { flex: 1; }
+.camada-item:hover { background: var(--superficie-2); color: var(--texto-2); }
+.camada-item:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+.camada-item[aria-pressed="true"] { color: var(--texto); }
+/* chave: quadrado à esquerda = desligada; à direita, em âmbar = ligada */
+.camada-item::after {
+  content: ""; flex: none; width: 30px; height: 16px; border: 1px solid var(--borda-forte); border-radius: 2px;
+  background: linear-gradient(var(--texto-3), var(--texto-3)) no-repeat 2px 50% / 11px 10px, #0a0d10;
+}
+.camada-item[aria-pressed="true"]::after {
+  border-color: var(--acento);
+  background: linear-gradient(#0a0d10, #0a0d10) no-repeat calc(100% - 2px) 50% / 11px 10px, var(--acento);
+}
+.camada-sinal {
+  position: relative; display: inline-grid; place-items: center; width: 18px; height: 14px; flex: none;
+  color: var(--texto-2); opacity: .5;
+}
+.camada-item[aria-pressed="true"] .camada-sinal { opacity: 1; }
+.sinal-trilha::before { content: ""; width: 17px; height: 0; border-top: 2.5px solid #ef4444; transform: rotate(-22deg); box-shadow: 0 0 0 .5px #000; }
+.sinal-setor { border: 1.5px dashed #60a5fa; background: rgba(96, 165, 250, .16); width: 16px; height: 12px; }
+.sinal-ponto::before { content: ""; width: 9px; height: 9px; background: #f59e0b; transform: rotate(45deg); box-shadow: 0 0 0 1px #000; }
+.sinal-relato::before { content: "P"; display: grid; place-items: center; width: 14px; height: 13px; border-radius: 2px; background: #8b5cf6; color: #fff; font: 700 9px/1 var(--fonte); }
+.sinal-foto::before { content: ""; width: 14px; height: 10px; border: 1.5px solid currentColor; border-radius: 2px; }
+.sinal-foto::after { content: ""; position: absolute; width: 5px; height: 5px; border: 1.5px solid currentColor; border-radius: 50%; }
+.sinal-local::before { content: ""; width: 11px; height: 11px; border: 1.5px solid #f43f5e; border-radius: 50%; box-shadow: inset 0 0 0 2.5px #0a0d10, inset 0 0 0 6px #f43f5e; }
+.sinal-nome { font-family: var(--fonte-titulo); font-weight: 700; font-size: .72rem; letter-spacing: 0; }
+
+/* Telas de toque: alvos de 44 px */
+@media (pointer: coarse) {
+  .camadas-botao { min-height: 44px; }
+  .seg-opcao, .camada-item { min-height: 44px; }
+  .camadas-fechar { min-height: 44px; min-width: 44px; }
+  .menu-item { min-height: 46px; }
+  .menu-grupo > summary { min-height: 44px; }
+  #mapa .leaflet-top.leaflet-right { top: 54px; }
+  body.lateral-oculta:not(.gaveta) #mapa .leaflet-top.leaflet-right { top: 106px; }
+  body.lateral-oculta:not(.gaveta) .camadas-mapa { top: 62px; }
+}
+
+/* Celular: botão compacto; o painel abre como folha sobre o mapa (fecha ao tocar fora) */
+@media (max-width: 599px) {
+  .camadas-resumo { display: none; }
+  .camadas-botao { padding: 0 10px; }
+  .camadas-painel { width: min(320px, calc(100vw - 20px)); }
+  .menu-ferramentas { width: min(340px, calc(100vw - 16px)); }
+}
+/* Celular (em pé ou deitado): camadas em duas colunas, como fichas que acendem
+   quando ligadas — o painel fica baixo e cobre menos o mapa */
+@media (max-width: 599px), (orientation: landscape) and (max-height: 540px) {
+  .camadas-lista { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .camada-item {
+    gap: 7px; padding: 4px 8px; border: 1px solid var(--borda-forte); border-radius: 2px; background: #0a0d10;
+    font-size: .8rem; line-height: 1.15;
+  }
+  .camada-item::after { display: none; }
+  .camada-item[aria-pressed="true"] { border-color: var(--acento); background: rgba(245, 158, 11, .12); color: var(--texto); box-shadow: inset 3px 0 0 var(--acento); }
+  .camada-item[aria-pressed="false"] > span:not([class]) { text-decoration: line-through; text-decoration-color: rgba(134, 147, 160, .6); }
+  .camadas-secao { padding: 8px 10px; }
+  .camadas-secao h4 { margin-bottom: 5px; }
+  .camadas-nota { font-size: .7rem; margin-top: 5px; }
+}
+/* Celular deitado: pouco espaço vertical, seções mais justas */
+@media (orientation: landscape) and (max-height: 540px) {
+  .camadas-secao { padding: 7px 10px; }
+  .camadas-botao .camadas-rotulo { display: none; }
+  .camadas-resumo { display: none; }
+}
+
+/* =====================================================================
+ * NOVA OPERAÇÃO — vítimas cadastradas junto com a operação
+ * ===================================================================== */
+.nova-vitimas { margin-top: 6px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.nova-vitimas > summary {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; cursor: pointer; list-style: none;
+  font-family: var(--fonte-titulo); font-weight: 600; font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: var(--texto-2);
+}
+.nova-vitimas > summary::-webkit-details-marker { display: none; }
+.nova-vitimas > summary::after {
+  content: ""; width: 6px; height: 6px; margin-left: auto; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg);
+}
+.nova-vitimas[open] > summary::after { transform: rotate(45deg); }
+.nova-vitimas-qtd { font-family: var(--mono); font-size: .72rem; letter-spacing: 0; text-transform: none; color: var(--acento); }
+.nova-vitimas-corpo { padding: 4px 12px 12px; border-top: 1px solid var(--borda); }
+.nova-vitima { position: relative; margin-top: 10px; padding: 10px 12px 2px; border: 1px solid var(--borda-forte); border-left: 3px solid var(--acento); border-radius: 2px; background: var(--superficie); }
+.nova-vitima-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.nova-vitima-topo strong { font-family: var(--fonte-titulo); font-weight: 700; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); }
+.nova-vitima .grupo { margin-bottom: 10px; }
+.nova-vitima.salva { border-left-color: var(--ok); opacity: .75; }
+.nova-vitima.falhou { border-left-color: var(--perigo); }
+.nova-vitima-estado { font-family: var(--mono); font-size: .72rem; }
+.nova-vitimas-acoes { margin-top: 10px; }
+.nova-op-status { margin-top: 12px; }
+.nova-op-dados { border: 0; margin: 0; padding: 0; min-width: 0; }
+.nova-op-dados:disabled { opacity: .55; }

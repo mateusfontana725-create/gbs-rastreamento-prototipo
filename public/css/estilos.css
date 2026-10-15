@@ -1835,7 +1835,7 @@ body.gaveta .gaveta-alca {
 body.gaveta .gaveta-alca span { width: 48px; height: 5px; border-radius: 3px; background: var(--borda-forte); }
 body.gaveta .gaveta-alca:focus-visible { outline: 3px solid var(--acento); outline-offset: -3px; border-radius: 12px 12px 0 0; }
 body.gaveta .btn-recolher, body.gaveta .btn-ocultar, body.gaveta #btn-mostrar-lateral { display: none !important; }
-/* as trilhas de todos ficam em Ferramentas → Camadas do mapa */
+/* as trilhas de todos ficam no painel Camadas, sobre o mapa */
 body.gaveta #btn-trilhas-on, body.gaveta #btn-trilhas-off { display: none; }
 body.gaveta .lateral-ferramentas { margin-top: 6px; }
 body.gaveta .lateral[data-gaveta="mini"] .lateral-ferramentas,

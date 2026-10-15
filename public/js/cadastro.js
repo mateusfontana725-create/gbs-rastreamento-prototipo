@@ -454,44 +454,66 @@
     }
   }
 
-  function editarFicha(op, v, opcoes) {
-    var nova = !v;
+  // Campos da ficha de vítima, com a validação. Usados na ficha (prefixo "vitima")
+  // e no cadastro da operação nova (vários blocos, cada um com o seu prefixo).
+  function camposVitima(v, prefixo) {
+    prefixo = prefixo || 'vitima';
     v = v || { nome: '', idade: null, caracteristicas: '', roupas: '', observacoes: '' };
-    var nome = UI.el('input', { classe: 'campo', id: 'vitima-nome', maxlength: '80', value: v.nome, placeholder: 'Nome (ou "Não identificada")' });
-    var idade = UI.el('input', { classe: 'campo', id: 'vitima-idade', type: 'number', min: '0', max: '130', step: '1', inputmode: 'numeric', value: v.idade == null ? '' : String(v.idade) });
-    function area(id, max, valor, ph) { var a = UI.el('textarea', { classe: 'campo', id: id, maxlength: String(max), rows: '3', placeholder: ph || '' }); a.value = valor || ''; return a; }
-    var carac = area('vitima-caracteristicas', 1000, v.caracteristicas, 'Altura, porte, cabelo, cor da pele, sinais, tatuagens, cicatrizes…');
-    var roupas = area('vitima-roupas', 1000, v.roupas, 'Cores e tipo de roupa, calçado, acessórios, mochila…');
-    var obs = area('vitima-observacoes', 2000, v.observacoes, 'Condição de saúde, medicamentos, último contato, hábitos, para onde iria…');
-    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'vitima-salvar', texto: nova ? 'Criar ficha' : 'Salvar' });
-    var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova ficha de vítima' : 'Editar ficha' }),
+    var nome = UI.el('input', { classe: 'campo', id: prefixo + '-nome', maxlength: '80', value: v.nome, placeholder: 'Nome (ou "Não identificada")' });
+    var idade = UI.el('input', { classe: 'campo', id: prefixo + '-idade', type: 'number', min: '0', max: '130', step: '1', inputmode: 'numeric', value: v.idade == null ? '' : String(v.idade) });
+    function area(id, max, valor, ph) { var a = UI.el('textarea', { classe: 'campo', id: prefixo + '-' + id, maxlength: String(max), rows: '3', placeholder: ph || '' }); a.value = valor || ''; return a; }
+    var carac = area('caracteristicas', 1000, v.caracteristicas, 'Altura, porte, cabelo, cor da pele, sinais, tatuagens, cicatrizes…');
+    var roupas = area('roupas', 1000, v.roupas, 'Cores e tipo de roupa, calçado, acessórios, mochila…');
+    var obs = area('observacoes', 2000, v.observacoes, 'Condição de saúde, medicamentos, último contato, hábitos, para onde iria…');
+    var elementos = [
       UI.el('div', { classe: 'grupo-duplo grupo-duplo-largo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vitima-nome', texto: 'Nome *' }), nome]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vitima-idade', texto: 'Idade (anos)' }), idade]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nome', texto: 'Nome *' }), nome]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-idade', texto: 'Idade (anos)' }), idade]),
       ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vitima-caracteristicas', texto: 'Características físicas' }), carac]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vitima-roupas', texto: 'Roupas' }), roupas]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vitima-observacoes', texto: 'Observações' }), obs]),
-      nova ? UI.el('p', { classe: 'ajuda', texto: 'A foto pode ser adicionada depois de criar a ficha.' }) : null,
-      erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
-    ]);
-    form.addEventListener('submit', async function (ev) {
-      ev.preventDefault();
-      erro.hidden = true;
-      var dados = {
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-caracteristicas', texto: 'Características físicas' }), carac]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-roupas', texto: 'Roupas' }), roupas]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-observacoes', texto: 'Observações' }), obs]),
+    ];
+    function ler() {
+      return {
         nome: nome.value.replace(/\s+/g, ' ').trim(),
         idade: idade.value.trim() === '' ? null : Number(idade.value),
         caracteristicas: carac.value.trim(),
         roupas: roupas.value.trim(),
         observacoes: obs.value.trim(),
       };
-      if (!dados.nome) { erro.textContent = 'Informe o nome da vítima (ou "Não identificada").'; erro.hidden = false; nome.focus(); return; }
+    }
+    // null = tudo certo; senão { texto, campo } para mostrar o erro e pôr o foco no campo
+    function validar(dados) {
+      if (!dados.nome) return { texto: 'Informe o nome da vítima (ou "Não identificada").', campo: nome };
       if (dados.idade != null && !(Number.isInteger(dados.idade) && dados.idade >= 0 && dados.idade <= 130)) {
-        erro.textContent = 'Idade: um número inteiro de 0 a 130.'; erro.hidden = false; idade.focus(); return;
+        return { texto: 'Idade: um número inteiro de 0 a 130.', campo: idade };
       }
+      return null;
+    }
+    function bloquear(sim) { [nome, idade, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); }); }
+    return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome };
+  }
+
+  function editarFicha(op, v, opcoes) {
+    var nova = !v;
+    v = v || { nome: '', idade: null, caracteristicas: '', roupas: '', observacoes: '' };
+    var campos = camposVitima(v, 'vitima');
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'vitima-salvar', texto: nova ? 'Criar ficha' : 'Salvar' });
+    var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova ficha de vítima' : 'Editar ficha' }),
+    ].concat(campos.elementos, [
+      nova ? UI.el('p', { classe: 'ajuda', texto: 'A foto pode ser adicionada depois de criar a ficha.' }) : null,
+      erro,
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
+    ]));
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var dados = campos.ler();
+      var invalido = campos.validar(dados);
+      if (invalido) { erro.textContent = invalido.texto; erro.hidden = false; invalido.campo.focus(); return; }
       btn.disabled = true;
       try {
         var res = await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: v.id || null, p_dados: dados });
@@ -575,6 +597,7 @@
     incompleto: incompleto,
     dataHora: dataHora,
     camposOperacao: camposOperacao,
+    camposVitima: camposVitima,
     escolherPontoNoMapa: escolherPontoNoMapa,
     abrirDados: abrirDados,
     abrirVitimas: abrirVitimas,

@@ -36,6 +36,7 @@
     atualizadoEm: null,   // última leitura bem-sucedida (ISO)
     fontes: null,
     camadaRadar: null, circulo: null, ultimoSom: {}, ctx: null, timer: null, buscando: false,
+    tilesOk: 0, tilesErro: 0,   // contagem dos tiles do radar no quadro atual (diagnóstico)
   };
 
   /* ------------------------------ camada e painel ------------------------------ */
@@ -64,6 +65,8 @@
       if (!est.camadaRadar) {
         est.camadaRadar = L.tileLayer(urlQuadro(est.quadro), { tileSize: 512, opacity: 0.6, zIndex: 400,
           attribution: 'Radar © RainViewer', maxNativeZoom: 7 });
+        est.camadaRadar.on('tileload', function () { est.tilesOk++; desenharRadarEstado(); });
+        est.camadaRadar.on('tileerror', function () { est.tilesErro++; desenharRadarEstado(); });
       } else est.camadaRadar.setUrl(urlQuadro(est.quadro));
       est.camadaRadar.addTo(m);
     } else if (est.camadaRadar) {
@@ -108,7 +111,25 @@
     $('meteo-range').value = String(i);
     var q = est.quadros[i];
     $('meteo-radar-hora').textContent = q ? 'Radar observado · ' + hora(q.t) : 'Sem quadros de radar';
+    est.tilesOk = 0; est.tilesErro = 0;
     if (est.camadaRadar) est.camadaRadar.setUrl(urlQuadro(i));
+    desenharRadarEstado();
+  }
+
+  // Diagnóstico visível: quantos tiles do quadro carregaram. Sem tiles, o mapa não mostra chuva.
+  function desenharRadarEstado() {
+    var el = $('meteo-radar-tiles');
+    if (!el) return;
+    if (!est.ligada) { el.textContent = ''; return; }
+    var total = est.tilesOk + est.tilesErro;
+    if (!total) { el.textContent = 'Imagens do radar: carregando…'; el.className = 'muted meteo-radar-tiles'; return; }
+    if (est.tilesOk === 0) {
+      el.textContent = 'Imagens do radar não carregaram (' + est.tilesErro + ' com erro). Veja o console do navegador.';
+      el.className = 'meteo-radar-tiles meteo-desat';
+    } else {
+      el.textContent = 'Imagens do radar: ' + est.tilesOk + ' carregadas' + (est.tilesErro ? ', ' + est.tilesErro + ' com erro' : '') + '. Sem cor na área = sem chuva no radar.';
+      el.className = 'muted meteo-radar-tiles';
+    }
   }
 
   /* ------------------------------ leitura ------------------------------ */
@@ -244,6 +265,7 @@
     $('meteo-raio').value = String(est.raioKm);
     $('meteo-radar-bloco').hidden = !est.quadros.length;
     desenharAviso();
+    desenharRadarEstado();
   }
 
   function elementoAlerta(a) {

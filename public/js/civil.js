@@ -11,6 +11,10 @@
 
   var C = window.Comunicacao;
   var UI = window.UI;
+  // App Android (app-android.js): GPS e envio continuam com a tela apagada. Fora do app, nada muda.
+  var APP = window.AppAndroid || { noApp: false };
+  function rpcCampo() { return APP.rpc || C.rpc; }
+  function noAppEmSegundoPlano() { return APP.noApp && document.visibilityState === 'hidden'; }
   function $(id) { return document.getElementById(id); }
 
   var CHAVE_PART = 'sar-civil-participacao';
@@ -141,6 +145,7 @@
   }
 
   async function iniciar() {
+    if (APP.redirecionando) return;   // o app está voltando para o último convite
     $('btn-recarregar').addEventListener('click', function () { location.reload(); });
 
     if (!C.configurado) {
@@ -154,6 +159,7 @@
     }
     estado.token = lerToken();
     if (!estado.token) {
+      if (APP.noApp) return mostrarErro('Abra o link do convite enviado pelos bombeiros e toque em ABRIR NO APLICATIVO.');
       return mostrarErro('Link incompleto. Abra o link completo enviado pelos bombeiros ou leia o QR Code novamente.');
     }
 
@@ -642,7 +648,8 @@
         return { id: C.uuid(), lat: p.lat, lng: p.lng, prec: p.prec, t: p.t };
       })).then(function () {
         // 1º ponto vai na hora; depois, logo em seguida (mais rápido em veículo).
-        agendarEnvio(!estado.ultimoEnviadoT ? 300 : rapido ? CFG.envioRapidoMs : CFG.envioPeMs);
+        // No app com a tela apagada, vai na hora: os temporizadores da página ficam espaçados.
+        agendarEnvio(noAppEmSegundoPlano() ? 0 : !estado.ultimoEnviadoT ? 300 : rapido ? CFG.envioRapidoMs : CFG.envioPeMs);
       });
     }
     if (window.GBS_DEBUG_GPS) console.debug('[GPS]', r.motivo, r.atual ? Math.round(r.atual.prec || 0) + ' m' : '');
@@ -744,7 +751,7 @@
     if (estado.enviando || !estado.part || estado.finalizado || !fila || !fila.qtdPendentes()) return;
     estado.enviando = true;
     try {
-      var r = await window.TrilhaLocal.enviarLote(fila, C.rpc, {
+      var r = await window.TrilhaLocal.enviarLote(fila, rpcCampo(), {
         lote: CFG.loteMaximo,
         gps: estado.rastreando ? estado.gps : null,
         ajustarHora: paraHoraDoServidor,
@@ -774,7 +781,7 @@
   async function enviarSinal() {
     if (!estado.part || estado.finalizado) return;
     try {
-      var r = await C.rpc('sinal_vida', {
+      var r = await rpcCampo()('sinal_vida', {
         p_participante: estado.part.participante_id,
         p_rastreando: estado.rastreando,
         p_gps: estado.rastreando ? estado.gps : null,
@@ -2244,7 +2251,7 @@
   }
 
   function registrarServiceWorker() {
-    if (!('serviceWorker' in navigator)) return;
+    if (!('serviceWorker' in navigator) || APP.noApp) return;   // no app a notificação é a do próprio app
     navigator.serviceWorker.register('sw.js').then(function (reg) {
       estado.swReg = reg;
       atualizarNotifBotao();
@@ -2289,7 +2296,9 @@
   function avisarPausa(ms) {
     var min = Math.max(1, Math.round(ms / 60000));
     var caixa = $('aviso-fundo');
-    caixa.textContent = 'O celular parou de enviar sua localização por cerca de ' + min + ' min. Deixe esta tela aberta e o celular desbloqueado.';
+    caixa.textContent = 'O celular parou de enviar sua localização por cerca de ' + min + ' min. ' + (APP.noApp
+      ? 'Desative a economia de bateria para o aplicativo Rastreamento GBS.'
+      : 'Deixe esta tela aberta e o celular desbloqueado.');
     caixa.hidden = false;
   }
 
@@ -2298,7 +2307,9 @@
     var gap = agora - estado.ultimoTique;
     estado.ultimoTique = agora;
     if (estado.rastreando && gap > 30000) {
-      avisarPausa(gap);
+      // no app, com a tela apagada, os temporizadores ficam espaçados mas o GPS segue: só avisa se o GPS parou
+      var gpsSeguiu = APP.noApp && estado.ultimaLeitura && agora - estado.ultimaLeitura.recebidaEm < 30000;
+      if (!gpsSeguiu) avisarPausa(gap);
       enviarSinal();
       agendarEnvio(0);
     }

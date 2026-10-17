@@ -1,0 +1,110 @@
+# App Android do civil (pasta app-android/): gera o APK e publica para download.
+# O site aponta /baixar-app para o arquivo desta release (vercel.json).
+#
+# Segredos do repositório (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64  chave de assinatura (arquivo .jks em base64)
+#   ANDROID_KEYSTORE_SENHA   senha da chave
+# Sem eles o APK sai com uma chave temporária: instala, mas a próxima versão
+# não atualiza por cima (o Android exige sempre a mesma chave).
+#
+# Variável opcional (Settings → Secrets and variables → Actions → Variables):
+#   APP_URL  endereço do site que o app abre (padrão: https://rastreamento-sar.vercel.app)
+name: App Android (civil)
+
+on:
+  push:
+    branches: [v2]
+    paths:
+      - 'app-android/**'
+      - '.github/workflows/android-civil.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-civil
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: civil-android
+      VERSAO: 2.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app-android/package-lock.json
+
+      - name: Dependências e páginas do app
+        working-directory: app-android
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          npm ci
+          if [ -n "$APP_URL" ]; then
+            node -e "const f='capacitor.config.json',c=require('./'+f);c.server.url=process.env.APP_URL.replace(/\/+$/,'')+'/civil.html';require('fs').writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
+          fi
+          echo "O app abre: $(node -p "require('./capacitor.config.json').server.url")"
+          npx cap sync android
+
+      - name: Chave de assinatura
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_SENHA }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_SENHA" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/gbs.jks"
+            echo "GBS_KEYSTORE_SENHA=$KEYSTORE_SENHA" >> "$GITHUB_ENV"
+            echo "Assinado com a chave do repositório." >> "$GITHUB_STEP_SUMMARY"
+          else
+            SENHA="temporaria-$(openssl rand -hex 12)"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/gbs.jks" -alias gbs -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$SENHA" -keypass "$SENHA" -dname "CN=Rastreamento GBS, C=BR"
+            echo "::add-mask::$SENHA"
+            echo "GBS_KEYSTORE_SENHA=$SENHA" >> "$GITHUB_ENV"
+            echo "::warning::Sem ANDROID_KEYSTORE_BASE64/ANDROID_KEYSTORE_SENHA: APK assinado com chave temporária (atualizações não instalam por cima)."
+            echo "⚠️ Assinado com **chave temporária**: configure os segredos para as atualizações instalarem por cima." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "GBS_KEYSTORE=$RUNNER_TEMP/gbs.jks" >> "$GITHUB_ENV"
+          echo "GBS_KEY_ALIAS=gbs" >> "$GITHUB_ENV"
+
+      - name: Gerar APK
+        working-directory: app-android/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease -PversionCode=${{ github.run_number }} -PversionName=$VERSAO
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/gbs-civil.apk"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs "$GITHUB_WORKSPACE/gbs-civil.apk" | head -3
+          echo "Versão $VERSAO · $(du -h "$GITHUB_WORKSPACE/gbs-civil.apk" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gbs-civil-${{ env.VERSAO }}
+          path: gbs-civil.apk
+
+      - name: Publicar para download (/baixar-app)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTAS="App Android do participante (civil), versão $VERSAO (branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA::7}). Baixe pelo botão na página do convite ou em /baixar-app."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "App Android do civil — $VERSAO" --notes "$NOTAS"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --title "App Android do civil — $VERSAO" --notes "$NOTAS"
+          fi
+          gh release upload "$TAG" gbs-civil.apk --clobber
+          echo "Download: https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/gbs-civil.apk" >> "$GITHUB_STEP_SUMMARY"

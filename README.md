@@ -710,6 +710,36 @@ dado de participante sai do banco nesses painéis.
 - Exportar os dados para pesquisa **não está implementado**: depende de decisão sobre dados de saúde (LGPD) e de
   aprovação ética, antes de qualquer conjunto de dados sair do sistema.
 
+### App Android do participante (civil) — versão 2
+
+O participante continua usando o **link** (iPhone e quem não quiser instalar). No **Android**, a tela inicial do
+link mostra também **BAIXAR O APLICATIVO** e **ABRIR NO APLICATIVO**. O app é a **mesma página** do link; a diferença
+é que ele **continua mandando a localização com a tela apagada** (o navegador para o GPS quando a tela apaga).
+
+- **Como o civil instala:** toca em BAIXAR O APLICATIVO (`/baixar-app`), abre o arquivo `gbs-civil.apk`, permite
+  "instalar desta fonte" quando o Android pedir e, se o Play Protect avisar, "Instalar mesmo assim". Depois volta ao
+  link e toca em ABRIR NO APLICATIVO: o app abre direto no convite. O passo a passo aparece em "Como instalar".
+- **No app:** permite a localização e as notificações. Enquanto rastreia aparece a notificação fixa "Rastreamento
+  GBS — Sua localização está sendo enviada aos bombeiros". Aberto pelo ícone, o app volta ao último convite.
+- **Como funciona:** `app-android/` é um projeto Capacitor que abre `<site>/civil.html` (`capacitor.config.json` →
+  `server.url`). Na página, `public/js/app-android.js` troca o GPS do navegador pelo plugin
+  `@capacitor-community/background-geolocation` (um serviço em primeiro plano, com a notificação) e manda o lote de
+  posições e o sinal de vida pelo **HTTP nativo**: o Android limita a rede da página depois de ~5 min em segundo
+  plano. O filtro de GPS, a fila no aparelho e o envio são os mesmos do link.
+- **Mudanças na página chegam sem APK novo** (o app abre o site). APK novo só para mudar a parte nativa.
+- **Geração do APK:** `.github/workflows/android-civil.yml` roda a cada envio ao branch `v2` que mexa em `app-android/`
+  (ou manualmente em Actions). Publica o arquivo na release `civil-android`; `/baixar-app` (vercel.json) aponta para ela.
+  - Segredos (Settings → Secrets and variables → Actions): `ANDROID_KEYSTORE_BASE64` (a chave `.jks` em base64) e
+    `ANDROID_KEYSTORE_SENHA`. **Guarde uma cópia da chave**: sem a mesma chave, o Android não aceita atualizar o app
+    instalado (seria preciso desinstalar e instalar de novo). Sem os segredos, o APK sai com chave temporária.
+  - Variável opcional `APP_URL`: o site que o app abre (padrão `https://rastreamento-sar.vercel.app`). **O site
+    precisa ter a versão 2 da página** (com `app-android.js`); senão o app funciona como o link, sem o GPS com a tela apagada.
+- **Limites:** alguns celulares (Xiaomi, Samsung, Motorola…) fecham apps em segundo plano para economizar bateria; se a
+  trilha parar com a tela apagada, desative a economia de bateria para o Rastreamento GBS. Desde 30/09/2026 o Google
+  exige **desenvolvedor verificado** para instalar apps no Brasil (a aplicação a APK baixado de link ainda varia; em 2027
+  vale para todos): para distribuir em larga escala, registre o app (pacote `br.gbs.rastreamento.civil`) na
+  verificação de desenvolvedor do Android. iPhone: não há app; continua pelo link.
+
 ### Avisos na tela
 
 Os avisos (ex.: "Dados salvos", pedidos de ajuda) têm um **×** para fechar e somem sozinhos em até **5 s**
@@ -803,6 +833,7 @@ rastreamento-sar/
 │       ├── arquivos.js         exportar e importar GPX, KML/KMZ, GeoJSON e CSV
 │       ├── ferramentas.js      ferramentas de mapa do painel (medir, ir para coordenada, estatísticas…)
 │       ├── trilha-local.js     fila offline dos pontos (IndexedDB) e envio com confirmação por ponto
+│       ├── app-android.js      página do civil no app Android (GPS com a tela apagada) e botão de instalar
 │       ├── cadastro.js         cadastro da operação, escolha de ponto no mapa e fichas das vítimas
 │       ├── relatorio.js        diário da operação, resultado, mapas em canvas e geração do relatório final
 │       ├── relatorio-pdf.js    monta o documento do relatório final (pdfmake), sem rede nem tela

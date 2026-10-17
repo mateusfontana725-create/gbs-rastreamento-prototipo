@@ -1919,3 +1919,11 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 }
 .aviso-fechar:hover, .aviso-fechar:focus-visible { opacity: 1; background: rgba(255, 255, 255, .08); outline: none; }
 @media (pointer: coarse) { .aviso-fechar { width: 44px; height: 44px; margin: -12px -12px -12px 0; } }
+
+/* ---- civil: aplicativo Android (app-android.js) ---- */
+.app-android { border-left: 4px solid var(--acento); display: grid; gap: 10px; }
+.app-android h2 { margin: 0; }
+.app-android p { margin: 0; }
+.app-android .btn-gigante { text-decoration: none; display: grid; place-items: center; }
+.app-passos summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.app-passos .perm-passos { margin-bottom: 4px; }

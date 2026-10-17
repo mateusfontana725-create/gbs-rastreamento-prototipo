@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rastreamento GBS</string>
+    <string name="title_activity_main">Rastreamento GBS</string>
+    <string name="package_name">br.gbs.rastreamento.civil</string>
+    <string name="custom_url_scheme">br.gbs.rastreamento.civil</string>
+    <!-- Ícone da notificação "Rastreamento ativo" (plugin de GPS em segundo plano) -->
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_rastreamento</string>
+</resources>

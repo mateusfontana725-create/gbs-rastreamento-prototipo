@@ -1,0 +1,16 @@
+{
+  "name": "gbs-civil-android",
+  "private": true,
+  "description": "App Android do participante (civil): a mesma página do link, com GPS em segundo plano.",
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "1.2.26",
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

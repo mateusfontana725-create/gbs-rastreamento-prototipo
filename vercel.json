@@ -3,7 +3,8 @@
   "outputDirectory": "public",
   "cleanUrls": false,
   "redirects": [
-    { "source": "/", "destination": "/militar.html", "permanent": false }
+    { "source": "/", "destination": "/militar.html", "permanent": false },
+    { "source": "/baixar-app", "destination": "https://github.com/mateusfontana725-create/gbs-rastreamento-prototipo/releases/download/civil-android/gbs-civil.apk", "permanent": false }
   ],
   "crons": [
     { "path": "/api/limpeza", "schedule": "0 7 * * *" }

@@ -1,0 +1,12 @@
+{
+  "appId": "br.gbs.rastreamento.civil",
+  "appName": "Rastreamento GBS",
+  "webDir": "www",
+  "server": {
+    "url": "https://rastreamento-sar.vercel.app/civil.html",
+    "errorPath": "sem-conexao.html"
+  },
+  "android": {
+    "resolveServiceWorkerRequests": false
+  }
+}

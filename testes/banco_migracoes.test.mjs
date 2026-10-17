@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -505,6 +505,15 @@ const apr = (await db.query(`select nome, admin, ativo from public.responsaveis 
 chk(apr && apr.nome === 'Cb Novato' && apr.admin === false && apr.ativo === true, 'aprovação cria responsável comum e ativo (sem administrador)', apr);
 chk((await rpc(pedinte, 'meu_status_acesso', {})).status === 'ativo', 'depois da aprovação o status é ativo');
 chk(/solicitacao_ja_decidida/.test(await erroDe(rpc(resp1, 'admin_decidir_solicitacao', { p_id: solId, p_aprovar: false }))), 'pedido já aprovado não muda de decisão');
+console.log('IPO da operação (migração 019)');
+const ipoDados = { destinatarios: '2 CRBM / 3 BBM', natureza: 'BUSCA TERRESTRE/AQUÁTICA – PESSOA', meio_liquido: 'lago', pessoas_perdidas: 1, procedimentos: ['scuba'] };
+const ipoSalvo = await rpc(resp1, 'salvar_ipo_operacao', { p_operacao: opSoR1.id, p_ipo: ipoDados });
+chk(ipoSalvo.ipo.meio_liquido === 'lago' && ipoSalvo.ipo.procedimentos[0] === 'scuba', 'o responsável salva o IPO da operação');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_ipo_operacao', { p_operacao: opSoR1.id, p_ipo: { natureza: 'x' } }))), 'responsável que não é dono não altera o IPO');
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_ipo_operacao', { p_operacao: opSoR1.id, p_ipo: ['lista'] }))), 'IPO que não é um objeto é recusado');
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_ipo_operacao', { p_operacao: opSoR1.id, p_ipo: { texto: 'x'.repeat(31000) } }))), 'IPO grande demais é recusado');
+const relIpo = await rpc(resp1, 'relatorio_operacao', { p_operacao: opSoR1.id });
+chk(relIpo.operacao.ipo && relIpo.operacao.ipo.natureza === 'BUSCA TERRESTRE/AQUÁTICA – PESSOA', 'o relatório devolve os dados do IPO');
 const pdfCam = op.id + '/44444444-4444-4444-8444-444444444444.pdf';
 
 chk(/arquivo_nao_enviado/.test(await erroDe(rpc(resp1, 'registrar_relatorio', { p_operacao: op.id, p_caminho: pdfCam, p_paginas: 12, p_bytes: 1000, p_sha256: 'a'.repeat(64) }))), 'registrar relatório sem o PDF no Storage: recusado');
@@ -538,5 +547,5 @@ const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
 
-console.log('\nMigrações 007–018 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–019 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

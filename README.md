@@ -669,6 +669,17 @@ chave própria).
 - Biblioteca: **pdfmake 0.2.23** (`public/vendor/pdfmake/`, licença MIT), carregada só ao gerar. Os mapas são
   desenhados em canvas com o OpenStreetMap de fundo; sem acesso ao fundo, o mapa sai sem ele (com escala).
 
+### IPO (Informe Padrão de Ocorrência)
+
+- **Menu ⋮ → Operação → IPO (informe da ocorrência)**: formulário com os campos do modelo do CBMPR (destinatários,
+  natureza, localidade, solicitante, vítima(s), horários, meio líquido, buscas preliminares, possibilidade de vida,
+  procedimentos, contexto, recursos do CB, BMs envolvidos, desdobramentos, imagens anexas e responsável).
+- O relatório final começa, depois da capa, com o IPO no mesmo formato e na mesma ordem do modelo ("IPO: 2 CRBM / 3 BBM",
+  "ATENÇÃO: uso exclusivo nos grupos do CBMPR", opções com "(X)" marcada e "( )" não marcada).
+- **Acionamento**: sai da data de acionamento do cadastro da operação (Dados da operação). Se for diferente do IPO,
+  corrija lá; o IPO não tem campo próprio para isso.
+- **Retenção:** hoje o IPO **não** é apagado pela limpeza de dados da operação. Ele tem nome, documento e dados da vítima, então isso precisa de decisão: apagar junto com os dados pessoais, ou manter como registro oficial.
+
 ### Excluir uma operação
 
 - Só operações **sem atividade registrada** (criadas por engano) podem ser excluídas. Com atividade no diário
@@ -844,7 +855,9 @@ rastreamento-sar/
    - **018** (`018_pedido_acesso_responsavel.sql`): tabela `solicitacoes_responsavel` e as funções do **pedido de acesso**
      (`meu_status_acesso`, `admin_listar_solicitacoes`, `admin_decidir_solicitacao`). Só o administrador decide.
      A tabela não tem acesso direto: o pedido entra pela função de servidor `/api/responsaveis` (ação `solicitar`).
-   O `schema.sql` completo já inclui da 003 à 018 (seções 10 a 25).
+   - **019** (`019_ipo_operacao.sql`): coluna `ipo` na operação e a função `salvar_ipo_operacao`. O relatório
+     (`relatorio_operacao`) passa a devolver os dados do IPO. Ver a seção "IPO" abaixo.
+   O `schema.sql` completo já inclui da 003 à 019 (seções 10 a 26).
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

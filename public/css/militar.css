@@ -628,3 +628,10 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .meteo-nota { font-size: .68rem; color: var(--texto-3); margin: 8px 0 0; }
 .meteo-bloco { display: none; }
 @media (max-width: 599px) { .meteo-painel { max-height: 46vh; } }
+
+/* IPO (js/ipo.js): formulário no modal */
+.form-ipo h3 { margin: 14px 0 6px; font-size: .9rem; }
+.opcoes-ipo { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.ipo-vitimas { display: grid; gap: 8px; margin-bottom: 6px; }
+.ipo-vitima { border: 1px solid var(--borda); border-radius: 4px; padding: 8px; display: grid; gap: 6px; background: var(--superficie-2); }
+.grade-ipo { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; }

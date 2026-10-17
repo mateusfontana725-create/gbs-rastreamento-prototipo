@@ -236,6 +236,7 @@
     $('btn-nova-op').addEventListener('click', abrirNovaOperacao);
     // Cadastro completo da operação nova: tipo, acionamento, local e descrição
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
+    $('menu-ipo').addEventListener('click', abrirIpo);
     $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
     $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
     $('menu-vitimas').addEventListener('click', function () {
@@ -887,6 +888,14 @@
         aplicarIntervaloGpsMeu();
         est.participantes.forEach(function (p) { sujarTrilha(p); });   // limite de falha pode ter mudado
       },
+    });
+  }
+
+  // IPO: informe padrão da ocorrência (dados que saem no início do relatório final).
+  function abrirIpo() {
+    if (!est.op || !window.Ipo) return;
+    window.Ipo.abrirEditor(est.op, function (ipo) {
+      if (est.op) est.op.ipo = ipo;
     });
   }
 

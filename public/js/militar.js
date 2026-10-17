@@ -654,7 +654,7 @@
   // "+ Nova operação": o cadastro abre num modal (a lista de operações fica limpa).
   function abrirNovaOperacao() {
     var codigo = UI.el('input', { classe: 'campo', id: 'nova-codigo', maxlength: '80', required: true, autocomplete: 'off', placeholder: 'Ex.: BUSCA SERRA AZUL 09/10' });
-    var campos = window.Cadastro.camposOperacao(null, { obrigatorio: true, agoraPadrao: true, prefixo: 'nova' });
+    var campos = window.Cadastro.camposOperacao(null, { inicial: true, prefixo: 'nova' });
     var retencao = UI.el('select', { classe: 'campo', id: 'nova-retencao' }, [
       ['0', 'Ao encerrar'], ['24', '24 h após encerrar'], ['72', '3 dias após encerrar'], ['168', '7 dias após encerrar'], ['720', '30 dias após encerrar'],
     ].map(function (o) { return UI.el('option', { value: o[0], selected: o[0] === '72' ? true : null, texto: o[1] }); }));
@@ -674,9 +674,9 @@
     ]);
     var form = UI.el('form', { classe: 'form-nova-op', id: 'form-nova', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),
-      UI.el('p', { classe: 'muted', texto: 'Campos com * são obrigatórios. O restante pode ser completado depois em Ferramentas → Dados da operação.' }),
-      dadosOp,
+      UI.el('p', { classe: 'muted', texto: 'Só o nome é obrigatório. O restante do cadastro é preenchido depois, no painel da operação (Dados da operação → Editar).' }),
       vitimas.elemento,
+      dadosOp,
       status,
       erro,
       UI.el('div', { classe: 'modal-acoes' }, [cancelar, btn]),
@@ -720,7 +720,7 @@
     }
     function adicionar() {
       seq += 1;
-      var campos = window.Cadastro.camposVitima(null, 'nova-vitima-' + seq);
+      var campos = window.Cadastro.camposVitima(null, 'nova-vitima-' + seq, { simples: true });
       var it = { campos: campos, salva: false };
       it.titulo = UI.el('strong');
       it.estado = UI.el('small', { classe: 'nova-vitima-estado muted' });

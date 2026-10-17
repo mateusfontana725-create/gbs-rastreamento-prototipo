@@ -2867,13 +2867,9 @@ begin
   v_ipo := public.ipo_validar(p_dados->'ipo');
   if p_dados is not null then
     v_op := public.aplicar_cadastro_operacao(v_op, p_dados - 'codigo');
-    if v_op.tipo is null then
-      raise exception 'tipo_operacao_invalido';
-    end if;
-    if v_op.acionado_em is null then
-      raise exception 'acionamento_invalido';
-    end if;
   end if;
+  -- cadastro inicial: o tipo fica para depois, e o início das operações é automático (a hora da criação)
+  v_op.acionado_em := coalesce(v_op.acionado_em, now());
 
   insert into public.operacoes (codigo, responsavel_id, token_civil, token_militar, retencao_horas,
                                 tipo, tipo_outro, acionado_em, local_endereco, local_lat, local_lng, descricao, ipo)

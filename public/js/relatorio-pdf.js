@@ -525,7 +525,7 @@
     ].concat(vitimas, [
       ficha([
         ['Início das operações (acionamento do CB)', op.acionado_em ? dataHora(op.acionado_em) : '—'],
-        ['Coordenadas de referência (último avistamento)', txt(i.coordenadas_referencia)],
+        ['Coordenadas de referência (último avistamento)', coord(op.local_lat, op.local_lng)],
         ['Desaparecimento (último horário visto)', txt(i.desaparecimento)],
         ['Nº de pessoas perdidas', i.pessoas_perdidas != null ? String(i.pessoas_perdidas) : '—'],
       ]),

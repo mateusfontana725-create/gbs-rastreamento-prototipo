@@ -669,19 +669,21 @@ chave própria).
 - Biblioteca: **pdfmake 0.2.23** (`public/vendor/pdfmake/`, licença MIT), carregada só ao gerar. Os mapas são
   desenhados em canvas com o OpenStreetMap de fundo; sem acesso ao fundo, o mapa sai sem ele (com escala).
 
-### IPO (Informe Padrão de Ocorrência)
+### IPO (Informe Padrão de Ocorrência) — é o próprio cadastro da operação
 
-O IPO **é o cadastro da operação**: não há mais um formulário separado. Ele aparece no **Novo cadastro** e em
-**Dados da operação → Editar** (bloco "IPO — informe padrão de ocorrência"), e o que já existe no cadastro não se repete:
+Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num só formulário, em `operacoes`
+(colunas próprias e `operacoes.ipo` para os campos do IPO).
 
-- **Localidade / endereço** = o endereço do cadastro (com o ponto de referência).
-- **Acionamento (início das operações)** = a data e hora do acionamento do cadastro.
-- **Contexto / descrição** = a descrição do cadastro.
-- **Tipo** = o tipo do cadastro (Aquática, Terrestre, Aérea ou Outras).
-- Campos próprios do IPO: destinatários, natureza, solicitante (nome e documento), desaparecimento (último horário
-  visto), coordenadas do último avistamento, meio líquido, nº de pessoas perdidas, buscas preliminares, possibilidade
-  de vida, BMs diretamente envolvidos, imagens anexas e responsável pelas informações. Ficam em `operacoes.ipo`.
-- **Vítimas do IPO = fichas de vítima.** A ficha ganhou nascimento, sexo e origem (migração 021). O IPO lista as fichas.
+- **Criação (+ Nova operação), o mínimo que se informa de imediato:** nome da operação (obrigatório), vítima(s)
+  (nome e idade, nas fichas), coordenadas (ponto no mapa), **início das operações** (automático: a hora da criação),
+  nome do solicitante, natureza e uma observação com a breve descrição da ocorrência. O tipo não é pedido agora.
+- **Painel da operação → Dados da operação → Editar:** o cadastro completo, no mesmo formulário: tipo (e "outras"),
+  início das operações, localidade/endereço, coordenadas, solicitante (nome e documento), natureza, destinatários,
+  desaparecimento (último horário visto), meio líquido, nº de pessoas perdidas, buscas preliminares, possibilidade
+  de vida, BMs diretamente envolvidos, imagens anexas, responsável pelas informações e a observação.
+  As coordenadas do cadastro são as do último avistamento: não há um segundo campo de coordenadas.
+- **Vítimas do IPO = fichas de vítima.** A ficha tem nome, idade, nascimento, sexo e origem (migração 021); na criação
+  pede-se só nome e idade, e o resto fica para o painel (Ferramentas → Vítimas).
 - **Procedimentos de busca, recursos do CB e desdobramentos** são registros do **diário** (categoria operação):
   **+ Novo registro** → tipo "Procedimento de busca sendo realizado" (com a lista de procedimentos), "Recurso empregado"
   ou "Desdobramento do dia". Cada um tem data e hora do fato e pode ser editado (fica no histórico).
@@ -689,7 +691,7 @@ O IPO **é o cadastro da operação**: não há mais um formulário separado. El
   "ATENÇÃO: uso exclusivo nos grupos do CBMPR", opções com "(X)" marcada e "( )" não marcada). Os procedimentos
   marcados vêm do diário, com a hora de cada um; recursos e desdobramentos também saem com data e hora.
 - **Retenção:** hoje o IPO **não** é apagado pela limpeza de dados da operação. Ele tem nome, documento e dados da vítima, então isso precisa de decisão: apagar junto com os dados pessoais, ou manter como registro oficial.
-- Operações salvas com o IPO antigo (formulário separado, só de teste) não são convertidas: os campos novos começam vazios.
+- Operações salvas com o formulário separado de IPO (só de teste) não são convertidas: os campos novos começam vazios.
 
 ### Excluir uma operação
 
@@ -874,9 +876,11 @@ rastreamento-sar/
    - **021** (`021_ipo_no_cadastro.sql`): o IPO entra no cadastro (`criar_operacao` e `atualizar_operacao` gravam
      `ipo`); fichas de vítima ganham `nascimento`, `sexo` e `origem`; nova função `diario_registrar_ipo` (procedimento,
      recurso e desdobramento no diário). Ver a seção "IPO" abaixo.
+   - **022** (`022_cadastro_inicial.sql`): criar a operação não exige mais o tipo, e o início das operações é a hora
+     da criação quando o formulário não manda outra.
    - **020** (`020_admin_excluir_sem_restricao.sql`): `excluir_operacao` deixa o administrador excluir operação com
      atividade (diário e relatórios). Criador sem ser administrador segue com a regra de operação sem atividade.
-   O `schema.sql` completo já inclui da 003 à 021.
+   O `schema.sql` completo já inclui da 003 à 022.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

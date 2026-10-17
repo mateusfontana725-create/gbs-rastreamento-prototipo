@@ -236,6 +236,15 @@
     $('btn-nova-op').addEventListener('click', abrirNovaOperacao);
     // Cadastro completo da operação nova: tipo, acionamento, local e descrição
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
+    $('menu-dashboard').addEventListener('click', abrirDashboardOperacao);
+    // estatísticas gerais: carregam só quando o painel é aberto
+    var estudosGeral = $('estudos-geral');
+    estudosGeral.addEventListener('toggle', function () {
+      if (estudosGeral.open && !estudosGeral.dataset.carregado && window.Dashboard) {
+        estudosGeral.dataset.carregado = '1';
+        window.Dashboard.geral($('estudos-geral-corpo'));
+      }
+    });
     $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
     $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
     $('menu-vitimas').addEventListener('click', function () {
@@ -874,6 +883,18 @@
   }
 
   // Ferramentas → Dados da operação (ver e editar o cadastro e o GPS).
+  // Dashboard da operação (menu Operação): números desta operação, sem dados pessoais.
+  function abrirDashboardOperacao() {
+    if (!est.op || !window.Dashboard) return;
+    var corpo = UI.el('div', { classe: 'estudo-operacao', id: 'estudo-operacao' });
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
+      corpo,
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]));
+    window.Dashboard.operacao(est.op, corpo);
+  }
+
   function abrirDadosOperacao() {
     if (!est.op) return;
     window.Cadastro.abrirDados(est.op, {

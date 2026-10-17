@@ -635,3 +635,25 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .ipo-vitimas { display: grid; gap: 8px; margin-bottom: 6px; }
 .ipo-vitima { border: 1px solid var(--borda); border-radius: 4px; padding: 8px; display: grid; gap: 6px; background: var(--superficie-2); }
 .grade-ipo { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; }
+
+/* ---- estatísticas e dashboards (painel inicial e da operação) ---- */
+.estudos { margin-bottom: 14px; }
+.estudos > summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; list-style: none; }
+.estudos > summary::-webkit-details-marker { display: none; }
+.estudos > summary h2 { margin: 0; font-size: 1rem; }
+.estudos-corpo, .estudo-operacao { display: grid; gap: 14px; margin-top: 12px; }
+.est-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.est-numero { background: var(--superficie-2); border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; display: grid; gap: 2px; }
+.est-numero strong { font-family: var(--mono); font-size: 1.1rem; }
+.est-numero span { font-size: .74rem; color: var(--texto-2); }
+.est-bloco { display: grid; gap: 8px; }
+.est-bloco h3 { margin: 0; font-size: .92rem; }
+.est-barras { display: grid; gap: 6px; }
+.est-linha { display: grid; grid-template-columns: minmax(96px, .8fr) 1fr 52px; align-items: center; gap: 8px; font-size: .82rem; }
+.est-trilho { display: block; background: var(--barra); border-radius: 4px; height: 10px; overflow: hidden; }
+.est-barra { display: block; height: 100%; background: var(--acento); }
+.est-n { text-align: right; font-family: var(--mono); }
+.est-oculto { font-size: .78rem; color: var(--texto-3); font-style: italic; }
+.est-tabela { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.est-tabela th, .est-tabela td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--borda); }
+@media (max-width: 600px) { .est-linha { grid-template-columns: 1fr; } .est-n { text-align: left; } }

@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -566,6 +566,25 @@ await db.query(`insert into public.relatorios (operacao_id, caminho, paginas, by
 chk(/operacao_com_registros/.test(await erroDe(rpc(resp2, 'excluir_operacao', { p_operacao: opComAtividade.id }))), 'criador que não é administrador NÃO exclui operação com relatório');
 chk((await db.query(`select count(*)::int n from public.operacoes where id = $1`, [opComAtividade.id])).rows[0].n === 1, 'operação recusada continua no banco');
 
+console.log('Perfil da vítima e estudos (migração 023)');
+const fichaPerfil = await rpc(resp1, 'salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'Idosa Teste', idade: 81, perfil: ['idoso', 'demencia'] }) });
+chk(fichaPerfil.perfil.includes('idoso') && fichaPerfil.perfil.length === 2, 'ficha guarda o perfil', fichaPerfil.perfil);
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'X', perfil: ['zumbi'] }) }))), 'perfil fora da lista: recusado');
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'X', perfil: 'idoso' }) }))), 'perfil que não é lista: recusado');
+const perfilEd = await rpc(resp1, 'salvar_vitima', { p_operacao: op.id, p_id: fichaPerfil.id, p_dados: JSON.stringify({ origem: 'Andirá' }) });
+chk(perfilEd.perfil.length === 2, 'editar a ficha sem o perfil mantém o perfil', perfilEd.perfil);
+const estOp = await rpc(resp1, 'estudo_operacao', { p_operacao: op.id });
+chk(estOp.localizacao && typeof estOp.localizacao.distancia_km === 'number' && estOp.localizacao.distancia_km >= 0, 'estudo da operação: distância do ULV à primeira localização', estOp.localizacao);
+chk(estOp.perfis.idoso >= 1 && estOp.perfis.demencia >= 1, 'estudo da operação conta os perfis', estOp.perfis);
+chk(!/Idosa Teste|cpf|telefone/i.test(JSON.stringify(estOp)), 'estudo da operação não traz nomes nem dados pessoais');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'estudo_operacao', { p_operacao: opSoR1.id }))), 'responsável de outra operação não vê o estudo da operação');
+const estGeral = await rpc(resp1, 'estudo_geral', {});
+chk(estGeral.operacoes.total >= 3, 'estudo geral conta as operações do administrador', estGeral.operacoes);
+chk(estGeral.distancia_km.mediana === null && estGeral.distancia_km.casos === null, 'com menos de 5 casos, a mediana fica oculta', estGeral.distancia_km);
+chk(estGeral.perfis.every((p) => p.fichas === null && p.mediana_km === null), 'perfis com menos de 5 fichas aparecem ocultos', estGeral.perfis);
+chk(!/Idosa Teste|cpf/i.test(JSON.stringify(estGeral)), 'estudo geral não traz nomes');
+chk(/permission denied/.test(await erroDe(como(null, `select public.estudo_geral()`, [], 'anon'))), 'anônimo não vê o estudo geral');
+
 console.log('Retenção e exclusão');
 await rpc(resp1, 'encerrar_operacao', { p_operacao: op.id });
 await rpc(resp1, 'apagar_dados_operacao', { p_operacao: op.id });
@@ -596,5 +615,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–022 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–023 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

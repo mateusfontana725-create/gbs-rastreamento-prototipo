@@ -102,6 +102,10 @@
       </div>
     </header>
     <div class="conteudo">
+      <details class="cartao estudos" id="estudos-geral">
+        <summary><h2>Estatísticas e estudos</h2><small class="muted">todas as suas operações · só números</small></summary>
+        <div class="estudos-corpo" id="estudos-geral-corpo"></div>
+      </details>
       <div class="cartao secao">
         <div class="ops-topo">
           <h2 id="ops-titulo">Minhas operações</h2>
@@ -246,6 +250,7 @@
             <details class="menu-grupo" data-grupo="operacao" open>
               <summary><h3 id="mg-op">Operação</h3></summary>
               <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
+              <button class="menu-item" type="button" id="menu-dashboard"><span class="ico-item" aria-hidden="true">▦</span><span>Dashboard da operação</span></button>
               <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário da operação</span></button>
               <button class="menu-item" type="button" id="menu-relatorio"><span class="ico-item" aria-hidden="true">▤</span><span>Relatório final (PDF)</span></button>
               <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
@@ -629,6 +634,7 @@
   <script src="js/arquivos.js"></script>
   <script src="js/cadastro.js"></script>
   <script src="js/ipo.js"></script>
+  <script src="js/dashboard.js"></script>
   <script src="js/relatorio-pdf.js"></script>
   <script src="js/relatorio.js"></script>
   <script src="js/militar.js"></script>

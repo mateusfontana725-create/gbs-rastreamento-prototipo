@@ -669,6 +669,29 @@ chave própria).
 - Biblioteca: **pdfmake 0.2.23** (`public/vendor/pdfmake/`, licença MIT), carregada só ao gerar. Os mapas são
   desenhados em canvas com o OpenStreetMap de fundo; sem acesso ao fundo, o mapa sai sem ele (com escala).
 
+### Estatísticas e estudos (dashboards)
+
+Objetivo: juntar, operação a operação, dados para estudar o comportamento da vítima e a distância em que ela é
+encontrada em relação ao **ULV** (último local visto). Os painéis mostram **só números**: nenhum nome, documento ou
+dado de participante sai do banco nesses painéis.
+
+- **Painel inicial → "Estatísticas e estudos"** (recolhido; carrega ao abrir): operações (total, abertas, encerradas),
+  por tipo, nos últimos 12 meses; distância do ULV até a localização da vítima (casos, mediana, metade central, média,
+  faixas de 1 km); tempo até a localização; perfis das vítimas; condição (com vida / em óbito). Vale para todas as
+  operações a que o responsável tem acesso (administrador: todas).
+- **Operação → Dashboard da operação**: ULV, primeira localização (condição, horário, minutos desde o início das
+  operações e distância do ULV), nº de fichas, perfis, setores e registros do diário.
+- **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro
+  registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
+- **Perfil da vítima** = campo da ficha (checkboxes em "Perfil (para estudos)": idoso, criança, adolescente,
+  Alzheimer/demência, autismo, deficiência intelectual, transtorno mental, outro). Não é calculado pela idade.
+- **Sigilo dos números:** grupos com **menos de 5 casos** chegam ocultos ("oculto (menos de 5 casos)"), no banco
+  (`estudo_geral`, `estudo_operacao`), não só na tela.
+- **Limitação conhecida:** a localização não está ligada a uma ficha específica. Com duas vítimas na mesma operação,
+  a distância conta para as duas. Ligar a localização à ficha é o próximo passo, se o estudo precisar disso.
+- Exportar os dados para pesquisa **não está implementado**: depende de decisão sobre dados de saúde (LGPD) e de
+  aprovação ética, antes de qualquer conjunto de dados sair do sistema.
+
 ### IPO (Informe Padrão de Ocorrência) — é o próprio cadastro da operação
 
 Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num só formulário, em `operacoes`
@@ -876,11 +899,13 @@ rastreamento-sar/
    - **021** (`021_ipo_no_cadastro.sql`): o IPO entra no cadastro (`criar_operacao` e `atualizar_operacao` gravam
      `ipo`); fichas de vítima ganham `nascimento`, `sexo` e `origem`; nova função `diario_registrar_ipo` (procedimento,
      recurso e desdobramento no diário). Ver a seção "IPO" abaixo.
+   - **023** (`023_estudos_perfil_distancia.sql`): perfil da vítima na ficha; `distancia_km`, `estudo_operacao` e
+     `estudo_geral` (agregados, grupos com menos de 5 casos ocultos). Ver "Estatísticas e estudos".
    - **022** (`022_cadastro_inicial.sql`): criar a operação não exige mais o tipo, e o início das operações é a hora
      da criação quando o formulário não manda outra.
    - **020** (`020_admin_excluir_sem_restricao.sql`): `excluir_operacao` deixa o administrador excluir operação com
      atividade (diário e relatórios). Criador sem ser administrador segue com a regra de operação sem atividade.
-   O `schema.sql` completo já inclui da 003 à 022.
+   O `schema.sql` completo já inclui da 003 à 023.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

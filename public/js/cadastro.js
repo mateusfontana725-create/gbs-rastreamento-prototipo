@@ -526,7 +526,7 @@
     if (v.nascimento) linha('Nascimento', v.nascimento);
     if (v.sexo) linha('Sexo', v.sexo === 'M' ? 'Masculino' : 'Feminino');
     if (v.origem) linha('Origem', v.origem);
-    if ((v.perfil || []).length) linha('Perfil', v.perfil.map(function (x) { return textoIpo(PERFIS_VITIMA, x); }).join(', '));
+    if ((v.perfil || []).length) linha('Perfil', v.perfil.map(function (x) { return textoIpo(window.Ipo.PERFIS_VITIMA, x); }).join(', '));
     linha('Características físicas', v.caracteristicas || '—');
     linha('Roupas', v.roupas || '—');
     linha('Observações', v.observacoes || '—');
@@ -571,11 +571,6 @@
 
   // Campos da ficha de vítima, com a validação. Usados na ficha (prefixo "vitima")
   // e no cadastro da operação nova (vários blocos, cada um com o seu prefixo).
-  // Perfis da vítima para os estudos (painel de estatísticas): sem nome e sem dados pessoais.
-  var PERFIS_VITIMA = [['idoso', 'Idoso (60 anos ou mais)'], ['crianca', 'Criança (até 12 anos)'], ['adolescente', 'Adolescente (13 a 17 anos)'],
-    ['demencia', 'Alzheimer / demência'], ['autismo', 'Autismo (TEA)'], ['deficiencia_intelectual', 'Deficiência intelectual'],
-    ['transtorno_mental', 'Transtorno mental'], ['outro', 'Outro']];
-
   // opcoes.simples: a criação da operação pede só nome e idade; o resto da ficha fica para o painel.
   function camposVitima(v, prefixo, opcoes) {
     prefixo = prefixo || 'vitima';
@@ -594,12 +589,19 @@
       UI.el('option', { value: 'F', selected: v.sexo === 'F' ? true : null, texto: 'Feminino' }),
     ]);
     var origem = UI.el('input', { classe: 'campo', id: prefixo + '-origem', maxlength: '120', autocomplete: 'off', placeholder: 'Cidade ou bairro', value: v.origem || '' });
-    var perfilNome = prefixo + '-perfil';
-    var perfil = UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Perfil (para estudos)' }),
-      UI.el('div', { classe: 'opcoes-ipo' }, PERFIS_VITIMA.map(function (x) {
-        return UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', name: perfilNome, value: x[0],
-          checked: (v.perfil || []).indexOf(x[0]) >= 0 ? true : null }), ' ' + x[1]]);
-      }))]);
+    // Perfil para os estudos: duas listas de seleção (principal e secundário), sempre com valores fixos
+    var perfilOpcoes = function (escolhido) {
+      return [UI.el('option', { value: '', texto: '— nenhum —' })].concat(window.Ipo.PERFIS_VITIMA.map(function (x) {
+        return UI.el('option', { value: x[0], selected: escolhido === x[0] ? true : null, texto: x[1] });
+      }));
+    };
+    var perfil1 = UI.el('select', { classe: 'campo', id: prefixo + '-perfil1' }, perfilOpcoes((v.perfil || [])[0]));
+    var perfil2 = UI.el('select', { classe: 'campo', id: prefixo + '-perfil2' }, perfilOpcoes((v.perfil || [])[1]));
+    var perfil = UI.el('div', { classe: 'grupo-duplo' }, [
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-perfil1', texto: 'Perfil da vítima (para estudos)' }), perfil1]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-perfil2', texto: 'Perfil secundário (opcional)' }), perfil2]),
+      UI.el('small', { classe: 'muted', texto: 'Idoso: 60 anos ou mais · Criança: até 12 anos · Adolescente: 13 a 17 anos.' }),
+    ]);
     var elementos = [
       UI.el('div', { classe: 'grupo-duplo grupo-duplo-largo' }, [
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nome', texto: 'Nome *' }), nome]),
@@ -628,7 +630,7 @@
         nascimento: nasc.value.trim(),
         sexo: sexo.value,
         origem: origem.value.replace(/\s+/g, ' ').trim(),
-        perfil: Array.prototype.map.call(perfil.querySelectorAll('input:checked'), function (c) { return c.value; }),
+        perfil: [perfil1.value, perfil2.value].filter(function (x, i, lista) { return x && lista.indexOf(x) === i; }),
       };
     }
     // null = tudo certo; senão { texto, campo } para mostrar o erro e pôr o foco no campo
@@ -641,7 +643,7 @@
     }
     function bloquear(sim) {
       [nome, idade, nasc, sexo, origem, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); });
-      perfil.querySelectorAll('input').forEach(function (c) { c.disabled = Boolean(sim); });
+      perfil.querySelectorAll('select').forEach(function (c) { c.disabled = Boolean(sim); });
     }
     if (opcoes && opcoes.simples) elementos = elementos.slice(0, 1);
     return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome };

@@ -10,10 +10,11 @@
   var C = raiz.Comunicacao, UI = raiz.UI;
   var NS = 'http://www.w3.org/2000/svg';
 
-  var PERFIS = {
-    idoso: 'Idoso', crianca: 'Criança', adolescente: 'Adolescente', demencia: 'Alzheimer / demência',
-    autismo: 'Autismo (TEA)', deficiencia_intelectual: 'Deficiência intelectual', transtorno_mental: 'Transtorno mental', outro: 'Outro',
-  };
+  // nomes dos perfis vêm da mesma lista do formulário (ipo.js): o gráfico e o cadastro não divergem
+  function nomePerfil(p) {
+    var x = (window.Ipo && window.Ipo.PERFIS_VITIMA || []).filter(function (y) { return y[0] === p; })[0];
+    return x ? x[1] : p;
+  }
   var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', outras: 'Outras', sem_tipo: 'Sem tipo' };
   var CONDICOES = { viva: 'Com vida', obito: 'Em óbito' };
   var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -182,7 +183,7 @@
     }
     if (loc.minutos_ate_mediana != null) out.push('A localização aconteceu, em mediana, ' + minutos(loc.minutos_ate_mediana) + ' depois do início das operações.');
     var perfisVisiveis = dados.perfis.filter(function (p) { return p.fichas != null; }).sort(function (a, b) { return b.fichas - a.fichas; });
-    if (perfisVisiveis.length) out.push('O perfil mais frequente entre as vítimas é "' + (PERFIS[perfisVisiveis[0].perfil] || perfisVisiveis[0].perfil) + '", com ' + perfisVisiveis[0].fichas + ' ficha' + (perfisVisiveis[0].fichas === 1 ? '' : 's') + '.');
+    if (perfisVisiveis.length) out.push('O perfil mais frequente entre as vítimas é "' + nomePerfil(perfisVisiveis[0].perfil) + '", com ' + perfisVisiveis[0].fichas + ' ficha' + (perfisVisiveis[0].fichas === 1 ? '' : 's') + '.');
     var condicoes = loc.por_condicao || {};
     if (condicoes.viva != null || condicoes.obito != null) {
       out.push('Entre as vítimas localizadas: ' + (condicoes.viva != null ? condicoes.viva + ' com vida' : 'um número oculto com vida') + ' e ' + (condicoes.obito != null ? condicoes.obito + ' em óbito' : 'um número oculto em óbito') + '.');
@@ -245,7 +246,7 @@
         var trilho = el('span', { classe: 'dash-trilho' }, [el('span', { classe: 'dash-trilho-barra' })]);
         trilho.firstChild.style.width = p.fichas == null ? '0%' : Math.round((p.fichas / perfisMax) * 100) + '%';
         return el('div', { classe: 'dash-perfil' }, [
-          el('span', { classe: 'dash-perfil-nome', texto: PERFIS[p.perfil] || p.perfil }),
+          el('span', { classe: 'dash-perfil-nome', texto: nomePerfil(p.perfil) }),
           trilho,
           el('span', { classe: 'dash-perfil-n' }, [ou(p.fichas)]),
           el('span', { classe: 'dash-perfil-km' }, [p.mediana_km == null ? el('span', { classe: 'muted', texto: 'distância oculta' }) : km(p.mediana_km)]),
@@ -280,7 +281,7 @@
     linhaDl(dl, 'Localização da vítima', loc ? (CONDICOES[loc.condicao] || loc.condicao) + ' · ' + dataHora(loc.em) : 'nenhuma registrada ainda');
     linhaDl(dl, 'Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : '—');
     linhaDl(dl, 'Tempo desde o início das operações', loc && loc.minutos_ate != null ? minutos(loc.minutos_ate) : '—');
-    var perfis = Object.keys(d.perfis || {}).map(function (p) { return { rotulo: PERFIS[p] || p, valor: d.perfis[p] }; });
+    var perfis = Object.keys(d.perfis || {}).map(function (p) { return { rotulo: nomePerfil(p), valor: d.perfis[p] }; });
     return [
       el('div', { classe: 'dash-kpis' }, [
         kpi('◎', 'Vítimas (fichas)', String(d.fichas), null, 'ambar'),
@@ -316,6 +317,5 @@
     operacao: function (op, elemento) {
       return carregar(elemento, function () { return C.rpc('estudo_operacao', { p_operacao: op.id }); }, renderOperacao);
     },
-    PERFIS: PERFIS,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

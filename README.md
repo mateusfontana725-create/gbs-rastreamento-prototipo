@@ -686,7 +686,7 @@ dado de participante sai do banco nesses painéis.
   operações e distância do ULV), nº de fichas, perfis, setores e registros do diário.
 - **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro
   registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
-- **Perfil da vítima** = campo da ficha (checkboxes em "Perfil (para estudos)": idoso, criança, adolescente,
+- **Perfil da vítima** = duas listas de seleção na ficha ("Perfil da vítima (para estudos)" e "Perfil secundário"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
   Alzheimer/demência, autismo, deficiência intelectual, transtorno mental, outro). Não é calculado pela idade.
 - **Sigilo dos números:** grupos com **menos de 5 casos** chegam ocultos ("oculto (menos de 5 casos)"), no banco
   (`estudo_geral`, `estudo_operacao`), não só na tela.

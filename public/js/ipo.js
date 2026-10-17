@@ -17,6 +17,9 @@
   // Natureza da ocorrência: escolha numa lista; "Outra" abre um campo para descrever.
   var NATUREZAS = ['BUSCA TERRESTRE – PESSOA', 'BUSCA AQUÁTICA – PESSOA', 'BUSCA TERRESTRE/AQUÁTICA – PESSOA', 'BUSCA AÉREA – PESSOA', 'RESGATE'];
   var OUTRA_NATUREZA = '__outra__';
+  // Perfis da vítima (estudos): valores fixos gravados no banco; o formulário só seleciona.
+  var PERFIS_VITIMA = [['idoso', 'Idoso'], ['crianca', 'Criança'], ['adolescente', 'Adolescente'], ['demencia', 'Alzheimer / demência'],
+    ['autismo', 'Autismo (TEA)'], ['deficiencia_intelectual', 'Deficiência intelectual'], ['transtorno_mental', 'Transtorno mental'], ['outro', 'Outro']];
   var MAX_TEXTO = 300, MAX_LONGO = 1000;
 
   function opcao(lista, valor) { return lista.some(function (x) { return x[0] === valor; }) ? valor : ''; }
@@ -48,6 +51,6 @@
   raiz.Ipo = {
     normalizarIpo: normalizarIpo,
     MEIOS: MEIOS, BUSCAS: BUSCAS, VIDA: VIDA, PROCEDIMENTOS: PROCEDIMENTOS, DESTINO_PADRAO: DESTINO_PADRAO,
-    NATUREZAS: NATUREZAS, OUTRA_NATUREZA: OUTRA_NATUREZA,
+    NATUREZAS: NATUREZAS, OUTRA_NATUREZA: OUTRA_NATUREZA, PERFIS_VITIMA: PERFIS_VITIMA,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

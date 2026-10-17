@@ -237,13 +237,24 @@
     // Cadastro completo da operação nova: tipo, acionamento, local e descrição
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
     $('menu-dashboard').addEventListener('click', abrirDashboardOperacao);
-    // estatísticas gerais: carregam só quando o painel é aberto
-    var estudosGeral = $('estudos-geral');
-    estudosGeral.addEventListener('toggle', function () {
-      if (estudosGeral.open && !estudosGeral.dataset.carregado && window.Dashboard) {
-        estudosGeral.dataset.carregado = '1';
-        window.Dashboard.geral($('estudos-geral-corpo'));
-      }
+    // menu do cabeçalho: um botão abre a lista de ações
+    $('btn-menu-topo').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      abrirMenuTopo($('menu-topo-lista').hidden);
+    });
+    document.addEventListener('click', function (ev) {
+      if (!$('menu-topo').contains(ev.target)) abrirMenuTopo(false);
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') abrirMenuTopo(false);
+    });
+    $('menu-topo-lista').addEventListener('click', function (ev) {
+      if (ev.target.closest('[data-vista]')) setVista(ev.target.closest('[data-vista]').getAttribute('data-vista'));
+      abrirMenuTopo(false);
+    });
+    // alternador: painel de estatísticas ou lista de operações
+    document.querySelectorAll('.vista-botao').forEach(function (b) {
+      b.addEventListener('click', function () { setVista(b.getAttribute('data-vista')); });
     });
     $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
     $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
@@ -551,8 +562,40 @@
     location.hash = '#op=' + op.id;
   }
 
-  async function mostrarOperacoes() {
+  function mostrarOperacoes() {
     mostrarTela('operacoes');
+    aplicarVista();
+  }
+
+  // Vista da tela inicial: "dashboard" (painel de estatísticas) ou "lista" (operações). Fica salva neste navegador.
+  function vistaAtual() {
+    try { return localStorage.getItem('gbs.vista') === 'lista' ? 'lista' : 'dashboard'; } catch (e) { return 'dashboard'; }
+  }
+
+  function setVista(nome) {
+    try { localStorage.setItem('gbs.vista', nome); } catch (e) { /* sem armazenamento: vale só nesta tela */ }
+    aplicarVista();
+  }
+
+  function aplicarVista() {
+    var dash = vistaAtual() === 'dashboard';
+    $('vista-dashboard').hidden = !dash;
+    $('vista-lista').hidden = dash;
+    $('vista-btn-dashboard').setAttribute('aria-selected', String(dash));
+    $('vista-btn-lista').setAttribute('aria-selected', String(!dash));
+    if (dash) {
+      if (window.Dashboard) window.Dashboard.geral($('estudos-geral-corpo'));
+    } else {
+      carregarListaOperacoes();
+    }
+  }
+
+  function abrirMenuTopo(aberto) {
+    $('menu-topo-lista').hidden = !aberto;
+    $('btn-menu-topo').setAttribute('aria-expanded', String(aberto));
+  }
+
+  async function carregarListaOperacoes() {
     var ul = $('lista-ops');
     ul.innerHTML = '<li class="muted">Carregando…</li>';
     var ops;

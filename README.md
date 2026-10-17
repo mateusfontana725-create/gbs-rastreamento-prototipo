@@ -675,10 +675,13 @@ Objetivo: juntar, operação a operação, dados para estudar o comportamento da
 encontrada em relação ao **ULV** (último local visto). Os painéis mostram **só números**: nenhum nome, documento ou
 dado de participante sai do banco nesses painéis.
 
-- **Painel inicial → "Estatísticas e estudos"** (recolhido; carrega ao abrir): operações (total, abertas, encerradas),
-  por tipo, nos últimos 12 meses; distância do ULV até a localização da vítima (casos, mediana, metade central, média,
-  faixas de 1 km); tempo até a localização; perfis das vítimas; condição (com vida / em óbito). Vale para todas as
-  operações a que o responsável tem acesso (administrador: todas).
+- **Tela inicial, alternador "▦ Painel" / "☰ Operações"**: o painel mostra cartões de números, leitura em texto e
+  gráficos desenhados em SVG (sem bibliotecas externas): operações por mês (12 meses), operações por tipo (rosca),
+  distância do ULV à localização (faixas de 1 km), distância e tempo (mediana, metade central, média, tempo até localizar),
+  perfis das vítimas e condição (com vida / em óbito). Vale para todas as operações a que o responsável tem acesso
+  (administrador: todas). A escolha fica salva neste navegador.
+- **Cabeçalho:** um único botão **☰ Menu** abre a lista de ações (Painel de estatísticas, Lista de operações,
+  Responsáveis, Minha conta, Sair).
 - **Operação → Dashboard da operação**: ULV, primeira localização (condição, horário, minutos desde o início das
   operações e distância do ULV), nº de fichas, perfis, setores e registros do diário.
 - **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro

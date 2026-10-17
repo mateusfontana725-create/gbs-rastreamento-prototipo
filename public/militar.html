@@ -95,18 +95,28 @@
         <div><h1>Operações de busca</h1><small id="usuario-nome"></small></div>
       </div>
       <div class="barra-espaco"></div>
-      <div class="barra-acoes">
-        <a class="btn btn-barra btn-pequeno" href="#responsaveis" id="btn-responsaveis" hidden>Responsáveis</a>
-        <button class="btn btn-barra btn-pequeno" type="button" id="btn-minha-conta">Minha conta</button>
-        <button class="btn btn-barra btn-pequeno" type="button" data-acao="sair">Sair</button>
+      <div class="menu-topo" id="menu-topo">
+        <button class="btn btn-barra btn-pequeno menu-topo-botao" type="button" id="btn-menu-topo" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-topo-lista">
+          <span aria-hidden="true">☰</span> Menu
+        </button>
+        <div class="menu-topo-lista" id="menu-topo-lista" role="menu" hidden>
+          <button class="menu-topo-item" type="button" role="menuitem" data-vista="dashboard"><span aria-hidden="true">▦</span> Painel de estatísticas</button>
+          <button class="menu-topo-item" type="button" role="menuitem" data-vista="lista"><span aria-hidden="true">☰</span> Lista de operações</button>
+          <a class="menu-topo-item" role="menuitem" href="#responsaveis" id="btn-responsaveis" hidden><span aria-hidden="true">◎</span> Responsáveis</a>
+          <button class="menu-topo-item" type="button" role="menuitem" id="btn-minha-conta"><span aria-hidden="true">◉</span> Minha conta</button>
+          <button class="menu-topo-item menu-topo-sair" type="button" role="menuitem" data-acao="sair"><span aria-hidden="true">⏻</span> Sair</button>
+        </div>
       </div>
     </header>
     <div class="conteudo">
-      <details class="cartao estudos" id="estudos-geral">
-        <summary><h2>Estatísticas e estudos</h2><small class="muted">todas as suas operações · só números</small></summary>
-        <div class="estudos-corpo" id="estudos-geral-corpo"></div>
-      </details>
-      <div class="cartao secao">
+      <div class="vistas" role="tablist" aria-label="O que mostrar">
+        <button class="vista-botao" type="button" role="tab" id="vista-btn-dashboard" data-vista="dashboard" aria-selected="true">▦ Painel</button>
+        <button class="vista-botao" type="button" role="tab" id="vista-btn-lista" data-vista="lista" aria-selected="false">☰ Operações</button>
+      </div>
+      <section class="dash-caixa" id="vista-dashboard" aria-label="Painel de estatísticas">
+        <div id="estudos-geral-corpo"></div>
+      </section>
+      <div class="cartao secao" id="vista-lista" hidden>
         <div class="ops-topo">
           <h2 id="ops-titulo">Minhas operações</h2>
           <!-- o cadastro abre num modal (militar.js: abrirNovaOperacao) -->

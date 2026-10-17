@@ -675,7 +675,7 @@ encontrada em relação ao **ULV** (último local visto). Os painéis mostram **
 dado de participante sai do banco nesses painéis.
 
 - **Tela inicial, alternador "▦ Painel" / "☰ Operações"**: o painel mostra cartões de números, leitura em texto e
-  gráficos desenhados em SVG (sem bibliotecas externas): operações por mês (12 meses), operações por tipo (rosca),
+  gráficos desenhados em SVG e em grade (sem bibliotecas externas), cada um com o tamanho da amostra (n): operações por mês (12 meses), operações por tipo (barras),
   distância do ULV à localização (faixas de 1 km), distância e tempo (mediana, metade central, média, tempo até localizar),
   perfis das vítimas e condição (com vida / em óbito). Vale para todas as operações a que o responsável tem acesso
   (administrador: todas). A escolha fica salva neste navegador.

@@ -7495,6 +7495,7 @@
     mapa: function () { return est.mapa; },
     op: function () { return est.op; },
     usuario: function () { return est.usuario; },
+    admin: function () { return Boolean(est.responsavel && est.responsavel.admin); },
     selecionado: function () { return est.selecionado; },
     participantes: function () { return Array.from(est.participantes.values()); },
     participante: function (id) { return est.participantes.get(id) || null; },

@@ -910,7 +910,9 @@ rastreamento-sar/
      da criação quando o formulário não manda outra.
    - **020** (`020_admin_excluir_sem_restricao.sql`): `excluir_operacao` deixa o administrador excluir operação com
      atividade (diário e relatórios). Criador sem ser administrador segue com a regra de operação sem atividade.
-   O `schema.sql` completo já inclui da 003 à 023.
+   - **024** (`024_admin_excluir_relatorio.sql`): nova função `excluir_relatorio` (só administrador). O PDF vai para a fila
+     de limpeza do Storage e a exclusão fica no diário (evento "Relatório excluído").
+   O `schema.sql` completo já inclui da 003 à 024.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

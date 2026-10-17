@@ -649,6 +649,24 @@
     return 'Relatorio-final-' + cod + '-' + d.getFullYear() + dd(d.getMonth() + 1) + dd(d.getDate()) + '-' + dd(d.getHours()) + dd(d.getMinutes()) + '.pdf';
   }
 
+  // Só o administrador exclui um relatório (o PDF sai do Storage pela limpeza diária; fica registrado no diário).
+  async function excluirRelatorio(r, op, depois) {
+    var ok = await UI.confirmar({
+      titulo: 'Excluir este relatório?',
+      texto: 'O PDF de ' + dataHora(r.gerado_em) + ' (gerado por ' + r.gerado_por_nome + ') deixa de estar disponível. A exclusão fica registrada no diário.',
+      ok: 'Excluir relatório',
+      perigo: true,
+    });
+    if (!ok) return;
+    try {
+      await C.rpc('excluir_relatorio', { p_relatorio: r.id });
+      UI.aviso('Relatório excluído.', 'ok');
+      if (depois) depois();
+    } catch (e) {
+      UI.aviso('Não foi possível excluir: ' + (e.message || e), 'erro', 8000);
+    }
+  }
+
   async function baixarSalvo(r, op) {
     try {
       var s = await C.cliente.storage.from('relatorios').createSignedUrl(r.caminho, 300);
@@ -685,7 +703,7 @@
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-relatorio' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Relatório final' }),
       opcoes.aviso ? UI.el('p', { classe: 'rel-aviso', texto: opcoes.aviso }) : null,
-      UI.el('p', { classe: 'muted', texto: 'Documento em PDF com o cadastro, as pessoas e grupos, os setores varridos (mapas e fotos), o diário consolidado e o resultado. Cada relatório gerado fica guardado e não pode ser apagado pelo app.' }),
+      UI.el('p', { classe: 'muted', texto: 'Documento em PDF com o cadastro, as pessoas e grupos, os setores varridos (mapas e fotos), o diário consolidado e o resultado. Cada relatório gerado fica guardado. Só o administrador pode excluir um relatório, e a exclusão fica registrada no diário.' }),
       UI.el('section', { classe: 'rel-bloco' }, [
         UI.el('h3', { texto: 'Resultado da operação' }),
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rel-resultado', texto: 'Desfecho' }), selRes]),
@@ -724,10 +742,12 @@
         var r = await C.consultar(C.cliente.from('relatorios').select('*').eq('operacao_id', op.id).order('gerado_em', { ascending: false }));
         listaSalvos.innerHTML = '';
         if (!r || !r.length) { listaSalvos.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhum relatório gerado ainda.' })); return; }
+        var ehAdmin = Boolean(P() && P().admin && P().admin());
         r.forEach(function (x) {
           listaSalvos.appendChild(UI.el('li', null, [
             UI.el('span', { texto: dataHora(x.gerado_em) + ' · ' + x.gerado_por_nome + (x.paginas ? ' · ' + x.paginas + ' pág.' : '') }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } }),
+            ehAdmin ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { excluirRelatorio(x, op, carregarSalvos); } }) : null,
           ]));
         });
       } catch (e) {

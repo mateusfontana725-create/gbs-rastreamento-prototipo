@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -566,6 +566,21 @@ await db.query(`insert into public.relatorios (operacao_id, caminho, paginas, by
 chk(/operacao_com_registros/.test(await erroDe(rpc(resp2, 'excluir_operacao', { p_operacao: opComAtividade.id }))), 'criador que não é administrador NÃO exclui operação com relatório');
 chk((await db.query(`select count(*)::int n from public.operacoes where id = $1`, [opComAtividade.id])).rows[0].n === 1, 'operação recusada continua no banco');
 
+console.log('Administrador exclui relatório (migração 024)');
+const caminhoRel = opSoR1.id + '/66666666-6666-4666-8666-666666666666.pdf';
+await db.query(`insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por_nome) values ($1, $2, 1, 10, $3, 'Sgt Um')`, [opSoR1.id, caminhoRel, 'c'.repeat(64)]);
+const idRel = (await db.query(`select id from public.relatorios where caminho = $1`, [caminhoRel])).rows[0].id;
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'excluir_relatorio', { p_relatorio: idRel }))), 'responsável comum não exclui relatório');
+chk(/sem_permissao/.test(await erroDe(rpc(anA, 'excluir_relatorio', { p_relatorio: idRel }))), 'participante não exclui relatório');
+chk(/relatorio_nao_apaga/.test(await erroDe(db.query(`delete from public.relatorios where id = $1`, [idRel]))), 'exclusão direta do registro continua bloqueada');
+const exRel = await rpc(resp1, 'excluir_relatorio', { p_relatorio: idRel });
+chk(exRel.id === idRel, 'administrador exclui o relatório', exRel);
+chk((await db.query(`select count(*)::int n from public.relatorios where id = $1`, [idRel])).rows[0].n === 0, 'o relatório sai da lista');
+const filaRel = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [caminhoRel])).rows[0];
+chk(filaRel && filaRel.bucket === 'relatorios' && filaRel.excluido_por === null, 'o PDF entra na fila de limpeza do Storage', filaRel);
+chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'relatorio_excluido'`, [opSoR1.id])).rows[0].n === 1, 'a exclusão fica registrada no diário');
+chk(/relatorio_nao_encontrado/.test(await erroDe(rpc(resp1, 'excluir_relatorio', { p_relatorio: idRel }))), 'excluir de novo: relatório não encontrado');
+
 console.log('Perfil da vítima e estudos (migração 023)');
 const fichaPerfil = await rpc(resp1, 'salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: JSON.stringify({ nome: 'Idosa Teste', idade: 81, perfil: ['idoso', 'demencia'] }) });
 chk(fichaPerfil.perfil.includes('idoso') && fichaPerfil.perfil.length === 2, 'ficha guarda o perfil', fichaPerfil.perfil);
@@ -615,5 +630,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–023 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–024 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

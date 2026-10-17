@@ -664,7 +664,7 @@ chave própria).
 - **Gerar PDF** monta, no navegador: capa com natureza, números e datas, sumário, a ocorrência (o IPO, com cada dado
   uma só vez: tipo não aparece, a natureza diz o tipo), pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
   setor, início, fim, duração, área, deslocamentos e fotos tiradas dentro do setor), pontos e encontros,
-  diário consolidado por dia (sem repetir os registros do IPO) e resultado com campos de assinatura. Cabeçalho e rodapé em todas as páginas
+  diário consolidado por dia (sem repetir os registros do IPO) e resultado (sem campos de assinatura). Cabeçalho e rodapé em todas as páginas
   ("DOCUMENTO RESTRITO", página X de Y).
 - O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios` (sem exclusão pelo app); a lista
   **Relatórios já gerados** permite baixar de novo.

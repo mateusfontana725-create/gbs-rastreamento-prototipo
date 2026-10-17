@@ -421,18 +421,7 @@
       ['Relatório gerado', dataHora(d.gerado_em) + ' por ' + txt(d.gerado_por_nome)],
       ['Versões anteriores', anteriores.length ? anteriores.map(function (r) { return dataHora(r.gerado_em) + ' (' + r.gerado_por_nome + ')'; }).join('; ') : 'Nenhuma'],
     ]));
-    out.push({ text: 'Assinaturas', style: 'h2', margin: [0, 26, 0, 30] });
-    out.push({ columns: [assinatura('Responsável pela operação'), assinatura('Comandante / superior imediato')], columnGap: 40 });
     return out;
-  }
-
-  function assinatura(rotulo) {
-    return { stack: [
-      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 230, y2: 0, lineWidth: 0.6, lineColor: '#6b7280' }] },
-      { text: rotulo, fontSize: 9, bold: true, margin: [0, 4, 0, 0] },
-      { text: 'Nome, posto/graduação e matrícula', style: 'nota' },
-      { text: 'Data: ____/____/________', style: 'nota', margin: [0, 6, 0, 0] },
-    ] };
   }
 
   /* ---------- documento ------------------------------------------------- */

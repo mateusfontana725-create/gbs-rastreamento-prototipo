@@ -1,6 +1,7 @@
 {
   "name": "gbs-civil-android",
   "private": true,
+  "version": "2.0.0",
   "description": "App Android do participante (civil): a mesma página do link, com GPS em segundo plano.",
   "scripts": {
     "sync": "cap sync android"

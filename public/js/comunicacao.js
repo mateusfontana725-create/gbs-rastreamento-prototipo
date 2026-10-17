@@ -69,6 +69,8 @@
     base_invalida: 'A base escolhida não existe mais. Marque um ponto de interesse do tipo "Base".',
     missao_encerrada: 'Este deslocamento já foi encerrado.',
     data_invalida: 'Data e hora inválidas: não podem estar no futuro nem muito antes do início da operação.',
+    procedimento_invalido: 'Escolha um dos procedimentos de busca da lista.',
+    tipo_invalido: 'Tipo de registro desconhecido. Atualize a página e tente de novo.',
     diario_evento_automatico: 'Eventos automáticos do diário não podem ser alterados. Só as observações são editáveis.',
     diario_nao_apaga: 'O diário da operação não pode ser apagado.',
     diario_somente_funcao: 'O diário só pode ser alterado pelo próprio painel.',

@@ -18,6 +18,11 @@
   var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', outras: 'Outras' };
   var BUCKET = 'vitimas';
 
+  function textoIpo(lista, valor) {
+    var x = lista.filter(function (o) { return o[0] === valor; })[0];
+    return x ? x[1] : valor;
+  }
+
   function textoTipo(op) {
     if (!op || !op.tipo) return '';
     return op.tipo === 'outras' ? 'Outras' + (op.tipo_outro ? ': ' + op.tipo_outro : '') : TIPOS[op.tipo] || op.tipo;
@@ -163,23 +168,25 @@
     var desc = UI.el('textarea', { classe: 'campo', id: pre + '-descricao', maxlength: '2000', rows: '3',
       placeholder: 'O que aconteceu, quem acionou, informações iniciais…' });
     desc.value = op.descricao || '';
+    var ipoCampos = window.Ipo.camposIpo(op, { prefixo: pre });
     mostrarLocal();
 
     var req = opcoes.obrigatorio ? ' *' : '';
     var elemento = UI.el('div', { classe: 'campos-cadastro' }, [
       UI.el('div', { classe: 'grupo-duplo' }, [
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: pre + '-tipo', texto: 'Tipo' + req }), tipo]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: pre + '-acionamento', texto: 'Data e hora do acionamento' + req }), acion]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: pre + '-acionamento', texto: 'Data e hora do acionamento (início das operações)' + req }), acion]),
       ]),
       grupoOutro,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: pre + '-endereco', texto: 'Endereço do local' }), endereco]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: pre + '-endereco', texto: 'Localidade / endereço' }), endereco]),
       UI.el('div', { classe: 'grupo' }, [
         UI.el('span', { classe: 'rotulo', texto: 'Ponto no mapa' }),
         UI.el('div', { classe: 'linha-ponto' }, [coordInfo, btnLimpar]),
         UI.el('div', { classe: 'acoes-linha' }, [btnMapa, btnAqui]),
         coordTxt, coordAviso,
       ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: pre + '-descricao', texto: 'Descrição' }), desc]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: pre + '-descricao', texto: 'Contexto / descrição' }), desc]),
+      ipoCampos.elemento,
     ]);
 
     function ler() {
@@ -192,6 +199,7 @@
         local_lat: local ? local.lat : null,
         local_lng: local ? local.lng : null,
         descricao: desc.value.trim(),
+        ipo: ipoCampos.ler(),
       };
       if (opcoes.obrigatorio && !t) { tipo.focus(); throw new Error('Escolha o tipo da operação.'); }
       if (t === 'outras' && !dados.tipo_outro) { outro.focus(); throw new Error('Em "Outras", descreva o tipo da operação.'); }
@@ -214,6 +222,7 @@
       acion.value = opcoes.agoraPadrao ? paraCampoData(Date.now()) : '';
       endereco.value = '';
       desc.value = '';
+      ipoCampos.limpar();
       coordTxt.value = '';
       coordAviso.textContent = '';
       local = null;
@@ -233,10 +242,25 @@
     function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
     linha('Nome', op.codigo);
     linha('Tipo', textoTipo(op) || '— não informado');
-    linha('Acionamento', op.acionado_em ? dataHora(op.acionado_em) : '— não informado');
-    linha('Endereço', op.local_endereco || '— não informado');
+    linha('Acionamento (início das operações)', op.acionado_em ? dataHora(op.acionado_em) : '— não informado');
+    linha('Localidade / endereço', op.local_endereco || '— não informado');
     linha('Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '— não marcado');
-    linha('Descrição', op.descricao || '—');
+    linha('Contexto / descrição', op.descricao || '—');
+    var ipo = window.Ipo.normalizarIpo(op.ipo || {});
+    if (ipo.natureza || ipo.solicitante_nome || ipo.meio_liquido || ipo.pessoas_perdidas != null) {
+      linha('IPO para', ipo.destinatarios);
+      if (ipo.natureza) linha('Natureza', ipo.natureza);
+      if (ipo.solicitante_nome) linha('Solicitante', [ipo.solicitante_nome, ipo.solicitante_documento].filter(Boolean).join(' · '));
+      if (ipo.desaparecimento) linha('Desaparecimento (último horário visto)', ipo.desaparecimento);
+      if (ipo.coordenadas_referencia) linha('Coordenadas do último avistamento', ipo.coordenadas_referencia);
+      if (ipo.meio_liquido) linha('Meio líquido', textoIpo(window.Ipo.MEIOS, ipo.meio_liquido));
+      if (ipo.pessoas_perdidas != null) linha('Pessoas perdidas', String(ipo.pessoas_perdidas));
+      if (ipo.bms_envolvidos != null) linha('BMs diretamente envolvidos', String(ipo.bms_envolvidos));
+      if (ipo.buscas_preliminares) linha('Buscas preliminares', textoIpo(window.Ipo.BUSCAS, ipo.buscas_preliminares));
+      if (ipo.possibilidade_vida) linha('Possibilidade real de vida', textoIpo(window.Ipo.VIDA, ipo.possibilidade_vida));
+      if (ipo.imagens_anexas != null) linha('Imagens anexas', ipo.imagens_anexas ? 'Sim' : 'Não');
+      if (ipo.responsavel_informacoes) linha('Responsável pelas informações', ipo.responsavel_informacoes);
+    }
     if (op.gps_intervalo_s) linha('GPS', 'ponto pelo menos a cada ' + op.gps_intervalo_s + ' s · falha acima de ' + op.gps_lacuna_s + ' s sem ponto');
     if ('permanencia_limite_min' in op) linha('Permanência no setor', op.permanencia_limite_min ? 'alerta depois de ' + textoMinutos(op.permanencia_limite_min) + ' no mesmo setor' : 'alerta desligado');
     linha('Criada', dataHora(op.criada_em));
@@ -412,6 +436,9 @@
     var dl = UI.el('dl', { classe: 'dados' });
     function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', { classe: 'texto-longo' }, [valor])); }
     linha('Idade', v.idade == null ? 'não informada' : textoIdade(v));
+    if (v.nascimento) linha('Nascimento', v.nascimento);
+    if (v.sexo) linha('Sexo', v.sexo === 'M' ? 'Masculino' : 'Feminino');
+    if (v.origem) linha('Origem', v.origem);
     linha('Características físicas', v.caracteristicas || '—');
     linha('Roupas', v.roupas || '—');
     linha('Observações', v.observacoes || '—');
@@ -465,11 +492,24 @@
     var carac = area('caracteristicas', 1000, v.caracteristicas, 'Altura, porte, cabelo, cor da pele, sinais, tatuagens, cicatrizes…');
     var roupas = area('roupas', 1000, v.roupas, 'Cores e tipo de roupa, calçado, acessórios, mochila…');
     var obs = area('observacoes', 2000, v.observacoes, 'Condição de saúde, medicamentos, último contato, hábitos, para onde iria…');
+    // dados do IPO (nascimento, sexo e origem), para o informe da ocorrência
+    var nasc = UI.el('input', { classe: 'campo', id: prefixo + '-nascimento', maxlength: '20', autocomplete: 'off', placeholder: 'dd/mm/aaaa', value: v.nascimento || '' });
+    var sexo = UI.el('select', { classe: 'campo', id: prefixo + '-sexo' }, [
+      UI.el('option', { value: '', texto: '—' }),
+      UI.el('option', { value: 'M', selected: v.sexo === 'M' ? true : null, texto: 'Masculino' }),
+      UI.el('option', { value: 'F', selected: v.sexo === 'F' ? true : null, texto: 'Feminino' }),
+    ]);
+    var origem = UI.el('input', { classe: 'campo', id: prefixo + '-origem', maxlength: '120', autocomplete: 'off', placeholder: 'Cidade ou bairro', value: v.origem || '' });
     var elementos = [
       UI.el('div', { classe: 'grupo-duplo grupo-duplo-largo' }, [
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nome', texto: 'Nome *' }), nome]),
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-idade', texto: 'Idade (anos)' }), idade]),
       ]),
+      UI.el('div', { classe: 'grupo-duplo' }, [
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nascimento', texto: 'Nascimento' }), nasc]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-sexo', texto: 'Sexo' }), sexo]),
+      ]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-origem', texto: 'Origem (cidade/bairro)' }), origem]),
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-caracteristicas', texto: 'Características físicas' }), carac]),
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-roupas', texto: 'Roupas' }), roupas]),
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-observacoes', texto: 'Observações' }), obs]),
@@ -481,6 +521,9 @@
         caracteristicas: carac.value.trim(),
         roupas: roupas.value.trim(),
         observacoes: obs.value.trim(),
+        nascimento: nasc.value.trim(),
+        sexo: sexo.value,
+        origem: origem.value.replace(/\s+/g, ' ').trim(),
       };
     }
     // null = tudo certo; senão { texto, campo } para mostrar o erro e pôr o foco no campo
@@ -491,7 +534,7 @@
       }
       return null;
     }
-    function bloquear(sim) { [nome, idade, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); }); }
+    function bloquear(sim) { [nome, idade, nasc, sexo, origem, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); }); }
     return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome };
   }
 

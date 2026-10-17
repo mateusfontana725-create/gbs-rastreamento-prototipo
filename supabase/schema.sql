@@ -2851,6 +2851,7 @@ language plpgsql security definer set search_path = public
 as $$
 declare
   v_op public.operacoes%rowtype;
+  v_ipo jsonb;
 begin
   if not public.eh_responsavel() then
     raise exception 'sem_permissao';
@@ -2863,6 +2864,7 @@ begin
     raise exception 'codigo_invalido';
   end if;
   v_op.descricao := '';
+  v_ipo := public.ipo_validar(p_dados->'ipo');
   if p_dados is not null then
     v_op := public.aplicar_cadastro_operacao(v_op, p_dados - 'codigo');
     if v_op.tipo is null then
@@ -2874,10 +2876,10 @@ begin
   end if;
 
   insert into public.operacoes (codigo, responsavel_id, token_civil, token_militar, retencao_horas,
-                                tipo, tipo_outro, acionado_em, local_endereco, local_lat, local_lng, descricao)
+                                tipo, tipo_outro, acionado_em, local_endereco, local_lat, local_lng, descricao, ipo)
   values (v_op.codigo, auth.uid(), public.gerar_token(), public.gerar_token(), p_retencao_horas,
           v_op.tipo, v_op.tipo_outro, v_op.acionado_em, v_op.local_endereco, v_op.local_lat, v_op.local_lng,
-          coalesce(v_op.descricao, ''))
+          coalesce(v_op.descricao, ''), v_ipo)
   returning * into v_op;
 
   return row_to_json(v_op);
@@ -2893,6 +2895,7 @@ as $$
 declare
   v_nome text := public.nome_responsavel_atual();
   v_op public.operacoes%rowtype;
+  v_ipo jsonb;
 begin
   if v_nome is null or not public.dono_operacao(p_operacao) then
     raise exception 'sem_permissao';
@@ -2901,9 +2904,10 @@ begin
   if not found then
     raise exception 'sem_permissao';
   end if;
+  v_ipo := public.ipo_validar(coalesce(p_dados->'ipo', v_op.ipo));
   v_op := public.aplicar_cadastro_operacao(v_op, p_dados);
   update public.operacoes
-     set codigo = v_op.codigo, tipo = v_op.tipo, tipo_outro = v_op.tipo_outro, acionado_em = v_op.acionado_em,
+     set ipo = v_ipo, codigo = v_op.codigo, tipo = v_op.tipo, tipo_outro = v_op.tipo_outro, acionado_em = v_op.acionado_em,
          local_endereco = v_op.local_endereco, local_lat = v_op.local_lat, local_lng = v_op.local_lng,
          descricao = coalesce(v_op.descricao, ''), atualizado_em = now(), atualizado_por_nome = v_nome
    where id = p_operacao
@@ -2929,7 +2933,10 @@ create table if not exists public.vitimas (
   criado_por_nome     text not null,
   criado_em           timestamptz not null default now(),
   atualizado_em       timestamptz not null default now(),
-  atualizado_por_nome text
+  atualizado_por_nome text,
+  nascimento          text check (nascimento is null or char_length(nascimento) <= 20),
+  sexo                text check (sexo is null or sexo in ('M', 'F')),
+  origem              text check (origem is null or char_length(origem) <= 120)
 );
 create index if not exists vitimas_operacao_idx on public.vitimas (operacao_id, criado_em);
 
@@ -2984,6 +2991,9 @@ begin
   if p_dados ? 'caracteristicas' then v.caracteristicas := btrim(coalesce(p_dados->>'caracteristicas', '')); end if;
   if p_dados ? 'roupas' then v.roupas := btrim(coalesce(p_dados->>'roupas', '')); end if;
   if p_dados ? 'observacoes' then v.observacoes := btrim(coalesce(p_dados->>'observacoes', '')); end if;
+  if p_dados ? 'nascimento' then v.nascimento := nullif(btrim(coalesce(p_dados->>'nascimento', '')), ''); end if;
+  if p_dados ? 'sexo' then v.sexo := nullif(btrim(coalesce(p_dados->>'sexo', '')), ''); end if;
+  if p_dados ? 'origem' then v.origem := nullif(btrim(regexp_replace(coalesce(p_dados->>'origem', ''), '\s+', ' ', 'g')), ''); end if;
   if p_dados ? 'idade' then
     if coalesce(jsonb_typeof(p_dados->'idade'), 'null') = 'null' then
       v.idade := null;
@@ -3004,6 +3014,9 @@ begin
   if char_length(v.caracteristicas) > 1000 or char_length(v.roupas) > 1000 or char_length(v.observacoes) > 2000 then
     raise exception 'dados_invalidos';
   end if;
+  if (v.sexo is not null and v.sexo not in ('M', 'F')) or char_length(coalesce(v.nascimento, '')) > 20 or char_length(coalesce(v.origem, '')) > 120 then
+    raise exception 'dados_invalidos';
+  end if;
 
   v.atualizado_em := now();
   v.atualizado_por_nome := v_nome_resp;
@@ -3011,7 +3024,7 @@ begin
     insert into public.vitimas select v.*;
   else
     update public.vitimas set nome = v.nome, idade = v.idade, caracteristicas = v.caracteristicas, roupas = v.roupas,
-           observacoes = v.observacoes, atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+           observacoes = v.observacoes, nascimento = v.nascimento, sexo = v.sexo, origem = v.origem, atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
      where id = v.id;
   end if;
   return row_to_json(v);
@@ -7173,6 +7186,73 @@ $$;
 revoke execute on function public.salvar_ipo_operacao(uuid, jsonb) from public, anon;
 grant execute on function public.salvar_ipo_operacao(uuid, jsonb) to authenticated;
 
+create or replace function public.ipo_validar(p_ipo jsonb)
+returns jsonb
+language plpgsql immutable set search_path = public
+as $$
+begin
+  p_ipo := coalesce(p_ipo, '{}'::jsonb);
+  if jsonb_typeof(p_ipo) <> 'object' or length(p_ipo::text) > 30000 then
+    raise exception 'dados_invalidos';
+  end if;
+  return p_ipo;
+end;
+$$;
+
+revoke execute on function public.ipo_validar(jsonb) from public, anon, authenticated;
+
+-- Procedimentos, recursos e desdobramentos da operação entram no diário (categoria operação).
+-- Procedimento: ref_id guarda a chave do procedimento (scuba, livre, rede, superficie, margens, aeronave).
+create or replace function public.diario_registrar_ipo(p_operacao uuid, p_ocorrido_em timestamptz, p_tipo text, p_chave text, p_texto text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_texto text := btrim(coalesce(p_texto, ''));
+  v_chave text := nullif(btrim(coalesce(p_chave, '')), '');
+  v_titulo text;
+  v public.diario%rowtype;
+  v_op public.operacoes%rowtype;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if p_tipo = 'procedimento' then
+    if v_chave not in ('scuba', 'livre', 'rede', 'superficie', 'margens', 'aeronave') then
+      raise exception 'procedimento_invalido';
+    end if;
+    v_titulo := 'Procedimento de busca';
+  elsif p_tipo = 'recurso' then
+    v_chave := null;
+    v_titulo := 'Recurso empregado';
+  elsif p_tipo = 'desdobramento' then
+    v_chave := null;
+    v_titulo := 'Desdobramento';
+  else
+    raise exception 'tipo_invalido';
+  end if;
+  if v_texto = '' then
+    raise exception 'texto_obrigatorio';
+  end if;
+  if char_length(v_texto) > 4000 then
+    raise exception 'texto_longo';
+  end if;
+  if p_ocorrido_em is null or p_ocorrido_em > now() + interval '2 minutes'
+     or p_ocorrido_em < coalesce(least(v_op.acionado_em, v_op.criada_em), v_op.criada_em) - interval '7 days' then
+    raise exception 'data_invalida';
+  end if;
+  insert into public.diario (operacao_id, ocorrido_em, origem, categoria, tipo, titulo, detalhe, ref_id, autor_id, autor_nome)
+  values (p_operacao, least(p_ocorrido_em, now()), 'manual', 'operacao', p_tipo, v_titulo, v_texto, v_chave, auth.uid(), v_nome)
+  returning * into v;
+  return row_to_json(v);
+end;
+$$;
+
+revoke execute on function public.diario_registrar_ipo(uuid, timestamptz, text, text, text) from public, anon;
+grant execute on function public.diario_registrar_ipo(uuid, timestamptz, text, text, text) to authenticated;
+
 create or replace function public.relatorio_operacao(p_operacao uuid)
 returns json
 language plpgsql stable security definer set search_path = public
@@ -7205,7 +7285,8 @@ begin
         join public.responsaveis r on r.user_id = x.user_id), '[]'::json),
     'vitimas', coalesce((
       select json_agg(json_build_object('id', t.id, 'nome', t.nome, 'idade', t.idade, 'caracteristicas', t.caracteristicas,
-                                        'roupas', t.roupas, 'observacoes', t.observacoes, 'foto_caminho', t.foto_caminho) order by t.criado_em)
+                                        'roupas', t.roupas, 'observacoes', t.observacoes, 'foto_caminho', t.foto_caminho,
+                                        'nascimento', t.nascimento, 'sexo', t.sexo, 'origem', t.origem) order by t.criado_em)
         from public.vitimas t where t.operacao_id = p_operacao), '[]'::json),
     'participantes', coalesce((
       select json_agg(json_build_object('id', p.id, 'nome', p.nome, 'tipo', p.tipo,
@@ -7253,7 +7334,7 @@ begin
     'diario', coalesce((
       select json_agg(json_build_object('id', d.id, 'ocorrido_em', d.ocorrido_em, 'origem', d.origem, 'categoria', d.categoria,
                'tipo', d.tipo, 'nivel', d.nivel, 'titulo', d.titulo, 'detalhe', d.detalhe, 'autor_nome', d.autor_nome,
-               'lat', d.lat, 'lng', d.lng, 'versao', d.versao, 'editado_em', d.editado_em, 'editado_por_nome', d.editado_por_nome)
+               'lat', d.lat, 'lng', d.lng, 'ref_id', d.ref_id, 'versao', d.versao, 'editado_em', d.editado_em, 'editado_por_nome', d.editado_por_nome)
                order by d.ocorrido_em, d.id)
         from public.diario d where d.operacao_id = p_operacao), '[]'::json),
     'relatorios_anteriores', coalesce((

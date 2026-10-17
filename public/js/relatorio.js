@@ -28,6 +28,14 @@
     operacao: 'Operação', setor: 'Setor', deslocamento: 'Deslocamento', chegada: 'Chegada', encontro: 'Encontro',
     alerta: 'Alerta', pessoa: 'Pessoas', observacao: 'Observação', documento: 'Documento',
   };
+  // Registros do IPO no diário (categoria operação): procedimento, recurso e desdobramento.
+  var TIPOS_IPO = { procedimento: 'Procedimento de busca', recurso: 'Recurso empregado', desdobramento: 'Desdobramento' };
+  var TIPOS_NOVOS = [
+    ['observacao', 'Observação'],
+    ['procedimento', 'Procedimento de busca sendo realizado'],
+    ['recurso', 'Recurso empregado (CB deslocado)'],
+    ['desdobramento', 'Desdobramento do dia'],
+  ];
   var RESULTADOS = [
     ['localizada_viva', 'Vítima localizada com vida'],
     ['localizada_obito', 'Vítima localizada em óbito'],
@@ -107,7 +115,7 @@
       filtros.appendChild(UI.el('button', { classe: 'btn btn-pequeno' + (c[0] === 'todas' ? ' btn-ativo' : ''), type: 'button', 'data-cat': c[0],
         'aria-pressed': String(c[0] === 'todas'), texto: c[1], onclick: function () { diario.filtro = c[0]; render(); } }));
     });
-    var btnNova = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-nova', texto: '+ Observação', onclick: function () { formObservacao(null); } });
+    var btnNova = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-nova', texto: '+ Novo registro', onclick: function () { formObservacao(null); } });
     var btnAtualizar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Atualizar', onclick: function () { recarregar(); } });
     var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatório final (PDF)', onclick: function () { fechar(); abrirRelatorio(op); } });
 
@@ -169,6 +177,17 @@
     await recarregar();
   }
 
+  function rotuloProcedimento(chave) {
+    var p = (window.Ipo && window.Ipo.PROCEDIMENTOS || []).filter(function (x) { return x[0] === chave; })[0];
+    return p ? p[1] : chave;
+  }
+
+  function tituloDoRegistro(e) {
+    if (e.tipo === 'procedimento') return 'Procedimento de busca: ' + rotuloProcedimento(e.ref_id);
+    if (TIPOS_IPO[e.tipo]) return TIPOS_IPO[e.tipo];
+    return e.origem === 'manual' ? 'Observação' : e.titulo;
+  }
+
   function itemDiario(e) {
     var manual = e.origem === 'manual';
     var acoes = UI.el('div', { classe: 'diario-item-acoes' }, [
@@ -181,7 +200,7 @@
       UI.el('div', { classe: 'diario-corpo' }, [
         UI.el('div', { classe: 'diario-cabeca' }, [
           UI.el('span', { classe: 'selo diario-cat', texto: ROTULO_CAT[e.categoria] || e.categoria }),
-          UI.el('strong', { texto: manual ? 'Observação' : e.titulo }),
+          UI.el('strong', { texto: tituloDoRegistro(e) }),
         ]),
         e.detalhe ? UI.el('p', { classe: 'diario-detalhe', texto: e.detalhe }) : null,
         UI.el('small', { classe: 'muted', texto: (manual ? 'Escrita por ' : 'Registrado: ') + e.autor_nome +
@@ -204,16 +223,32 @@
 
   function formObservacao(e) {
     var op = diario.op;
+    var tipo = e && TIPOS_IPO[e.tipo] ? e.tipo : 'observacao';
     var quando = UI.el('input', { classe: 'campo', id: 'obs-quando', type: 'datetime-local', required: true, max: paraCampo(C.agora()), value: paraCampo(e ? e.ocorrido_em : C.agora()) });
-    var texto = UI.el('textarea', { classe: 'campo', id: 'obs-texto', rows: '5', maxlength: '4000', placeholder: 'O que aconteceu, quem estava envolvido, decisões tomadas…' });
+    var escolha = UI.el('select', { classe: 'campo', id: 'obs-tipo', disabled: e ? true : null }, TIPOS_NOVOS.map(function (t) {
+      return UI.el('option', { value: t[0], selected: t[0] === tipo ? true : null, texto: t[1] });
+    }));
+    var procedimento = UI.el('select', { classe: 'campo', id: 'obs-procedimento', disabled: e ? true : null },
+      [UI.el('option', { value: '', texto: '— escolha —' })].concat(window.Ipo.PROCEDIMENTOS.map(function (p) {
+        return UI.el('option', { value: p[0], selected: e && e.ref_id === p[0] ? true : null, texto: p[1] });
+      })));
+    var grupoProc = UI.el('div', { classe: 'grupo', hidden: tipo !== 'procedimento' }, [
+      UI.el('label', { classe: 'rotulo', for: 'obs-procedimento', texto: 'Procedimento' }), procedimento]);
+    escolha.addEventListener('change', function () { grupoProc.hidden = escolha.value !== 'procedimento'; });
+    var dicas = { observacao: 'O que aconteceu, quem estava envolvido, decisões tomadas…', procedimento: 'Onde e como foi feito, equipe, ponto de início…',
+      recurso: 'Ex.: ABS 0015/3º BBM — 2 militares em solo', desdobramento: 'O que foi feito e o que se apurou neste dia da operação' };
+    var texto = UI.el('textarea', { classe: 'campo', id: 'obs-texto', rows: '5', maxlength: '4000', placeholder: dicas[tipo] });
     texto.value = e ? e.detalhe : '';
+    escolha.addEventListener('change', function () { texto.placeholder = dicas[escolha.value] || dicas.observacao; });
     var erro = UI.el('p', { classe: 'erro-form', hidden: true });
     var salvar = UI.el('button', { classe: 'btn btn-primario', type: 'submit', texto: e ? 'Salvar edição' : 'Adicionar ao diário' });
     var form = UI.el('form', { classe: 'form-observacao', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: e ? 'Editar observação' : 'Nova observação' }),
-      e ? UI.el('p', { classe: 'muted', texto: 'Escrita por ' + e.autor_nome + '. A versão atual fica guardada no histórico.' }) : null,
+      UI.el('h2', { id: 'modal-titulo', texto: e ? (TIPOS_IPO[e.tipo] ? 'Editar registro' : 'Editar observação') : 'Novo registro no diário' }),
+      e ? UI.el('p', { classe: 'muted', texto: 'Escrito por ' + e.autor_nome + '. A versão atual fica guardada no histórico.' }) : null,
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-tipo', texto: 'Tipo do registro' }), escolha]),
+      grupoProc,
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-quando', texto: 'Data e hora do fato' }), quando]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-texto', texto: 'Observação' }), texto]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-texto', texto: 'Texto' }), texto]),
       erro,
       UI.el('div', { classe: 'modal-acoes' }, [
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirDiario(op); } }),
@@ -226,16 +261,20 @@
       ev.preventDefault();
       erro.hidden = true;
       var iso = deCampo(quando.value);
+      var novoTipo = escolha.value;
       if (!iso) { erro.textContent = 'Informe a data e a hora.'; erro.hidden = false; quando.focus(); return; }
       if (C.paraMs(iso) > C.agora() + 60000) { erro.textContent = 'A data e a hora não podem estar no futuro.'; erro.hidden = false; quando.focus(); return; }
-      if (!texto.value.trim()) { erro.textContent = 'Escreva a observação.'; erro.hidden = false; texto.focus(); return; }
+      if (!e && novoTipo === 'procedimento' && !procedimento.value) { erro.textContent = 'Escolha o procedimento de busca.'; erro.hidden = false; procedimento.focus(); return; }
+      if (!texto.value.trim()) { erro.textContent = novoTipo === 'observacao' || e ? 'Escreva a observação.' : 'Escreva o texto do registro.'; erro.hidden = false; texto.focus(); return; }
       salvar.disabled = true;
       try {
-        var r = e
-          ? await C.rpc('diario_editar', { p_id: e.id, p_ocorrido_em: iso, p_texto: texto.value })
-          : await C.rpc('diario_adicionar', { p_operacao: op.id, p_ocorrido_em: iso, p_texto: texto.value });
+        var r;
+        if (e) r = await C.rpc('diario_editar', { p_id: e.id, p_ocorrido_em: iso, p_texto: texto.value });
+        else if (novoTipo === 'observacao') r = await C.rpc('diario_adicionar', { p_operacao: op.id, p_ocorrido_em: iso, p_texto: texto.value });
+        else r = await C.rpc('diario_registrar_ipo', { p_operacao: op.id, p_ocorrido_em: iso, p_tipo: novoTipo,
+          p_chave: novoTipo === 'procedimento' ? procedimento.value : null, p_texto: texto.value });
         diario.itens.set(r.id, r);
-        UI.aviso(e ? 'Observação editada.' : 'Observação adicionada ao diário.', 'ok');
+        UI.aviso(e ? 'Registro editado.' : novoTipo === 'observacao' ? 'Observação adicionada ao diário.' : 'Registro adicionado ao diário.', 'ok');
         fechar();
         abrirDiario(op);
       } catch (x) {

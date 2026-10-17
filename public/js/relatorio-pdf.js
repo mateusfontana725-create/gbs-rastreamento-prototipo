@@ -438,7 +438,7 @@
       out.push({ text: diaExtenso(dia.t) + '  ·  ' + dia.itens.length + ' registro(s)', style: 'dia', headlineLevel: 1 });
       out.push(tabela(['Hora', 'Categoria', 'Registro', 'Por'], dia.itens.map(function (e) {
         var obs = e.origem === 'manual';
-        var corpo = [{ text: obs ? 'Observação' : e.titulo, style: 'td', bold: true }];
+        var corpo = [{ text: e.tipo === 'procedimento' ? 'Procedimento de busca: ' + nomeProcedimento(e.ref_id) : obs ? 'Observação' : e.titulo, style: 'td', bold: true }];
         if (!vazio(e.detalhe)) corpo.push({ text: e.detalhe, style: obs ? 'td' : 'tdSuave' });
         if (obs && e.editado_em) corpo.push({ text: 'Editada por ' + txt(e.editado_por_nome) + ' em ' + dataHora(e.editado_em) + ' (versão ' + e.versao + ')', style: 'tdNota' });
         if (e.lat != null) corpo.push({ text: coord(e.lat, e.lng), style: 'tdNota' });
@@ -484,12 +484,23 @@
     var marcados = [].concat(valores || []);
     return lista.map(function (x) { return (marcados.indexOf(x[0]) >= 0 ? '(X) ' : '(   ) ') + x[1]; });
   }
+  // Registros do diário que vêm do IPO (procedimento, recurso, desdobramento).
+  function registrosIpo(d, tipo) {
+    return (d.diario || []).filter(function (e) { return e.tipo === tipo; });
+  }
+  function nomeProcedimento(chave) {
+    var p = window.Ipo.PROCEDIMENTOS.filter(function (x) { return x[0] === chave; })[0];
+    return p ? p[1] : txt(chave);
+  }
+  function listaIpo(linhas) {
+    return linhas.length ? { stack: linhas.map(function (t) { return { text: t, style: 'corpo' }; }), margin: [0, 0, 0, 10] } : nota('Nenhum registro no diário.');
+  }
   function secaoIpo(d) {
     var op = d.operacao;
     var i = window.Ipo.normalizarIpo(op.ipo || {});
     var sexo = { M: 'Masculino', F: 'Feminino' };
-    var vitimas = i.vitimas.length
-      ? i.vitimas.map(function (v) {
+    var vitimas = (d.vitimas || []).length
+      ? d.vitimas.map(function (v) {
         return ficha([
           ['VÍTIMA', txt(v.nome) + (v.nascimento ? ' (nascim: ' + v.nascimento + ')' : '')],
           ['Sexo/Idade', txt(sexo[v.sexo]) + ' / ' + (v.idade != null ? v.idade + ' anos' : '—')],
@@ -497,44 +508,49 @@
         ]);
       })
       : [nota('Nenhuma vítima informada.')];
-    var out = [
+    var procedimentos = registrosIpo(d, 'procedimento');
+    var recursos = registrosIpo(d, 'recurso');
+    var desdobramentos = registrosIpo(d, 'desdobramento');
+    var marcadosProc = procedimentos.map(function (e) { return e.ref_id; });
+    return [
       { text: 'IPO: ' + i.destinatarios, style: 'h2', pageBreak: 'before', margin: [0, 0, 0, 2] },
       { text: 'Informe Padrão de Ocorrência - IPO', style: 'h1', margin: [0, 0, 0, 4] },
       { text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.', style: 'nota', margin: [0, 0, 0, 12] },
       ficha([
         ['Natureza', txt(i.natureza)],
-        ['Localidade/Município/Região', txt(i.localidade)],
+        ['Localidade/Município/Região', txt(op.local_endereco)],
         ['Nome do solicitante', txt(i.solicitante_nome) + (i.solicitante_documento ? ' (' + i.solicitante_documento + ')' : '')],
       ]),
       subtitulo('Vítima(s)'),
     ].concat(vitimas, [
       ficha([
-        ['Início das operações', txt(i.inicio_operacoes, '—')],
-        ['Acionamento do CB', op.acionado_em ? dataHora(op.acionado_em) : '—'],
-        ['Coordenadas de referência (último avistamento)', txt(i.coordenadas_referencia, coord(op.local_lat, op.local_lng))],
+        ['Início das operações (acionamento do CB)', op.acionado_em ? dataHora(op.acionado_em) : '—'],
+        ['Coordenadas de referência (último avistamento)', txt(i.coordenadas_referencia)],
         ['Desaparecimento (último horário visto)', txt(i.desaparecimento)],
         ['Nº de pessoas perdidas', i.pessoas_perdidas != null ? String(i.pessoas_perdidas) : '—'],
       ]),
       subtitulo('Tipo de meio líquido'),
-      { stack: marcas(window.Ipo.MEIOS, i.meio_liquido ? [i.meio_liquido] : []).map(function (t) { return { text: t, style: 'corpo' }; }), margin: [0, 0, 0, 10] },
+      listaIpo(marcas(window.Ipo.MEIOS, i.meio_liquido ? [i.meio_liquido] : [])),
       subtitulo('Buscas preliminares (casas de parentes, hospitais etc.)?'),
-      { stack: marcas(window.Ipo.BUSCAS, i.buscas_preliminares ? [i.buscas_preliminares] : []).map(function (t) { return { text: t, style: 'corpo' }; }), margin: [0, 0, 0, 10] },
+      listaIpo(marcas(window.Ipo.BUSCAS, i.buscas_preliminares ? [i.buscas_preliminares] : [])),
       subtitulo('Possibilidade real de vida?'),
-      { stack: marcas(window.Ipo.VIDA, i.possibilidade_vida ? [i.possibilidade_vida] : []).map(function (t) { return { text: t, style: 'corpo' }; }), margin: [0, 0, 0, 10] },
+      listaIpo(marcas(window.Ipo.VIDA, i.possibilidade_vida ? [i.possibilidade_vida] : [])),
       subtitulo('Procedimentos de busca sendo realizados'),
-      { stack: marcas(window.Ipo.PROCEDIMENTOS, i.procedimentos).map(function (t) { return { text: t, style: 'corpo' }; }), margin: [0, 0, 0, 10] },
+      listaIpo(marcas(window.Ipo.PROCEDIMENTOS, marcadosProc)),
+      listaIpo(procedimentos.map(function (e) {
+        return hora(e.ocorrido_em) + ' · ' + nomeProcedimento(e.ref_id) + (vazio(e.detalhe) ? '' : ' — ' + e.detalhe);
+      })),
       subtitulo('Contexto / histórico / cenário do desaparecimento'),
-      { text: txt(i.contexto), style: 'corpo', margin: [0, 0, 0, 10] },
+      { text: txt(op.descricao), style: 'corpo', margin: [0, 0, 0, 10] },
       subtitulo('Recursos CB deslocados e sendo utilizados'),
-      { text: txt(i.recursos), style: 'corpo', margin: [0, 0, 0, 10] },
+      listaIpo(recursos.map(function (e) { return dataHora(e.ocorrido_em) + ' · ' + e.detalhe; })),
       ficha([['Quantidade de BMs diretamente envolvidos na resposta', i.bms_envolvidos != null ? String(i.bms_envolvidos) : '—']]),
       subtitulo('Desdobramentos / situação atual'),
-      { text: txt(i.desdobramentos), style: 'corpo', margin: [0, 0, 0, 10] },
+      listaIpo(desdobramentos.map(function (e) { return dataHora(e.ocorrido_em) + ' · ' + e.detalhe; })),
       subtitulo('Imagens anexas junto a esta mensagem?'),
-      { stack: marcas([['sim', 'Sim'], ['nao', 'Não']], i.imagens_anexas === true ? ['sim'] : i.imagens_anexas === false ? ['nao'] : []).map(function (t) { return { text: t, style: 'corpo' }; }), margin: [0, 0, 0, 10] },
+      listaIpo(marcas([['sim', 'Sim'], ['nao', 'Não']], i.imagens_anexas === true ? ['sim'] : i.imagens_anexas === false ? ['nao'] : [])),
       ficha([['Responsável pelas informações', txt(i.responsavel_informacoes)]]),
     ]);
-    return out;
   }
 
   function montarDocumento(d, recursos) {

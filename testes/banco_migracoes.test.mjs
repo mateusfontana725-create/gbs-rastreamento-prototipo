@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -514,6 +514,40 @@ chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_ipo_operacao', { p_op
 chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_ipo_operacao', { p_operacao: opSoR1.id, p_ipo: { texto: 'x'.repeat(31000) } }))), 'IPO grande demais é recusado');
 const relIpo = await rpc(resp1, 'relatorio_operacao', { p_operacao: opSoR1.id });
 chk(relIpo.operacao.ipo && relIpo.operacao.ipo.natureza === 'BUSCA TERRESTRE/AQUÁTICA – PESSOA', 'o relatório devolve os dados do IPO');
+console.log('IPO no cadastro (migração 021)');
+const ipoAgora = new Date(Date.now() - 3600e3).toISOString();
+const opIpo = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP IPO CADASTRO', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'aquatica', acionado_em: ipoAgora, local_endereco: 'Represa privada', descricao: 'Contexto do caso',
+  ipo: { destinatarios: '2 CRBM / 3 BBM', natureza: 'BUSCA AQUÁTICA – PESSOA', meio_liquido: 'lago', pessoas_perdidas: 1, bms_envolvidos: 5 } }) });
+chk(opIpo.ipo.natureza === 'BUSCA AQUÁTICA – PESSOA' && opIpo.ipo.bms_envolvidos === 5 && opIpo.local_endereco === 'Represa privada', 'criar com o IPO grava o IPO e o endereço no cadastro', opIpo.ipo);
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'OP IPO RUIM', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'aquatica', acionado_em: ipoAgora, ipo: ['x'] }) }))), 'IPO que não é objeto: recusado ao criar');
+const ipoTroca = await rpc(resp1, 'atualizar_operacao', { p_operacao: opIpo.id, p_dados: JSON.stringify({ ipo: { natureza: 'BUSCA AQUÁTICA 2' } }) });
+chk(ipoTroca.ipo.natureza === 'BUSCA AQUÁTICA 2', 'editar o cadastro troca o IPO');
+const ipoMantem = await rpc(resp1, 'atualizar_operacao', { p_operacao: opIpo.id, p_dados: JSON.stringify({ descricao: 'Contexto novo' }) });
+chk(ipoMantem.ipo.natureza === 'BUSCA AQUÁTICA 2' && ipoMantem.descricao === 'Contexto novo', 'editar outro campo do cadastro mantém o IPO');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'atualizar_operacao', { p_operacao: opIpo.id, p_dados: JSON.stringify({ ipo: { natureza: 'x' } }) }))), 'responsável de outra operação não altera o IPO pelo cadastro');
+
+const vitIpo = await rpc(resp1, 'salvar_vitima', { p_operacao: opIpo.id, p_id: null, p_dados: JSON.stringify({ nome: 'Eduardo Dias', idade: 18, nascimento: '29/10/2008', sexo: 'M', origem: 'Bandeirantes' }) });
+chk(vitIpo.sexo === 'M' && vitIpo.nascimento === '29/10/2008' && vitIpo.origem === 'Bandeirantes', 'ficha de vítima guarda nascimento, sexo e origem (vítima do IPO)', vitIpo);
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_vitima', { p_operacao: opIpo.id, p_id: vitIpo.id, p_dados: JSON.stringify({ sexo: 'X' }) }))), 'sexo fora de M/F: recusado');
+const vitEd = await rpc(resp1, 'salvar_vitima', { p_operacao: opIpo.id, p_id: vitIpo.id, p_dados: JSON.stringify({ origem: 'Andirá' }) });
+chk(vitEd.origem === 'Andirá' && vitEd.sexo === 'M', 'editar a ficha mantém sexo e nascimento');
+
+const dIpo = (tipo, chave, texto, quando) => rpc(resp1, 'diario_registrar_ipo', { p_operacao: opIpo.id, p_ocorrido_em: quando || ipoAgora, p_tipo: tipo, p_chave: chave, p_texto: texto });
+const procScuba = await dIpo('procedimento', 'scuba', 'Mergulho no ponto do sonar');
+chk(procScuba.tipo === 'procedimento' && procScuba.ref_id === 'scuba' && procScuba.categoria === 'operacao' && procScuba.origem === 'manual', 'procedimento de busca entra no diário com a chave', procScuba);
+chk(/procedimento_invalido/.test(await erroDe(dIpo('procedimento', 'drone', 'x'))), 'procedimento fora da lista: recusado');
+chk(/texto_obrigatorio/.test(await erroDe(dIpo('recurso', null, '   '))), 'recurso sem descrição: recusado');
+chk(/tipo_invalido/.test(await erroDe(dIpo('outro', null, 'x'))), 'tipo desconhecido: recusado');
+chk(/data_invalida/.test(await erroDe(dIpo('desdobramento', null, 'Dia 1', new Date(Date.now() + 3 * 3600e3).toISOString()))), 'desdobramento no futuro: recusado');
+const recIpo = await dIpo('recurso', null, 'ABS 0015/3º BBM');
+const desIpo = await dIpo('desdobramento', null, 'Dia 1 - busca terrestre em solo');
+chk(recIpo.tipo === 'recurso' && desIpo.tipo === 'desdobramento', 'recurso e desdobramento entram no diário');
+chk(/sem_permissao/.test(await erroDe(rpc(anA, 'diario_registrar_ipo', { p_operacao: opIpo.id, p_ocorrido_em: ipoAgora, p_tipo: 'recurso', p_chave: null, p_texto: 'x' }))), 'participante não registra recurso no diário');
+const relIpo2 = await rpc(resp1, 'relatorio_operacao', { p_operacao: opIpo.id });
+chk(relIpo2.diario.some((d) => d.tipo === 'procedimento' && d.ref_id === 'scuba') && relIpo2.vitimas.some((v) => v.sexo === 'M' && v.origem === 'Andirá'), 'relatório traz procedimentos (com chave) e as vítimas com o IPO', { d: relIpo2.diario.length, v: relIpo2.vitimas });
+const relEd = await rpc(resp1, 'diario_editar', { p_id: procScuba.id, p_ocorrido_em: ipoAgora, p_texto: 'Mergulho SCUBA, 2º ponto' });
+chk(relEd.ref_id === 'scuba' && relEd.tipo === 'procedimento' && relEd.detalhe === 'Mergulho SCUBA, 2º ponto', 'procedimento editado mantém a chave e o tipo');
+
 const pdfCam = op.id + '/44444444-4444-4444-8444-444444444444.pdf';
 
 chk(/arquivo_nao_enviado/.test(await erroDe(rpc(resp1, 'registrar_relatorio', { p_operacao: op.id, p_caminho: pdfCam, p_paginas: 12, p_bytes: 1000, p_sha256: 'a'.repeat(64) }))), 'registrar relatório sem o PDF no Storage: recusado');
@@ -560,5 +594,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–020 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–021 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

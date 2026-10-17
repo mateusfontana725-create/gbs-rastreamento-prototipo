@@ -944,12 +944,38 @@
   function abrirDashboardOperacao() {
     if (!est.op || !window.Dashboard) return;
     var corpo = UI.el('div', { classe: 'estudo-operacao', id: 'estudo-operacao' });
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao modal-dashboard' }, [
+      UI.el('div', { classe: 'modal-dashboard-topo' }, [
+        UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Fechar', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
       corpo,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
-    window.Dashboard.operacao(est.op, corpo);
+    window.Dashboard.operacao(est.op, corpo, { resumo: resumoOperacao });
+  }
+
+  // Retrato do que o painel já tem carregado, para o dashboard da operação (sem nova consulta ao banco):
+  // trilhas filtradas (GPS.trilha), grupo de cada pessoa, setores com vértices e área, e ocorrências.
+  function resumoOperacao() {
+    var participantes = Array.from(est.participantes.values()).map(function (p) {
+      var tr = window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp(), objetos: true });
+      var g = grupoDoParticipante(p);
+      return {
+        id: p.id, tipo: tipoDe(p.dados), grupo: g ? { id: g.id, nome: g.nome, cor: g.cor } : null,
+        segmentos: tr.segmentos.map(function (seg) { return seg.map(function (pt) { return { lat: pt.lat, lng: pt.lng, t: pt.t }; }); }),
+      };
+    });
+    var setores = Array.from(est.setores.values()).map(function (x) {
+      return { id: x.d.id, nome: x.d.nome, areaM2: areaSetorM2(x.d), vertices: verticesSetor(x.d) };
+    });
+    var o = { ajuda: 0, PISTA: 0, VESTIGIO: 0, OBJETO: 0, OBSTACULO: 0, ordens: 0, fotos: est.fotos.size, pontos: est.pontosInt.size, retornosAtrasados: 0 };
+    est.mensagens.forEach(function (m) {
+      if (m.categoria === 'AJUDA' || m.resposta === 'PRECISO_AJUDA') o.ajuda++;
+      if (m.direcao === 'entrada' && m.categoria && o[m.categoria] != null && m.categoria !== 'AJUDA') o[m.categoria]++;
+      if (m.direcao !== 'entrada') o.ordens++;
+    });
+    est.alertas.forEach(function (a) { if (a.tipo === 'retorno_atrasado') o.retornosAtrasados++; });
+    return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: o };
   }
 
   function abrirDadosOperacao() {
@@ -3389,13 +3415,13 @@
   }
 
   function avisoClicavel(texto, acao) {
-    UI.aviso(texto, 'msg', 10000);
-    var a = $('avisos').lastElementChild;
+    var a = UI.aviso(texto, 'msg');
     if (!a) return;
     a.classList.add('clicavel');
     a.setAttribute('tabindex', '0');
     a.addEventListener('click', function () { if (a.parentNode) a.parentNode.removeChild(a); acao(); });
-    a.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); a.click(); } });
+    // Enter no botão de fechar só fecha: não abre a conversa
+    a.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && ev.target === a) { ev.preventDefault(); a.click(); } });
   }
 
   function bipeMensagem() {

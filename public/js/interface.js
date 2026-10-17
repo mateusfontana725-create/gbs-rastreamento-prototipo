@@ -22,13 +22,41 @@
     return e;
   }
 
+  // Avisos (toasts): curtos e com botão de fechar. Quem chama pode pedir menos tempo, nunca mais que
+  // 5 s (8 s para erro). Com o mouse em cima o aviso espera; no toque não (não há "sair de cima").
+  // ms = 'fixo': fica até fechar no × (alertas de segurança que não aparecem em outro lugar).
+  var AVISO_MAX = 5000, AVISO_MAX_ERRO = 8000;
   function aviso(texto, tipo, ms) {
     var raiz = document.getElementById('avisos');
-    if (!raiz) return;
-    var a = el('div', { classe: 'aviso' + (tipo ? ' aviso-' + tipo : ''), role: tipo === 'erro' ? 'alert' : 'status', texto: texto });
+    if (!raiz) return null;
+    var erro = tipo === 'erro', fixo = ms === 'fixo';
+    var dur = fixo ? null : Math.min(ms || (erro ? 6000 : 3500), erro ? AVISO_MAX_ERRO : AVISO_MAX);
+    var timer = null;
+    var a = el('div', { classe: 'aviso' + (tipo ? ' aviso-' + tipo : '') + (fixo ? ' aviso-fixo' : ''), role: erro ? 'alert' : 'status' }, [
+      el('span', { classe: 'aviso-texto', texto: texto }),
+    ]);
+    function fechar() {
+      clearTimeout(timer);
+      if (a.parentNode) a.parentNode.removeChild(a);
+    }
+    a.appendChild(el('button', { classe: 'aviso-fechar', type: 'button', 'aria-label': 'Fechar aviso', title: 'Fechar', texto: '×',
+      onclick: function (ev) { ev.stopPropagation(); fechar(); } }));
+    if (!fixo) {
+      a.addEventListener('pointerenter', function (ev) { if (ev.pointerType === 'mouse') clearTimeout(timer); });
+      a.addEventListener('pointerleave', function (ev) {
+        if (ev.pointerType !== 'mouse') return;
+        clearTimeout(timer);
+        timer = setTimeout(fechar, 2000);
+      });
+      timer = setTimeout(fechar, dur);
+    }
     raiz.appendChild(a);
-    while (raiz.children.length > 3) raiz.removeChild(raiz.firstChild);
-    setTimeout(function () { if (a.parentNode) a.parentNode.removeChild(a); }, ms || (tipo === 'erro' ? 6000 : 3500));
+    // no máximo 3 na tela: sai o mais antigo que não seja fixo
+    while (raiz.children.length > 3) {
+      var velho = raiz.querySelector('.aviso:not(.aviso-fixo)') || raiz.firstChild;
+      raiz.removeChild(velho);
+    }
+    return a;
   }
 
   // Pilha de modais: normalmente só um aberto; opcoes.empilhar abre por cima

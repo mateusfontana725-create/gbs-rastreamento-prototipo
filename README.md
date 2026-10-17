@@ -686,9 +686,19 @@ dado de participante sai do banco nesses painéis.
   (administrador: todas). A escolha fica salva neste navegador.
 - **Cabeçalho:** um único botão **☰ Menu** abre a lista de ações (Painel de estatísticas, Lista de operações,
   Responsáveis, Minha conta, Sair).
-- **Operação → Estudo da operação**: linha do tempo (início das operações → localização da vítima, com o tempo
-  entre os dois; sem localização mostra "em andamento há…"), quatro números (fichas, localizada, distância do ULV,
-  registros do diário), perfis das vítimas em barras e o local (ULV, localizações registradas, setores).
+- **Operação → Dashboard da operação** (janela larga; no celular, uma coluna):
+  - seis números: duração, efetivo (e quantos em campo agora), km percorridos, esforço em pessoa·hora,
+    setores (com a % da área coberta) e se a vítima foi localizada;
+  - **pessoas em campo** ao longo do tempo (uma coluna por intervalo de 15 min a 1 dia), com a hora da
+    localização da vítima marcada;
+  - **vítima**: condição, hora, tempo após o início, distância do ULV e perfis das fichas;
+  - **esforço por grupo** (pessoas, km e horas com GPS) e **cobertura dos setores** (% da área por onde passou
+    alguma trilha, em quadrados de ~30 m, e a última passagem; os menos cobertos primeiro);
+  - **ocorrências**: pedidos de ajuda, pistas, vestígios, objetos, obstáculos, fotos, pontos marcados, ordens
+    enviadas, retornos atrasados e registros no diário.
+  Esforço, setores e ocorrências são calculados no navegador com o que o painel já carregou (trilhas filtradas
+  pelo mesmo critério do mapa). Só a parte da vítima vem do banco (`estudo_operacao`, migração 023); sem ela, o
+  restante aparece mesmo assim.
 - **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro
   registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
 - **Perfil da vítima** = uma lista de seleção na ficha ("Perfil da vítima (para estudos)"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
@@ -699,6 +709,13 @@ dado de participante sai do banco nesses painéis.
   a distância conta para as duas. Ligar a localização à ficha é o próximo passo, se o estudo precisar disso.
 - Exportar os dados para pesquisa **não está implementado**: depende de decisão sobre dados de saúde (LGPD) e de
   aprovação ética, antes de qualquer conjunto de dados sair do sistema.
+
+### Avisos na tela
+
+Os avisos (ex.: "Dados salvos", pedidos de ajuda) têm um **×** para fechar e somem sozinhos em até **5 s**
+(**8 s** para erros e alertas). Com o mouse em cima, o aviso espera; ao tirar o mouse, some em 2 s. Pedidos de
+ajuda continuam também na faixa de alerta. A exceção são **"saiu do setor"** e **"entrou na área de risco"**:
+como só aparecem no aviso, ficam na tela até você fechar no ×.
 
 ### IPO (Informe Padrão de Ocorrência) — é o próprio cadastro da operação
 

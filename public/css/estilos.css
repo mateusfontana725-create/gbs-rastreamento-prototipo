@@ -1909,3 +1909,13 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 
 /* Mapa do civil: cor de grupo na legenda (a cor vem do grupo do próprio participante) */
 .lg-grupo-cor { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid #fff; vertical-align: middle; }
+
+/* ---- avisos: botão de fechar ---- */
+.aviso { display: flex; align-items: flex-start; gap: 10px; }
+.aviso-texto { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.aviso-fechar {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; margin: -6px -8px -6px 0; padding: 0;
+  background: none; border: 0; border-radius: 6px; color: inherit; font-size: 1.4rem; line-height: 1; cursor: pointer; opacity: .75;
+}
+.aviso-fechar:hover, .aviso-fechar:focus-visible { opacity: 1; background: rgba(255, 255, 255, .08); outline: none; }
+@media (pointer: coarse) { .aviso-fechar { width: 44px; height: 44px; margin: -12px -12px -12px 0; } }

@@ -656,7 +656,7 @@
       var agora = f > margem ? 'fora' : f <= 0 ? 'dentro' : antes || 'dentro';
       atual.estadoAlertas[chave] = agora;
       if (antes === 'dentro' && agora === 'fora') {
-        UI.aviso('⚠ ' + nome + ' SAIU do setor ' + s.nome + ' (≈ ' + fmtDist(f) + ' fora).', 'erro', 15000);
+        UI.aviso('⚠ ' + nome + ' SAIU do setor ' + s.nome + ' (≈ ' + fmtDist(f) + ' fora).', 'erro', 'fixo');
         P.alarme();
         registrarAlerta(nome + ' saiu do setor ' + s.nome);
       } else if (antes === 'fora' && agora === 'dentro') {
@@ -673,7 +673,7 @@
       var agora = dd <= raio ? 'dentro' : dd > raio + Math.max(10, (pt.prec || 0) / 2) ? 'fora' : antes || 'fora';
       atual.estadoAlertas[chave] = agora;
       if (agora === 'dentro' && antes !== 'dentro') {
-        UI.aviso('⚠ ' + nome + ' ENTROU na área de risco "' + d.titulo + '" (a ' + fmtDist(dd) + ' do ponto).', 'erro', 15000);
+        UI.aviso('⚠ ' + nome + ' ENTROU na área de risco "' + d.titulo + '" (a ' + fmtDist(dd) + ' do ponto).', 'erro', 'fixo');
         P.alarme();
         registrarAlerta(nome + ' entrou na área de risco ' + d.titulo);
       }

@@ -139,14 +139,42 @@
     var id = function (s) { return pre + '-' + s; };
     var local = op.local_lat != null ? { lat: op.local_lat, lng: op.local_lng } : null;
     var ipo = window.Ipo.normalizarIpo(op.ipo || {});
+    var raiz = null;
 
-    /* ---- sempre: coordenadas, solicitante, natureza e observação ---- */
+    /* ---- local: ou um ponto no mapa, ou só um endereço. Os dois juntos confundiam: o endereço
+       podia ser de outro lugar que o ponto marcado. Por isso a escolha é uma só. ---- */
+    var modoNome = id('local-modo');
+    var modoInicial = !local && op.local_endereco ? 'endereco' : 'mapa';
     var coordInfo = UI.el('span', { classe: 'mono', id: id('ponto-info') });
     var coordTxt = UI.el('input', { classe: 'campo mono', id: id('ponto-txt'), placeholder: 'ou digite: -22.4508, -42.9762 · 23K 708263 7515869' });
     var coordAviso = UI.el('small', { classe: 'muted' });
+    var miniMapaEl = UI.el('div', { classe: 'mini-mapa', id: id('mini-mapa'), role: 'img', 'aria-label': 'Mapa com o ponto da operação' });
+    var miniVazio = UI.el('p', { classe: 'mini-mapa-vazio muted', texto: 'Nenhum ponto marcado ainda. Escolha no mapa, use sua posição ou digite as coordenadas.' });
+    var mapaMini = null, marcadorMini = null;
+
+    function atualizarMiniMapa() {
+      if (!local || !window.L) return;
+      function desenhar() {
+        if (!local) return;
+        if (!mapaMini) {
+          mapaMini = L.map(miniMapaEl, { zoomControl: true, attributionControl: false }).setView([local.lat, local.lng], 15);
+          L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapaMini);
+          marcadorMini = L.marker([local.lat, local.lng]).addTo(mapaMini);
+        } else {
+          marcadorMini.setLatLng([local.lat, local.lng]);
+          mapaMini.setView([local.lat, local.lng], Math.max(mapaMini.getZoom(), 15));
+        }
+        mapaMini.invalidateSize();
+      }
+      // o mapa só tem tamanho quando está visível: desenha depois que o painel aparece
+      if (miniMapaEl.offsetParent) desenhar(); else setTimeout(desenhar, 80);
+    }
     function mostrarLocal() {
       coordInfo.textContent = local ? window.Coords.formatar(local.lat, local.lng, 'dec') : 'nenhum ponto marcado';
       btnLimpar.hidden = !local;
+      miniVazio.hidden = Boolean(local);
+      miniMapaEl.hidden = !local;
+      atualizarMiniMapa();
     }
     coordTxt.addEventListener('input', function () {
       var c = window.Coords.interpretar(coordTxt.value);
@@ -163,19 +191,51 @@
       btnAqui.disabled = false;
       if (!p) { UI.aviso('Não foi possível obter a sua localização agora. Escolha no mapa.', 'erro', 6000); return; }
       local = { lat: p.lat, lng: p.lng };
+      coordTxt.value = '';
       coordAviso.textContent = p.prec ? 'Sua posição (± ' + Math.round(p.prec) + ' m)' : '';
       mostrarLocal();
     } });
-    var btnLimpar = UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Tirar o ponto', onclick: function () { local = null; mostrarLocal(); } });
-    var grupoPonto = UI.el('div', { classe: 'grupo' }, [
-      UI.el('span', { classe: 'rotulo', texto: 'Coordenadas (ponto no mapa)' }),
-      UI.el('div', { classe: 'linha-ponto' }, [coordInfo, btnLimpar]),
-      UI.el('div', { classe: 'acoes-linha' }, [btnMapa, btnAqui]),
-      coordTxt, coordAviso,
+    var btnLimpar = UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Tirar o ponto', onclick: function () { local = null; coordTxt.value = ''; coordAviso.textContent = ''; mostrarLocal(); } });
+    var avisoLegado = op.local_endereco && local
+      ? UI.el('p', { classe: 'nota', texto: 'Este cadastro também tinha um endereço escrito ("' + op.local_endereco + '"). Ao salvar com o ponto no mapa, o endereço é retirado.' })
+      : null;
+    var painelMapa = UI.el('div', { classe: 'cad-local-mapa' }, [
+      UI.el('div', { classe: 'cad-local-controles' }, [
+        UI.el('span', { classe: 'rotulo', texto: 'Ponto da operação' }),
+        UI.el('div', { classe: 'linha-ponto' }, [coordInfo, btnLimpar]),
+        UI.el('div', { classe: 'acoes-linha' }, [btnMapa, btnAqui]),
+        coordTxt, coordAviso, avisoLegado,
+      ]),
+      UI.el('div', { classe: 'cad-local-visual' }, [miniMapaEl, miniVazio]),
     ]);
 
+    var endereco = UI.el('input', { classe: 'campo', id: id('endereco'), maxlength: '300', autocomplete: 'off',
+      placeholder: 'Rua, número, bairro, cidade ou referência', value: op.local_endereco || '' });
+    var painelEndereco = UI.el('div', { classe: 'cad-local-endereco' }, [
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('endereco'), texto: 'Endereço' }), endereco]),
+      UI.el('p', { classe: 'ajuda', texto: 'Sem ponto no mapa, a operação não aparece no mapa e não entra nos cálculos de distância (ULV).' }),
+    ]);
+    var radiosModo = UI.el('div', { classe: 'cad-modo', role: 'radiogroup', 'aria-label': 'Como informar o local' }, [
+      ['mapa', 'Marcar no mapa'], ['endereco', 'Só endereço (sem ponto)'],
+    ].map(function (m) {
+      return UI.el('label', { classe: 'cad-modo-opcao' }, [UI.el('input', { type: 'radio', name: modoNome, value: m[0], checked: modoInicial === m[0] ? true : null }), ' ' + m[1]]);
+    }));
+    function modoAtual() {
+      var r = radiosModo.querySelector('input:checked');
+      return r ? r.value : 'mapa';
+    }
+    function aplicarModo() {
+      var m = modoAtual();
+      painelMapa.hidden = m !== 'mapa';
+      painelEndereco.hidden = m !== 'endereco';
+      if (m === 'mapa') atualizarMiniMapa();
+    }
+    radiosModo.addEventListener('change', aplicarModo);
+    var secaoLocal = secao('Local', 'larg', [radiosModo, painelMapa, painelEndereco]);
+
+    /* ---- ocorrência ---- */
     var solicNome = UI.el('input', { classe: 'campo', id: id('solic-nome'), maxlength: '120', autocomplete: 'off', value: ipo.solicitante_nome });
-    // Natureza: lista de opções; "Outra" abre um campo para descrever
+    // Natureza: lista de opções; "Outros" abre um campo para descrever
     var naturezaConhecida = window.Ipo.NATUREZAS.indexOf(ipo.natureza) >= 0;
     var naturezaSel = UI.el('select', { classe: 'campo', id: id('natureza') }, [UI.el('option', { value: '', texto: '— escolha —' })].concat(
       window.Ipo.NATUREZAS.map(function (n) { return UI.el('option', { value: n, selected: naturezaConhecida && ipo.natureza === n ? true : null, texto: n }); }),
@@ -202,12 +262,10 @@
     desc.value = op.descricao || '';
     var grupoSolic = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-nome'), texto: 'Nome do solicitante' }), solicNome]);
     var grupoNatureza = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('natureza'), texto: 'Natureza' }), naturezaSel, grupoOutraNat]);
-    var grupoDesc = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('descricao'), texto: 'Observação (breve descrição da ocorrência)' }), desc]);
+    var grupoDesc = UI.el('div', { classe: 'grupo cad-largo' }, [UI.el('label', { classe: 'rotulo', for: id('descricao'), texto: 'Observação (breve descrição da ocorrência)' }), desc]);
 
-    /* ---- cadastro completo (painel): o restante do IPO e a localidade ---- */
+    /* ---- cadastro completo (painel): o restante do IPO ---- */
     var acion = UI.el('input', { classe: 'campo', id: id('acionamento'), type: 'datetime-local', value: op.acionado_em ? paraCampoData(op.acionado_em) : '' });
-    var endereco = UI.el('input', { classe: 'campo', id: id('endereco'), maxlength: '300', autocomplete: 'off',
-      placeholder: 'Rua, número, bairro, cidade ou referência', value: op.local_endereco || '' });
     var solicDoc = UI.el('input', { classe: 'campo', id: id('solic-doc'), maxlength: '40', autocomplete: 'off', value: ipo.solicitante_documento });
     var destino = UI.el('input', { classe: 'campo', id: id('destino'), maxlength: '120', autocomplete: 'off', value: ipo.destinatarios });
     var desap = UI.el('input', { classe: 'campo', id: id('desap'), type: 'datetime-local', value: ipo.desaparecimento ? paraCampoData(ipo.desaparecimento) : '' });
@@ -215,7 +273,6 @@
     var bms = UI.el('input', { classe: 'campo', id: id('bms'), type: 'number', min: '0', max: '999', value: ipo.bms_envolvidos != null ? ipo.bms_envolvidos : '' });
     var responsavel = UI.el('input', { classe: 'campo', id: id('resp'), maxlength: '1000', autocomplete: 'off', placeholder: 'Ex.: Sgt. Fulano — equipe GBS', value: ipo.responsavel_informacoes });
     var nomeMeio = id('meio'), nomeBuscas = id('buscas'), nomeVida = id('vida'), nomeImagens = id('imagens');
-    var raiz = null;
     function marcadoEm(nome) {
       var r = raiz.querySelector('input[name="' + nome + '"]:checked');
       return r ? r.value : '';
@@ -227,42 +284,39 @@
     naturezaOutra.addEventListener('input', atualizarMeio);
     atualizarMeio();
 
-    // (só no modo completo: cada campo é um nó do DOM e não pode estar em dois lugares)
-    var elementosCompletos = inicial ? [] : [
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('acionamento'), texto: 'Data e hora do início das operações *' }), acion]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('endereco'), texto: 'Localidade / endereço' }), endereco]),
-      grupoPonto,
-      grupoNatureza,
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-nome'), texto: 'Nome do solicitante' }), solicNome]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-doc'), texto: 'Documento do solicitante (RG/CPF)' }), solicDoc]),
-      ]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('destino'), texto: 'IPO para (destinatários)' }), destino]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('desap'), texto: 'Data e hora do último momento visto' }), desap]),
-      ]),
-      grupoMeio,
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('pessoas'), texto: 'Nº de pessoas perdidas' }), pessoas]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('bms'), texto: 'BMs diretamente envolvidos' }), bms]),
-      ]),
-      radiosCampo(nomeBuscas, 'Buscas preliminares (casas de parentes, hospitais etc.)?', window.Ipo.BUSCAS, ipo.buscas_preliminares),
-      radiosCampo(nomeVida, 'Possibilidade real de vida?', window.Ipo.VIDA, ipo.possibilidade_vida),
-      radiosCampo(nomeImagens, 'Imagens anexas junto a esta mensagem?', [['sim', 'Sim'], ['nao', 'Não']],
-        ipo.imagens_anexas === true ? 'sim' : ipo.imagens_anexas === false ? 'nao' : ''),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('resp'), texto: 'Responsável pelas informações' }), responsavel]),
-    ];
+    var grupoAcion = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('acionamento'), texto: 'Data e hora do início das operações *' }), acion]);
+    var grupoDesap = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('desap'), texto: 'Data e hora do último momento visto' }), desap]);
+    var grupoDestino = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('destino'), texto: 'IPO para (destinatários)' }), destino]);
+    var grupoSolicDoc = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-doc'), texto: 'Documento do solicitante (RG/CPF)' }), solicDoc]);
+    var grupoResp = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('resp'), texto: 'Responsável pelas informações' }), responsavel]);
+    var grupoPessoas = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('pessoas'), texto: 'Nº de pessoas perdidas' }), pessoas]);
+    var grupoBms = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('bms'), texto: 'BMs diretamente envolvidos' }), bms]);
+    var grupoBuscas = radiosCampo(nomeBuscas, 'Buscas preliminares (casas de parentes, hospitais etc.)?', window.Ipo.BUSCAS, ipo.buscas_preliminares);
+    var grupoVida = radiosCampo(nomeVida, 'Possibilidade real de vida?', window.Ipo.VIDA, ipo.possibilidade_vida);
+    var grupoImagens = radiosCampo(nomeImagens, 'Imagens anexas junto a esta mensagem?', [['sim', 'Sim'], ['nao', 'Não']],
+      ipo.imagens_anexas === true ? 'sim' : ipo.imagens_anexas === false ? 'nao' : '');
+
     // Na criação, o início é automático (a hora em que a operação for criada)
     var inicioAuto = UI.el('p', { classe: 'ajuda', id: id('inicio-auto'), texto: 'Início das operações: automático, a data e a hora em que a operação for criada.' });
 
-    var elementos = inicial ? [grupoPonto, inicioAuto, grupoSolic, grupoNatureza, grupoDesc] : elementosCompletos.concat([grupoDesc]);
-    raiz = UI.el('div', { classe: 'campos-cadastro' }, elementos);
+    // (cada campo é um nó do DOM: aparece em uma única seção)
+    var secoes = inicial
+      ? [secaoLocal, secao('Início e solicitação', 'larg', [inicioAuto, grupoSolic, grupoNatureza]), secao('Observação', 'larg', [grupoDesc])]
+      : [secaoLocal,
+        secao('Ocorrência', 'meia', [grupoAcion, grupoNatureza, grupoDesap, grupoMeio]),
+        secao('Solicitante e destinatários', 'meia', [grupoSolic, grupoSolicDoc, grupoDestino, grupoResp]),
+        secao('Busca', 'meia', [grupoPessoas, grupoBms, grupoBuscas, grupoVida, grupoImagens]),
+        secao('Observação', 'meia', [grupoDesc])];
+    raiz = UI.el('div', { classe: 'campos-cadastro' }, secoes);
     mostrarLocal();
+    aplicarModo();
 
     function ler() {
+      var noMapa = modoAtual() === 'mapa';
       var dados = {
-        local_lat: local ? local.lat : null,
-        local_lng: local ? local.lng : null,
+        local_lat: noMapa && local ? local.lat : null,
+        local_lng: noMapa && local ? local.lng : null,
+        local_endereco: noMapa ? '' : endereco.value.replace(/\s+/g, ' ').trim(),
         descricao: desc.value.trim(),
         ipo: null,
       };
@@ -281,7 +335,6 @@
       dados.tipo = tip.tipo;
       dados.tipo_outro = tip.tipo_outro;
       dados.acionado_em = new Date(ms).toISOString();
-      dados.local_endereco = endereco.value.replace(/\s+/g, ' ').trim();
       dados.ipo = window.Ipo.normalizarIpo({
         natureza: naturezaValor(), solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,
         destinatarios: destino.value, desaparecimento: isoLocal(desap.value), meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
@@ -297,10 +350,12 @@
       naturezaLimpar();
       atualizarMeio();
       desc.value = '';
+      local = null;
       coordTxt.value = '';
       coordAviso.textContent = '';
-      local = null;
       mostrarLocal();
+      radiosModo.querySelector('input[value="mapa"]').checked = true;
+      aplicarModo();
       if (inicial) return;
       acion.value = '';
       endereco.value = '';
@@ -310,10 +365,20 @@
       pessoas.value = '';
       bms.value = '';
       responsavel.value = '';
-      raiz.querySelectorAll('input[type="radio"]').forEach(function (r) { r.checked = false; });
+      [nomeMeio, nomeBuscas, nomeVida, nomeImagens].forEach(function (nome) {
+        raiz.querySelectorAll('input[name="' + nome + '"]').forEach(function (r) { r.checked = false; });
+      });
     }
 
     return { elemento: raiz, ler: ler, limpar: limpar };
+  }
+
+  // Seção do formulário: "larg" ocupa a largura toda; "meia" fica lado a lado em tela maior.
+  function secao(titulo, largura, filhos) {
+    return UI.el('section', { classe: 'cad-secao cad-' + largura }, [
+      UI.el('h3', { classe: 'cad-secao-titulo', texto: titulo }),
+      UI.el('div', { classe: 'cad-campos' }, filhos),
+    ]);
   }
 
   // Opções de uma escolha única (meio líquido, buscas, possibilidade de vida, imagens)

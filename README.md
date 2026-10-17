@@ -156,11 +156,16 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 
 ### Cadastro completo da operação
 
-- **+ Nova operação** (no topo de "Minhas operações") abre o cadastro num modal: nome (obrigatório), **tipo** (Aquática, Terrestre, Aérea ou Outras — em "Outras" um
-  campo "Qual?" com texto livre) e **data e hora do acionamento** (já vem com a hora atual; não pode estar
-  no futuro) são obrigatórios. **Endereço**, **ponto no mapa** (📍 Escolher no mapa, Usar minha posição ou
-  digitar a coordenada em qualquer formato) e **descrição** são opcionais e podem ser completados depois.
-  O mapa para escolher o ponto abre por cima do formulário, sem perder o que já foi preenchido.
+- **+ Nova operação** (no topo de "Minhas operações") abre o cadastro num modal. Só o **nome** é obrigatório; o
+  **início das operações** é automático (a hora em que a operação for criada). Vítimas, local, solicitante, natureza
+  e observação são opcionais e podem ser completados depois. O mapa para escolher o ponto abre por cima do
+  formulário, sem perder o que já foi preenchido.
+- **Local: um modo de cada vez.** Ou **Marcar no mapa** (📍 Escolher no mapa, Usar minha posição ou a coordenada
+  digitada em qualquer formato), ou **Só endereço (sem ponto)**. O ponto aparece num mapa pequeno ao lado dos
+  botões, para conferir. Escolhido o endereço, o ponto não é gravado; salvo com o ponto, o endereço escrito é
+  retirado (um aviso aparece quando um cadastro antigo tinha os dois). O app não consulta serviço de busca de
+  endereços, então o endereço não vira ponto sozinho. Sem ponto, a operação não aparece no mapa e não entra nos
+  cálculos de distância (ULV).
 - **Ferramentas → Dados da operação**: ver e editar tudo (inclusive o nome) e o **intervalo do GPS** (ver
   "Trilhas GPS"). O local aparece no mapa como **◎ laranja** ("Local da operação", camada própria em
   no painel **Camadas**); tocar nele abre os dados.
@@ -703,9 +708,11 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
   (nome e idade, nas fichas), coordenadas (ponto no mapa), **início das operações** (automático: a hora da criação),
   nome do solicitante, natureza e uma observação com a breve descrição da ocorrência. O tipo não é pedido agora.
 - **Painel da operação → Dados da operação → Editar:** o cadastro completo, no mesmo formulário: início das operações,
-  localidade/endereço, coordenadas, solicitante (nome e documento), natureza, destinatários, data e hora do último momento
+  local (ponto no mapa ou só endereço), solicitante (nome e documento), natureza, destinatários, data e hora do último momento
   visto, nº de pessoas perdidas, buscas preliminares, possibilidade de vida ("Não apurado" quando não se sabe), BMs
   diretamente envolvidos, imagens anexas, responsável pelas informações, a observação e as vítimas.
+  Em celular, o formulário tem uma coluna só; em tablet e PC (a partir de 760 px) as seções ficam lado a lado
+  (Ocorrência | Solicitante, Busca | Observação) e a janela é mais larga.
 - **Tipo da operação** não é escolhido à parte: vem da **natureza** (busca aquática → aquática; terrestre → terrestre;
   aérea → aérea; qualquer outra → "outras", com a própria natureza). O **meio líquido** só aparece para busca aquática.
   As coordenadas do cadastro são as do último avistamento: não há um segundo campo de coordenadas.

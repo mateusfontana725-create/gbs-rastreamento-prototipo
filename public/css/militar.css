@@ -799,3 +799,54 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .exp-grupo > summary { cursor: pointer; font-size: .9rem; }
 .exp-grupo-acoes { margin: 6px 0; }
 .lista-escolha { max-height: 180px; overflow: auto; display: grid; gap: 4px; padding-right: 4px; }
+
+/* ---- cadastro da operação (criação e Dados da operação → Editar) ----
+   Celular: tudo em uma coluna. Tablet e PC (a partir de 760 px): as seções lado a lado,
+   para o formulário ficar mais na horizontal. */
+.modal:has(.form-dados) { width: min(1040px, 100%); }
+.campos-cadastro { min-width: 0; }
+.cad-secao { min-width: 0; margin: 0 0 14px; }
+.cad-secao-titulo {
+  font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2);
+  margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--borda);
+}
+.cad-campos { min-width: 0; }
+.cad-campos > .ajuda, .cad-campos > .cad-largo, .cad-campos > .cad-modo, .cad-campos > .cad-local-mapa, .cad-campos > .cad-local-endereco { grid-column: 1 / -1; }
+.cad-campos > .ajuda { margin: 0 0 12px; }
+
+/* escolha do local: um modo de cada vez */
+.cad-modo { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.cad-modo-opcao {
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; font-weight: 600;
+  border: 1px solid var(--borda-forte); border-radius: var(--raio); background: var(--superficie-2);
+}
+.cad-modo-opcao:has(input:checked) { border-color: var(--acento); box-shadow: inset 0 0 0 1px var(--acento); }
+.cad-modo-opcao input { width: 18px; height: 18px; accent-color: var(--acento); }
+.cad-local-mapa { display: grid; gap: 12px; min-width: 0; }
+.cad-local-controles { min-width: 0; }
+.cad-local-controles .rotulo { display: block; margin-bottom: 4px; }
+.cad-local-visual { position: relative; min-width: 0; min-height: 240px; }
+.cad-local-visual [hidden] { display: none !important; }
+.mini-mapa { height: 240px; border-radius: var(--raio); border: 1px solid var(--borda-forte); background: #0e1318; }
+.mini-mapa-vazio {
+  display: grid; place-items: center; text-align: center; height: 240px; margin: 0; padding: 14px;
+  border: 1px dashed var(--borda-forte); border-radius: var(--raio);
+}
+.cad-local-endereco { min-width: 0; }
+
+/* formulário do painel: as seções lado a lado a partir de tablet */
+.form-dados > .grupo-gps { margin: 0; }
+@media (min-width: 760px) {
+  .campos-cadastro { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+  .cad-larg { grid-column: 1 / -1; }
+  .cad-larg > .cad-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+  .cad-local-mapa { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); align-items: start; }
+  .cad-local-visual, .mini-mapa, .mini-mapa-vazio { min-height: 260px; height: 260px; }
+
+  .form-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; align-items: start; }
+  .form-dados > * { grid-column: 1 / -1; }
+  .form-dados > .grupo-gps { grid-column: auto; }
+}
+@media (max-width: 759px) {
+  .cad-local-visual, .mini-mapa, .mini-mapa-vazio { min-height: 220px; height: 220px; }
+}

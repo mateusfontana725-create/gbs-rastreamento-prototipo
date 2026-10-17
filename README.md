@@ -177,7 +177,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   **Seguir sem elas**) — a operação não é criada de novo, ficha salva não é reenviada e, antes de repetir,
   o painel confere no servidor se a tentativa anterior já tinha gravado (sem duplicar). A foto é
   adicionada depois, na ficha.
-- **Ferramentas → Vítimas (fichas)**: uma ou mais fichas por operação, com **foto**, **nome** (ou "Não
+- **Vítimas (fichas)** ficam em **Dados da operação → Editar** (e na criação da operação): uma ou mais fichas por operação, com **foto**, **nome** (ou "Não
   identificada"), **idade**, **características físicas**, **roupas** e **observações**.
 - A foto é reduzida no aparelho (máx. 1600 px, JPEG) e guardada no bucket **privado `vitimas`** do
   Supabase Storage; só aparece por link temporário assinado. Trocar ou tirar a foto apaga o arquivo antigo.
@@ -524,7 +524,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Operação**: Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis;
   - **Participantes e equipes**: Convidar participantes, Grupos, Deslocamentos de grupos, Enviar destino
     a participantes;
-  - **Registros e ocorrências**: Vítimas (fichas), Registrar foto, Marcar ponto de interesse;
+  - **Registros e ocorrências**: Registrar foto, Marcar ponto de interesse;
   - **Setores de busca**: Novo setor por raio, Novo setor desenhando a área, Lista de setores e pontos;
   - **Mapa e navegação**: Ir para coordenada, Medir distância e área, Exportar, Importar (o **⤢** do mapa
     enquadra todos);
@@ -686,7 +686,7 @@ dado de participante sai do banco nesses painéis.
   operações e distância do ULV), nº de fichas, perfis, setores e registros do diário.
 - **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro
   registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
-- **Perfil da vítima** = duas listas de seleção na ficha ("Perfil da vítima (para estudos)" e "Perfil secundário"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
+- **Perfil da vítima** = uma lista de seleção na ficha ("Perfil da vítima (para estudos)"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
   Alzheimer/demência, autismo, deficiência intelectual, transtorno mental, outro). Não é calculado pela idade.
 - **Sigilo dos números:** grupos com **menos de 5 casos** chegam ocultos ("oculto (menos de 5 casos)"), no banco
   (`estudo_geral`, `estudo_operacao`), não só na tela.
@@ -703,13 +703,15 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
 - **Criação (+ Nova operação), o mínimo que se informa de imediato:** nome da operação (obrigatório), vítima(s)
   (nome e idade, nas fichas), coordenadas (ponto no mapa), **início das operações** (automático: a hora da criação),
   nome do solicitante, natureza e uma observação com a breve descrição da ocorrência. O tipo não é pedido agora.
-- **Painel da operação → Dados da operação → Editar:** o cadastro completo, no mesmo formulário: tipo (e "outras"),
-  início das operações, localidade/endereço, coordenadas, solicitante (nome e documento), natureza, destinatários,
-  desaparecimento (último horário visto), meio líquido, nº de pessoas perdidas, buscas preliminares, possibilidade
-  de vida, BMs diretamente envolvidos, imagens anexas, responsável pelas informações e a observação.
+- **Painel da operação → Dados da operação → Editar:** o cadastro completo, no mesmo formulário: início das operações,
+  localidade/endereço, coordenadas, solicitante (nome e documento), natureza, destinatários, data e hora do último momento
+  visto, nº de pessoas perdidas, buscas preliminares, possibilidade de vida ("Não apurado" quando não se sabe), BMs
+  diretamente envolvidos, imagens anexas, responsável pelas informações, a observação e as vítimas.
+- **Tipo da operação** não é escolhido à parte: vem da **natureza** (busca aquática → aquática; terrestre → terrestre;
+  aérea → aérea; qualquer outra → "outras", com a própria natureza). O **meio líquido** só aparece para busca aquática.
   As coordenadas do cadastro são as do último avistamento: não há um segundo campo de coordenadas.
-- **Vítimas do IPO = fichas de vítima.** A ficha tem nome, idade, nascimento, sexo e origem (migração 021); na criação
-  pede-se só nome e idade, e o resto fica para o painel (Ferramentas → Vítimas).
+- **Vítimas do IPO = fichas de vítima.** A ficha tem nome, idade, nascimento, sexo, origem, perfil e **foto** (migração 021).
+  O mesmo formulário da ficha aparece na criação da operação e em Dados da operação → Editar.
 - **Procedimentos de busca, recursos do CB e desdobramentos** são registros do **diário** (categoria operação):
   **+ Novo registro** → tipo "Procedimento de busca sendo realizado" (com a lista de procedimentos), "Recurso empregado"
   ou "Desdobramento do dia". Cada um tem data e hora do fato e pode ser editado (fica no histórico).

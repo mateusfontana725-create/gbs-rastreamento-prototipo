@@ -258,9 +258,6 @@
     });
     $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
     $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
-    $('menu-vitimas').addEventListener('click', function () {
-      if (est.op) window.Cadastro.abrirVitimas(est.op, { editavel: !est.op.dados_apagados_em, limparArquivos: limparArquivosPendentes });
-    });
     $('menu-grupos').addEventListener('click', abrirGrupos);
     $('menu-missoes').addEventListener('click', abrirMissoes);
     $('opt-local').addEventListener('click', function () { definirPrefMapa('local', !est.prefsMapa.local); });
@@ -761,7 +758,7 @@
     var caixa = UI.el('details', { classe: 'nova-vitimas', id: 'nova-vitimas' }, [
       UI.el('summary', null, [UI.el('span', { texto: 'Vítimas (opcional)' }), qtd]),
       UI.el('div', { classe: 'nova-vitimas-corpo' }, [
-        UI.el('p', { classe: 'ajuda', texto: 'Cadastre agora quem está sendo procurado (uma ficha por pessoa). A foto e outras vítimas podem ser adicionadas depois em Ferramentas → Vítimas.' }),
+        UI.el('p', { classe: 'ajuda', texto: 'Quem está sendo procurado: uma ficha por pessoa, com a foto se houver. A ficha completa também pode ser preenchida depois, em Dados da operação → Editar.' }),
         lista,
         UI.el('div', { classe: 'nova-vitimas-acoes' }, [add]),
       ]),
@@ -772,7 +769,7 @@
     }
     function adicionar() {
       seq += 1;
-      var campos = window.Cadastro.camposVitima(null, 'nova-vitima-' + seq, { simples: true });
+      var campos = window.Cadastro.camposVitima(null, 'nova-vitima-' + seq);
       var it = { campos: campos, salva: false };
       it.titulo = UI.el('strong');
       it.estado = UI.el('small', { classe: 'nova-vitima-estado muted' });
@@ -896,12 +893,13 @@
     var existentes = [];
     if (pend.some(function (it) { return it.tentou; })) {
       try {
-        existentes = (await C.consultar(C.cliente.from('vitimas').select('id,nome,idade,caracteristicas,roupas,observacoes').eq('operacao_id', op.id))) || [];
+        existentes = (await C.consultar(C.cliente.from('vitimas').select('id,nome,idade,caracteristicas,roupas,observacoes,nascimento,sexo,origem,perfil').eq('operacao_id', op.id))) || [];
       } catch (e) { existentes = []; }
     }
     function igual(a, b) {
       return a.nome === b.nome && (a.idade == null ? null : Number(a.idade)) === b.idade && (a.caracteristicas || '') === b.caracteristicas &&
-        (a.roupas || '') === b.roupas && (a.observacoes || '') === b.observacoes;
+        (a.roupas || '') === b.roupas && (a.observacoes || '') === b.observacoes && (a.nascimento || null) === (b.nascimento || null) &&
+        (a.sexo || null) === (b.sexo || null) && (a.origem || '') === (b.origem || '') && JSON.stringify(a.perfil || []) === JSON.stringify(b.perfil || []);
     }
     for (var i = 0; i < pend.length; i++) {
       var it = pend[i];
@@ -915,7 +913,16 @@
       vitimas.marcar(it, null, 'salvando…');
       it.tentou = true;
       try {
-        await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: dados });
+        var salva = await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: dados });
+        var arq = it.campos.arquivo();
+        if (arq) {
+          try {
+            await window.Cadastro.subirFoto(op, salva, arq);
+          } catch (e) {
+            vitimas.marcar(it, 'salva', '✓ salva · foto não enviada: ' + e.message);
+            continue;
+          }
+        }
         vitimas.marcar(it, 'salva', '✓ salva');
       } catch (e) {
         vitimas.marcar(it, 'falhou', '✕ não salva');
@@ -942,6 +949,7 @@
     if (!est.op) return;
     window.Cadastro.abrirDados(est.op, {
       editavel: true,
+      limparArquivos: limparArquivosPendentes,
       verNoMapa: function (op) { verLocalNoMapa(op); },
       aoSalvar: function (atual) {
         if (!est.op || !atual || atual.id !== est.op.id) return;

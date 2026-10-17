@@ -526,7 +526,7 @@
       ficha([
         ['Início das operações (acionamento do CB)', op.acionado_em ? dataHora(op.acionado_em) : '—'],
         ['Coordenadas de referência (último avistamento)', coord(op.local_lat, op.local_lng)],
-        ['Desaparecimento (último horário visto)', txt(i.desaparecimento)],
+        ['Data e hora do último momento visto', i.desaparecimento ? dataHora(i.desaparecimento) : '—'],
         ['Nº de pessoas perdidas', i.pessoas_perdidas != null ? String(i.pessoas_perdidas) : '—'],
       ]),
       subtitulo('Tipo de meio líquido'),

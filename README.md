@@ -656,10 +656,10 @@ chave própria).
 - **Ferramentas → Relatório final (PDF)** (ou **Relatório final (PDF)** no menu **⋮** da linha na lista de operações). Só responsáveis da operação
   (o banco confere em `relatorio_operacao`).
 - Registre o **resultado** (vítima localizada com vida / em óbito / não localizada / outro, com descrição).
-- **Gerar PDF** monta, no navegador: capa com resultado e números, sumário, dados do cadastro e fichas das
-  vítimas, pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
+- **Gerar PDF** monta, no navegador: capa com natureza, números e datas, sumário, a ocorrência (o IPO, com cada dado
+  uma só vez: tipo não aparece, a natureza diz o tipo), pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
   setor, início, fim, duração, área, deslocamentos e fotos tiradas dentro do setor), pontos e encontros,
-  diário consolidado por dia e resultado com campos de assinatura. Cabeçalho e rodapé em todas as páginas
+  diário consolidado por dia (sem repetir os registros do IPO) e resultado com campos de assinatura. Cabeçalho e rodapé em todas as páginas
   ("DOCUMENTO RESTRITO", página X de Y).
 - O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios` (sem exclusão pelo app); a lista
   **Relatórios já gerados** permite baixar de novo.
@@ -714,7 +714,8 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
 - **Procedimentos de busca, recursos do CB e desdobramentos** são registros do **diário** (categoria operação):
   **+ Novo registro** → tipo "Procedimento de busca sendo realizado" (com a lista de procedimentos), "Recurso empregado"
   ou "Desdobramento do dia". Cada um tem data e hora do fato e pode ser editado (fica no histórico).
-- O relatório final começa, depois da capa, com o IPO no mesmo formato e na mesma ordem do modelo ("IPO: 2 CRBM / 3 BBM",
+- O relatório final começa, depois da capa, com a ocorrência no formato do IPO (é a única seção de cadastro, sem repetir
+  dados) e na mesma ordem do modelo ("IPO: 2 CRBM / 3 BBM",
   "ATENÇÃO: uso exclusivo nos grupos do CBMPR", opções com "(X)" marcada e "( )" não marcada). Os procedimentos
   marcados vêm do diário, com a hora de cada um; recursos e desdobramentos também saem com data e hora.
 - **Retenção:** hoje o IPO **não** é apagado pela limpeza de dados da operação. Ele tem nome, documento e dados da vítima, então isso precisa de decisão: apagar junto com os dados pessoais, ou manter como registro oficial.

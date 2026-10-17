@@ -17,7 +17,6 @@
     observacao: '#eef4fb',
   };
 
-  var TIPO_OPERACAO = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', outras: 'Outras' };
   var TIPO_PESSOA = { civil: 'Civil', militar: 'Militar', responsavel: 'Responsável' };
   var STATUS_SETOR = { pendente: 'Pendente', andamento: 'Em andamento', concluido: 'Concluído' };
   var RESULTADO = {
@@ -69,10 +68,6 @@
   function coord(lat, lng) {
     if (lat == null || lng == null) return '—';
     return Number(lat).toFixed(6) + ', ' + Number(lng).toFixed(6);
-  }
-  function tipoOperacao(op) {
-    if (!op.tipo) return '—';
-    return op.tipo === 'outras' ? 'Outras' + (op.tipo_outro ? ' (' + op.tipo_outro + ')' : '') : TIPO_OPERACAO[op.tipo] || op.tipo;
   }
   function vazio(v) { return v == null || String(v).trim() === ''; }
   function txt(v, alt) { return vazio(v) ? (alt == null ? '—' : alt) : String(v); }
@@ -186,7 +181,7 @@
       [String(pessoas), 'pessoas de campo'],
       [String(d.grupos.length), 'grupos'],
       [concluidos + ' / ' + d.setores.length, 'setores concluídos'],
-      [String(d.diario.length), 'registros no diário'],
+      [String(registrosDiario(d).length), 'registros no diário'],
       [String(d.fotos.length), 'fotos'],
     ];
     // Logo do Corpo de Bombeiros também na capa (acima do título), como no cabeçalho das páginas
@@ -195,8 +190,7 @@
       { text: 'RELATÓRIO FINAL DE OPERAÇÃO', style: 'sobretitulo', margin: [0, recursos.logo ? 0 : 30, 0, 6] },
       { canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 14] },
       { text: op.codigo, style: 'tituloCapa' },
-      { text: [tipoOperacao(op), vazio(op.local_endereco) ? '' : '  ·  ' + op.local_endereco].join(''), style: 'subtituloCapa', margin: [0, 6, 0, 22] },
-      caixaResultado(op),
+      { text: txt(window.Ipo.normalizarIpo(op.ipo || {}).natureza, ''), style: 'subtituloCapa', margin: [0, 6, 0, 22] },
       {
         table: { widths: ['*', '*', '*'], body: [[
           bloco('Acionamento', dataHora(op.acionado_em)),
@@ -237,41 +231,6 @@
     return { stack: [{ text: rotulo.toUpperCase(), style: 'rotuloCaixa' }, { text: valor, fontSize: 11, margin: [0, 2, 0, 0] }] };
   }
 
-  function secaoCadastro(d, recursos) {
-    var op = d.operacao;
-    var out = [secao(1, 'Dados do cadastro', true)];
-    out.push(ficha([
-      ['Código da operação', op.codigo],
-      ['Tipo', tipoOperacao(op)],
-      ['Data e hora do acionamento', dataHora(op.acionado_em)],
-      ['Local', txt(op.local_endereco)],
-      ['Coordenadas do local', coord(op.local_lat, op.local_lng)],
-      ['Criada no sistema', dataHora(op.criada_em) + (op.criador_nome ? ' por ' + op.criador_nome : '')],
-      ['Encerrada', op.encerrada_em ? dataHora(op.encerrada_em) : 'Operação ainda ativa'],
-      ['Retenção dos dados', op.retencao_horas ? op.retencao_horas + ' h após o encerramento' : 'Apagados no encerramento'],
-    ]));
-    if (!vazio(op.descricao)) {
-      out.push(subtitulo('Descrição da ocorrência'));
-      out.push({ text: op.descricao, style: 'corpo', margin: [0, 0, 0, 12] });
-    }
-    out.push(subtitulo('Vítima(s)'));
-    if (!d.vitimas.length) out.push(nota('Nenhuma ficha de vítima cadastrada.'));
-    d.vitimas.forEach(function (v) {
-      var dados = ficha([
-        ['Nome', v.nome],
-        ['Idade', v.idade != null ? v.idade + ' anos' : '—'],
-        vazio(v.caracteristicas) ? null : ['Características físicas', v.caracteristicas],
-        vazio(v.roupas) ? null : ['Roupas', v.roupas],
-        vazio(v.observacoes) ? null : ['Observações', v.observacoes],
-      ]);
-      var foto = recursos.fotosVitimas && recursos.fotosVitimas[v.id];
-      out.push(foto
-        ? { columns: [{ image: foto, fit: [110, 140], width: 120 }, Object.assign({ width: '*' }, dados)], columnGap: 10, margin: [0, 0, 0, 10], unbreakable: true }
-        : dados);
-    });
-    return out;
-  }
-
   function nomesGrupos(p) { return (p.grupos || []).map(function (g) { return g.grupo + (g.papel === 'responsavel' ? ' (resp.)' : ''); }).join(', '); }
 
   function situacao(p) {
@@ -281,7 +240,7 @@
   }
 
   function secaoPessoas(d) {
-    var out = [secao(2, 'Pessoas e grupos', true)];
+    var out = [secao(1, 'Pessoas e grupos', true)];
     out.push(subtitulo('Responsáveis pela operação'));
     out.push(tabela(['Nome', 'Função', 'Desde'], d.responsaveis.map(function (r) {
       return [{ text: r.nome, style: 'td', bold: true }, r.criador ? 'Criou a operação' : 'Responsável adicionado', dataHoraCurta(r.desde)];
@@ -314,7 +273,7 @@
   }
 
   function secaoSetores(d, recursos) {
-    var out = [secao(3, 'Setores varridos', true)];
+    var out = [secao(2, 'Setores varridos', true)];
     if (!d.setores.length) {
       out.push(nota('Nenhum setor de busca foi definido nesta operação.'));
       return out;
@@ -402,7 +361,7 @@
   }
 
   function secaoPontos(d) {
-    var out = [secao(4, 'Pontos de interesse e encontros', true)];
+    var out = [secao(3, 'Pontos de interesse e encontros', true)];
     var encontros = d.diario.filter(function (e) { return e.categoria === 'encontro'; });
     out.push(subtitulo('Encontros e relatos de campo'));
     if (!encontros.length) out.push(nota('Nenhum encontro ou relato de campo registrado.'));
@@ -422,14 +381,15 @@
   }
 
   function secaoDiario(d) {
-    var out = [secao(5, 'Diário consolidado', true)];
-    out.push({ text: 'Registro cronológico de tudo o que aconteceu na operação. Os eventos automáticos são gravados pelo sistema e não podem ser alterados; as observações foram escritas pelos responsáveis (as edições ficam registradas).', style: 'corpo', margin: [0, 0, 0, 10] });
-    if (!d.diario.length) {
+    var entradas = registrosDiario(d);
+    var out = [secao(4, 'Diário consolidado', true)];
+    out.push({ text: 'Registro cronológico de tudo o que aconteceu na operação. Os eventos automáticos são gravados pelo sistema e não podem ser alterados; as observações foram escritas pelos responsáveis (as edições ficam registradas). Procedimentos, recursos e desdobramentos do IPO estão na seção Ocorrência, e não se repetem aqui.', style: 'corpo', margin: [0, 0, 0, 10] });
+    if (!entradas.length) {
       out.push(nota('Nenhum registro no diário.'));
       return out;
     }
     var dias = [];
-    d.diario.forEach(function (e) {
+    entradas.forEach(function (e) {
       var k = chaveDia(e.ocorrido_em);
       if (!dias.length || dias[dias.length - 1].k !== k) dias.push({ k: k, t: e.ocorrido_em, itens: [] });
       dias[dias.length - 1].itens.push(e);
@@ -455,11 +415,9 @@
 
   function secaoResultado(d) {
     var op = d.operacao;
-    var out = [secao(6, 'Resultado', true), caixaResultado(op)];
+    var out = [secao(5, 'Resultado', true), caixaResultado(op)];
     var anteriores = d.relatorios_anteriores || [];
     out.push(ficha([
-      ['Encerramento', op.encerrada_em ? dataHora(op.encerrada_em) : 'Operação ainda ativa no momento deste relatório'],
-      ['Duração total', duracao(op.acionado_em || op.criada_em, op.encerrada_em || d.gerado_em)],
       ['Relatório gerado', dataHora(d.gerado_em) + ' por ' + txt(d.gerado_por_nome)],
       ['Versões anteriores', anteriores.length ? anteriores.map(function (r) { return dataHora(r.gerado_em) + ' (' + r.gerado_por_nome + ')'; }).join('; ') : 'Nenhuma'],
     ]));
@@ -495,42 +453,56 @@
   function listaIpo(linhas) {
     return linhas.length ? { stack: linhas.map(function (t) { return { text: t, style: 'corpo' }; }), margin: [0, 0, 0, 10] } : nota('Nenhum registro no diário.');
   }
-  function secaoIpo(d) {
+  // Registros do diário que já aparecem na seção da ocorrência (IPO): procedimento, recurso e desdobramento.
+  function registrosDiario(d) {
+    return (d.diario || []).filter(function (e) { return ['procedimento', 'recurso', 'desdobramento'].indexOf(e.tipo) === -1; });
+  }
+
+  // Dados da ocorrência, no formato do IPO do CBMPR. O IPO é o próprio cadastro da operação:
+  // cada dado aparece uma só vez no relatório.
+  function secaoOcorrencia(d, recursos) {
     var op = d.operacao;
     var i = window.Ipo.normalizarIpo(op.ipo || {});
     var sexo = { M: 'Masculino', F: 'Feminino' };
+    var fotos = (recursos && recursos.fotosVitimas) || {};
     var vitimas = (d.vitimas || []).length
       ? d.vitimas.map(function (v) {
-        return ficha([
+        var dados = ficha([
           ['VÍTIMA', txt(v.nome) + (v.nascimento ? ' (nascim: ' + v.nascimento + ')' : '')],
-          ['Sexo/Idade', txt(sexo[v.sexo]) + ' / ' + (v.idade != null ? v.idade + ' anos' : '—')],
+          ['Sexo / idade', txt(sexo[v.sexo]) + ' / ' + (v.idade != null ? v.idade + ' anos' : '—')],
           ['Origem da vítima', txt(v.origem)],
+          vazio(v.caracteristicas) ? null : ['Características físicas', v.caracteristicas],
+          vazio(v.roupas) ? null : ['Roupas', v.roupas],
+          vazio(v.observacoes) ? null : ['Observações', v.observacoes],
         ]);
+        var foto = fotos[v.id];
+        return foto
+          ? { columns: [{ image: foto, fit: [110, 140], width: 120 }, Object.assign({ width: '*' }, dados)], columnGap: 10, margin: [0, 0, 0, 10], unbreakable: true }
+          : dados;
       })
       : [nota('Nenhuma vítima informada.')];
     var procedimentos = registrosIpo(d, 'procedimento');
-    var recursos = registrosIpo(d, 'recurso');
+    var recursosCb = registrosIpo(d, 'recurso');
     var desdobramentos = registrosIpo(d, 'desdobramento');
     var marcadosProc = procedimentos.map(function (e) { return e.ref_id; });
-    return [
+
+    var partes = [
       { text: 'IPO: ' + i.destinatarios, style: 'h2', pageBreak: 'before', margin: [0, 0, 0, 2] },
       { text: 'Informe Padrão de Ocorrência - IPO', style: 'h1', margin: [0, 0, 0, 4] },
       { text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.', style: 'nota', margin: [0, 0, 0, 12] },
       ficha([
         ['Natureza', txt(i.natureza)],
-        ['Localidade/Município/Região', txt(op.local_endereco)],
         ['Nome do solicitante', txt(i.solicitante_nome) + (i.solicitante_documento ? ' (' + i.solicitante_documento + ')' : '')],
-      ]),
-      subtitulo('Vítima(s)'),
-    ].concat(vitimas, [
-      ficha([
+        ['Localidade / município / região', txt(op.local_endereco)],
         ['Início das operações (acionamento do CB)', op.acionado_em ? dataHora(op.acionado_em) : '—'],
         ['Coordenadas de referência (último avistamento)', coord(op.local_lat, op.local_lng)],
         ['Data e hora do último momento visto', i.desaparecimento ? dataHora(i.desaparecimento) : '—'],
         ['Nº de pessoas perdidas', i.pessoas_perdidas != null ? String(i.pessoas_perdidas) : '—'],
       ]),
-      subtitulo('Tipo de meio líquido'),
-      listaIpo(marcas(window.Ipo.MEIOS, i.meio_liquido ? [i.meio_liquido] : [])),
+      subtitulo('Vítima(s)'),
+    ].concat(vitimas);
+    if (i.meio_liquido) partes.push(subtitulo('Meio líquido'), listaIpo(marcas(window.Ipo.MEIOS, [i.meio_liquido])));
+    return partes.concat([
       subtitulo('Buscas preliminares (casas de parentes, hospitais etc.)?'),
       listaIpo(marcas(window.Ipo.BUSCAS, i.buscas_preliminares ? [i.buscas_preliminares] : [])),
       subtitulo('Possibilidade real de vida?'),
@@ -540,16 +512,19 @@
       listaIpo(procedimentos.map(function (e) {
         return hora(e.ocorrido_em) + ' · ' + nomeProcedimento(e.ref_id) + (vazio(e.detalhe) ? '' : ' — ' + e.detalhe);
       })),
-      subtitulo('Contexto / histórico / cenário do desaparecimento'),
+      subtitulo('Descrição da ocorrência'),
       { text: txt(op.descricao), style: 'corpo', margin: [0, 0, 0, 10] },
       subtitulo('Recursos CB deslocados e sendo utilizados'),
-      listaIpo(recursos.map(function (e) { return dataHora(e.ocorrido_em) + ' · ' + e.detalhe; })),
+      listaIpo(recursosCb.map(function (e) { return dataHora(e.ocorrido_em) + ' · ' + e.detalhe; })),
       ficha([['Quantidade de BMs diretamente envolvidos na resposta', i.bms_envolvidos != null ? String(i.bms_envolvidos) : '—']]),
       subtitulo('Desdobramentos / situação atual'),
       listaIpo(desdobramentos.map(function (e) { return dataHora(e.ocorrido_em) + ' · ' + e.detalhe; })),
       subtitulo('Imagens anexas junto a esta mensagem?'),
       listaIpo(marcas([['sim', 'Sim'], ['nao', 'Não']], i.imagens_anexas === true ? ['sim'] : i.imagens_anexas === false ? ['nao'] : [])),
-      ficha([['Responsável pelas informações', txt(i.responsavel_informacoes)]]),
+      ficha([
+        ['Responsável pelas informações', txt(i.responsavel_informacoes)],
+        ['Retenção dos dados', op.retencao_horas ? op.retencao_horas + ' h após o encerramento' : 'Apagados no encerramento'],
+      ]),
     ]);
   }
 
@@ -561,8 +536,7 @@
     ANO_REF = ref ? ref.getFullYear() : null;
     var conteudo = []
       .concat(capa(d, recursos))
-      .concat(secaoIpo(d))
-      .concat(secaoCadastro(d, recursos))
+      .concat(secaoOcorrencia(d, recursos))
       .concat(secaoPessoas(d))
       .concat(secaoSetores(d, recursos))
       .concat(secaoPontos(d))

@@ -6371,10 +6371,13 @@
       if (!r.eu) {
         funcoes.push({ texto: 'Redefinir senha', acao: function () { redefinirSenha(r); } });
         funcoes.push({ texto: r.admin ? 'Tirar administrador' : 'Tornar administrador', acao: function () { alterarAdmin(r); } });
-        funcoes.push({ texto: r.ativo ? 'Desativar acesso' : 'Reativar acesso', perigo: r.ativo, acao: function () { alterarAtivo(r); } });
       }
       funcoes.push({ texto: 'Renomear', acao: function () { renomearResponsavel(r); } });
-      if (!r.eu) funcoes.push({ texto: 'Excluir responsável', perigo: true, acao: function () { excluirResponsavel(r); } });
+      // Desativar e excluir ficam juntos, no fim do menu
+      if (!r.eu) {
+        funcoes.push({ texto: r.ativo ? 'Desativar acesso' : 'Reativar acesso', perigo: r.ativo, acao: function () { alterarAtivo(r); } });
+        funcoes.push({ texto: 'Excluir responsável', perigo: true, acao: function () { excluirResponsavel(r); } });
+      }
       var acoes = UI.el('div', { classe: 'op-acoes' }, [menuLinha(funcoes)]);
       var li = UI.el('li', { classe: (r.ativo ? '' : 'inativo ') + 'clicavel', tabindex: '0' }, [
         UI.el('div', { classe: 'op-info' }, [

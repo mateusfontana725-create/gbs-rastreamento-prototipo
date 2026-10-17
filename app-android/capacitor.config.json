@@ -3,7 +3,7 @@
   "appName": "Rastreamento GBS",
   "webDir": "www",
   "server": {
-    "url": "https://rastreamento-sar.vercel.app/civil.html",
+    "url": "https://gbs-rastreamento-prototipo-v2-git-v2-mateus-projects-f1979159.vercel.app/civil.html",
     "errorPath": "sem-conexao.html"
   },
   "android": {

@@ -8,7 +8,7 @@
 # não atualiza por cima (o Android exige sempre a mesma chave).
 #
 # Variável opcional (Settings → Secrets and variables → Actions → Variables):
-#   APP_URL  endereço do site que o app abre (padrão: https://rastreamento-sar.vercel.app)
+#   APP_URL  endereço do site que o app abre (sem ela: server.url do capacitor.config.json)
 name: App Android (civil)
 
 on:

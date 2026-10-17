@@ -732,7 +732,8 @@ link mostra também **BAIXAR O APLICATIVO** e **ABRIR NO APLICATIVO**. O app é 
   - Segredos (Settings → Secrets and variables → Actions): `ANDROID_KEYSTORE_BASE64` (a chave `.jks` em base64) e
     `ANDROID_KEYSTORE_SENHA`. **Guarde uma cópia da chave**: sem a mesma chave, o Android não aceita atualizar o app
     instalado (seria preciso desinstalar e instalar de novo). Sem os segredos, o APK sai com chave temporária.
-  - Variável opcional `APP_URL`: o site que o app abre (padrão `https://rastreamento-sar.vercel.app`). **O site
+  - O site que o app abre está em `app-android/capacitor.config.json` → `server.url` (hoje, o endereço fixo do preview
+    do branch `v2` na Vercel). A variável opcional `APP_URL` do repositório substitui esse endereço no build. **O site
     precisa ter a versão 2 da página** (com `app-android.js`); senão o app funciona como o link, sem o GPS com a tela apagada.
 - **Limites:** alguns celulares (Xiaomi, Samsung, Motorola…) fecham apps em segundo plano para economizar bateria; se a
   trilha parar com a tela apagada, desative a economia de bateria para o Rastreamento GBS. Desde 30/09/2026 o Google

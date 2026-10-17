@@ -14,6 +14,9 @@
     ['scuba', 'Mergulho com equipamento SCUBA'], ['livre', 'Mergulho livre'], ['rede', 'Rede de busca/garatéia'],
     ['superficie', 'Busca de superfície com embarcações'], ['margens', 'Busca terrestre nas margens/areia'], ['aeronave', 'Busca com aeronave'],
   ];
+  // Natureza da ocorrência: escolha numa lista; "Outra" abre um campo para descrever.
+  var NATUREZAS = ['BUSCA TERRESTRE – PESSOA', 'BUSCA AQUÁTICA – PESSOA', 'BUSCA TERRESTRE/AQUÁTICA – PESSOA', 'BUSCA AÉREA – PESSOA', 'RESGATE'];
+  var OUTRA_NATUREZA = '__outra__';
   var MAX_TEXTO = 300, MAX_LONGO = 1000;
 
   function opcao(lista, valor) { return lista.some(function (x) { return x[0] === valor; }) ? valor : ''; }
@@ -45,5 +48,6 @@
   raiz.Ipo = {
     normalizarIpo: normalizarIpo,
     MEIOS: MEIOS, BUSCAS: BUSCAS, VIDA: VIDA, PROCEDIMENTOS: PROCEDIMENTOS, DESTINO_PADRAO: DESTINO_PADRAO,
+    NATUREZAS: NATUREZAS, OUTRA_NATUREZA: OUTRA_NATUREZA,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

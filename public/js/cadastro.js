@@ -168,13 +168,33 @@
     ]);
 
     var solicNome = UI.el('input', { classe: 'campo', id: id('solic-nome'), maxlength: '120', autocomplete: 'off', value: ipo.solicitante_nome });
-    var natureza = UI.el('input', { classe: 'campo', id: id('natureza'), maxlength: '300', autocomplete: 'off',
-      placeholder: 'Ex.: BUSCA TERRESTRE/AQUÁTICA – PESSOA', value: ipo.natureza });
+    // Natureza: lista de opções; "Outra" abre um campo para descrever
+    var naturezaConhecida = window.Ipo.NATUREZAS.indexOf(ipo.natureza) >= 0;
+    var naturezaSel = UI.el('select', { classe: 'campo', id: id('natureza') }, [UI.el('option', { value: '', texto: '— escolha —' })].concat(
+      window.Ipo.NATUREZAS.map(function (n) { return UI.el('option', { value: n, selected: naturezaConhecida && ipo.natureza === n ? true : null, texto: n }); }),
+      [UI.el('option', { value: window.Ipo.OUTRA_NATUREZA, selected: ipo.natureza && !naturezaConhecida ? true : null, texto: 'Outros (descrever)' })]));
+    var naturezaOutra = UI.el('input', { classe: 'campo', id: id('natureza-outra'), maxlength: '300', autocomplete: 'off',
+      placeholder: 'Descreva a natureza da ocorrência', value: naturezaConhecida ? '' : ipo.natureza || '' });
+    var grupoOutraNat = UI.el('div', { classe: 'grupo', hidden: !(ipo.natureza && !naturezaConhecida) }, [
+      UI.el('label', { classe: 'rotulo', for: id('natureza-outra'), texto: 'Qual natureza?' }), naturezaOutra]);
+    naturezaSel.addEventListener('change', function () {
+      grupoOutraNat.hidden = naturezaSel.value !== window.Ipo.OUTRA_NATUREZA;
+      if (!grupoOutraNat.hidden) naturezaOutra.focus();
+    });
+    function naturezaValor() {
+      if (naturezaSel.value === window.Ipo.OUTRA_NATUREZA) return naturezaOutra.value.replace(/\s+/g, ' ').trim();
+      return naturezaSel.value;
+    }
+    function naturezaLimpar() {
+      naturezaSel.value = '';
+      naturezaOutra.value = '';
+      grupoOutraNat.hidden = true;
+    }
     var desc = UI.el('textarea', { classe: 'campo', id: id('descricao'), maxlength: '2000', rows: '3',
       placeholder: 'Breve descrição do que aconteceu: quem desapareceu, onde, em que circunstâncias…' });
     desc.value = op.descricao || '';
     var grupoSolic = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-nome'), texto: 'Nome do solicitante' }), solicNome]);
-    var grupoNatureza = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('natureza'), texto: 'Natureza' }), natureza]);
+    var grupoNatureza = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('natureza'), texto: 'Natureza' }), naturezaSel, grupoOutraNat]);
     var grupoDesc = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('descricao'), texto: 'Observação (breve descrição da ocorrência)' }), desc]);
 
     /* ---- cadastro completo (painel): o restante do IPO e a localidade ---- */
@@ -243,7 +263,7 @@
         ipo: null,
       };
       if (inicial) {
-        dados.ipo = window.Ipo.normalizarIpo({ natureza: natureza.value, solicitante_nome: solicNome.value });
+        dados.ipo = window.Ipo.normalizarIpo({ natureza: naturezaValor(), solicitante_nome: solicNome.value });
         return dados;
       }
       var t = tipo.value;
@@ -257,7 +277,7 @@
       dados.acionado_em = new Date(ms).toISOString();
       dados.local_endereco = endereco.value.replace(/\s+/g, ' ').trim();
       dados.ipo = window.Ipo.normalizarIpo({
-        natureza: natureza.value, solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,
+        natureza: naturezaValor(), solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,
         destinatarios: destino.value, desaparecimento: desap.value, meio_liquido: marcadoEm(nomeMeio),
         pessoas_perdidas: pessoas.value, buscas_preliminares: marcadoEm(nomeBuscas), possibilidade_vida: marcadoEm(nomeVida),
         bms_envolvidos: bms.value, imagens_anexas: marcadoEm(nomeImagens) === 'sim' ? true : marcadoEm(nomeImagens) === 'nao' ? false : null,
@@ -268,7 +288,7 @@
 
     function limpar() {
       solicNome.value = '';
-      natureza.value = '';
+      naturezaLimpar();
       desc.value = '';
       coordTxt.value = '';
       coordAviso.textContent = '';

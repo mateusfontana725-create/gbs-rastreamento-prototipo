@@ -235,53 +235,92 @@
   /* ------------------------------------------------------------------ */
   /* Exportar                                                             */
   /* ------------------------------------------------------------------ */
+  // o: { trilhas, pontos, setores } com a lista de ids escolhidos (null = todos)
   function dadosParaExportar(o) {
     var dados = { nome: P.op().codigo, trilhas: [], pontos: [], setores: [] };
-    if (o.trilhas) {
-      P.participantes().forEach(function (p) {
-        if (o.participante && p.id !== o.participante) return;
-        var tr = P.trilha(p);
-        if (!tr.segmentos.length) return;
-        dados.trilhas.push({ nome: p.dados.nome + ' (' + P.tipo(p) + ')', tipo: P.tipo(p), cor: p.cor, segmentos: tr.segmentos });
-      });
-    }
-    if (o.pontos) {
-      P.pontosInteresse().forEach(function (d) {
-        dados.pontos.push({ nome: d.titulo, lat: d.lat, lng: d.lng, descricao: d.descricao, categoria: (P.categorias[d.categoria] || {}).rotulo || d.categoria });
-      });
-    }
-    if (o.setores) dados.setores = P.setores();
+    function escolhido(lista, id) { return !lista || lista.indexOf(id) >= 0; }
+    P.participantes().forEach(function (p) {
+      if (!escolhido(o.trilhas, p.id)) return;
+      var tr = P.trilha(p);
+      if (!tr.segmentos.length) return;
+      dados.trilhas.push({ nome: p.dados.nome + ' (' + P.tipo(p) + ')', tipo: P.tipo(p), cor: p.cor, segmentos: tr.segmentos });
+    });
+    P.pontosInteresse().forEach(function (d) {
+      if (!escolhido(o.pontos, d.id)) return;
+      dados.pontos.push({ nome: d.titulo, lat: d.lat, lng: d.lng, descricao: d.descricao, categoria: (P.categorias[d.categoria] || {}).rotulo || d.categoria });
+    });
+    dados.setores = P.setores().filter(function (s) { return escolhido(o.setores, s.id); });
     return dados;
   }
 
+  // Lista marcável de um tipo de item (trilhas, pontos, setores), com marcar/desmarcar todos.
+  function grupoEscolha(titulo, itens) {
+    var caixas = itens.map(function (it) {
+      var cb = UI.el('input', { type: 'checkbox', checked: it.marcado ? true : null });
+      return { id: it.id, cb: cb, rotulo: UI.el('label', { classe: 'linha-opcao' }, [cb, ' ' + it.rotulo]) };
+    });
+    var contagem = UI.el('small', { classe: 'muted' });
+    function atualizar() {
+      contagem.textContent = caixas.filter(function (c) { return c.cb.checked; }).length + ' de ' + caixas.length;
+    }
+    var alternar = UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Marcar todos' });
+    alternar.addEventListener('click', function () {
+      var marcar = caixas.some(function (c) { return !c.cb.checked; });
+      caixas.forEach(function (c) { c.cb.checked = marcar; });
+      alternar.textContent = marcar ? 'Desmarcar todos' : 'Marcar todos';
+      atualizar();
+    });
+    caixas.forEach(function (c) { c.cb.addEventListener('change', atualizar); });
+    atualizar();
+    return {
+      elemento: UI.el('details', { classe: 'exp-grupo', open: caixas.length && caixas.length <= 6 ? true : null }, [
+        UI.el('summary', null, [UI.el('strong', { texto: titulo }), ' ', contagem]),
+        UI.el('div', { classe: 'exp-grupo-acoes' }, [alternar]),
+        caixas.length ? UI.el('div', { classe: 'lista-escolha' }, caixas.map(function (c) { return c.rotulo; }))
+          : UI.el('p', { classe: 'muted', texto: 'Nada deste tipo no mapa.' }),
+      ]),
+      ids: function () { return caixas.filter(function (c) { return c.cb.checked; }).map(function (c) { return c.id; }); },
+    };
+  }
+
+  // Exportar: escolhe o que sai (cada trilha, cada ponto de interesse e cada setor). participanteId:
+  // atalho do participante, que abre já só com a trilha dele.
   function abrirExportar(participanteId) {
-    var sel = UI.el('select', { classe: 'campo', id: 'exp-quem' }, [UI.el('option', { value: '', texto: 'Todos os participantes' })].concat(
-      P.participantes().map(function (p) { return UI.el('option', { value: p.id, selected: p.id === participanteId ? true : null, texto: P.nome(p) }); })));
-    function caixa(id, texto, marcado) { return UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', id: id, checked: marcado ? true : null }), ' ' + texto]); }
+    var gTrilhas = grupoEscolha('Trilhas', P.participantes().map(function (p) {
+      return { id: p.id, rotulo: P.nome(p) + ' (' + P.tipo(p) + ')', marcado: participanteId ? p.id === participanteId : true };
+    }));
+    var gPontos = grupoEscolha('Pontos de interesse', P.pontosInteresse().map(function (d) {
+      return { id: d.id, rotulo: d.titulo + ' · ' + ((P.categorias[d.categoria] || {}).rotulo || d.categoria), marcado: !participanteId };
+    }));
+    var gSetores = grupoEscolha('Setores de busca', P.setores().map(function (s) {
+      return { id: s.id, rotulo: s.nome, marcado: !participanteId };
+    }));
     var formatos = [['gpx', 'GPX', 'AlpineQuest, Garmin, OsmAnd, Wikiloc'], ['kml', 'KML', 'Google Earth e Google Maps'], ['geojson', 'GeoJSON', 'QGIS e outros SIG'], ['csv', 'CSV', 'planilha (Excel, LibreOffice)']];
     var radios = UI.el('div', { classe: 'opcoes-modo' }, formatos.map(function (f, i) {
       return UI.el('label', { classe: 'opcao-modo' }, [UI.el('input', { type: 'radio', name: 'exp-formato', value: f[0], checked: i === 0 ? true : null }),
         UI.el('span', null, [UI.el('strong', { texto: f[1] }), UI.el('small', { texto: f[2] })])]);
     }));
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var baixar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'exp-baixar', texto: 'Baixar arquivo' });
     var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Exportar dados da operação' }),
-      UI.el('div', { classe: 'grupo' }, [caixa('exp-trilhas', 'Trilhas de', true), sel]),
-      UI.el('div', { classe: 'grupo' }, [caixa('exp-pontos', 'Pontos de interesse', !participanteId), caixa('exp-setores', 'Setores de busca (no GPX, como contorno)', !participanteId)]),
+      UI.el('h2', { id: 'modal-titulo', texto: 'Exportar' }),
+      UI.el('p', { classe: 'muted', texto: 'Só sai o que estiver marcado.' }),
+      gTrilhas.elemento, gPontos.elemento, gSetores.elemento,
       UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Formato' }), radios]),
       UI.el('p', { classe: 'nota', texto: 'O arquivo contém a localização de pessoas: guarde e compartilhe com o mesmo cuidado dos dados da operação.' }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
-        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'exp-baixar', texto: 'Baixar arquivo' })]),
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), baixar]),
     ]);
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       var fmt = form.querySelector('input[name="exp-formato"]:checked').value;
-      var o = { trilhas: $('exp-trilhas').checked, participante: sel.value || null, pontos: $('exp-pontos').checked, setores: $('exp-setores').checked };
-      var dados = dadosParaExportar(o);
-      if (!dados.trilhas.length && !dados.pontos.length && !dados.setores.length) { erro.textContent = 'Nada para exportar com essas opções.'; erro.hidden = false; return; }
-      var nome = (P.op().codigo + (o.participante ? '-' + (P.participante(o.participante) || { dados: { nome: '' } }).dados.nome : '') + '-' +
-        new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_') + '.' + fmt;
+      var dados = dadosParaExportar({ trilhas: gTrilhas.ids(), pontos: gPontos.ids(), setores: gSetores.ids() });
+      if (!dados.trilhas.length && !dados.pontos.length && !dados.setores.length) {
+        erro.textContent = 'Marque pelo menos um item para exportar.';
+        erro.hidden = false;
+        return;
+      }
+      var nome = (P.op().codigo + '-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_') + '.' + fmt;
       window.Arquivos.baixar(nome, window.Arquivos.exportar(fmt, dados), fmt);
       window.__ultimaExportacao = { nome: nome, formato: fmt, dados: dados };   // para conferência/testes
       fechar();
@@ -346,7 +385,8 @@
             ativa && d.areas.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Área → setor', onclick: function () {
               fechar(); var a = d.areas[0]; P.criarSetor(a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }), a.nome); } }) : null,
             UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Remover', onclick: function () {
-              atual.importados = atual.importados.filter(function (x) { return x !== imp; }); salvarImportados(); desenharImportados(); render(); } }),
+              UI.confirmar({ titulo: 'Remover "' + (imp.nome || 'arquivo') + '" do mapa?', texto: 'Os elementos importados saem do mapa. O arquivo original não é apagado.', ok: 'Remover', perigo: true })
+                .then(function (ok) { if (!ok) return; atual.importados = atual.importados.filter(function (x) { return x !== imp; }); salvarImportados(); desenharImportados(); render(); }); } }),
           ]),
         ]));
       });

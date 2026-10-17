@@ -42,8 +42,7 @@
       <button class="btn btn-primario btn-gigante" type="submit" id="btn-entrar">ENTRAR</button>
       <p class="erro-form" id="login-erro" role="alert" hidden></p>
       <p class="ajuda">Somente militares cadastrados como responsáveis podem acessar este painel.</p>
-      <p class="ajuda">Ainda não tem acesso? Peça o cadastro e aguarde a aprovação de um administrador.</p>
-      <button class="btn btn-escuro btn-gigante" type="button" id="btn-solicitar-acesso">PEDIR ACESSO</button>
+      <p class="ajuda ajuda-link">Ainda não tem acesso? <button class="link-botao" type="button" id="btn-solicitar-acesso">Pedir acesso</button></p>
     </form>
   </section>
 
@@ -237,6 +236,7 @@
           <span class="ico-msg" aria-hidden="true"></span><span class="rotulo-longo">Mensagens</span>
           <span class="contador" id="contador-msgs" hidden>0</span>
         </button>
+        <button class="btn btn-barra btn-pequeno" type="button" id="btn-convite" hidden title="Convidar participantes para esta operação"><span aria-hidden="true">＋</span> <span>Convidar</span></button>
         <div class="ferramentas" id="ferramentas">
           <button class="btn btn-barra btn-pequeno btn-ferramentas" type="button" id="btn-ferramentas" aria-label="Ferramentas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-ferramentas" title="Ferramentas da operação e do mapa">
             <span class="ico-menu" aria-hidden="true"></span><span class="rotulo-longo">Ferramentas</span>
@@ -266,29 +266,25 @@
             </details>
             <details class="menu-grupo" data-grupo="equipes" open>
               <summary><h3 id="mg-equipes">Participantes e equipes</h3></summary>
-              <button class="menu-item" type="button" id="btn-convite"><span class="ico-item" aria-hidden="true">＋</span><span>Convidar participantes</span></button>
               <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino a participantes</span></button>
             </details>
             <details class="menu-grupo" data-grupo="registros" open>
-              <summary><h3 id="mg-registros">Registros e ocorrências</h3></summary>
+              <summary><h3 id="mg-registros">Registros e Setores</h3></summary>
               <button class="menu-item" type="button" id="btn-registrar-foto"><span class="ico-camera" aria-hidden="true"></span><span>Registrar foto</span></button>
               <button class="menu-item" type="button" id="menu-ponto"><span class="ico-item" aria-hidden="true">▾</span><span>Marcar ponto de interesse</span></button>
-            </details>
-            <details class="menu-grupo" data-grupo="areas" open>
-              <summary><h3 id="mg-areas">Setores de busca</h3></summary>
               <button class="menu-item" type="button" id="menu-setor-raio"><span class="ico-item" aria-hidden="true">◯</span><span>Novo setor por raio</span></button>
               <button class="menu-item" type="button" id="menu-setor-poligono"><span class="ico-item" aria-hidden="true">⬠</span><span>Novo setor desenhando a área</span></button>
               <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Lista de setores e pontos</span></button>
+              <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar (escolher o que sai)</span></button>
+              <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo (GPX, KML, KMZ…)</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
             </details>
             <details class="menu-grupo" data-grupo="mapa">
               <summary><h3 id="mg-mapa">Mapa e navegação</h3></summary>
               <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
               <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
               <p class="menu-sol" id="menu-sol" hidden></p>
-              <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar (GPX, KML, GeoJSON, CSV)</span></button>
-              <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo (GPX, KML, KMZ…)</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
             </details>
             <details class="menu-grupo" data-grupo="config">
               <summary><h3 id="mg-config">Configurações e manutenção</h3></summary>

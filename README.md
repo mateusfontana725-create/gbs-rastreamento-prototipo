@@ -524,10 +524,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Operação**: Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis;
   - **Participantes e equipes**: Convidar participantes, Grupos, Deslocamentos de grupos, Enviar destino
     a participantes;
-  - **Registros e ocorrências**: Registrar foto, Marcar ponto de interesse;
-  - **Setores de busca**: Novo setor por raio, Novo setor desenhando a área, Lista de setores e pontos;
-  - **Mapa e navegação**: Ir para coordenada, Medir distância e área, Exportar, Importar (o **⤢** do mapa
-    enquadra todos);
+  - **Registros e Setores**: Registrar foto, Marcar ponto de interesse, Novo setor por raio, Novo setor desenhando a
+    área, Lista de setores e pontos, Exportar (escolher o que sai), Importar;
+  - **Mapa e navegação**: Ir para coordenada, Medir distância e área (o **⤢** do mapa enquadra todos);
   - **Configurações e manutenção**: Formato das coordenadas, **Tema** (Escuro ou Claro; o padrão é o escuro e a escolha fica no aparelho), Diagnóstico do GPS;
   - **Encerrar ou excluir · ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
@@ -579,7 +578,7 @@ Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na 
 - **Medir distância e área**: toque nos pontos; mostra cada trecho com **distância e rumo** (graus e
   direção), o total, e — ao fechar o polígono — **área (ha / km²) e perímetro**. O polígono medido pode
   virar **setor de busca** com um toque. Botões Desfazer e Sair.
-- **Exportar**: trilhas (de um participante ou de todos), pontos de interesse e setores em **GPX**
+- **Exportar**: escolhe-se item a item (cada trilha, cada ponto de interesse, cada setor, com "Marcar todos") e o formato. Sai em **GPX**
   (Garmin, AlpineQuest, OsmAnd, Locus), **KML** (Google Earth), **GeoJSON** (QGIS/ArcGIS) ou **CSV**
   (planilha, separador `;`). As trilhas saem com horário e precisão de cada ponto e as **lacunas** do sinal
   ficam como segmentos separados. Bom para relatórios e para levar a busca para outro aplicativo.
@@ -993,7 +992,7 @@ Depois do deploy, o Vercel mostra o domínio do projeto, por exemplo `https://ra
 
 1. **Painel do militar**: `https://rastreamento-sar.vercel.app/militar.html`
    (o endereço raiz `/` também redireciona para ele). Faça login e crie a operação.
-2. **Link do participante**: é gerado **por operação**, em **Ferramentas → Convidar participantes**. Há duas abas:
+2. **Link do participante**: é gerado **por operação**, no botão **Convidar** do cabeçalho da operação. Há duas abas:
    - **Link para CIVIS** — `https://rastreamento-sar.vercel.app/civil.html#t=<token de 64 caracteres>`
      Quem entra por ele sempre aparece como **civil**.
    - **Link para MILITARES** — outro token; permite escolher **militar** (ou civil). Compartilhe só com militares.
@@ -1019,7 +1018,7 @@ encerrada, e o token fica após o `#` (não é enviado aos servidores nem aparec
   só entrou por engano ou não deve mais ter acesso e não tem histórico, excluir é a opção.
 - Um administrador não consegue desativar nem tirar o próprio acesso de administrador (evita
   ficar sem nenhum administrador).
-- **Pedir acesso** (tela de login, botão **PEDIR ACESSO**): quem ainda não tem acesso preenche nome, e-mail e senha
+- **Pedir acesso** (tela de login, link **Pedir acesso**): quem ainda não tem acesso preenche nome, e-mail e senha
   num modal. O servidor cria o login **sem acesso** e registra o pedido como pendente. Enquanto isso, quem tenta
   entrar vê "aguardando a aprovação de um administrador". Na tela **Responsáveis**, o administrador vê a seção
   **Pedidos de acesso** e clica em **Aprovar** (vira responsável comum, sem administrador) ou **Recusar**. Um
@@ -1280,3 +1279,9 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   ou cadastro é necessário para o que foi implementado.
 - Sem sinal de celular não há rastreamento ao vivo, e nenhuma tecnologia web contorna isso. Em áreas
   remotas, a fila offline completa a trilha quando o participante volta a ter sinal.
+
+### Confirmações e ações definitivas
+
+Toda ação que apaga um dado ou desativa algo pede confirmação em uma janela própria: tirar participante de grupo,
+remover responsável da operação, excluir ficha, setor, ponto ou grupo, desativar acesso, apagar foto ou mensagem ainda
+não enviada, remover arquivo importado, descartar ficha de vítima em rascunho, excluir relatório e excluir operação.

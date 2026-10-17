@@ -773,8 +773,13 @@
       var it = { campos: campos, salva: false };
       it.titulo = UI.el('strong');
       it.estado = UI.el('small', { classe: 'nova-vitima-estado muted' });
-      it.remover = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Remover', onclick: function () {
+      it.remover = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Remover', onclick: async function () {
         if (it.salva) return;
+        var nomeDigitado = it.campos.nome.value.trim();
+        if (nomeDigitado) {
+          var ok = await UI.confirmar({ titulo: 'Descartar a vítima "' + nomeDigitado + '"?', texto: 'A ficha ainda não foi salva: o que foi digitado nela se perde.', ok: 'Descartar', perigo: true });
+          if (!ok) return;
+        }
         itens = itens.filter(function (x) { return x !== it; });
         it.bloco.remove();
         renumerar();
@@ -6074,15 +6079,10 @@
           ]),
         ]);
         if (souCriador && !r.criador && !eu) {
-          var confirmando = false;
           var bRem = UI.el('button', { classe: 'btn btn-perigo btn-pequeno', type: 'button', texto: 'Remover' });
           bRem.addEventListener('click', async function () {
-            if (!confirmando) {
-              confirmando = true;
-              bRem.textContent = 'Confirmar remoção';
-              setTimeout(function () { confirmando = false; bRem.textContent = 'Remover'; }, 5000);
-              return;
-            }
+            var ok = await UI.confirmar({ titulo: 'Remover ' + r.nome + ' da operação?', texto: r.nome + ' deixa de ter acesso a esta operação. O que a pessoa já registrou continua no histórico.', ok: 'Remover', perigo: true });
+            if (!ok) return;
             bRem.disabled = true;
             try {
               render(await C.rpc('remover_responsavel', { p_operacao: op.id, p_user: r.user_id }));
@@ -6833,6 +6833,9 @@
   }
 
   async function removerMembro(gid, pid) {
+    var p = est.participantes.get(pid);
+    var ok = await UI.confirmar({ titulo: 'Tirar do grupo?', texto: (p ? p.dados.nome : 'Este participante') + ' sai deste grupo. Ele continua na operação e o histórico dele fica como está.', ok: 'Tirar do grupo', perigo: true });
+    if (!ok) return;
     try {
       await C.rpc('remover_membro', { p_grupo: gid, p_participante: pid });
       var mapa = est.membros.get(gid);

@@ -1025,7 +1025,11 @@
     ]);
     if (local && local.erro) {
       li.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Apagar',
-        onclick: function () { estado.msgPendentes = estado.msgPendentes.filter(function (x) { return x !== local; }); salvarMsgPendentes(); renderizarHistorico(); } }));
+        onclick: async function () {
+          var ok = await UI.confirmar({ titulo: 'Apagar esta mensagem?', texto: 'Ela ainda não foi enviada. Apagada, não chega à operação.', ok: 'Apagar', perigo: true });
+          if (!ok) return;
+          estado.msgPendentes = estado.msgPendentes.filter(function (x) { return x !== local; }); salvarMsgPendentes(); renderizarHistorico();
+        } }));
     }
     return li;
   }
@@ -2169,7 +2173,11 @@
       if (it.estado === 'erro' || it.estado === 'fila') {
         li.appendChild(UI.el('div', { classe: 'foto-acoes' }, [
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Tentar', onclick: function () { it.estado = 'fila'; it.erro = null; processarFilaFotos(); } }),
-          UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Apagar', onclick: async function () { await apagarFotoLocal(it.id); renderizarFotos(); } }),
+          UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Apagar', onclick: async function () {
+            var ok = await UI.confirmar({ titulo: 'Apagar esta foto?', texto: 'Ela ainda não foi enviada. Apagada, a foto se perde.', ok: 'Apagar', perigo: true });
+            if (!ok) return;
+            await apagarFotoLocal(it.id); renderizarFotos();
+          } }),
         ]));
       }
       ul.appendChild(li);

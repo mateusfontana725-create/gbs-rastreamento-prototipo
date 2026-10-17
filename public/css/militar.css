@@ -755,3 +755,13 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
   .dash-perfil { grid-template-columns: minmax(100px, 1fr) 1fr 36px; }
   .dash-perfil .dash-perfil-km { grid-column: 1 / -1; text-align: left; }
 }
+
+/* ---- link de ação (ex.: "Pedir acesso" na tela de login) ---- */
+.link-botao { background: none; border: 0; padding: 0; color: var(--acento); font: inherit; text-decoration: underline; cursor: pointer; }
+.ajuda-link { margin-top: 6px; }
+
+/* ---- escolha de itens na exportação ---- */
+.exp-grupo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; background: var(--superficie-2); }
+.exp-grupo > summary { cursor: pointer; font-size: .9rem; }
+.exp-grupo-acoes { margin: 6px 0; }
+.lista-escolha { max-height: 180px; overflow: auto; display: grid; gap: 4px; padding-right: 4px; }

@@ -995,10 +995,13 @@
         UI.el('li', { texto: 'fotografias registradas no mapa' + (nFotos ? ' (' + nFotos + ')' : '') + ' e os arquivos armazenados;' }),
         UI.el('li', { texto: 'fichas das vítimas e as fotos delas;' }),
         UI.el('li', { texto: 'grupos, deslocamentos de grupos e alertas;' }),
+        UI.el('li', { texto: 'diário da operação e relatórios gerados (PDF);' }),
         UI.el('li', { texto: 'equipe de responsáveis da operação e os links/QR Codes de convite (inclusive os dos grupos), que deixam de funcionar na hora.' }),
       ]),
       UI.el('p', { classe: 'ajuda', texto: 'Quem ainda estiver com o link aberto deixa de enviar localização, mensagens e fotos. Outras operações não são afetadas.' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Só operações sem atividade (criadas por engano) podem ser excluídas. Com atividade no diário, a exclusão é recusada: o diário e os relatórios são o documento da operação.' }),
+      UI.el('p', { classe: 'ajuda', texto: est.responsavel.admin
+        ? 'Como administrador, a exclusão vale para qualquer operação da equipe, mesmo com atividade no diário ou relatórios gerados.'
+        : 'Só operações sem atividade (criadas por engano) podem ser excluídas. Com atividade no diário, a exclusão é recusada: o diário e os relatórios são o documento da operação.' }),
       UI.el('div', { classe: 'grupo' }, [
         UI.el('label', { classe: 'rotulo', for: 'excluir-codigo', texto: 'Para confirmar, digite o nome da operação' }),
         UI.el('p', { classe: 'ajuda mono', id: 'excluir-ajuda', texto: op.codigo }),

@@ -6017,6 +6017,7 @@ create policy gbs_relatorios_ver on storage.objects
 -- ---------------------------------------------------------------------
 -- Exclusão da operação: só sem atividade registrada (criada por engano).
 -- Com atividade, a operação e o diário ficam; os dados pessoais saem pela retenção.
+-- Administrador: exclui qualquer operação da equipe, com diário e relatórios (migração 020).
 -- ---------------------------------------------------------------------
 create or replace function public.excluir_operacao(p_operacao uuid)
 returns json
@@ -6035,12 +6036,16 @@ begin
   if v_codigo is null then
     raise exception 'sem_permissao';
   end if;
-  if exists (select 1 from public.diario where operacao_id = p_operacao
-              and tipo not in ('operacao_criada', 'acionamento', 'responsavel_adicionado', 'ficha_vitima', 'grupo_criado', 'setor_criado',
-                               'operacao_encerrada', 'operacao_reaberta', 'dados_apagados'))
-     or exists (select 1 from public.relatorios where operacao_id = p_operacao) then
+  if not public.eh_admin()
+     and (exists (select 1 from public.diario where operacao_id = p_operacao
+                   and tipo not in ('operacao_criada', 'acionamento', 'responsavel_adicionado', 'ficha_vitima', 'grupo_criado', 'setor_criado',
+                                    'operacao_encerrada', 'operacao_reaberta', 'dados_apagados'))
+          or exists (select 1 from public.relatorios where operacao_id = p_operacao)) then
     raise exception 'operacao_com_registros';
   end if;
+  insert into public.arquivos_pendentes (caminho, bucket, operacao_id, excluido_por)
+  select caminho, 'relatorios', p_operacao, null from public.relatorios where operacao_id = p_operacao
+  on conflict (caminho) do nothing;
   select count(*) into v_fotos from public.fotos where operacao_id = p_operacao;
   select count(*) into v_participantes from public.participantes where operacao_id = p_operacao and tipo <> 'responsavel';
   select count(*) into v_vitimas from public.vitimas where operacao_id = p_operacao;

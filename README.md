@@ -682,9 +682,12 @@ chave própria).
 
 ### Excluir uma operação
 
-- Só operações **sem atividade registrada** (criadas por engano) podem ser excluídas. Com atividade no diário
-  (pessoas, setores iniciados, deslocamentos, relatos, observações, resultado ou relatório), o banco recusa:
-  o diário e os relatórios são o documento da operação, e os dados pessoais saem pela retenção.
+- **Criador da operação** (ou responsável adicionado, que não é administrador) só pode excluir operação **sem atividade
+  registrada** (criadas por engano). Com atividade no diário (pessoas, setores iniciados, deslocamentos, relatos,
+  observações, resultado ou relatório), o banco recusa: o diário e os relatórios são o documento da operação, e os
+  dados pessoais saem pela retenção.
+- **Administrador** exclui **qualquer** operação da equipe, sem essa restrição: diário, observações e relatórios
+  gerados também são apagados (migração 020). Os PDFs saem do Storage pela fila de limpeza diária.
 - Disponível para **quem criou a operação** e para **administradores** (que alcançam **todas** as operações, inclusive para excluir): na lista de
   operações (botão **Excluir operação**) e em **Ferramentas → Excluir operação**. Os demais nem veem o
   botão, e o banco recusa a exclusão se alguém tentar por fora. Participantes nunca podem excluir.
@@ -857,7 +860,9 @@ rastreamento-sar/
      A tabela não tem acesso direto: o pedido entra pela função de servidor `/api/responsaveis` (ação `solicitar`).
    - **019** (`019_ipo_operacao.sql`): coluna `ipo` na operação e a função `salvar_ipo_operacao`. O relatório
      (`relatorio_operacao`) passa a devolver os dados do IPO. Ver a seção "IPO" abaixo.
-   O `schema.sql` completo já inclui da 003 à 019 (seções 10 a 26).
+   - **020** (`020_admin_excluir_sem_restricao.sql`): `excluir_operacao` deixa o administrador excluir operação com
+     atividade (diário e relatórios). Criador sem ser administrador segue com a regra de operação sem atividade.
+   O `schema.sql` completo já inclui da 003 à 020.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -1034,7 +1039,7 @@ identidades anônimas sem participação há mais de 7 dias são removidas. A li
 | Deslocamentos e alertas | `missoes`, `missao_membros` e `alertas`: leitura só pelos responsáveis da operação; eventos calculados no servidor a partir das posições gravadas (o celular não informa "cheguei"); finalizar a busca: só o responsável da operação ou o responsável do grupo da missão; cada evento gera um alerta só (chave única); `verificar_retornos` sem operação só roda pelo agendador (`pg_cron`) |
 | Fila offline | o celular só marca um ponto como enviado quando o servidor confirma o id; usuário e operação de cada ponto vêm sempre da sessão no servidor (os ids guardados no aparelho são só para diagnóstico) |
 | Remover e reincluir | remover não apaga dados; reincluir só por responsável da operação ativa (`reincluir_participante`), reativando o mesmo registro; histórico em `participacao_eventos` (só responsáveis leem); participante não remove nem reinclui ninguém |
-| Exclusão de operação | só o criador ou um administrador da equipe (`excluir_operacao`, verificado no banco); transação única; arquivos removidos do Storage com fila de pendências e limpeza diária; tokens invalidados na hora |
+| Exclusão de operação | o criador ou um administrador da equipe (`excluir_operacao`, verificado no banco); só o administrador exclui operação com atividade (migração 020); transação única; arquivos removidos do Storage com fila de pendências e limpeza diária; tokens invalidados na hora |
 | Validação de dados | latitude/longitude/precisão/horário validados no servidor; lote máximo de 500 pontos; orientação até 500 caracteres; limite de 60 orientações por minuto e de 300 participantes por operação |
 | Segredos | só a chave **pública** chega ao navegador (via `/api/config`, lida de variável de ambiente). A chave secreta fica no servidor (`/api/limpeza`) |
 | Cabeçalhos | CSP restritiva, HSTS, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` (envia só o domínio do site, exigido pelo OpenStreetMap; o token do link fica após o `#` e nunca é enviado), `Permissions-Policy` (geolocalização só no próprio site) |

@@ -48,24 +48,8 @@
           </div>
         </div>
 
-        <!-- Só no navegador do Android (app-android.js): o app manda a localização mesmo com a tela apagada -->
-        <section class="cartao secao app-android" id="app-android" hidden>
-          <h2>Use o aplicativo (Android)</h2>
-          <p>Com o aplicativo, sua localização <strong>continua sendo enviada com a tela apagada</strong>. É a mesma tela deste link.</p>
-          <a class="btn btn-primario btn-gigante" id="app-baixar" href="/baixar-app" rel="noopener">BAIXAR O APLICATIVO</a>
-          <button class="btn btn-escuro" type="button" id="app-abrir">Já instalei: ABRIR NO APLICATIVO</button>
-          <details class="app-passos">
-            <summary>Como instalar</summary>
-            <ol class="perm-passos">
-              <li>Toque em <strong>BAIXAR O APLICATIVO</strong>. Se o Chrome perguntar, toque em <strong>Baixar mesmo assim</strong>.</li>
-              <li>Abra o arquivo baixado (<strong>gbs-civil.apk</strong>) pela notificação ou em Downloads.</li>
-              <li>Se aparecer <strong>instalação bloqueada</strong>, toque em <strong>Configurações</strong>, ative <strong>Permitir desta fonte</strong>, volte e toque em <strong>Instalar</strong>.</li>
-              <li>Se o Play Protect avisar, toque em <strong>Mais detalhes</strong> e <strong>Instalar mesmo assim</strong>.</li>
-              <li>Volte a esta página e toque em <strong>ABRIR NO APLICATIVO</strong>. No app, permita a <strong>localização</strong> e as <strong>notificações</strong>.</li>
-            </ol>
-          </details>
-          <p class="ajuda">Prefere não instalar? Continue por aqui mesmo, logo abaixo. Neste caso, mantenha a tela ligada.</p>
-        </section>
+        <!-- Só no navegador do Android: faixa do aplicativo (app-android.js) -->
+        <div class="app-faixa-lugar" data-app-android hidden></div>
 
         <!-- Localização bloqueada / desligada: explica e permite verificar de novo sem refazer o cadastro -->
         <section class="cartao secao permissao-caixa" id="ini-permissao" hidden aria-live="polite">
@@ -208,6 +192,9 @@
           <h2 class="titulo-secao" id="tit-fotos">Suas fotos</h2>
           <ul class="fotos-minhas" id="fotos-minhas"></ul>
         </section>
+
+        <!-- Só no navegador do Android: passar para o aplicativo sem refazer o cadastro (app-android.js) -->
+        <div class="app-faixa-lugar" data-app-android hidden></div>
 
         <button class="btn btn-notif" type="button" id="btn-notif" hidden>🔔 Avisar quando os bombeiros mandarem mensagem</button>
         <label class="linha-opcao" hidden><input type="checkbox" id="opt-tela" checked> Manter a tela ligada</label>

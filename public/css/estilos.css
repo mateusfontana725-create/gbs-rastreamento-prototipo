@@ -1920,10 +1920,12 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 .aviso-fechar:hover, .aviso-fechar:focus-visible { opacity: 1; background: rgba(255, 255, 255, .08); outline: none; }
 @media (pointer: coarse) { .aviso-fechar { width: 44px; height: 44px; margin: -12px -12px -12px 0; } }
 
-/* ---- civil: aplicativo Android (app-android.js) ---- */
-.app-android { border-left: 4px solid var(--acento); display: grid; gap: 10px; }
-.app-android h2 { margin: 0; }
-.app-android p { margin: 0; }
-.app-android .btn-gigante { text-decoration: none; display: grid; place-items: center; }
-.app-passos summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
-.app-passos .perm-passos { margin-bottom: 4px; }
+/* ---- civil: aplicativo Android (app-android.js) — faixa discreta ---- */
+.app-faixa-lugar { margin: 0 0 12px; }
+.app-faixa { display: grid; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--borda); border-left: 3px solid var(--acento); background: var(--superficie); }
+.app-faixa-texto { margin: 0; font-size: .88rem; line-height: 1.35; color: var(--texto-2); }
+.app-faixa-texto strong { color: var(--texto); }
+.app-faixa-acoes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.app-faixa-acoes .btn { flex: 0 0 auto; text-decoration: none; }
+.app-faixa-link { background: none; border: 0; padding: 4px 2px; color: var(--acento); font: inherit; font-size: .85rem; text-decoration: underline; cursor: pointer; }
+.app-faixa-passos { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: .85rem; line-height: 1.35; color: var(--texto-2); }

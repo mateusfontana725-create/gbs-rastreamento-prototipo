@@ -30,8 +30,9 @@ public class MainActivity extends BridgeActivity {
         abrirConvite(intent);
     }
 
-    // gbscivil://abrir?t=<convite> → <página do civil>?t=<convite>
+    // gbscivil://abrir?t=<convite>[&s=<sessão>] → <página do civil>?t=<convite>[#s=<sessão>]
     // (o parâmetro "a" muda a cada abertura para a página carregar de novo, mesmo com o mesmo convite)
+    // A sessão vem do navegador depois do cadastro e vai no fragmento (#), que não é enviado ao servidor.
     private void abrirConvite(Intent intent) {
         if (intent == null || intent.getData() == null) return;
         Uri dado = intent.getData();
@@ -40,10 +41,12 @@ public class MainActivity extends BridgeActivity {
         if (token == null || !token.matches("[0-9a-fA-F]{64}")) return;
         String base = getBridge().getServerUrl();
         if (base == null) return;
-        Uri pagina = Uri.parse(base).buildUpon().clearQuery().fragment(null)
+        Uri.Builder destino = Uri.parse(base).buildUpon().clearQuery().fragment(null)
             .appendQueryParameter("t", token.toLowerCase())
-            .appendQueryParameter("a", String.valueOf(System.currentTimeMillis()))
-            .build();
+            .appendQueryParameter("a", String.valueOf(System.currentTimeMillis()));
+        String sessao = dado.getQueryParameter("s");
+        if (sessao != null && sessao.matches("[A-Za-z0-9_-]+")) destino.encodedFragment("s=" + sessao);
+        Uri pagina = destino.build();
         getBridge().getWebView().post(() -> getBridge().getWebView().loadUrl(pagina.toString()));
     }
 

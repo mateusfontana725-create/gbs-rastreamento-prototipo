@@ -712,13 +712,18 @@ dado de participante sai do banco nesses painéis.
 
 ### App Android do participante (civil) — versão 2
 
-O participante continua usando o **link** (iPhone e quem não quiser instalar). No **Android**, a tela inicial do
-link mostra também **BAIXAR O APLICATIVO** e **ABRIR NO APLICATIVO**. O app é a **mesma página** do link; a diferença
+O participante continua usando o **link** (iPhone e quem não quiser instalar). No **Android** (inclusive tablet
+no modo "site para computador"), o link mostra uma faixa discreta com **Baixar** e **Abrir no app**, antes do
+cadastro e também na tela de rastreamento. O app é a **mesma página** do link; a diferença
 é que ele **continua mandando a localização com a tela apagada** (o navegador para o GPS quando a tela apaga).
 
 - **Como o civil instala:** toca em BAIXAR O APLICATIVO (`/baixar-app`), abre o arquivo `gbs-civil.apk`, permite
   "instalar desta fonte" quando o Android pedir e, se o Play Protect avisar, "Instalar mesmo assim". Depois volta ao
   link e toca em ABRIR NO APLICATIVO: o app abre direto no convite. O passo a passo aparece em "Como instalar".
+- **Já cadastrado no navegador:** "Abrir no app" leva a sessão junto (no fim do endereço, depois do `#`, que não sai
+  do aparelho). O app continua a **mesma pessoa** no painel e retoma sozinho; o navegador para de enviar, apaga a
+  sessão dele e mostra "O rastreamento continua no aplicativo" (dois lugares renovando a mesma sessão fariam o
+  servidor derrubá-la).
 - **No app:** permite a localização e as notificações. Enquanto rastreia aparece a notificação fixa "Rastreamento
   GBS — Sua localização está sendo enviada aos bombeiros". Aberto pelo ícone, o app volta ao último convite.
 - **Como funciona:** `app-android/` é um projeto Capacitor que abre `<site>/civil.html` (`capacitor.config.json` →

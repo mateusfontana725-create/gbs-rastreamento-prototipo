@@ -146,6 +146,7 @@
 
   async function iniciar() {
     if (APP.redirecionando) return;   // o app está voltando para o último convite
+    if (APP.pronto) await APP.pronto;   // app aberto pelo navegador: sessão do civil chegando
     $('btn-recarregar').addEventListener('click', function () { location.reload(); });
 
     if (!C.configurado) {

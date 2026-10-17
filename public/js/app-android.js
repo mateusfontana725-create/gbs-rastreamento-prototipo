@@ -23,12 +23,20 @@
   var PACOTE = 'br.gbs.rastreamento.civil';    // capacitor.config.json → appId
   var CHAVE_CONVITE = 'gbs.app.convite';
   var CHAVE_GPS_OK = 'gbs.app.gps_ok';
+  var CHAVE_PART = 'sar-civil-participacao';   // civil.js: participação salva no aparelho
+  // comunicacao.js: onde o Supabase guarda a sessão desta página
+  var CHAVE_SESSAO = 'sar-sessao-' + (document.documentElement.getAttribute('data-pagina') || 'app');
 
   var cap = window.Capacitor;
   var noApp = Boolean(cap && cap.isNativePlatform && cap.isNativePlatform() && cap.getPlatform() === 'android');
-  var android = /Android/i.test(navigator.userAgent || '');
+  // Tablets Android abrem o Chrome no modo "site para computador": o navegador se apresenta como Linux.
+  // Linux com tela de toque (e não Chromebook) é, na prática, Android.
+  var ua = navigator.userAgent || '';
+  var android = /Android/i.test(ua) ||
+    Boolean(navigator.userAgentData && navigator.userAgentData.platform === 'Android') ||
+    (/Linux/i.test(ua) && !/CrOS/i.test(ua) && navigator.maxTouchPoints > 0);
 
-  var api = { noApp: noApp, redirecionando: false, rpc: null };
+  var api = { noApp: noApp, redirecionando: false, rpc: null, pronto: null };
   window.AppAndroid = api;
 
   function tokenDaUrl() {
@@ -54,8 +62,27 @@
       location.replace(location.pathname + '?t=' + ler(CHAVE_CONVITE));
       return;
     }
+    receberSessao();
     instalarGpsNativo();
     api.rpc = criarRpcNativa();
+  }
+
+  // Vindo do navegador depois do cadastro: a sessão e a participação chegam no fim do endereço
+  // (#s=..., não vai ao servidor). Com a mesma sessão o app continua a mesma pessoa no painel;
+  // a página retoma sozinha e o Android pede a localização na hora.
+  function receberSessao() {
+    var s = new URLSearchParams(location.hash.replace(/^#/, '')).get('s');
+    if (!s) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    var pacote = null;
+    try { pacote = JSON.parse(decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))))); } catch (e) { return; }
+    if (!pacote || !pacote.a || !pacote.r) return;
+    if (pacote.p) gravar(CHAVE_PART, JSON.stringify(pacote.p));
+    gravar(CHAVE_GPS_OK, '1');
+    var C = window.Comunicacao;
+    if (C && C.cliente) {
+      api.pronto = C.cliente.auth.setSession({ access_token: pacote.a, refresh_token: pacote.r }).catch(function () { /* segue sem: cadastro de novo */ });
+    }
   }
 
   // Leituras do plugin no formato do navigator.geolocation (o que civil.js e gps.js esperam)
@@ -192,21 +219,84 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* No navegador do Android: oferecer o aplicativo na tela inicial       */
+  /* No navegador do Android: oferecer o aplicativo                       */
   /* ------------------------------------------------------------------ */
+  // Uma faixa discreta antes do cadastro e na tela de rastreamento ([data-app-android] no civil.html).
   if (!noApp && android) {
     document.addEventListener('DOMContentLoaded', function () {
-      var caixa = document.getElementById('app-android');
-      if (!caixa) return;
-      caixa.hidden = false;
-      document.getElementById('app-baixar').setAttribute('href', APK);
-      document.getElementById('app-abrir').addEventListener('click', function () {
-        var t = tokenDaUrl();
-        // instalado: abre o app no convite; não instalado: o Chrome baixa o APK
-        var reserva = location.origin + APK;
-        location.href = 'intent://abrir' + (t ? '?t=' + t : '') + '#Intent;scheme=' + ESQUEMA + ';package=' + PACOTE +
-          ';S.browser_fallback_url=' + encodeURIComponent(reserva) + ';end';
+      document.querySelectorAll('[data-app-android]').forEach(function (lugar) {
+        lugar.appendChild(faixa());
+        lugar.hidden = false;
       });
     });
+  }
+
+  function faixa() {
+    var el = window.UI.el;
+    var passos = el('ol', { classe: 'app-faixa-passos', hidden: true }, [
+      'Toque em Baixar (se o Chrome perguntar, Baixar mesmo assim).',
+      'Abra o arquivo gbs-civil.apk pela notificação ou em Downloads.',
+      'Se aparecer "instalação bloqueada": Configurações → Permitir desta fonte → Instalar.',
+      'Se o Play Protect avisar: Mais detalhes → Instalar mesmo assim.',
+      'Volte aqui e toque em Abrir no app. Permita a localização e as notificações.',
+    ].map(function (t) { return el('li', { texto: t }); }));
+    var ajuda = el('button', { classe: 'app-faixa-link', type: 'button', 'aria-expanded': 'false', texto: 'Como instalar' });
+    ajuda.addEventListener('click', function () {
+      passos.hidden = !passos.hidden;
+      ajuda.setAttribute('aria-expanded', String(!passos.hidden));
+    });
+    return el('div', { classe: 'app-faixa' }, [
+      el('p', { classe: 'app-faixa-texto' }, [el('strong', { texto: 'Android: ' }), 'o aplicativo envia sua localização mesmo com a tela apagada.']),
+      el('div', { classe: 'app-faixa-acoes' }, [
+        el('a', { classe: 'btn btn-pequeno', href: APK, texto: 'Baixar' }),
+        el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Abrir no app', onclick: abrirNoApp }),
+        ajuda,
+      ]),
+      passos,
+    ]);
+  }
+
+  // Instalado: abre o app no convite (e, depois do cadastro, na mesma participação).
+  // Não instalado: o Chrome segue para o download do APK.
+  async function abrirNoApp() {
+    var t = tokenDaUrl();
+    var sessao = t ? await sessaoParaApp(t) : null;
+    if (sessao) vigiarPassagem();
+    location.href = 'intent://abrir' + (t ? '?t=' + t + (sessao ? '&s=' + sessao : '') : '') +
+      '#Intent;scheme=' + ESQUEMA + ';package=' + PACOTE +
+      ';S.browser_fallback_url=' + encodeURIComponent(location.origin + APK) + ';end';
+  }
+
+  // Só depois do cadastro: sessão + participação salva, em base64 seguro para endereço.
+  async function sessaoParaApp(t) {
+    var p = null;
+    try { p = JSON.parse(ler(CHAVE_PART) || 'null'); } catch (e) { /* sem participação */ }
+    if (!p || p.token !== t || !p.participante_id || !p.ativo) return null;
+    var s = null;
+    try { s = (await window.Comunicacao.cliente.auth.getSession()).data.session; } catch (e) { /* sem sessão */ }
+    if (!s || !s.access_token || !s.refresh_token) return null;
+    var json = JSON.stringify({ a: s.access_token, r: s.refresh_token, p: p });
+    return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  // O app abriu se a página saiu da frente logo depois do toque. Aí o navegador para de rastrear
+  // (o mesmo celular não manda a trilha em dobro) e larga a sessão: o servidor derruba uma sessão
+  // renovada por dois lugares, e o app ficaria sem ela.
+  function vigiarPassagem() {
+    var inicio = Date.now();
+    function aoSair() {
+      if (document.visibilityState !== 'hidden') return;
+      document.removeEventListener('visibilitychange', aoSair);
+      if (Date.now() - inicio <= 5000) passarParaApp();
+    }
+    document.addEventListener('visibilitychange', aoSair);
+    setTimeout(function () { document.removeEventListener('visibilitychange', aoSair); }, 5000);
+  }
+
+  function passarParaApp() {
+    try { window.Comunicacao.cliente.auth.stopAutoRefresh(); } catch (e) { /* sem cliente */ }
+    try { localStorage.removeItem(CHAVE_SESSAO); localStorage.removeItem(CHAVE_PART); } catch (e) { /* ignora */ }
+    window.GBS_RECARREGANDO = true;   // sem o aviso de "sair da página"
+    location.replace('app-aberto.html');
   }
 })();

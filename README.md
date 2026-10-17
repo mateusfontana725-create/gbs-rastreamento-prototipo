@@ -686,8 +686,9 @@ dado de participante sai do banco nesses painéis.
   (administrador: todas). A escolha fica salva neste navegador.
 - **Cabeçalho:** um único botão **☰ Menu** abre a lista de ações (Painel de estatísticas, Lista de operações,
   Responsáveis, Minha conta, Sair).
-- **Operação → Dashboard da operação**: ULV, primeira localização (condição, horário, minutos desde o início das
-  operações e distância do ULV), nº de fichas, perfis, setores e registros do diário.
+- **Operação → Estudo da operação**: linha do tempo (início das operações → localização da vítima, com o tempo
+  entre os dois; sem localização mostra "em andamento há…"), quatro números (fichas, localizada, distância do ULV,
+  registros do diário), perfis das vítimas em barras e o local (ULV, localizações registradas, setores).
 - **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro
   registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
 - **Perfil da vítima** = uma lista de seleção na ficha ("Perfil da vítima (para estudos)"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
@@ -712,7 +713,8 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
   visto, nº de pessoas perdidas, buscas preliminares, possibilidade de vida ("Não apurado" quando não se sabe), BMs
   diretamente envolvidos, imagens anexas, responsável pelas informações, a observação e as vítimas.
   Em celular, o formulário tem uma coluna só; em tablet e PC (a partir de 760 px) as seções ficam lado a lado
-  (Ocorrência | Solicitante, Busca | Observação) e a janela é mais larga.
+  (Ocorrência | Solicitante, Busca | Observação) e a janela é mais larga. Na criação, Local | Ocorrência e
+  nome da operação e retenção na mesma linha.
 - **Tipo da operação** não é escolhido à parte: vem da **natureza** (busca aquática → aquática; terrestre → terrestre;
   aérea → aérea; qualquer outra → "outras", com a própria natureza). O **meio líquido** só aparece para busca aquática.
   As coordenadas do cadastro são as do último avistamento: não há um segundo campo de coordenadas.

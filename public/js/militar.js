@@ -713,13 +713,15 @@
     var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'btn-criar', texto: 'Criar operação' });
     var cancelar = UI.el('button', { classe: 'btn', type: 'button', id: 'nova-cancelar', texto: 'Cancelar', onclick: function () { fechar(); } });
     var dadosOp = UI.el('fieldset', { classe: 'nova-op-dados', id: 'nova-op-dados' }, [
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'nova-codigo', texto: 'Nome ou código da operação *' }), codigo]),
-      campos.elemento,
-      UI.el('div', { classe: 'grupo' }, [
-        UI.el('label', { classe: 'rotulo', for: 'nova-retencao', texto: 'Apagar dados pessoais' }),
-        retencao,
-        UI.el('small', { classe: 'muted', texto: 'Participantes, trilhas, mensagens e fotos. O diário e os relatórios ficam guardados.' }),
+      UI.el('div', { classe: 'nova-op-linha' }, [
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'nova-codigo', texto: 'Nome ou código da operação *' }), codigo]),
+        UI.el('div', { classe: 'grupo' }, [
+          UI.el('label', { classe: 'rotulo', for: 'nova-retencao', texto: 'Apagar dados pessoais' }),
+          retencao,
+          UI.el('small', { classe: 'muted', texto: 'Participantes, trilhas, mensagens e fotos. O diário e os relatórios ficam guardados.' }),
+        ]),
       ]),
+      campos.elemento,
     ]);
     var form = UI.el('form', { classe: 'form-nova-op', id: 'form-nova', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),

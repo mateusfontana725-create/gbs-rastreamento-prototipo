@@ -850,3 +850,47 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 @media (max-width: 759px) {
   .cad-local-visual, .mini-mapa, .mini-mapa-vazio { min-height: 220px; height: 220px; }
 }
+
+/* ---- painel da operação (v2): linha do tempo, cartões alinhados ---- */
+.dash-s7 { grid-column: span 7; }
+.dash-s5 { grid-column: span 5; }
+.dash-chip { display: inline-block; margin-left: 4px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--borda-forte);
+  font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); vertical-align: middle; }
+.dash-chip-aberta { color: #34d399; border-color: rgba(52, 211, 153, .45); background: rgba(52, 211, 153, .12); }
+
+/* linha do tempo: início → (tempo entre) → localização */
+.dash-tempo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 1.3fr) minmax(0, 1fr); align-items: center; gap: 18px;
+  padding: 18px 20px; border-radius: 14px; border: 1px solid var(--borda); background: var(--superficie); }
+.dash-tempo-no { display: grid; gap: 4px; min-width: 0; }
+.dash-tempo-no::before { content: ''; width: 12px; height: 12px; border-radius: 50%; background: var(--acento); margin-bottom: 4px; }
+.dash-tempo-fim { justify-items: end; text-align: right; }
+.dash-tempo-fim::before { justify-self: end; }
+.dash-tempo-pendente::before { background: transparent; border: 2px solid var(--texto-3); }
+.dash-tempo-no .dash-tempo-rotulo { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
+.dash-tempo-data { font-family: var(--mono); font-size: 1.02rem; font-weight: 600; overflow-wrap: anywhere; }
+.dash-tempo-pendente .dash-tempo-data { font-family: var(--fonte); font-weight: 500; font-style: italic; color: var(--texto-3); }
+.dash-tempo-no small { font-size: .8rem; }
+.dash-tempo-centro { display: grid; justify-items: center; gap: 4px; text-align: center; min-width: 0; }
+.dash-tempo-centro .dash-tempo-rotulo { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
+.dash-tempo-medida { font-family: var(--mono); font-size: 1.4rem; line-height: 1.15; font-weight: 600; }
+.dash-tempo-trilho { display: block; width: 100%; height: 6px; border-radius: 3px; margin-top: 6px; }
+.dash-tempo-trilho.ativo { background: linear-gradient(90deg, #fbbf24, #b45309); }
+.dash-tempo-trilho.tracejado { background: repeating-linear-gradient(90deg, var(--borda-forte) 0 8px, transparent 8px 14px); }
+
+@media (max-width: 960px) {
+  .dash-s7, .dash-s5 { grid-column: span 12; }
+}
+@media (max-width: 560px) {
+  .dash-tempo { grid-template-columns: 1fr; gap: 10px; padding: 14px; }
+  .dash-tempo-fim, .dash-tempo-fim::before { justify-items: start; justify-self: start; text-align: left; }
+  .dash-tempo-centro { justify-items: start; text-align: left; }
+  .dash-tempo-medida { font-size: 1.2rem; }
+}
+
+/* ---- nova operação: horizontal a partir de tablet (Local | Ocorrência; nome e retenção numa linha) ---- */
+.modal:has(.form-nova-op) { width: min(980px, 100%); }
+.nova-op-linha { display: grid; gap: 0 16px; }
+.cad-meia .cad-local-mapa { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 760px) {
+  .nova-op-linha { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
+}

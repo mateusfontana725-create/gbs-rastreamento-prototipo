@@ -305,35 +305,94 @@
   }
 
   /* ------------------------------ painel da operação ------------------------------ */
-  function renderOperacao(d) {
+  // Os números da operação são do próprio responsável: nada aqui fica oculto por tamanho de amostra.
+  // Dados que não existem (sem ponto, sem localização) aparecem por extenso, não como "oculto".
+  function minutosDesde(iso) {
+    var t = Date.parse(iso);
+    return isNaN(t) ? null : Math.max(0, (Date.now() - t) / 60000);
+  }
+  function coordenadas(p) { return p.lat.toFixed(5) + ', ' + p.lng.toFixed(5); }
+
+  // Linha do tempo: início das operações → localização da vítima, com o tempo entre os dois no meio.
+  // Sem localização, mostra o que falta: em andamento há X, ou encerrada sem localização.
+  function linhaDoTempo(d) {
+    var loc = d.localizacao, inicio = d.acionado_em;
+    function no(rotulo, valor, sub, classe) {
+      return el('div', { classe: 'dash-tempo-no ' + classe }, [
+        el('span', { classe: 'dash-tempo-rotulo', texto: rotulo }),
+        el('strong', { classe: 'dash-tempo-data', texto: valor }),
+        sub ? el('small', { classe: 'muted', texto: sub }) : null,
+      ]);
+    }
+    var meio;
+    if (loc) {
+      meio = [el('span', { classe: 'dash-tempo-rotulo', texto: 'Até a localização' }),
+        el('strong', { classe: 'dash-tempo-medida', texto: minutos(loc.minutos_ate) || '—' }),
+        el('span', { classe: 'dash-tempo-trilho ativo' })];
+    } else if (d.encerrada_em) {
+      meio = [el('span', { classe: 'dash-tempo-rotulo', texto: 'Encerrada' }),
+        el('strong', { classe: 'dash-tempo-medida', texto: 'sem localização' }),
+        el('span', { classe: 'dash-tempo-trilho tracejado' })];
+    } else {
+      var decorrido = inicio ? minutos(minutosDesde(inicio)) : null;
+      meio = [el('span', { classe: 'dash-tempo-rotulo', texto: 'Em andamento' }),
+        el('strong', { classe: 'dash-tempo-medida', texto: decorrido ? 'há ' + decorrido : 'sem início registrado' }),
+        el('span', { classe: 'dash-tempo-trilho tracejado' })];
+    }
+    return el('section', { classe: 'dash-tempo', 'aria-label': 'Linha do tempo da operação' }, [
+      no('Início das operações', inicio ? dataHora(inicio) : 'não informado', null, 'dash-tempo-ini'),
+      el('div', { classe: 'dash-tempo-centro' }, meio),
+      loc
+        ? no('Localização da vítima', dataHora(loc.em), CONDICOES[loc.condicao] || loc.condicao, 'dash-tempo-fim')
+        : no('Localização da vítima', 'ainda não registrada', null, 'dash-tempo-fim dash-tempo-pendente'),
+    ]);
+  }
+
+  function renderOperacao(d, op, elemento) {
     var loc = d.localizacao;
-    var perfis = Object.keys(d.perfis || {}).map(function (p) { return { perfil: p, fichas: d.perfis[p], operacoes_com_localizacao: null }; });
-    return [
-      el('div', { classe: 'dash-kpis' }, [
-        kpi('◎', 'Vítimas (fichas)', String(d.fichas), null, 'ambar'),
-        kpi('⌖', 'Localizações', String(d.localizacoes), loc ? (CONDICOES[loc.condicao] || loc.condicao) : 'nenhuma ainda', 'roxo'),
-        kpi('▦', 'Setores', String(d.setores), null, 'azul'),
-        kpi('☰', 'Registros no diário', String(d.registros_diario), null, 'verde'),
+    var perfis = Object.keys(d.perfis || {}).map(function (p) { return { rotulo: nomePerfil(p), valor: d.perfis[p] }; })
+      .sort(function (a, b) { return b.valor - a.valor; });
+    var encerrada = Boolean(d.encerrada_em);
+
+    var topo = el('header', { classe: 'dash-topo' }, [
+      el('div', null, [
+        el('h2', { texto: 'Estudo da operação' }),
+        el('p', { classe: 'muted' }, [
+          el('span', { texto: d.codigo + ' · ' }),
+          el('span', { classe: 'dash-chip ' + (encerrada ? 'dash-chip-fim' : 'dash-chip-aberta'), texto: encerrada ? 'encerrada' : 'em andamento' }),
+        ]),
       ]),
-      el('div', { classe: 'dash-grade' }, [
-        cartao({
-          span: 6, titulo: 'Local e tempo', pergunta: 'Onde a vítima foi vista pela última vez e quando foi localizada?',
-          corpo: [medidas([
-            ['Último local visto (ULV)', d.ulv ? window.Coords.formatar(d.ulv.lat, d.ulv.lng, 'dec') : 'sem ponto no cadastro'],
-            ['Início das operações', d.acionado_em ? dataHora(d.acionado_em) : null],
-            ['Localização da vítima', loc ? dataHora(loc.em) : 'nenhuma registrada ainda'],
-            ['Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : null],
-            ['Tempo desde o início', loc && loc.minutos_ate != null ? minutos(loc.minutos_ate) : null],
-          ])],
-          nota: 'ULV = último local visto: o ponto do cadastro da operação.',
-        }),
-        cartao({
-          span: 6, titulo: 'Perfis das vítimas', n: d.fichas ? d.fichas : 0,
-          pergunta: 'Quem está sendo procurado, pelos perfis cadastrados nas fichas.',
-          corpo: [d.fichas ? tabelaPerfis(perfis, false) : el('p', { classe: 'muted', texto: 'Nenhuma ficha de vítima nesta operação.' })],
-        }),
+      el('div', { classe: 'dash-acoes' }, [
+        el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Atualizar', onclick: function () { raiz.Dashboard.operacao(op, elemento); } }),
       ]),
-    ];
+    ]);
+
+    var kpis = el('div', { classe: 'dash-kpis' }, [
+      kpi('◎', 'Vítimas (fichas)', String(d.fichas), d.fichas ? 'com ficha cadastrada' : 'nenhuma ficha ainda', 'ambar'),
+      kpi('⌖', 'Localizada', loc ? 'Sim' : 'Não', loc ? (CONDICOES[loc.condicao] || loc.condicao) : 'ainda não registrada', 'roxo'),
+      kpi('↔', 'Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : '—',
+        loc ? 'entre o último local visto e a localização' : 'sem localização', 'azul'),
+      kpi('☰', 'Registros no diário', String(d.registros_diario), null, 'verde'),
+    ]);
+
+    var cartaoPerfis = cartao({
+      span: 7, titulo: 'Perfil das vítimas', n: d.fichas,
+      pergunta: 'Quais perfis foram cadastrados nas fichas desta operação?',
+      corpo: [perfis.length ? barrasHorizontais(perfis, d.fichas)
+        : el('p', { classe: 'muted', texto: 'Nenhuma ficha com perfil cadastrado.' })],
+    });
+
+    var cartaoLocal = cartao({
+      span: 5, titulo: 'Local', pergunta: 'Onde está o último local visto e quantos registros há?',
+      corpo: [medidas([
+        ['Último local visto (ULV)', d.ulv ? coordenadas(d.ulv) : 'sem ponto no cadastro'],
+        ['Localizações registradas', String(d.localizacoes)],
+        ['Setores de busca', String(d.setores)],
+      ])],
+      nota: 'ULV = último local visto: o ponto do cadastro da operação. Sem ponto, a distância não é calculada.',
+    });
+
+    return [topo, kpis, linhaDoTempo(d), el('div', { classe: 'dash-grade' }, [cartaoPerfis, cartaoLocal])];
   }
 
   /* ------------------------------ carregamento ------------------------------ */
@@ -355,7 +414,8 @@
   raiz.Dashboard = {
     geral: function (elemento) { return carregar(elemento, function () { return C.rpc('estudo_geral'); }, renderGeral); },
     operacao: function (op, elemento) {
-      return carregar(elemento, function () { return C.rpc('estudo_operacao', { p_operacao: op.id }); }, renderOperacao);
+      return carregar(elemento, function () { return C.rpc('estudo_operacao', { p_operacao: op.id }); },
+        function (d, alvo) { return renderOperacao(d, op, alvo); });
     },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

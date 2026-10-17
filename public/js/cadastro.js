@@ -231,7 +231,7 @@
       if (m === 'mapa') atualizarMiniMapa();
     }
     radiosModo.addEventListener('change', aplicarModo);
-    var secaoLocal = secao('Local', 'larg', [radiosModo, painelMapa, painelEndereco]);
+    var secaoLocal = secao('Local', inicial ? 'meia' : 'larg', [radiosModo, painelMapa, painelEndereco]);
 
     /* ---- ocorrência ---- */
     var solicNome = UI.el('input', { classe: 'campo', id: id('solic-nome'), maxlength: '120', autocomplete: 'off', value: ipo.solicitante_nome });
@@ -301,7 +301,7 @@
 
     // (cada campo é um nó do DOM: aparece em uma única seção)
     var secoes = inicial
-      ? [secaoLocal, secao('Início e solicitação', 'larg', [inicioAuto, grupoSolic, grupoNatureza]), secao('Observação', 'larg', [grupoDesc])]
+      ? [secaoLocal, secao('Ocorrência', 'meia', [inicioAuto, grupoSolic, grupoNatureza, grupoDesc])]
       : [secaoLocal,
         secao('Ocorrência', 'meia', [grupoAcion, grupoNatureza, grupoDesap, grupoMeio]),
         secao('Solicitante e destinatários', 'meia', [grupoSolic, grupoSolicDoc, grupoDestino, grupoResp]),

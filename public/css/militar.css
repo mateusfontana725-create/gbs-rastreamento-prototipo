@@ -274,6 +274,8 @@ body.lateral-oculta:not(.gaveta) #mapa .leaflet-top.leaflet-right { top: 94px; }
 .sinal-foto::after { content: ""; position: absolute; width: 5px; height: 5px; border: 1.5px solid currentColor; border-radius: 50%; }
 .sinal-local::before { content: ""; width: 11px; height: 11px; border: 1.5px solid #f43f5e; border-radius: 50%; box-shadow: inset 0 0 0 2.5px #0a0d10, inset 0 0 0 6px #f43f5e; }
 .sinal-nome { font-family: var(--fonte-titulo); font-weight: 700; font-size: .72rem; letter-spacing: 0; }
+.sinal-agrupar { width: 16px; height: 16px; border-radius: 50%; color: #fff; font: 800 8px/1 var(--mono);
+  background: radial-gradient(circle, #0a0d10 0 5px, transparent 5.5px), conic-gradient(#ef4444 0 120deg, #3b82f6 0 240deg, #22c55e 0); }
 
 /* Telas de toque: alvos de 44 px */
 @media (pointer: coarse) {
@@ -955,3 +957,59 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { border-color: v
 .dash-det-vazio { padding: 8px 2px; }
 .dash-det-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 .dash-det-acoes .btn { flex: 1 1 200px; }
+
+/* =====================================================================
+ * Mapa adaptativo (mapa-rotulos.js): detalhe pelo zoom, sem sobreposição
+ * ===================================================================== */
+.mapa-adaptativo .mk-rotulo { font-size: 11.5px; line-height: 17px; padding: 0 5px; }
+.mapa-adaptativo .leaflet-tooltip.rotulo-setor { font-size: 11px; }
+.mapa-adaptativo .mk-poi-rotulo { font-size: 10.5px; line-height: 16px; }
+/* sem espaço: some até aproximar (passar o mouse no marcador mostra) */
+.mapa-adaptativo .rotulo-colide { visibility: hidden; }
+.mapa-adaptativo .leaflet-marker-icon:hover .rotulo-colide,
+.mapa-adaptativo .leaflet-marker-icon:focus .rotulo-colide { visibility: visible; }
+
+/* posições alternativas quando o lado direito está ocupado */
+.mapa-adaptativo .mk-rotulo.rot-esq, .mapa-adaptativo .mk-poi-rotulo.rot-esq { left: auto; right: 16px; }
+.mapa-adaptativo .mk-rotulo.rot-acima { top: -32px; }
+.mapa-adaptativo .mk-rotulo.rot-abaixo { top: 8px; }
+.mapa-adaptativo .mk-poi-rotulo.rot-acima { top: -50px; }
+.mapa-adaptativo .leaflet-tooltip.rotulo-setor.rot-acima { margin-top: -24px; }
+.mapa-adaptativo .leaflet-tooltip.rotulo-setor.rot-abaixo { margin-top: 24px; }
+
+/* Médio (zoom 15–16): nomes curtos, sem a idade da posição nem a situação do setor */
+.mapa-adaptativo.zoom-medio .mk-rotulo, .mapa-adaptativo.zoom-longe .mk-rotulo { font-size: 10.5px; line-height: 16px; }
+.mapa-adaptativo.zoom-medio .mk-nome, .mapa-adaptativo.zoom-longe .mk-nome {
+  display: inline-block; max-width: 13ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.mapa-adaptativo.zoom-medio .mk-idade, .mapa-adaptativo.zoom-longe .mk-idade { display: none; }
+.mapa-adaptativo.zoom-medio .rs-status, .mapa-adaptativo.zoom-longe .rs-status { display: none; }
+.mapa-adaptativo.zoom-medio .rs-nome, .mapa-adaptativo.zoom-longe .rs-nome {
+  display: inline-block; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.mapa-adaptativo.zoom-medio .leaflet-tooltip.rotulo-setor, .mapa-adaptativo.zoom-longe .leaflet-tooltip.rotulo-setor { font-size: 10px; padding: 0 5px; }
+/* quem pede atenção mantém o rótulo completo */
+.mapa-adaptativo .mk.ajuda .mk-idade, .mapa-adaptativo .mk.saida .mk-idade, .mapa-adaptativo .mk.selecionado .mk-idade { display: inline; }
+.mapa-adaptativo .mk.ajuda .mk-nome, .mapa-adaptativo .mk.saida .mk-nome, .mapa-adaptativo .mk.selecionado .mk-nome { max-width: none; }
+
+/* Longe (zoom ≤ 14): só os símbolos; nome apenas de quem pede atenção e dos pontos críticos */
+.mapa-adaptativo.zoom-longe .mk-rotulo,
+.mapa-adaptativo.zoom-longe .mk-poi-rotulo,
+.mapa-adaptativo.zoom-longe .mk-local-rotulo { display: none; }
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .mk.ajuda .mk-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .mk.saida .mk-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .mk.selecionado .mk-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .mk.eu .mk-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .poi-VITIMA_ENCONTRADA + .mk-poi-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .leaflet-marker-icon:hover .mk-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .leaflet-marker-icon:hover .mk-poi-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .leaflet-marker-icon:focus .mk-rotulo,
+.mapa-adaptativo.zoom-longe:not(.esconder-rotulos) .leaflet-marker-icon:focus .mk-poi-rotulo { display: block; }
+
+/* Pessoas agrupadas: anel com as cores dos grupos e o número no meio */
+.cluster-pessoas {
+  display: grid; padding: 5px; border-radius: 50%; cursor: pointer;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 10px rgba(0, 0, 0, .8);
+}
+.cluster-pessoas b {
+  display: grid; place-items: center; border-radius: 50%; background: #0a0d10; color: #fff;
+  font: 800 13px/1 var(--mono); border: 1.5px solid rgba(255, 255, 255, .85);
+}

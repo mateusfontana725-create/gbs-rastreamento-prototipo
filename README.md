@@ -520,11 +520,22 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - **Filtros nas listas** (muito dado, então dá para reduzir a tela): em **operações**, busca por nome, local ou descrição (sem acento), situação (ativas ou encerradas), criador (**criadas por mim** ou **por outros**; só aparece para administrador, que enxerga todas) e período do acionamento, com **Limpar**; em **responsáveis**, busca por nome ou e-mail, situação (com acesso ou desativados), papel (administradores ou responsáveis comuns) e **Limpar**. O contador mostra quantos itens aparecem.
 - **Painel Camadas** (botão sobre o mapa, canto superior direito, ao lado da lista): separa
   **Tipo de mapa** (Mapa · Topográfico · Satélite), **Visualização** (Plano 2D · Relevo 3D) e **Camadas
-  operacionais** (Trilhas, Setores, Pontos de interesse, Relatos, Fotos, Local da operação, Nomes no mapa),
+  operacionais** (Trilhas, Setores, Pontos de interesse, Relatos, Fotos, Local da operação, Nomes no mapa, Agrupar pessoas próximas),
   cada uma com sinal próprio e chave liga/desliga. O botão mostra o resumo (ex.: "Satélite · 2 ocultas").
   Escolher uma opção **não fecha** o painel. No celular e no tablet ele abre como folha compacta (camadas
   em duas colunas) e fecha ao tocar no mapa, em ✕ ou com Esc; no computador fica aberto enquanto se usa o
   mapa. As preferências continuam gravadas no aparelho, como antes.
+- **Mapa adaptativo** (operações grandes sem poluição; `public/js/mapa-rotulos.js`):
+  - **Detalhe pelo zoom**: de longe (zoom ≤ 14) só os símbolos; aparecem os nomes apenas de quem pede atenção
+    (ajuda, pedido de saída, selecionado, você) e da vítima encontrada. No zoom 15–16 os nomes aparecem curtos, sem o
+    "há X min" e sem a situação do setor. De perto (17+) aparece tudo. A fonte dos rótulos é menor e acompanha o zoom.
+  - **Sem nome sobre nome**: os rótulos são colocados do mais importante para o menos (quem pede atenção, pontos
+    críticos como vítima, risco, base e última localização, pessoas, demais pontos, setores). Se o lado direito estiver
+    ocupado, o nome tenta a esquerda, em cima ou embaixo; sem espaço, some até aproximar. Passar o mouse (ou focar) no
+    marcador mostra o nome escondido. O nome do setor fica abaixo das pessoas e dos pontos, sem cobri-los.
+  - **Pessoas próximas agrupadas** de longe (até o zoom 15): um círculo com o número de pessoas e um anel com as cores dos
+    grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
+    nunca entra no agrupamento. Desliga em **Camadas → Agrupar pessoas próximas** (preferência lembrada no aparelho).
 - O menu **Ferramentas** é organizado em grupos recolhíveis (o aberto/fechado fica lembrado no aparelho):
   - **Operação**: Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis;
   - **Participantes e equipes**: Convidar participantes, Grupos, Deslocamentos de grupos, Enviar destino

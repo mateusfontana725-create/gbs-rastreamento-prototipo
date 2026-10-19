@@ -146,7 +146,8 @@
     camadaAtual: 'osm',
     camadaPontos: null,         // fotos e relatos (agrupados quando próximos)
     legenda: null,
-    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, legenda: true, setores: true, pontos: true, local: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
+    rotulos: { agendar: function () {} },   // mapa-rotulos.js, ligado ao criar o mapa
+    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, agrupar: true, legenda: true, setores: true, pontos: true, local: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
     lateralOculta: Boolean(C.local.ler(CHAVE_LATERAL, false)),
     centralAba: 'msgs',
     // setores, pontos de interesse e destinos
@@ -344,6 +345,7 @@
     $('opt-fotos').addEventListener('click', function () { definirPrefMapa('fotos', !est.prefsMapa.fotos); });
     $('opt-relatos').addEventListener('click', function () { definirPrefMapa('relatos', !est.prefsMapa.relatos); });
     $('opt-nomes').addEventListener('click', function () { definirPrefMapa('nomes', !est.prefsMapa.nomes); });
+    $('opt-agrupar').addEventListener('click', function () { definirPrefMapa('agrupar', !est.prefsMapa.agrupar); });
     $('opt-coord').addEventListener('change', function () { definirPrefMapa('coord', this.value); if (est.selecionado) atualizarFicha(); });
     $('ficha-estatisticas').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirEstatisticas(est.selecionado); });
     $('ficha-exportar').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirExportar(est.selecionado); });
@@ -1310,7 +1312,7 @@
 
   function limparDadosDoMapa() {
     est.participantes.forEach(function (p) {
-      if (p.marcador) p.marcador.remove();
+      tirarPessoaDoMapa(p);
       if (p.trilha) p.trilha.remove();
       if (p.halo) p.halo.remove();
       if (p.lacunas) p.lacunas.remove();
@@ -1465,6 +1467,10 @@
 
     // Setores ficam ABAIXO das trilhas e dos marcadores (não escondem nada).
     mapa.createPane('setores').style.zIndex = 350;
+    // Nome do setor: acima das áreas e trilhas, mas abaixo das pessoas e pontos (não as cobre).
+    var painelRotSetor = mapa.createPane('rotulosSetor');
+    painelRotSetor.style.zIndex = 450;
+    painelRotSetor.style.pointerEvents = 'none';
     est.camadaSetores = L.layerGroup();
     est.camadaPontosInt = L.layerGroup();
     if (est.prefsMapa.setores) est.camadaSetores.addTo(mapa);
@@ -1474,6 +1480,11 @@
     mapa.on('contextmenu', function (e) { if (!est.desenho && window.Ferramentas) window.Ferramentas.infoPonto(e.latlng); });
 
     est.mapa = mapa;
+    // Pessoas: agrupadas de longe quando estão perto umas das outras; quem pede atenção fica à parte.
+    est.camadaPessoasFixas = L.featureGroup().addTo(mapa);
+    montarCamadaPessoas();
+    // Nomes pelo zoom e sem sobreposição (mapa-rotulos.js)
+    est.rotulos = window.MapaRotulos ? window.MapaRotulos.instalar(mapa) : { agendar: function () {} };
     $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomes);
     atualizarMenu();
     setTimeout(function () { mapa.invalidateSize(); }, 50);
@@ -1575,6 +1586,7 @@
       if (chave === 'pontos' && est.camadaPontosInt) { if (valor) est.camadaPontosInt.addTo(est.mapa); else est.camadaPontosInt.remove(); }
       if (chave === 'local') desenharLocalOp();
       if (chave === 'nomes') $('mapa').classList.toggle('esconder-rotulos', !valor);
+      if (chave === 'agrupar') montarCamadaPessoas();
     }
     atualizarMenu();
   }
@@ -1699,6 +1711,7 @@
     $('opt-setores').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.setores)));
     $('opt-pontos').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pontos)));
     $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomes)));
+    $('opt-agrupar').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.agrupar)));
     $('opt-coord').value = est.prefsMapa.coord || 'dec';
     var trilhasVisiveis = todasTrilhasVisiveis();
     $('opt-trilhas').setAttribute('aria-pressed', String(trilhasVisiveis));
@@ -2254,26 +2267,75 @@
     if (!est.mapa) return;
     var pos = posicaoAtual(p);
     if (!pos || p.dados.removido || !visivelNoFiltro(p)) {
-      if (p.marcador) { p.marcador.remove(); p.marcador = null; }
+      tirarPessoaDoMapa(p);
       return;
     }
     if (!p.marcador) {
       p.marcador = L.marker([pos.lat, pos.lng], {
         icon: criarIcone(p),
         keyboard: true,
+        riseOnHover: true,   // o nome escondido por falta de espaço aparece por cima ao passar o mouse
         title: nomeExibido(p) + ' (' + TIPOS[tipoDe(p.dados)].rotulo + ')',
         alt: p.dados.nome,
+        corAgrupado: corDoParticipante(p),
         zIndexOffset: tipoDe(p.dados) === 'responsavel' ? 200 : tipoDe(p.dados) === 'militar' ? 100 : 0,
-      }).addTo(est.mapa);
+      });
       p.marcador.on('click', function () {
         if (est.desenho) { aoClicarNoMapa({ latlng: p.marcador.getLatLng() }); return; }
         selecionar(p.id);
       });
+      // Ao sair de um agrupamento o ícone é recriado: reaplica a situação atual
+      p.marcador.on('add', function () { atualizarAparenciaMarcador(p); });
+      colocarPessoaNoMapa(p);
       return;
     }
     var atual = p.marcador.getLatLng();
-    if (atual.lat !== pos.lat || atual.lng !== pos.lng) p.marcador.setLatLng([pos.lat, pos.lng]);
+    if (atual.lat !== pos.lat || atual.lng !== pos.lng) { p.marcador.setLatLng([pos.lat, pos.lng]); est.rotulos.agendar(); }
     atualizarAparenciaMarcador(p);
+  }
+
+  /* ---------- Camada das pessoas (agrupamento de longe) -------------- */
+  function criarCamadaPessoas() {
+    return est.prefsMapa.agrupar && window.MapaRotulos ? window.MapaRotulos.criarGrupoPessoas(L) : L.featureGroup();
+  }
+
+  // (Re)cria a camada conforme a preferência "Agrupar pessoas próximas" e devolve as pessoas a ela.
+  function montarCamadaPessoas() {
+    if (!est.mapa) return;
+    if (est.camadaPessoas) { est.camadaPessoas.clearLayers(); est.camadaPessoas.remove(); }
+    est.camadaPessoas = criarCamadaPessoas().addTo(est.mapa);
+    est.participantes.forEach(function (p) {
+      if (p.marcador) { est.camadaPessoasFixas.removeLayer(p.marcador); p._fixo = null; colocarPessoaNoMapa(p); }
+    });
+  }
+
+  // Pede atenção (ajuda, saída, selecionado, você): sempre visível, fora do agrupamento.
+  function colocarPessoaNoMapa(p) {
+    if (!p.marcador || !est.camadaPessoas) return;
+    var fixo = !window.MapaRotulos || window.MapaRotulos.ehDestaque(classesMarcador(p));
+    if (p._fixo === fixo) return;
+    var sai = fixo ? est.camadaPessoas : est.camadaPessoasFixas, entra = fixo ? est.camadaPessoasFixas : est.camadaPessoas;
+    if (sai.hasLayer(p.marcador)) sai.removeLayer(p.marcador);
+    p._fixo = fixo;
+    entra.addLayer(p.marcador);
+  }
+
+  function tirarPessoaDoMapa(p) {
+    if (!p.marcador) return;
+    if (est.camadaPessoas && est.camadaPessoas.hasLayer(p.marcador)) est.camadaPessoas.removeLayer(p.marcador);
+    if (est.camadaPessoasFixas && est.camadaPessoasFixas.hasLayer(p.marcador)) est.camadaPessoasFixas.removeLayer(p.marcador);
+    p.marcador.remove();
+    p.marcador = null;
+    p._fixo = null;
+  }
+
+  // Cor do grupo no agrupamento: refaz os círculos uma vez só, depois de várias mudanças.
+  function atualizarAgrupamentos() {
+    if (est._refazGrupos || !est.camadaPessoas || !est.camadaPessoas.refreshClusters) return;
+    est._refazGrupos = setTimeout(function () {
+      est._refazGrupos = null;
+      if (est.camadaPessoas.refreshClusters) est.camadaPessoas.refreshClusters();
+    }, 300);
   }
 
   // Cor do grupo no símbolo e na trilha. Só refaz o símbolo quando o HTML muda (sem piscar).
@@ -2281,18 +2343,21 @@
     if (p.marcador) {
       var html = criarIcone(p).options.html;
       if (p._iconeHtml !== html) { p.marcador.setIcon(criarIcone(p)); p._iconeHtml = html; }
+      var cor = corDoParticipante(p);
+      if (p.marcador.options.corAgrupado !== cor) { p.marcador.options.corAgrupado = cor; atualizarAgrupamentos(); }
     }
     if (p.trilha) p.trilha.setStyle({ color: corDoParticipante(p) });
   }
 
   function atualizarAparenciaMarcador(p) {
     if (!p.marcador) return;
+    colocarPessoaNoMapa(p);   // entra ou sai do agrupamento conforme a situação
     var el = p.marcador.getElement();
     if (!el) return;
     var mk = el.querySelector('.mk');
     if (!mk) return;
     var cls = classesMarcador(p);
-    if (mk.className !== cls) mk.className = cls;
+    if (mk.className !== cls) { mk.className = cls; est.rotulos.agendar(); }
     var nome = el.querySelector('.mk-nome');
     if (nome && nome.textContent !== nomeExibido(p)) nome.textContent = nomeExibido(p);
     var idade = el.querySelector('.mk-idade');
@@ -4367,8 +4432,9 @@
     };
   }
 
-  function textoRotuloSetor(d) {
-    return d.nome + ' · ' + STATUS_SETOR[d.status].rotulo;
+  // A situação some de longe (o traço e o preenchimento da área já a indicam)
+  function htmlRotuloSetor(d) {
+    return '<span class="rs-nome">' + C.esc(d.nome) + '</span><span class="rs-status"> · ' + C.esc(STATUS_SETOR[d.status].rotulo) + '</span>';
   }
 
   function desenharSetor(s) {
@@ -4379,7 +4445,7 @@
     var camada = d.forma === 'circulo'
       ? L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, estiloSetor(d)))
       : L.polygon(d.pontos, estiloSetor(d));
-    camada.bindTooltip(C.esc(textoRotuloSetor(d)), { permanent: true, direction: 'center', className: 'rotulo-setor', opacity: 1 });
+    camada.bindTooltip(htmlRotuloSetor(d), { permanent: true, direction: 'center', className: 'rotulo-setor', opacity: 1, pane: 'rotulosSetor' });
     camada.on('click', function (ev) {
       if (est.desenho) return;   // durante o desenho o clique é do mapa
       L.DomEvent.stopPropagation(ev);
@@ -4415,7 +4481,7 @@
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_BASE_PADRAO, color: '#0ea5e9', weight: 2, dashArray: '4 6',
         fillColor: '#0ea5e9', fillOpacity: 0.06, interactive: false, className: 'circulo-base' }).addTo(est.camadaPontosInt);
     }
-    var mk = L.marker([d.lat, d.lng], { icon: iconePontoInt(d), keyboard: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo, zIndexOffset: -50 });
+    var mk = L.marker([d.lat, d.lng], { icon: iconePontoInt(d), keyboard: true, riseOnHover: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo, zIndexOffset: -50 });
     mk.on('click', function () {
       if (est.desenho) { aoClicarNoMapa({ latlng: mk.getLatLng() }); return; }
       abrirPontoInt(d.id);

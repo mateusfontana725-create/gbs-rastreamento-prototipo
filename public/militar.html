@@ -99,8 +99,6 @@
           <span aria-hidden="true">☰</span> Menu
         </button>
         <div class="menu-topo-lista" id="menu-topo-lista" role="menu" hidden>
-          <button class="menu-topo-item" type="button" role="menuitem" data-vista="dashboard"><span aria-hidden="true">▦</span> Painel de estatísticas</button>
-          <button class="menu-topo-item" type="button" role="menuitem" data-vista="lista"><span aria-hidden="true">☰</span> Lista de operações</button>
           <a class="menu-topo-item" role="menuitem" href="#responsaveis" id="btn-responsaveis" hidden><span aria-hidden="true">◎</span> Responsáveis</a>
           <button class="menu-topo-item" type="button" role="menuitem" id="btn-minha-conta"><span aria-hidden="true">◉</span> Minha conta</button>
           <button class="menu-topo-item menu-topo-sair" type="button" role="menuitem" data-acao="sair"><span aria-hidden="true">⏻</span> Sair</button>
@@ -109,10 +107,10 @@
     </header>
     <div class="conteudo">
       <div class="vistas" role="tablist" aria-label="O que mostrar">
-        <button class="vista-botao" type="button" role="tab" id="vista-btn-dashboard" data-vista="dashboard" aria-selected="true">▦ Painel</button>
+        <button class="vista-botao" type="button" role="tab" id="vista-btn-dashboard" data-vista="dashboard" aria-selected="true">▦ Dashboard</button>
         <button class="vista-botao" type="button" role="tab" id="vista-btn-lista" data-vista="lista" aria-selected="false">☰ Operações</button>
       </div>
-      <section class="dash-caixa" id="vista-dashboard" aria-label="Painel de estatísticas">
+      <section class="dash-caixa" id="vista-dashboard" aria-label="Dashboard">
         <div id="estudos-geral-corpo"></div>
       </section>
       <div class="cartao secao" id="vista-lista" hidden>

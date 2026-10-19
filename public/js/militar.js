@@ -248,10 +248,7 @@
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') abrirMenuTopo(false);
     });
-    $('menu-topo-lista').addEventListener('click', function (ev) {
-      if (ev.target.closest('[data-vista]')) setVista(ev.target.closest('[data-vista]').getAttribute('data-vista'));
-      abrirMenuTopo(false);
-    });
+    $('menu-topo-lista').addEventListener('click', function () { abrirMenuTopo(false); });
     // alternador: painel de estatísticas ou lista de operações
     document.querySelectorAll('.vista-botao').forEach(function (b) {
       b.addEventListener('click', function () { setVista(b.getAttribute('data-vista')); });

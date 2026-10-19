@@ -679,13 +679,13 @@ Objetivo: juntar, operação a operação, dados para estudar o comportamento da
 encontrada em relação ao **ULV** (último local visto). Os painéis mostram **só números**: nenhum nome, documento ou
 dado de participante sai do banco nesses painéis.
 
-- **Tela inicial, alternador "▦ Painel" / "☰ Operações"**: o painel mostra cartões de números, leitura em texto e
+- **Tela inicial, alternador "▦ Dashboard" / "☰ Operações"** (botões na própria tela): o Dashboard mostra cartões de números, leitura em texto e
   gráficos desenhados em SVG e em grade (sem bibliotecas externas), cada um com o tamanho da amostra (n): operações por mês (12 meses), operações por tipo (barras),
   distância do ULV à localização (faixas de 1 km), distância e tempo (mediana, metade central, média, tempo até localizar),
   perfis das vítimas e condição (com vida / em óbito). Vale para todas as operações a que o responsável tem acesso
   (administrador: todas). A escolha fica salva neste navegador.
-- **Cabeçalho:** um único botão **☰ Menu** abre a lista de ações (Painel de estatísticas, Lista de operações,
-  Responsáveis, Minha conta, Sair).
+- **Cabeçalho:** um único botão **☰ Menu** abre a lista de ações (Responsáveis, Minha conta, Sair). A troca
+  entre Dashboard e Operações fica só nos botões da tela.
 - **Operação → Dashboard da operação** (janela larga; no celular, uma coluna):
   - seis números: duração, efetivo (e quantos em campo agora), km percorridos, esforço em pessoa·hora,
     setores (com a % da área coberta) e se a vítima foi localizada;

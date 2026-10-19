@@ -237,7 +237,7 @@
 
     var topo = el('header', { classe: 'dash-topo' }, [
       el('div', null, [
-        el('h2', { texto: 'Estatísticas e estudos' }),
+        el('h2', { texto: 'Dashboard' }),
         el('p', { classe: 'muted', texto: 'Todas as operações a que você tem acesso. Só números, sem identificação.' }),
       ]),
       el('div', { classe: 'dash-acoes' }, [

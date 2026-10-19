@@ -179,5 +179,5 @@
   }
   verificarVersao();
 
-  window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, confirmar: confirmar };
+  window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar };
 })();

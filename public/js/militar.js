@@ -948,7 +948,13 @@
       ]),
       corpo,
     ]));
-    window.Dashboard.operacao(est.op, corpo, { resumo: resumoOperacao });
+    // ações dos detalhes do dashboard: fecham as janelas e levam ao lugar certo do painel
+    window.Dashboard.operacao(est.op, corpo, { resumo: resumoOperacao, acoes: {
+      verPessoa: function (id) { UI.fecharTodos(); selecionar(id); },
+      verSetor: function (id) { var s = est.setores.get(id); UI.fecharTodos(); if (s) verSetorNoMapa(s.d); },
+      abrirCentral: function (aba) { UI.fecharTodos(); abrirCentral(aba); },
+      abrirDiario: function () { UI.fecharTodos(); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); },
+    } });
   }
 
   // Retrato do que o painel já tem carregado, para o dashboard da operação (sem nova consulta ao banco):
@@ -958,7 +964,7 @@
       var tr = window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp(), objetos: true });
       var g = grupoDoParticipante(p);
       return {
-        id: p.id, tipo: tipoDe(p.dados), grupo: g ? { id: g.id, nome: g.nome, cor: g.cor } : null,
+        id: p.id, nome: nomeExibido(p), tipo: tipoDe(p.dados), grupo: g ? { id: g.id, nome: g.nome, cor: g.cor } : null,
         segmentos: tr.segmentos.map(function (seg) { return seg.map(function (pt) { return { lat: pt.lat, lng: pt.lng, t: pt.t }; }); }),
       };
     });

@@ -62,15 +62,145 @@
   function oculto() { return el('span', { classe: 'dash-oculto', texto: 'oculto', title: 'menos de 5 casos' }); }
   function valorOu(v, f) { return v == null ? oculto() : (f ? f(v) : String(v)); }
 
-  function kpi(icone, rotulo, valor, detalhe, cor) {
-    return el('div', { classe: 'dash-kpi dash-kpi-' + cor }, [
+  /* ------------------------------ interação: tocar abre os detalhes ------------------------------ */
+  // Deixa o elemento clicável e acessível pelo teclado (Enter / Espaço). Funciona em HTML e em SVG.
+  function clicavel(no, aoClicar, dica) {
+    if (!aoClicar) return no;
+    no.classList.add('dash-clicavel');
+    no.setAttribute('role', 'button');
+    no.setAttribute('tabindex', '0');
+    if (dica && no.namespaceURI !== NS) no.setAttribute('title', dica);
+    no.addEventListener('click', function (ev) { ev.stopPropagation(); aoClicar(); });
+    no.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); aoClicar(); }
+    });
+    return no;
+  }
+  // Outras partes da mesma linha (barra, número) também respondem ao toque, sem entrar na ordem do Tab.
+  function tambemClica(no, aoClicar) {
+    if (!aoClicar) return no;
+    no.classList.add('dash-clicavel-sec');
+    no.addEventListener('click', function (ev) { ev.stopPropagation(); aoClicar(); });
+    return no;
+  }
+
+  // Lista da janela de detalhes. itens: [{ titulo, meta, valor, aoClicar }] ou uma Promise disso.
+  function listaDetalhe(itens, vazio) {
+    var ul = el('ul', { classe: 'dash-det-lista' });
+    function preencher(lista) {
+      ul.innerHTML = '';
+      if (!lista.length) { ul.appendChild(el('li', { classe: 'muted dash-det-vazio', texto: vazio || 'Nada para mostrar.' })); return; }
+      lista.forEach(function (it) {
+        var partes = [
+          el('span', { classe: 'dash-det-nome' }, [it.titulo]),
+          it.meta ? el('span', { classe: 'dash-det-meta', texto: it.meta }) : null,
+          it.valor != null ? el('span', { classe: 'dash-det-valor', texto: it.valor }) : null,
+        ];
+        ul.appendChild(el('li', null, [it.aoClicar
+          ? el('button', { classe: 'dash-det-item', type: 'button', onclick: it.aoClicar }, partes.concat([el('span', { classe: 'dash-det-seta', 'aria-hidden': 'true', texto: '›' })]))
+          : el('div', { classe: 'dash-det-item' }, partes)]));
+      });
+    }
+    if (itens && typeof itens.then === 'function') {
+      ul.appendChild(el('li', { classe: 'muted dash-det-vazio', texto: 'Carregando…' }));
+      itens.then(preencher, function (e) {
+        ul.innerHTML = '';
+        ul.appendChild(el('li', { classe: 'erro-form', texto: 'Não foi possível carregar: ' + ((e && e.message) || e) }));
+      });
+    } else {
+      preencher(itens || []);
+    }
+    return ul;
+  }
+
+  // Janela de detalhes, por cima do dashboard (fechar volta para ele).
+  // o: { titulo, subtitulo, medidas: [[rótulo, valor]], lista, vazio, nota, acoes: [{ texto, fn, principal }] }
+  function abrirDetalhe(o) {
+    var fechar = null;
+    var caixa = el('div', { classe: 'dash-det' }, [
+      el('div', { classe: 'dash-det-topo' }, [
+        el('h2', { id: 'modal-titulo', texto: o.titulo }),
+        el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
+      o.subtitulo ? el('p', { classe: 'muted dash-det-sub', texto: o.subtitulo }) : null,
+      o.medidas ? medidas(o.medidas) : null,
+      o.lista ? listaDetalhe(o.lista, o.vazio) : null,
+      o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
+      o.acoes && o.acoes.length ? el('div', { classe: 'dash-det-acoes' }, o.acoes.map(function (a) {
+        return el('button', { classe: 'btn' + (a.principal ? ' btn-primario' : ''), type: 'button', texto: a.texto, onclick: a.fn });
+      })) : null,
+    ]);
+    fechar = UI.abrirModal(caixa, { empilhar: true });
+    return fechar;
+  }
+
+  // Operações a que o responsável tem acesso, para as listas dos detalhes. Mesmos critérios do estudo_geral:
+  // mês = início das operações (ou criação) no fuso do banco (UTC); sem tipo = "sem_tipo".
+  var cacheOps = null, cacheLocalizadas = null;
+  function operacoesDoUsuario() {
+    if (!cacheOps) {
+      cacheOps = C.consultarTudo(function () { return C.cliente.from('operacoes').select('*').order('criada_em', { ascending: false }); });
+      cacheOps.catch(function () { cacheOps = null; });
+    }
+    return cacheOps;
+  }
+  function operacoesComLocalizacao() {
+    if (!cacheLocalizadas) {
+      cacheLocalizadas = C.consultarTudo(function () { return C.cliente.from('vitima_localizacoes').select('operacao_id'); })
+        .then(function (linhas) { return new Set(linhas.map(function (l) { return l.operacao_id; })); });
+      cacheLocalizadas.catch(function () { cacheLocalizadas = null; });
+    }
+    return cacheLocalizadas;
+  }
+  function mesDaOperacao(o) {
+    var t = Date.parse(o.acionado_em || o.criada_em);
+    return isNaN(t) ? null : new Date(t).toISOString().slice(0, 7);
+  }
+  function abrirOperacao(id) {
+    if (UI.fecharTodos) UI.fecharTodos();
+    location.hash = '#op=' + id;
+  }
+  function itemOperacao(o) {
+    var natureza = o.ipo && o.ipo.natureza ? o.ipo.natureza : (TIPOS[o.tipo || 'sem_tipo'] || o.tipo);
+    var quando = o.acionado_em || o.criada_em;
+    return {
+      titulo: o.codigo || 'Operação',
+      meta: [natureza, quando ? dataHora(quando).slice(0, 10) : null].filter(Boolean).join(' · '),
+      valor: o.encerrada_em ? 'encerrada' : 'aberta',
+      aoClicar: function () { abrirOperacao(o.id); },
+    };
+  }
+  // Lista (Promise) das operações que passam no filtro, já no formato da janela de detalhes.
+  function listaOperacoes(filtro) {
+    return operacoesDoUsuario().then(function (ops) { return ops.filter(filtro).map(itemOperacao); });
+  }
+  function detalheLocalizadas(d) {
+    var loc = d.localizacoes, dist = d.distancia_km;
+    abrirDetalhe({
+      titulo: 'Operações com vítima localizada',
+      medidas: [
+        ['Operações com localização', valorOu(loc.operacoes_com_localizacao)],
+        ['Tempo até localizar (mediana)', valorOu(loc.minutos_ate_mediana, minutos)],
+        ['Distância do ULV (mediana)', valorOu(dist.mediana, km)],
+      ],
+      lista: operacoesComLocalizacao().then(function (ids) {
+        return listaOperacoes(function (o) { return ids.has(o.id); });
+      }),
+      vazio: 'Nenhuma vítima localizada nas suas operações.',
+      nota: 'Toque numa operação para abri-la.',
+    });
+  }
+
+  function kpi(icone, rotulo, valor, detalhe, cor, aoClicar) {
+    return clicavel(el('div', { classe: 'dash-kpi dash-kpi-' + cor }, [
       el('span', { classe: 'dash-kpi-icone', 'aria-hidden': 'true', texto: icone }),
       el('div', { classe: 'dash-kpi-texto' }, [
         el('span', { classe: 'dash-kpi-rotulo', texto: rotulo }),
         el('strong', { classe: 'dash-kpi-valor' }, [valor]),
         detalhe ? el('small', { classe: 'dash-kpi-detalhe', texto: detalhe }) : null,
       ]),
-    ]);
+      aoClicar ? el('span', { classe: 'dash-kpi-seta', 'aria-hidden': 'true', texto: '›' }) : null,
+    ]), aoClicar, 'Ver detalhes: ' + rotulo);
   }
 
   // Cartão com estrutura fixa: título, n (tamanho da amostra), pergunta, corpo e nota.
@@ -78,12 +208,13 @@
   function cartao(o) {
     var amostra = o.n == null ? el('span', { classe: 'dash-n dash-n-baixo', texto: 'n < 5' })
       : el('span', { classe: 'dash-n', texto: 'n = ' + o.n });
-    return el('section', { classe: 'dash-card dash-s' + (o.span || 12) }, [
-      el('header', { classe: 'dash-card-topo' }, [el('h3', { texto: o.titulo }), o.n === undefined ? null : amostra]),
+    return clicavel(el('section', { classe: 'dash-card dash-s' + (o.span || 12) }, [
+      el('header', { classe: 'dash-card-topo' }, [el('h3', { texto: o.titulo }), o.n === undefined ? null : amostra,
+        o.aoClicar ? el('span', { classe: 'dash-card-dica', texto: o.dica || 'Detalhes ›' }) : null]),
       o.pergunta ? el('p', { classe: 'dash-pergunta', texto: o.pergunta }) : null,
       el('div', { classe: 'dash-card-corpo' }, o.corpo),
       o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
-    ]);
+    ]), o.aoClicar, 'Ver detalhes: ' + o.titulo);
   }
 
   /* ------------------------------ gráficos ------------------------------ */
@@ -103,7 +234,8 @@
   }
 
   // Colunas verticais. itens: [{ rotulo, valor }]; valor 0 vira um traço; valor nulo vira "oculto".
-  function colunas(itens, rotuloGrafico) {
+  // aoClicar(item, índice): cada coluna (com o rótulo) vira um alvo de toque.
+  function colunas(itens, rotuloGrafico, aoClicar) {
     var W = 640, H = 230, base = 186, topo = 30, margem = 12;
     var slot = (W - margem * 2) / Math.max(itens.length, 1);
     var largura = slot * 0.6;
@@ -124,36 +256,44 @@
     itens.forEach(function (it, i) {
       var x = margem + i * slot + (slot - largura) / 2;
       var cx = x + largura / 2;
+      var g = sv('g', { class: 'dash-col' });
+      if (aoClicar) {
+        g.appendChild(sv('title', null, it.rotulo + ': ' + (it.valor == null ? 'oculto' : it.valor) + ' · toque para ver'));
+        g.appendChild(sv('rect', { x: margem + i * slot, y: topo - 20, width: slot, height: base - topo + 46, rx: 6, class: 'dash-alvo' }));
+      }
       if (it.valor == null) {
-        s.appendChild(sv('rect', { x: x, y: base - 14, width: largura, height: 14, rx: 4, class: 'dash-oculta' }));
+        g.appendChild(sv('rect', { x: x, y: base - 14, width: largura, height: 14, rx: 4, class: 'dash-oculta' }));
       } else if (it.valor === 0) {
-        s.appendChild(sv('rect', { x: x, y: base - 3, width: largura, height: 3, rx: 1.5, class: 'dash-zero' }));
+        g.appendChild(sv('rect', { x: x, y: base - 3, width: largura, height: 3, rx: 1.5, class: 'dash-zero' }));
       } else {
         var h = Math.max(6, (base - topo) * (it.valor / max));
-        s.appendChild(sv('rect', { x: x, y: base - h, width: largura, height: h, rx: 5, fill: 'url(#' + id + ')' }));
-        s.appendChild(sv('text', { x: cx, y: base - h - 7, 'text-anchor': 'middle', class: 'dash-valor' }, String(it.valor)));
+        g.appendChild(sv('rect', { x: x, y: base - h, width: largura, height: h, rx: 5, fill: 'url(#' + id + ')' }));
+        g.appendChild(sv('text', { x: cx, y: base - h - 7, 'text-anchor': 'middle', class: 'dash-valor' }, String(it.valor)));
       }
-      s.appendChild(sv('text', { x: cx, y: base + 20, 'text-anchor': 'middle', class: 'dash-eixo' }, it.rotulo));
+      g.appendChild(sv('text', { x: cx, y: base + 20, 'text-anchor': 'middle', class: 'dash-eixo' }, it.rotulo));
+      if (aoClicar) clicavel(g, function () { aoClicar(it, i); });
+      s.appendChild(g);
     });
     return s;
   }
 
   // Barras horizontais em grade: rótulo | barra | valor · percentual. Alinham por construção.
-  function barrasHorizontais(linhas, total) {
+  function barrasHorizontais(linhas, total, aoClicar) {
     var max = linhas.reduce(function (m, l) { return Math.max(m, l.valor || 0); }, 0) || 1;
     var nodos = [];
     linhas.forEach(function (l) {
+      var fn = aoClicar ? function () { aoClicar(l); } : null;
       var trilho = el('span', { classe: 'dash-trilho' }, [el('span', { classe: 'dash-trilho-barra' })]);
       trilho.firstChild.style.width = l.valor == null ? '0%' : Math.max(2, Math.round((l.valor / max) * 100)) + '%';
-      nodos.push(el('span', { classe: 'dash-linha-rotulo', texto: l.rotulo }), trilho);
-      nodos.push(l.valor == null ? el('span', { classe: 'dash-num' }, [oculto()])
-        : el('span', { classe: 'dash-num', texto: l.valor + (total ? ' · ' + percentual(l.valor, total) : '') }));
+      nodos.push(clicavel(el('span', { classe: 'dash-linha-rotulo', texto: l.rotulo }), fn, 'Ver detalhes: ' + l.rotulo), tambemClica(trilho, fn));
+      nodos.push(tambemClica(l.valor == null ? el('span', { classe: 'dash-num' }, [oculto()])
+        : el('span', { classe: 'dash-num', texto: l.valor + (total ? ' · ' + percentual(l.valor, total) : '') }), fn));
     });
     return el('div', { classe: 'dash-barras' }, nodos);
   }
 
   // Uma faixa 100% dividida por categoria, com legenda alinhada embaixo.
-  function faixaProporcao(itens, total) {
+  function faixaProporcao(itens, total, aoClicar) {
     var visiveis = itens.filter(function (i) { return i.valor > 0; });
     var faixa = el('div', { classe: 'dash-faixa', role: 'img', 'aria-label': itens.map(function (i) {
       return i.rotulo + ': ' + (i.valor == null ? 'oculto' : i.valor);
@@ -164,10 +304,11 @@
       faixa.appendChild(seg);
     });
     var legenda = el('div', { classe: 'dash-legenda' }, itens.map(function (it, i) {
+      var fn = aoClicar ? function () { aoClicar(it); } : null;
       return [
         el('span', { classe: 'dash-bolinha dash-seg-' + i, 'aria-hidden': 'true' }),
-        el('span', { classe: 'dash-linha-rotulo', texto: it.rotulo }),
-        el('span', { classe: 'dash-num' }, [it.valor == null ? oculto() : it.valor + ' · ' + percentual(it.valor, total)]),
+        clicavel(el('span', { classe: 'dash-linha-rotulo', texto: it.rotulo }), fn, 'Ver detalhes: ' + it.rotulo),
+        tambemClica(el('span', { classe: 'dash-num' }, [it.valor == null ? oculto() : it.valor + ' · ' + percentual(it.valor, total)]), fn),
       ];
     }).reduce(function (a, b) { return a.concat(b); }, []));
     return el('div', { classe: 'dash-proporcao' }, [faixa, legenda]);
@@ -175,7 +316,7 @@
 
   // Tabela de perfis. Painel geral: fichas, operações com localização e distância mediana.
   // Painel da operação (geral = false): só as fichas daquele perfil.
-  function tabelaPerfis(perfis, geral) {
+  function tabelaPerfis(perfis, geral, aoClicar) {
     var max = perfis.reduce(function (m, p) { return Math.max(m, p.fichas || 0); }, 0) || 1;
     var cabecalho = geral ? ['Perfil', '', 'Fichas', 'Com localização', 'Mediana até a localização'] : ['Perfil', '', 'Fichas'];
     var classes = { '': 'dash-cab-barra', 'Com localização': 'dash-col-loc' };
@@ -183,11 +324,12 @@
     perfis.forEach(function (p) {
       var trilho = el('span', { classe: 'dash-trilho dash-trilho-celula' }, [el('span', { classe: 'dash-trilho-barra' })]);
       trilho.firstChild.style.width = p.fichas == null ? '0%' : Math.max(2, Math.round((p.fichas / max) * 100)) + '%';
-      nodos.push(el('span', { classe: 'dash-linha-rotulo', texto: nomePerfil(p.perfil) }), trilho,
-        el('span', { classe: 'dash-num' }, [valorOu(p.fichas)]));
+      var fn = aoClicar ? function () { aoClicar(p); } : null;
+      nodos.push(clicavel(el('span', { classe: 'dash-linha-rotulo', texto: nomePerfil(p.perfil) }), fn, 'Ver detalhes: ' + nomePerfil(p.perfil)),
+        tambemClica(trilho, fn), tambemClica(el('span', { classe: 'dash-num' }, [valorOu(p.fichas)]), fn));
       if (geral) {
-        nodos.push(el('span', { classe: 'dash-num dash-col-loc' }, [valorOu(p.operacoes_com_localizacao)]),
-          el('span', { classe: 'dash-num' }, [valorOu(p.mediana_km, km)]));
+        nodos.push(tambemClica(el('span', { classe: 'dash-num dash-col-loc' }, [valorOu(p.operacoes_com_localizacao)]), fn),
+          tambemClica(el('span', { classe: 'dash-num' }, [valorOu(p.mediana_km, km)]), fn));
       }
     });
     return el('div', { classe: 'dash-tabela' + (geral ? ' dash-tabela-geral' : '') }, nodos);
@@ -230,8 +372,8 @@
   function renderGeral(d, elemento) {
     var ops = d.operacoes, dist = d.distancia_km, loc = d.localizacoes;
     var meses = ultimos12(ops.por_mes);
-    var tipos = Object.keys(ops.por_tipo || {}).map(function (t) { return { rotulo: TIPOS[t] || t, valor: ops.por_tipo[t] }; });
-    var condicoes = Object.keys(loc.por_condicao || {}).map(function (c) { return { rotulo: CONDICOES[c] || c, valor: loc.por_condicao[c] }; });
+    var tipos = Object.keys(ops.por_tipo || {}).map(function (t) { return { chave: t, rotulo: TIPOS[t] || t, valor: ops.por_tipo[t] }; });
+    var condicoes = Object.keys(loc.por_condicao || {}).map(function (c) { return { chave: c, rotulo: CONDICOES[c] || c, valor: loc.por_condicao[c] }; });
     var totalCond = condicoes.reduce(function (t, i) { return t + (i.valor || 0); }, 0);
     var comLocalizacao = loc.operacoes_com_localizacao;
 
@@ -246,11 +388,22 @@
       ]),
     ]);
 
+    var nota = 'Toque numa operação para abri-la.';
     var kpis = el('div', { classe: 'dash-kpis' }, [
-      kpi('▦', 'Operações', String(ops.total), ops.total ? 'todas as que você acessa' : 'nenhuma ainda', 'ambar'),
-      kpi('◉', 'Abertas', String(ops.abertas), 'em andamento agora', 'verde'),
-      kpi('✓', 'Encerradas', String(ops.encerradas), 'com registro final', 'azul'),
-      kpi('⌖', 'Com vítima localizada', valorOu(comLocalizacao), comLocalizacao == null ? 'poucos casos' : percentual(comLocalizacao, ops.total) + ' das operações', 'roxo'),
+      kpi('▦', 'Operações', String(ops.total), ops.total ? 'todas as que você acessa' : 'nenhuma ainda', 'ambar', function () {
+        abrirDetalhe({ titulo: 'Todas as operações', subtitulo: ops.total + ' no seu acesso, da mais nova para a mais antiga.',
+          lista: listaOperacoes(function () { return true; }), vazio: 'Nenhuma operação ainda.', nota: nota });
+      }),
+      kpi('◉', 'Abertas', String(ops.abertas), 'em andamento agora', 'verde', function () {
+        abrirDetalhe({ titulo: 'Operações abertas', subtitulo: 'Em andamento agora.',
+          lista: listaOperacoes(function (o) { return !o.encerrada_em; }), vazio: 'Nenhuma operação aberta.', nota: nota });
+      }),
+      kpi('✓', 'Encerradas', String(ops.encerradas), 'com registro final', 'azul', function () {
+        abrirDetalhe({ titulo: 'Operações encerradas', lista: listaOperacoes(function (o) { return Boolean(o.encerrada_em); }),
+          vazio: 'Nenhuma operação encerrada.', nota: nota });
+      }),
+      kpi('⌖', 'Com vítima localizada', valorOu(comLocalizacao), comLocalizacao == null ? 'poucos casos' : percentual(comLocalizacao, ops.total) + ' das operações', 'roxo',
+        function () { detalheLocalizadas(d); }),
     ]);
 
     var leitura = el('section', { classe: 'dash-leitura' }, [
@@ -261,23 +414,63 @@
 
     var grafMeses = cartao({
       span: 8, titulo: 'Operações por mês', n: ops.total, pergunta: 'Quantas operações começaram em cada mês, nos últimos 12 meses?',
-      corpo: [colunas(meses.map(function (m) { return { rotulo: MESES[Number(m.mes.slice(5)) - 1], valor: m.n }; }), 'Operações por mês')],
+      corpo: [colunas(meses.map(function (m) { return { mes: m.mes, rotulo: MESES[Number(m.mes.slice(5)) - 1], valor: m.n }; }), 'Operações por mês',
+        function (it) {
+          abrirDetalhe({ titulo: 'Operações de ' + rotuloMes(it.mes), subtitulo: it.valor + (it.valor === 1 ? ' operação começou' : ' operações começaram') + ' neste mês.',
+            lista: listaOperacoes(function (o) { return mesDaOperacao(o) === it.mes; }), vazio: 'Nenhuma operação neste mês.', nota: nota });
+        })],
+      nota: 'Toque numa coluna para ver as operações do mês.',
     });
 
     var grafTipos = cartao({
       span: 4, titulo: 'Operações por tipo', n: ops.total, pergunta: 'Que tipo de operação predomina?',
-      corpo: [barrasHorizontais(tipos, ops.total)],
+      corpo: [barrasHorizontais(tipos, ops.total, function (t) {
+        abrirDetalhe({ titulo: 'Operações: ' + t.rotulo, subtitulo: t.valor + ' de ' + ops.total + ' (' + percentual(t.valor, ops.total) + ').',
+          lista: listaOperacoes(function (o) { return (o.tipo || 'sem_tipo') === t.chave; }), vazio: 'Nenhuma operação deste tipo.', nota: nota });
+      })],
+      nota: 'Toque num tipo para ver as operações.',
     });
 
     var grafDist = cartao({
       span: 8, titulo: 'Distância entre o ULV e a localização', n: dist.casos,
       pergunta: 'A que distância do último local visto (ULV) a vítima foi localizada?',
-      corpo: [colunas(dist.faixas.map(function (f) { return { rotulo: f.faixa, valor: f.n }; }), 'Distância do ULV à localização')],
-      nota: 'ULV = último local visto: o ponto do cadastro da operação (coordenadas do último avistamento).',
+      corpo: [colunas(dist.faixas.map(function (f) { return { rotulo: f.faixa, valor: f.n }; }), 'Distância do ULV à localização', function (f) {
+        abrirDetalhe({
+          titulo: 'Localizadas a ' + f.rotulo + ' km do ULV',
+          medidas: [
+            ['Casos nesta faixa', valorOu(f.valor)],
+            ['Parte dos casos com distância', f.valor == null || !dist.casos ? null : percentual(f.valor, dist.casos)],
+            ['Total de casos com distância', valorOu(dist.casos)],
+          ],
+          nota: f.valor == null ? 'Menos de ' + d.k_minimo + ' casos: o número fica oculto para que ninguém seja identificado.'
+            : 'Distância em linha reta entre o último local visto (ULV) e o ponto onde a vítima foi localizada.',
+          acoes: [{ texto: 'Ver operações com vítima localizada', fn: function () { detalheLocalizadas(d); } }],
+        });
+      })],
+      nota: 'ULV = último local visto: o ponto do cadastro da operação (coordenadas do último avistamento). Toque numa coluna para detalhes.',
     });
 
     var resumoDist = cartao({
-      span: 4, titulo: 'Distância e tempo', n: dist.casos, pergunta: 'Resumo dos casos com localização.',
+      span: 4, titulo: 'Distância e tempo', n: dist.casos, pergunta: 'Resumo dos casos com localização.', dica: 'Como ler ›',
+      aoClicar: function () {
+        abrirDetalhe({
+          titulo: 'Como ler: distância e tempo',
+          medidas: [
+            ['Mediana', valorOu(dist.mediana, km)],
+            ['Metade central (25%–75%)', dist.p25 == null ? null : km(dist.p25) + ' a ' + km(dist.p75)],
+            ['Média', valorOu(dist.media, km)],
+            ['Tempo até localizar (mediana)', valorOu(loc.minutos_ate_mediana, minutos)],
+          ],
+          lista: [
+            { titulo: 'Mediana', meta: 'Metade dos casos foi localizada mais perto que isso, metade mais longe. Não é puxada por um caso extremo.' },
+            { titulo: 'Metade central', meta: 'Faixa onde estão os 50% de casos do meio. Boa referência para o raio de busca inicial.' },
+            { titulo: 'Média', meta: 'Soma das distâncias dividida pelo número de casos. Um caso muito longe aumenta bastante a média.' },
+            { titulo: 'Tempo até localizar', meta: 'Do início das operações até o primeiro registro de vítima localizada (mediana).' },
+          ],
+          nota: 'Com menos de ' + d.k_minimo + ' casos os valores ficam ocultos.',
+          acoes: [{ texto: 'Ver operações com vítima localizada', fn: function () { detalheLocalizadas(d); } }],
+        });
+      },
       corpo: [medidas([
         ['Mediana', km(dist.mediana)],
         ['Metade central (25%–75%)', dist.p25 == null ? null : km(dist.p25) + ' a ' + km(dist.p75)],
@@ -289,13 +482,33 @@
     var grafPerfis = cartao({
       span: 8, titulo: 'Perfil das vítimas', n: d.perfis.reduce(function (t, p) { return t + (p.fichas || 0); }, 0),
       pergunta: 'Quais perfis aparecem, e em quantos casos a vítima foi localizada?',
-      corpo: [tabelaPerfis(d.perfis, true)],
-      nota: 'Fichas podem ter perfil em branco. A distância mediana por perfil só aparece com 5 ou mais casos.',
+      corpo: [tabelaPerfis(d.perfis, true, function (p) {
+        abrirDetalhe({
+          titulo: 'Perfil: ' + nomePerfil(p.perfil),
+          medidas: [
+            ['Fichas com este perfil', valorOu(p.fichas)],
+            ['Operações com vítima localizada', valorOu(p.operacoes_com_localizacao)],
+            ['Distância mediana até a localização', valorOu(p.mediana_km, km)],
+          ],
+          nota: 'Uma ficha pode ter mais de um perfil. Números com menos de ' + d.k_minimo + ' casos ficam ocultos.',
+        });
+      })],
+      nota: 'Fichas podem ter perfil em branco. A distância mediana por perfil só aparece com 5 ou mais casos. Toque num perfil para detalhes.',
     });
 
     var grafCond = cartao({
       span: 4, titulo: 'Vítimas localizadas', n: totalCond, pergunta: 'Com vida ou em óbito?',
-      corpo: [faixaProporcao(condicoes, totalCond || 1)],
+      corpo: [faixaProporcao(condicoes, totalCond || 1, function (c) {
+        abrirDetalhe({
+          titulo: 'Vítimas localizadas: ' + c.rotulo.toLowerCase(),
+          medidas: [
+            ['Vítimas', valorOu(c.valor)],
+            ['Parte das localizadas', c.valor == null || !totalCond ? null : percentual(c.valor, totalCond)],
+          ],
+          nota: 'Conta o primeiro registro de localização de cada vítima.',
+          acoes: [{ texto: 'Ver operações com vítima localizada', fn: function () { detalheLocalizadas(d); } }],
+        });
+      })],
     });
 
     return [
@@ -342,7 +555,7 @@
         if (primeiro == null || pt.t < primeiro) primeiro = pt.t;
       });
     });
-    return { id: p.id, tipo: p.tipo, grupo: p.grupo, km: m / 1000, horas: ms / 3600000, pontos: pontos,
+    return { id: p.id, nome: p.nome || 'Participante', tipo: p.tipo, grupo: p.grupo, km: m / 1000, horas: ms / 3600000, pontos: pontos,
       primeiro: primeiro, ultimo: ultimo, emCampo: ultimo != null && agora - ultimo <= EM_CAMPO_MS };
   }
 
@@ -368,7 +581,7 @@
         });
       });
     });
-    return { inicio: t0, passo: passo, baldes: conjuntos.map(function (s, k) { return { t: t0 + k * passo, pessoas: s.size }; }) };
+    return { inicio: t0, passo: passo, baldes: conjuntos.map(function (s, k) { return { t: t0 + k * passo, pessoas: s.size, ids: Array.from(s) }; }) };
   }
 
   // Cobertura aproximada de um setor: células de ~30 m (maiores em setores grandes) por onde alguma
@@ -420,7 +633,7 @@
       });
     });
     return { id: s.id, nome: s.nome, areaKm2: s.areaM2 / 1e6, cobertura: visitadas / total, celulaM: Math.round(cel),
-      ultimaPassagem: ultima, pessoas: quem.size };
+      ultimaPassagem: ultima, pessoas: quem.size, ids: Array.from(quem) };
   }
 
   function calcularEsforco(r, inicio, fim) {
@@ -450,6 +663,7 @@
       atividade: atividade(r, campo, inicio, fim != null ? fim : agora),
       setores: setores.sort(function (a, b) { return (a.cobertura == null) - (b.cobertura == null) || (a.cobertura || 0) - (b.cobertura || 0); }),
       coberturaMedia: areaTotal ? areaCoberta / areaTotal : null,
+      pessoas: campo,   // para as listas de detalhe
     };
   }
 
@@ -473,7 +687,7 @@
 
   // Pessoas em campo ao longo do tempo (uma coluna por intervalo) com marcas (ex.: vítima localizada).
   // largura: em px da tela, para o texto sair no tamanho real (no celular o gráfico não é encolhido)
-  function graficoAtividade(at, marcas, largura) {
+  function graficoAtividade(at, marcas, largura, aoClicar) {
     var W = Math.round(Math.max(280, Math.min(760, largura || 760))), H = 240, base = 198, topo = 26, esq = 30, dir = 8;
     var n = at.baldes.length, slot = (W - esq - dir) / n, larg = Math.max(2, slot - 2);
     var max = at.baldes.reduce(function (m, b) { return Math.max(m, b.pessoas); }, 0);
@@ -496,6 +710,7 @@
       // área de toque maior que a barra
       g.appendChild(sv('rect', { x: esq + i * slot, y: topo, width: slot, height: base - topo, class: 'dash-alvo' }));
       if (b.pessoas) g.appendChild(sv('rect', { x: x, y: base - h, width: larg, height: h, rx: Math.min(3, larg / 2), class: 'dash-barra' }));
+      if (aoClicar && b.pessoas) clicavel(g, function () { aoClicar(b); });
       s.appendChild(g);
       if (i % cada === 0) {
         var meiaNoite = new Date(b.t).getHours() === 0 && new Date(b.t).getMinutes() === 0;
@@ -513,18 +728,20 @@
   }
 
   // Tabela alinhada: cabeçalho e linhas na mesma grade; "barra" vira uma trilha proporcional.
-  function tabela(classe, colunas, linhas) {
+  // aoClicarLinha(índice): a 1ª célula vira o alvo do teclado; as outras também respondem ao toque.
+  function tabela(classe, colunas, linhas, aoClicarLinha) {
     var nodos = colunas.map(function (c) { return el('span', { classe: 'dash-cab' + (c.num ? ' dash-cab-num' : '') + (c.classe ? ' ' + c.classe : ''), texto: c.titulo }); });
-    linhas.forEach(function (l) {
+    linhas.forEach(function (l, j) {
+      var fn = aoClicarLinha ? function () { aoClicarLinha(j); } : null;
       colunas.forEach(function (c, i) {
-        var v = l[i];
+        var v = l[i], no;
         if (c.barra) {
-          var trilho = el('span', { classe: 'dash-trilho' + (c.classe ? ' ' + c.classe : '') }, [el('span', { classe: 'dash-trilho-barra' })]);
-          trilho.firstChild.style.width = v == null ? '0%' : Math.max(v > 0 ? 2 : 0, Math.round(v * 100)) + '%';
-          nodos.push(trilho);
+          no = el('span', { classe: 'dash-trilho' + (c.classe ? ' ' + c.classe : '') }, [el('span', { classe: 'dash-trilho-barra' })]);
+          no.firstChild.style.width = v == null ? '0%' : Math.max(v > 0 ? 2 : 0, Math.round(v * 100)) + '%';
         } else {
-          nodos.push(el('span', { classe: (c.num ? 'dash-num' : 'dash-linha-rotulo') + (c.classe ? ' ' + c.classe : '') }, [v == null ? '—' : v]));
+          no = el('span', { classe: (c.num ? 'dash-num' : 'dash-linha-rotulo') + (c.classe ? ' ' + c.classe : '') }, [v == null ? '—' : v]);
         }
+        nodos.push(i === 0 ? clicavel(no, fn, 'Ver detalhes') : tambemClica(no, fn));
       });
     });
     return el('div', { classe: 'dash-tab ' + classe }, nodos);
@@ -532,10 +749,10 @@
 
   function ocorrencias(itens) {
     return el('div', { classe: 'dash-ocorr' }, itens.map(function (it) {
-      return el('div', { classe: 'dash-ocorr-item' + (it.alerta && it.valor ? ' dash-ocorr-alerta' : '') + (it.valor ? '' : ' dash-ocorr-zero') }, [
+      return clicavel(el('div', { classe: 'dash-ocorr-item' + (it.alerta && it.valor ? ' dash-ocorr-alerta' : '') + (it.valor ? '' : ' dash-ocorr-zero') }, [
         el('strong', { texto: it.valor == null ? '—' : String(it.valor) }),
         el('span', { texto: it.rotulo }),
-      ]);
+      ]), it.aoClicar, it.dica);
     }));
   }
 
@@ -547,34 +764,104 @@
     var e = r ? calcularEsforco(r, inicio, fim) : null;
     var loc = d && d.localizacao;
     var encerrada = Boolean(fim);
+    // ações no painel (militar.js): ver pessoa / setor no mapa, abrir a central e o diário
+    var acoes = (r && r.acoes) || {};
+    var porId = new Map((e ? e.pessoas : []).map(function (p) { return [p.id, p]; }));
+    var TIPO_PESSOA = { militar: 'militar', civil: 'civil', responsavel: 'responsável' };
+    function situacao(p) { return p.emCampo ? 'em campo agora' : p.ultimo ? 'último ponto ' + haQuanto(p.ultimo, agora) : 'sem GPS'; }
+    function itemPessoa(p, valor) {
+      return {
+        titulo: p.nome, meta: [p.grupo ? p.grupo.nome : 'sem grupo', TIPO_PESSOA[p.tipo] || p.tipo, valor != null ? situacao(p) : null].filter(Boolean).join(' · '),
+        valor: valor != null ? valor : situacao(p),
+        aoClicar: acoes.verPessoa ? function () { acoes.verPessoa(p.id); } : null,
+      };
+    }
+    function detalhePessoas(titulo, subtitulo, pessoas, valorDe) {
+      abrirDetalhe({ titulo: titulo, subtitulo: subtitulo, lista: pessoas.map(function (p) { return itemPessoa(p, valorDe ? valorDe(p) : null); }),
+        vazio: 'Ninguém.', nota: acoes.verPessoa ? 'Toque numa pessoa para vê-la no mapa e abrir a ficha.' : null });
+    }
+    function porNome(a, b) { return a.nome.localeCompare(b.nome); }
+    function detalheSetor(st) {
+      abrirDetalhe({
+        titulo: st.nome || 'Setor',
+        medidas: [
+          ['Área', st.areaKm2 < 1 ? num(st.areaKm2 * 100, 1) + ' ha' : num(st.areaKm2, 2) + ' km²'],
+          ['Coberto (aproximado)', st.cobertura == null ? '—' : pct(st.cobertura)],
+          ['Última passagem', st.ultimaPassagem ? haQuanto(st.ultimaPassagem, agora) + ' (' + hora(st.ultimaPassagem) + ')' : 'ninguém passou'],
+          ['Pessoas que passaram', String(st.pessoas || 0)],
+        ],
+        lista: (st.ids || []).map(function (id) { return porId.get(id); }).filter(Boolean).sort(porNome).map(function (p) { return itemPessoa(p, null); }),
+        vazio: 'Ninguém passou por este setor ainda.',
+        acoes: acoes.verSetor ? [{ texto: 'Ver setor no mapa', principal: true, fn: function () { acoes.verSetor(st.id); } }] : null,
+      });
+    }
+    function detalheVitima() {
+      abrirDetalhe({
+        titulo: 'Vítima',
+        medidas: !d ? [['Dados do banco', 'indisponíveis (migração 023)']] : [
+          ['Localizada', loc ? 'sim · ' + (CONDICOES[loc.condicao] || loc.condicao).toLowerCase() : 'não'],
+          ['Hora', loc ? diaMes(Date.parse(loc.em)) + ' ' + hora(Date.parse(loc.em)) : '—'],
+          ['Tempo após o início', loc && loc.minutos_ate != null ? minutos(loc.minutos_ate) : '—'],
+          ['Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : (d.ulv ? '—' : 'sem ULV')],
+          ['Fichas de vítima', String(d.fichas)],
+          ['Localizações registradas', String(d.localizacoes)],
+        ],
+        nota: d && d.ulv ? 'ULV (último local visto): ' + coordenadas(d.ulv) : null,
+      });
+    }
 
     var topo = el('div', { classe: 'dash-barra-op' }, [
       el('span', { classe: 'dash-chip ' + (encerrada ? 'dash-chip-fim' : 'dash-chip-aberta'), texto: encerrada ? 'encerrada' : 'em andamento' }),
       el('span', { classe: 'muted dash-atualizado', texto: 'Números de ' + diaMes(agora) + ' ' + hora(agora) }),
-      el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Atualizar', onclick: function () { raiz.Dashboard.operacao(op, elemento, { resumo: r && r.fonte }); } }),
+      el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Atualizar', onclick: function () { raiz.Dashboard.operacao(op, elemento, { resumo: r && r.fonte, acoes: acoes }); } }),
     ]);
 
     var vitimaValor = !d ? '—' : loc ? 'Sim' : 'Não';
     var vitimaDet = !d ? 'sem dados do banco' : loc ? (CONDICOES[loc.condicao] || loc.condicao) + ' · ' + hora(Date.parse(loc.em)) : 'ainda não localizada';
+    var comGente = e && e.atividade ? e.atividade.baldes.filter(function (b) { return b.pessoas; }).length * e.atividade.passo : null;
     var kpis = el('div', { classe: 'dash-kpis dash-kpis-6' }, [
-      kpi('◷', 'Duração', duracao((fim || agora) - inicio) || '—', inicio ? (encerrada ? 'encerrada ' + diaMes(fim) + ' ' + hora(fim) : 'desde ' + diaMes(inicio) + ' ' + hora(inicio)) : 'início não informado', 'ambar'),
-      kpi('◉', 'Efetivo', e ? String(e.efetivo) : '—', e ? (encerrada ? e.porTipo.militar + ' mil. · ' + e.porTipo.civil + ' civis' : e.emCampo + ' em campo agora') : null, 'verde'),
-      kpi('↝', 'Percorrido', e ? num(e.km, 1) + ' km' : '—', 'soma das trilhas GPS', 'azul'),
-      kpi('⧗', 'Esforço', e ? num(e.horas, 1) + ' h' : '—', 'pessoa·hora com GPS', 'azul'),
-      kpi('▦', 'Setores', e ? String(e.setores.length) : '—', e && e.coberturaMedia != null ? pct(e.coberturaMedia) + ' coberto' : 'nenhum desenhado', 'ambar'),
-      kpi('⌖', 'Localizada', vitimaValor, vitimaDet, 'roxo'),
+      kpi('◷', 'Duração', duracao((fim || agora) - inicio) || '—', inicio ? (encerrada ? 'encerrada ' + diaMes(fim) + ' ' + hora(fim) : 'desde ' + diaMes(inicio) + ' ' + hora(inicio)) : 'início não informado', 'ambar',
+        function () {
+          abrirDetalhe({ titulo: 'Duração', medidas: [
+            ['Início das operações', inicio ? diaMes(inicio) + ' ' + hora(inicio) : 'não informado'],
+            [encerrada ? 'Encerramento' : 'Agora', diaMes(fim || agora) + ' ' + hora(fim || agora)],
+            ['Duração', duracao((fim || agora) - inicio) || '—'],
+            ['Tempo com alguém em campo', comGente != null ? '≈ ' + duracao(comGente) : '—'],
+          ], nota: 'Tempo com alguém em campo: soma dos intervalos do gráfico em que pelo menos uma pessoa enviou posição.' });
+        }),
+      kpi('◉', 'Efetivo', e ? String(e.efetivo) : '—', e ? (encerrada ? e.porTipo.militar + ' mil. · ' + e.porTipo.civil + ' civis' : e.emCampo + ' em campo agora') : null, 'verde',
+        e ? function () {
+          detalhePessoas('Efetivo', e.porTipo.militar + ' militares · ' + e.porTipo.civil + ' civis · ' + e.porTipo.responsavel + ' responsáveis com trilha',
+            e.pessoas.slice().sort(function (a, b) { return (b.emCampo - a.emCampo) || porNome(a, b); }));
+        } : null),
+      kpi('↝', 'Percorrido', e ? num(e.km, 1) + ' km' : '—', 'soma das trilhas GPS', 'azul',
+        e ? function () { detalhePessoas('Percorrido por pessoa', num(e.km, 1) + ' km no total', e.pessoas.slice().sort(function (a, b) { return b.km - a.km; }), function (p) { return num(p.km, 1) + ' km'; }); } : null),
+      kpi('⧗', 'Esforço', e ? num(e.horas, 1) + ' h' : '—', 'pessoa·hora com GPS', 'azul',
+        e ? function () { detalhePessoas('Horas com GPS por pessoa', num(e.horas, 1) + ' pessoa·hora no total', e.pessoas.slice().sort(function (a, b) { return b.horas - a.horas; }), function (p) { return num(p.horas, 1) + ' h'; }); } : null),
+      kpi('▦', 'Setores', e ? String(e.setores.length) : '—', e && e.coberturaMedia != null ? pct(e.coberturaMedia) + ' coberto' : 'nenhum desenhado', 'ambar',
+        e && e.setores.length ? function () {
+          abrirDetalhe({ titulo: 'Setores', subtitulo: 'Do menos para o mais coberto.', lista: e.setores.map(function (st) {
+            return { titulo: st.nome || 'Setor', meta: st.ultimaPassagem ? 'última passagem ' + haQuanto(st.ultimaPassagem, agora) : 'ninguém passou',
+              valor: st.cobertura == null ? '—' : pct(st.cobertura), aoClicar: function () { detalheSetor(st); } };
+          }) });
+        } : null),
+      kpi('⌖', 'Localizada', vitimaValor, vitimaDet, 'roxo', detalheVitima),
     ]);
 
     // pessoas em campo no tempo, com a localização marcada
     var corpoAtiv = e && e.atividade && e.atividade.baldes.some(function (b) { return b.pessoas; })
       ? [graficoAtividade(e.atividade, loc ? [{ t: Date.parse(loc.em), rotulo: 'Vítima localizada ' + hora(Date.parse(loc.em)) }] : [],
-        (elemento.clientWidth || 760) - 40)]
+        (elemento.clientWidth || 760) - 40, function (b) {
+          var intervalo = e.atividade.passo >= 86400000 ? diaMes(b.t) : diaMes(b.t) + ', ' + hora(b.t) + '–' + hora(b.t + e.atividade.passo);
+          detalhePessoas('Em campo: ' + intervalo, b.pessoas + (b.pessoas === 1 ? ' pessoa enviou' : ' pessoas enviaram') + ' posição neste intervalo.',
+            b.ids.map(function (id) { return porId.get(id); }).filter(Boolean).sort(porNome));
+        })]
       : [el('p', { classe: 'muted', texto: 'Ainda não há trilhas GPS nesta operação.' })];
     var cAtiv = cartao({
       span: 8, titulo: 'Pessoas em campo', pergunta: 'Quantas pessoas enviaram posição em cada intervalo, do início até ' + (encerrada ? 'o encerramento' : 'agora') + '.',
       corpo: corpoAtiv,
       nota: e && e.atividade ? 'Início em ' + diaMes(e.atividade.inicio) + '. Cada coluna = ' + duracao(e.atividade.passo) +
-        '. Passe o mouse ou toque numa coluna para ver o número.' : null,
+        '. Toque numa coluna para ver quem estava em campo.' : null,
     });
 
     // vítima: localização e perfis (do banco)
@@ -606,7 +893,12 @@
         var nome = el('span', { classe: 'dash-grupo' }, [el('span', { classe: 'dash-bolinha' }), g.nome]);
         if (g.cor) nome.firstChild.style.background = g.cor; else nome.firstChild.classList.add('dash-sem-cor');
         return [nome, String(g.pessoas), g.km / maxKm, num(g.km, 1), num(g.horas, 1)];
-      })) : el('p', { classe: 'muted', texto: 'Ninguém em campo ainda.' })],
+      }), function (j) {
+        var g = e.grupos[j];
+        detalhePessoas('Grupo: ' + g.nome, g.pessoas + (g.pessoas === 1 ? ' pessoa' : ' pessoas') + ' · ' + num(g.km, 1) + ' km · ' + num(g.horas, 1) + ' h',
+          e.pessoas.filter(function (p) { return (p.grupo ? p.grupo.id : '') === g.id; }).sort(function (a, b) { return b.km - a.km; }),
+          function (p) { return num(p.km, 1) + ' km'; });
+      }) : el('p', { classe: 'muted', texto: 'Ninguém em campo ainda.' })],
     });
 
     // cobertura dos setores
@@ -618,7 +910,7 @@
       ], e.setores.map(function (s) {
         return [s.nome || 'Setor', s.areaKm2 < 1 ? num(s.areaKm2 * 100, 1) + ' ha' : num(s.areaKm2, 2) + ' km²', s.cobertura,
           s.cobertura == null ? null : pct(s.cobertura), s.ultimaPassagem ? haQuanto(s.ultimaPassagem, agora) : 'ninguém passou'];
-      })) : el('p', { classe: 'muted', texto: 'Nenhum setor desenhado.' })],
+      }), function (j) { detalheSetor(e.setores[j]); }) : el('p', { classe: 'muted', texto: 'Nenhum setor desenhado.' })],
       nota: e && e.setores.length ? 'Aproximado: o setor é dividido em quadrados de ~' + (e.setores[0].celulaM || 30) + ' m; conta como coberto o quadrado por onde passou alguma trilha. Os menos cobertos aparecem primeiro.' : null,
     });
 
@@ -626,17 +918,22 @@
     var cOcorr = cartao({
       span: 12, titulo: 'Ocorrências', pergunta: 'O que chegou do campo e o que o comando fez.',
       corpo: [ocorrencias([
-        { rotulo: 'Pedidos de ajuda', valor: o.ajuda, alerta: true },
-        { rotulo: 'Pistas', valor: o.PISTA },
-        { rotulo: 'Vestígios', valor: o.VESTIGIO },
-        { rotulo: 'Objetos', valor: o.OBJETO },
-        { rotulo: 'Obstáculos', valor: o.OBSTACULO },
+        { rotulo: 'Pedidos de ajuda', valor: o.ajuda, alerta: true, aba: 'msgs' },
+        { rotulo: 'Pistas', valor: o.PISTA, aba: 'msgs' },
+        { rotulo: 'Vestígios', valor: o.VESTIGIO, aba: 'msgs' },
+        { rotulo: 'Objetos', valor: o.OBJETO, aba: 'msgs' },
+        { rotulo: 'Obstáculos', valor: o.OBSTACULO, aba: 'msgs' },
         { rotulo: 'Fotos', valor: o.fotos },
         { rotulo: 'Pontos marcados', valor: o.pontos },
-        { rotulo: 'Ordens enviadas', valor: o.ordens },
-        { rotulo: 'Retornos atrasados', valor: o.retornosAtrasados, alerta: true },
-        { rotulo: 'Registros no diário', valor: d ? d.registros_diario : null },
-      ])],
+        { rotulo: 'Ordens enviadas', valor: o.ordens, aba: 'msgs' },
+        { rotulo: 'Retornos atrasados', valor: o.retornosAtrasados, alerta: true, aba: 'alertas' },
+        { rotulo: 'Registros no diário', valor: d ? d.registros_diario : null, diario: true },
+      ].map(function (it) {
+        // mensagens e relatos abrem a central; retornos, os alertas; o diário abre o diário
+        if (it.aba && acoes.abrirCentral) { it.aoClicar = function () { acoes.abrirCentral(it.aba); }; it.dica = 'Abrir ' + (it.aba === 'alertas' ? 'os alertas' : 'as mensagens'); }
+        if (it.diario && acoes.abrirDiario) { it.aoClicar = function () { acoes.abrirDiario(); }; it.dica = 'Abrir o diário'; }
+        return it;
+      }))],
     });
 
     return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cSet, cOcorr])];
@@ -659,7 +956,10 @@
   }
 
   raiz.Dashboard = {
-    geral: function (elemento) { return carregar(elemento, function () { return C.rpc('estudo_geral'); }, renderGeral); },
+    geral: function (elemento) {
+      cacheOps = cacheLocalizadas = null;
+      return carregar(elemento, function () { return C.rpc('estudo_geral'); }, renderGeral);
+    },
     // opcoes.resumo: função que devolve o resumo do painel (trilhas, grupos, setores, ocorrências).
     // O estudo do banco (vítimas) é opcional: se faltar a migração, o restante aparece mesmo assim.
     operacao: function (op, elemento, opcoes) {
@@ -668,7 +968,7 @@
         var d = null;
         try { d = await C.rpc('estudo_operacao', { p_operacao: op.id }); } catch (e) { console.warn('estudo_operacao indisponível:', e.message || e); }
         var r = fonte ? fonte() : null;
-        if (r) r.fonte = fonte;
+        if (r) { r.fonte = fonte; r.acoes = (opcoes && opcoes.acoes) || {}; }
         return { d: d, r: r };
       }, function (x, alvo) { return renderOperacao(x.d, x.r, op, alvo); });
     },

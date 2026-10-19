@@ -916,3 +916,42 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 @media (min-width: 760px) {
   .nova-op-linha { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
 }
+
+/* ---- dashboards interativos: tocar abre os detalhes ---- */
+.dash-clicavel { cursor: pointer; }
+.dash-clicavel:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.dash-clicavel-sec { cursor: pointer; }
+.dash-kpi.dash-clicavel { position: relative; transition: border-color .15s, background .15s; }
+.dash-kpi.dash-clicavel:hover { border-color: var(--acento); background: var(--superficie-2); }
+.dash-kpi-seta { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; color: var(--texto-3); }
+.dash-kpi.dash-clicavel:hover .dash-kpi-seta { color: var(--acento); }
+.dash-card.dash-clicavel:hover { border-color: var(--acento); }
+.dash-card-dica { margin-left: auto; font-size: .72rem; color: var(--acento); white-space: nowrap; }
+.dash-card-topo .dash-n + .dash-card-dica { margin-left: 8px; }
+.dash-linha-rotulo.dash-clicavel { text-decoration: underline; text-decoration-color: var(--borda-forte); text-underline-offset: 3px; }
+.dash-linha-rotulo.dash-clicavel:hover, .dash-linha-rotulo.dash-clicavel:focus-visible { color: var(--acento); text-decoration-color: var(--acento); }
+.dash-col.dash-clicavel .dash-alvo { fill: transparent; }
+.dash-col.dash-clicavel:hover .dash-alvo, .dash-col.dash-clicavel:focus-visible .dash-alvo { fill: var(--superficie-2); }
+.dash-col.dash-clicavel:focus-visible { outline: none; }
+.dash-col.dash-clicavel:focus-visible .dash-alvo { stroke: var(--acento); stroke-width: 2; }
+.dash-ocorr-item.dash-clicavel:hover { border-color: var(--acento); }
+
+/* janela de detalhes */
+.modal:has(.dash-det) { width: min(560px, 100%); }
+.dash-det { display: grid; gap: 12px; font-variant-numeric: tabular-nums; }
+.dash-det-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dash-det-topo h2 { margin: 0; font-size: 1.1rem; }
+.dash-det-sub { margin: 0; font-size: .85rem; }
+.dash-det-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: min(55vh, 460px); overflow: auto; }
+.dash-det-item { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "nome valor seta" "meta valor seta";
+  align-items: center; gap: 2px 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--borda); background: var(--superficie-2);
+  color: var(--texto); font: inherit; text-align: left; }
+button.dash-det-item { cursor: pointer; }
+button.dash-det-item:hover, button.dash-det-item:focus-visible { border-color: var(--acento); outline: none; }
+.dash-det-nome { grid-area: nome; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-det-meta { grid-area: meta; font-size: .78rem; color: var(--texto-2); min-width: 0; }
+.dash-det-valor { grid-area: valor; font-family: var(--mono); font-size: .85rem; color: var(--texto-2); white-space: nowrap; }
+.dash-det-seta { grid-area: seta; color: var(--texto-3); font-size: 1.2rem; }
+.dash-det-vazio { padding: 8px 2px; }
+.dash-det-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.dash-det-acoes .btn { flex: 1 1 200px; }

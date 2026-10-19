@@ -686,6 +686,15 @@ dado de participante sai do banco nesses painéis.
   (administrador: todas). A escolha fica salva neste navegador.
 - **Cabeçalho:** um único botão **☰ Menu** abre a lista de ações (Responsáveis, Minha conta, Sair). A troca
   entre Dashboard e Operações fica só nos botões da tela.
+- **Interativo (tocar abre os detalhes, por cima; Fechar volta ao dashboard):**
+  - Dashboard: os números abrem a lista das operações (todas, abertas, encerradas, com vítima localizada); uma coluna
+    do mês ou um tipo abre as operações daquele mês ou tipo; perfil, faixa de distância e condição abrem os números
+    e o que significam; "Distância e tempo" explica como ler. Tocar numa operação abre a operação. Números com
+    menos de 5 casos continuam "oculto".
+  - Dashboard da operação: os números abrem as pessoas (efetivo, km e horas por pessoa), os setores e a duração;
+    uma coluna do gráfico mostra quem estava em campo naquele intervalo; um grupo, os integrantes; um setor, a
+    cobertura, quem passou e **Ver setor no mapa**. Tocar numa pessoa mostra a pessoa no mapa e abre a ficha.
+    Pedidos de ajuda, relatos e ordens abrem as mensagens; retornos atrasados, os alertas; o diário, o diário.
 - **Operação → Dashboard da operação** (janela larga; no celular, uma coluna):
   - seis números: duração, efetivo (e quantos em campo agora), km percorridos, esforço em pessoa·hora,
     setores (com a % da área coberta) e se a vítima foi localizada;

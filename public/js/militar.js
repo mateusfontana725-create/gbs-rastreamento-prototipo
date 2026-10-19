@@ -147,7 +147,8 @@
     camadaPontos: null,         // fotos e relatos (agrupados quando próximos)
     legenda: null,
     rotulos: { agendar: function () {} },   // mapa-rotulos.js, ligado ao criar o mapa
-    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, agrupar: true, legenda: true, setores: true, pontos: true, local: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
+    filtroEstado: null,         // lista: só conectados / instáveis / sem atualização (tocar no resumo)
+    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, agrupar: true, pessoas: true, legenda: true, setores: true, pontos: true, local: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
     lateralOculta: Boolean(C.local.ler(CHAVE_LATERAL, false)),
     centralAba: 'msgs',
     // setores, pontos de interesse e destinos
@@ -267,7 +268,6 @@
     $('btn-encerrar').addEventListener('click', encerrarOperacao);
     $('btn-apagar-faixa').addEventListener('click', function () { apagarDados(est.op); });
     // um botão só: o texto diz o que o toque vai fazer
-    $('btn-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
     $('busca').addEventListener('input', function () { est.listaSuja = true; renderizarLista(); });
     $('btn-recolher').addEventListener('click', alternarLateral);
     iniciarGaveta();
@@ -346,6 +346,24 @@
     $('opt-relatos').addEventListener('click', function () { definirPrefMapa('relatos', !est.prefsMapa.relatos); });
     $('opt-nomes').addEventListener('click', function () { definirPrefMapa('nomes', !est.prefsMapa.nomes); });
     $('opt-agrupar').addEventListener('click', function () { definirPrefMapa('agrupar', !est.prefsMapa.agrupar); });
+    $('opt-pessoas').addEventListener('click', function () { definirPrefMapa('pessoas', !est.prefsMapa.pessoas); });
+    document.querySelectorAll('[data-modo-mapa]').forEach(function (b) {
+      b.addEventListener('click', function () { aplicarModoMapa(b.getAttribute('data-modo-mapa')); });
+    });
+    document.querySelector('#faixa-alerta .faixa-alerta-textos').addEventListener('click', function () {
+      var f = $('faixa-alerta');
+      f.classList.toggle('aberta');
+      this.setAttribute('aria-expanded', String(f.classList.contains('aberta')));
+    });
+    document.querySelector('#faixa-alerta .faixa-alerta-textos').addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.click(); }
+    });
+    $('resumo').addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-estado]');
+      if (!b) return;
+      est.filtroEstado = est.filtroEstado === b.getAttribute('data-estado') ? null : b.getAttribute('data-estado');
+      renderizarLista();
+    });
     $('opt-coord').addEventListener('change', function () { definirPrefMapa('coord', this.value); if (est.selecionado) atualizarFicha(); });
     $('ficha-estatisticas').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirEstatisticas(est.selecionado); });
     $('ficha-exportar').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirExportar(est.selecionado); });
@@ -1482,6 +1500,8 @@
     est.mapa = mapa;
     // Pessoas: agrupadas de longe quando estão perto umas das outras; quem pede atenção fica à parte.
     est.camadaPessoasFixas = L.featureGroup().addTo(mapa);
+    // "Pessoas" desligado só esconde (CSS): tirar o agrupamento do mapa com gente se movendo quebra a biblioteca
+    $('mapa').classList.toggle('ocultar-pessoas', !est.prefsMapa.pessoas);
     montarCamadaPessoas();
     // Nomes pelo zoom e sem sobreposição (mapa-rotulos.js)
     est.rotulos = window.MapaRotulos ? window.MapaRotulos.instalar(mapa) : { agendar: function () {} };
@@ -1587,6 +1607,11 @@
       if (chave === 'local') desenharLocalOp();
       if (chave === 'nomes') $('mapa').classList.toggle('esconder-rotulos', !valor);
       if (chave === 'agrupar') montarCamadaPessoas();
+      if (chave === 'pessoas' && est.camadaPessoas) {
+        $('mapa').classList.toggle('ocultar-pessoas', !valor);
+        est.rotulos.agendar();
+        if (est.circuloPrecisao) { if (valor) est.circuloPrecisao.addTo(est.mapa); else est.circuloPrecisao.remove(); }
+      }
     }
     atualizarMenu();
   }
@@ -1695,6 +1720,42 @@
     });
   }
 
+  /* ---------- Modos rápidos do mapa ("mostrar só …") ----------------- */
+  // Cada modo liga exatamente estas camadas e desliga as outras; mexer numa camada
+  // depois vira "personalizado". O rastreamento e os dados não mudam, só o que aparece.
+  var CAMADAS_MODO = ['pessoas', 'trilhas', 'setores', 'pontos', 'relatos', 'fotos', 'local'];
+  var MODOS_MAPA = {
+    tudo: { rotulo: 'Tudo', liga: CAMADAS_MODO },
+    equipes: { rotulo: 'Equipes', liga: ['pessoas', 'trilhas'] },
+    cobertura: { rotulo: 'Cobertura', liga: ['trilhas', 'setores'] },
+    setores: { rotulo: 'Setores', liga: ['setores'] },
+    pontos: { rotulo: 'Pontos', liga: ['pontos', 'local'] },
+    fotos: { rotulo: 'Fotos', liga: ['fotos'] },
+    relatos: { rotulo: 'Relatos', liga: ['relatos'] },
+  };
+  function camadaLigada(k) { return k === 'trilhas' ? todasTrilhasVisiveis() : Boolean(est.prefsMapa[k]); }
+  function modoMapaAtual() {
+    var achado = null;
+    Object.keys(MODOS_MAPA).some(function (m) {
+      var liga = MODOS_MAPA[m].liga;
+      var igual = CAMADAS_MODO.every(function (k) { return camadaLigada(k) === (liga.indexOf(k) >= 0); });
+      if (igual) achado = m;
+      return igual;
+    });
+    return achado;
+  }
+  function aplicarModoMapa(m) {
+    var modo = MODOS_MAPA[m];
+    if (!modo) return;
+    CAMADAS_MODO.forEach(function (k) {
+      var quer = modo.liga.indexOf(k) >= 0;
+      if (camadaLigada(k) === quer) return;
+      if (k === 'trilhas') definirTodasTrilhas(quer, true);
+      else definirPrefMapa(k, quer);
+    });
+    atualizarMenu();
+  }
+
   function todasTrilhasVisiveis() {
     var todas = true;
     est.participantes.forEach(function (p) { if (!p.trilhaVisivel) todas = false; });
@@ -1712,19 +1773,24 @@
     $('opt-pontos').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pontos)));
     $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomes)));
     $('opt-agrupar').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.agrupar)));
+    $('opt-pessoas').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pessoas)));
     $('opt-coord').value = est.prefsMapa.coord || 'dec';
     var trilhasVisiveis = todasTrilhasVisiveis();
     $('opt-trilhas').setAttribute('aria-pressed', String(trilhasVisiveis));
-    $('btn-trilhas').setAttribute('aria-pressed', String(trilhasVisiveis));
-    $('btn-trilhas').textContent = trilhasVisiveis ? 'Ocultar trilhas' : 'Mostrar trilhas';
     $('opt-local').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.local)));
     $('menu-grupos-qtd').textContent = est.grupos.size ? String(est.grupos.size) : '';
     var ativas = missoesAtivas().length;
     $('menu-missoes-qtd').textContent = ativas ? ativas + ' ativo(s)' : '';
     // resumo no botão "Camadas": mapa de fundo e quantas camadas estão ocultas
     var nomesBase = { osm: 'Mapa', topo: 'Topográfico', satelite: 'Satélite' };
-    var ocultas = $('camadas-painel').querySelectorAll('.camada-item[aria-pressed="false"]').length;
-    $('camadas-resumo').textContent = (nomesBase[est.camadaAtual] || '') + (ocultas ? ' · ' + ocultas + (ocultas > 1 ? ' ocultas' : ' oculta') : '');
+    var modo = modoMapaAtual();
+    document.querySelectorAll('[data-modo-mapa]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-modo-mapa') === modo));
+    });
+    var filtrado = modo !== 'tudo';
+    $('btn-camadas').classList.toggle('camadas-filtrado', filtrado);
+    $('camadas-resumo').textContent = (nomesBase[est.camadaAtual] || '') +
+      (!filtrado ? '' : modo ? ' · só ' + MODOS_MAPA[modo].rotulo.toLowerCase() : ' · personalizado');
     $('btn-camadas').setAttribute('aria-label', 'Camadas do mapa: ' + $('camadas-resumo').textContent);
   }
 
@@ -2031,13 +2097,15 @@
     if (navigator.onLine === false || (est.syncFalhou && est.tempoReal !== 'ok')) {
       cls = 'sem_atualizacao'; txt = 'Sem conexão — reconectando';
     } else if (est.tempoReal === 'ok') {
-      cls = 'conectado'; txt = 'Tempo real ativo';
+      cls = 'conectado'; txt = 'Ao vivo';
     } else if (est.tempoReal === 'falha') {
       cls = 'instavel'; txt = 'Atualizando a cada ' + Math.round(LIM.pollingFalhaMs / 1000) + ' s';
     } else {
       cls = 'aguardando'; txt = 'Conectando…';
     }
-    pil.innerHTML = '<span class="ponto ponto-' + cls + '"></span><span>' + C.esc(txt) + '</span>';
+    var html = '<span class="ponto ponto-' + cls + '"></span><span>' + C.esc(txt) + '</span>';
+    if (pil.innerHTML !== html) pil.innerHTML = html;
+    pil.title = cls === 'conectado' ? 'Tempo real ativo: as posições chegam na hora' : txt;
   }
 
   /* ------------------------------------------------------------------ */
@@ -2046,7 +2114,7 @@
   function upsertParticipante(row) {
     var p = est.participantes.get(row.id);
     if (!p) {
-      p = { id: row.id, dados: row, pontos: [], trilhaVisivel: true, marcador: null, trilha: null, li: null, cor: null };
+      p = { id: row.id, dados: row, pontos: [], trilhaVisivel: est.prefsMapa.trilhas !== false, marcador: null, trilha: null, li: null, cor: null };
       est.participantes.set(row.id, p);
       atribuirCores();
       // pontos que chegaram antes do cadastro do participante
@@ -2524,7 +2592,10 @@
     atualizarMenu();
   }
 
-  function definirTodasTrilhas(visivel) {
+  function definirTodasTrilhas(visivel, silencioso) {
+    // lembrado no aparelho: quem entrar depois já aparece com ou sem trilha
+    est.prefsMapa.trilhas = visivel;
+    C.local.gravar(CHAVE_PREFS_MAPA, est.prefsMapa);
     est.participantes.forEach(function (p) {
       p.trilhaVisivel = visivel;
       desenharTrilha(p);
@@ -2533,7 +2604,7 @@
     renderizarLista();
     if (est.selecionado) atualizarFicha();
     atualizarMenu();
-    UI.aviso(visivel ? 'Todas as trilhas visíveis.' : 'Trilhas ocultas (o rastreamento continua).');
+    if (!silencioso) UI.aviso(visivel ? 'Todas as trilhas visíveis.' : 'Trilhas ocultas (o rastreamento continua).');
   }
 
   /* ---------- Gaveta da lista (celular e tablet em pé) ---------------- */
@@ -2669,32 +2740,41 @@
     setTimeout(function () { if (est.mapa) est.mapa.invalidateSize(); }, 50);
   }
 
+  // Lista compacta: uma linha por pessoa (símbolo, nome, avisos e a idade da posição).
+  // Tipo e grupo já estão no símbolo (forma, letra e cor); o resto fica na ficha (tocar na linha).
   function criarItemLista(p) {
     var li = UI.el('li', { classe: 'lista-item', tabindex: '0', 'data-id': p.id });
     var simbolo = UI.el('div', { classe: 'li-simbolo' });
     var nome = UI.el('div', { classe: 'li-nome' });
-    var acoes = UI.el('div', { classe: 'li-acoes' });
     var estado = UI.el('div', { classe: 'li-estado' });
-    var bLoc = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', title: 'Localizar no mapa', 'aria-label': 'Localizar ' + p.dados.nome + ' no mapa', texto: '◎' });
-    var bTri = UI.el('button', { classe: 'btn btn-pequeno btn-trilha', type: 'button', title: 'Mostrar/ocultar trilha', texto: 'Trilha' });
+    var acoes = UI.el('div', { classe: 'li-acoes' });
     var bRei = UI.el('button', { classe: 'btn btn-pequeno btn-ok btn-reincluir', type: 'button', hidden: true, 'aria-label': 'Reincluir ' + p.dados.nome + ' na operação', texto: 'Reincluir' });
-    bLoc.addEventListener('click', function (ev) { ev.stopPropagation(); centralizar(p.id); });
-    bTri.addEventListener('click', function (ev) { ev.stopPropagation(); alternarTrilha(p.id); });
     bRei.addEventListener('click', function (ev) { ev.stopPropagation(); reincluirParticipante(p.id); });
     acoes.appendChild(bRei);
-    acoes.appendChild(bLoc);
-    acoes.appendChild(bTri);
     li.appendChild(simbolo);
     li.appendChild(nome);
-    li.appendChild(acoes);
     li.appendChild(estado);
-    li.addEventListener('click', function () { selecionar(p.id); });
+    li.appendChild(acoes);
+    li.addEventListener('click', function () { abrirDaLista(p.id); });
     li.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selecionar(p.id); }
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); abrirDaLista(p.id); }
     });
     p.li = li;
-    p.liPartes = { simbolo: simbolo, nome: nome, estado: estado, bTri: bTri, bLoc: bLoc, bRei: bRei };
+    p.liPartes = { simbolo: simbolo, nome: nome, estado: estado, bRei: bRei };
     return li;
+  }
+
+  // Tocar na linha: abre a ficha e leva o mapa até a pessoa (sem mudar o zoom).
+  function abrirDaLista(id) {
+    selecionar(id);
+    var p = est.participantes.get(id);
+    var pos = p && posicaoAtual(p);
+    if (pos && est.mapa) est.mapa.panTo([pos.lat, pos.lng]);
+  }
+
+  // "há 26 min" → "26 min" (coluna estreita da lista)
+  function idadeCurta(t) {
+    return String(C.idade(t) || '').replace(/^há\s+/, '');
   }
 
   function atualizarItemLista(p) {
@@ -2702,42 +2782,45 @@
     var d = p.dados;
     var e = estadoDe(p);
     var ajuda = temAjuda(p);
+    var saida = saidaPendente(p);
     var pend = mensagensPendentes(p);
     var novas = naoLidasDe(p.id).length;
     var pos = posicaoAtual(p);
     var partes = p.liPartes;
+    var grupos = gruposDe(p.id);
+    var gpsRuim = d.rastreando && ['sem_sinal', 'negado', 'indisponivel'].indexOf(d.gps_estado) !== -1;
 
     var htmlSimb = '<div class="' + (posicaoAntiga(p) ? 'antigo' : '') + '">' + htmlSimbolo(p) + '</div>';
     if (partes.simbolo.innerHTML !== htmlSimb) partes.simbolo.innerHTML = htmlSimb;
 
-    var htmlNome = '<span class="nome-txt">' + C.esc(nomeExibido(p)) + '</span>' + htmlSeloTipo(d) +
-      gruposDe(p.id).map(function (g) {
-        return '<span class="selo selo-grupo" style="--cor-grupo:' + C.esc(g.cor) + '" title="' + (g.papel === 'responsavel' ? 'Responsável do grupo ' : 'Grupo ') + C.esc(g.nome) + '">' +
-          (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
-      }).join('') +
-      (ajuda ? '<span class="selo selo-perigo">Pediu ajuda</span>' : '') +
-      (saidaPendente(p) ? '<span class="selo selo-alerta">Pediu para sair</span>' : '') +
-      (aguardandoRetorno(p) ? '<span class="selo selo-responsavel">Reincluído</span>' : '') +
-      (pend ? '<span class="selo selo-alerta" title="Mensagens aguardando confirmação">✉ ' + pend + '</span>' : '') +
-      (novas ? '<span class="selo selo-responsavel selo-msg-nova" title="Mensagens novas deste participante">' + (novas === 1 ? 'Mensagem nova' : novas + ' mensagens novas') + '</span>' : '');
+    // Avisos só quando existem (ícone curto; a descrição completa vai no title e na ficha)
+    var resp = grupos.some(function (g) { return g.papel === 'responsavel'; });
+    var htmlNome = (resp ? '<span class="li-estrela" title="Responsável do grupo">★</span>' : '') +
+      '<span class="nome-txt">' + C.esc(nomeExibido(p)) + '</span>' +
+      (ajuda ? '<span class="li-aviso li-aviso-ajuda" title="Pediu ajuda">SOS</span>' : '') +
+      (saida ? '<span class="li-aviso li-aviso-saida" title="Pediu para sair">Saída</span>' : '') +
+      (novas ? '<span class="li-aviso li-aviso-msg" title="' + (novas === 1 ? 'Mensagem nova' : novas + ' mensagens novas') + '">✉' + (novas > 1 ? novas : '') + '</span>' : '');
     if (partes.nome.innerHTML !== htmlNome) partes.nome.innerHTML = htmlNome;
 
-    var gpsRuim = d.rastreando && ['sem_sinal', 'negado', 'indisponivel'].indexOf(d.gps_estado) !== -1;
-    var htmlEstado = '<span class="ponto ponto-' + e.cod + '"></span><span>' + C.esc(e.rot) + '</span>' +
-      (gpsRuim ? '<span class="selo selo-alerta">' + C.esc(textoGps(d.gps_estado)) + '</span>' : '') +
-      '<span class="muted">· ' + (pos ? 'posição ' + C.hora(pos.t) + ' (' + C.idade(pos.t) + ')' : 'sem posição ainda') + '</span>';
+    var dica = e.rot + (gpsRuim ? ' · ' + textoGps(d.gps_estado) : '') +
+      (pend ? ' · ' + pend + ' mensagem(ns) aguardando confirmação' : '') + (aguardandoRetorno(p) ? ' · reincluído' : '') +
+      (pos ? ' · posição ' + C.hora(pos.t) + ' (' + C.idade(pos.t) + ')' : ' · sem posição ainda') +
+      (grupos.length ? ' · ' + grupos.map(function (g) { return (g.papel === 'responsavel' ? 'resp. ' : '') + g.nome; }).join(', ') : '');
+    var htmlEstado = '<span class="ponto ponto-' + e.cod + '"></span>' +
+      (gpsRuim ? '<span class="li-gps" aria-hidden="true">GPS</span>' : '') +
+      '<span class="li-idade">' + (pos ? C.esc(idadeCurta(pos.t)) : '—') + '</span>';
     if (partes.estado.innerHTML !== htmlEstado) partes.estado.innerHTML = htmlEstado;
+    if (p.li.title !== dica) { p.li.title = dica; p.li.setAttribute('aria-label', nomeExibido(p) + ': ' + dica); }
 
-    partes.bTri.setAttribute('aria-pressed', String(p.trilhaVisivel));
-    partes.bTri.setAttribute('aria-label', (p.trilhaVisivel ? 'Ocultar' : 'Mostrar') + ' trilha de ' + d.nome);
-    partes.bLoc.disabled = !pos;
     var podeReincluir = podeReincluirP(p);
     if (partes.bRei.hidden === podeReincluir) partes.bRei.hidden = !podeReincluir;
     p.li.classList.toggle('selecionado', est.selecionado === p.id);
     p.li.classList.toggle('alerta-ajuda', Boolean(ajuda));
-    p.li.classList.toggle('alerta-saida', saidaPendente(p) && !ajuda);
+    p.li.classList.toggle('alerta-saida', saida && !ajuda);
+    p.li.classList.toggle('li-antigo', e.cod !== 'conectado' && tipoDe(d) !== 'responsavel');
     var busca = $('busca').value.trim().toLowerCase();
-    p.li.hidden = (Boolean(busca) && d.nome.toLowerCase().indexOf(busca) === -1) || !visivelNoFiltro(p);
+    p.li.hidden = (Boolean(busca) && d.nome.toLowerCase().indexOf(busca) === -1) || !visivelNoFiltro(p) ||
+      (est.filtroEstado && !d.removido && (tipoDe(d) === 'responsavel' || estadoDe(p).cod !== est.filtroEstado));
   }
 
   function ordemLista(a, b) {
@@ -2781,12 +2864,17 @@
       var c = estadoDe(p).cod;
       if (cont[c] != null) cont[c]++;
     });
-    $('resumo').innerHTML =
-      '<span><span class="ponto ponto-conectado"></span> <b>' + cont.conectado + '</b> conectados</span>' +
-      '<span><span class="ponto ponto-instavel"></span> <b>' + cont.instavel + '</b> instáveis</span>' +
-      '<span><span class="ponto ponto-sem_atualizacao"></span> <b>' + cont.sem_atualizacao + '</b> sem atualização</span>' +
-      (cont.parado ? '<span><span class="ponto ponto-parado"></span> <b>' + cont.parado + '</b> interrompidos</span>' : '') +
-      '<span class="muted">' + cont.militar + ' militar(es) · ' + cont.civil + ' civil(is) · ' + cont.responsavel + ' responsável(is)</span>';
+    // Resumo numa linha: cada contador filtra a lista (tocar de novo mostra todos)
+    var chips = [['conectado', 'conectados'], ['instavel', 'instáveis'], ['sem_atualizacao', 'sem atualização'], ['parado', 'interromperam']]
+      .filter(function (c) { return c[0] !== 'parado' || cont.parado; })
+      .map(function (c) {
+        var ativo = est.filtroEstado === c[0];
+        return '<button type="button" class="resumo-chip' + (ativo ? ' ativo' : '') + '" data-estado="' + c[0] + '" aria-pressed="' + ativo + '" title="' +
+          cont[c[0]] + ' ' + c[1] + (ativo ? ' · tocar para mostrar todos' : ' · tocar para listar só estes') + '"><span class="ponto ponto-' + c[0] + '"></span><b>' + cont[c[0]] + '</b></button>';
+      }).join('');
+    var htmlResumo = chips + '<span class="resumo-tipos" title="' + cont.militar + ' militar(es) · ' + cont.civil + ' civil(is) · ' + cont.responsavel + ' responsável(is)">' +
+      cont.militar + ' M · ' + cont.civil + ' C' + (cont.responsavel ? ' · ' + cont.responsavel + ' R' : '') + '</span>';
+    if ($('resumo').innerHTML !== htmlResumo) $('resumo').innerHTML = htmlResumo;
     // a altura da gaveta recolhida depende do resumo (que muda de tamanho)
     if (gaveta.ativa && gaveta.estado === 'mini' && !$('lateral').classList.contains('arrastando')) aplicarGaveta();
     atualizarBotaoReabrir();
@@ -2898,7 +2986,9 @@
 
     // Topo da ficha: tipo e situação numa linha só. O essencial fica à vista;
     // CPF, coordenadas e histórico ficam em "Mais detalhes".
-    $('ficha-resumo').innerHTML = htmlSeloTipo(d) + ' <span class="ponto ponto-' + e.cod + '"></span> ' + C.esc(e.rot);
+    $('ficha-resumo').innerHTML = htmlSeloTipo(d) + gruposDe(p.id).map(function (g) {
+      return ' <span class="selo selo-grupo" style="--cor-grupo:' + C.esc(g.cor) + '">' + (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
+    }).join('') + ' <span class="ponto ponto-' + e.cod + '"></span> ' + C.esc(e.rot);
     var posTxt;
     if (!pos) posTxt = 'Ainda sem posição';
     else posTxt = 'Posição ' + C.idade(pos.t) + ' · ' + C.precisao(pos.prec) + (posicaoAntiga(p) ? ' · antiga' : '');
@@ -7391,6 +7481,8 @@
     $('faixa-alerta-meta').textContent = 'Alerta às ' + C.hora(a.criado_em, false) + (a.posicao_em ? ' · última posição às ' + C.hora(a.posicao_em, false) : '') +
       (criticos.length > 1 ? ' · mais ' + (criticos.length - 1) + ' alerta(s) crítico(s)' : '');
     $('faixa-alerta-mapa').hidden = a.lat == null && !a.grupo_id;
+    // Faixa numa linha; tocar no texto mostra tudo (outro alerta volta a ficar compacto)
+    if (est.faixaAlertaId !== a.id) { faixa.classList.remove('aberta'); est.faixaAlertaId = a.id; }
     faixa.hidden = false;
     if (!est.timerAlarmeCritico) est.timerAlarmeCritico = setInterval(function () { if (est.alertaFaixa) alarme(); }, 20000);
   }

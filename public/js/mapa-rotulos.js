@@ -171,7 +171,7 @@
     var dica = marcadores.length + ' pessoas aqui: ' + nomes.slice(0, 8).join(', ') + (nomes.length > 8 ? ' e mais ' + (nomes.length - 8) : '') + '. Toque para aproximar.';
     var tam = marcadores.length >= 20 ? 44 : marcadores.length >= 8 ? 40 : 36;
     return L.divIcon({
-      className: 'cluster-wrap',
+      className: 'cluster-wrap cluster-pessoas-wrap',
       html: '<div class="cluster-pessoas" style="width:' + tam + 'px;height:' + tam + 'px;background:conic-gradient(' + fatiasDeCor(cores) + ')" title="' + esc(dica) + '">' +
         '<b>' + marcadores.length + '</b></div>',
       iconSize: [tam, tam],

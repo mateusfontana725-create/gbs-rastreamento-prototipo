@@ -569,6 +569,28 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   rápido vai para a próxima). Pelo teclado: seta para cima/baixo. A legenda e a escala sobem junto com a
   gaveta. Ao desenhar um setor ou marcar um ponto, a gaveta recolhe sozinha. A altura escolhida fica
   lembrada. O botão de trilhas fica no painel **Camadas → Trilhas**, sobre o mapa.
+- **Painel enxuto** (operações grandes sem tela poluída):
+  - **Lista em uma linha por pessoa**: símbolo (forma, letra e cor do grupo já dizem tipo e grupo), ★ para responsável
+    do grupo, nome, avisos só quando existem (**SOS** pedido de ajuda, **Saída**, **✉** mensagem nova), a bolinha da
+    conexão, **GPS** riscado quando o GPS está sem sinal e a idade da última posição ("26 min"). Os selos
+    CIVIL/MILITAR e de grupo, o texto "Sem atualização há…", o horário da posição e os botões ◎/Trilha saíram da
+    lista: o detalhe aparece ao passar o mouse e, completo, na **ficha** (tocar na linha), que agora também mostra
+    o grupo. A lista ficou mais estreita (320 px no computador, 290 px no tablet).
+  - **Resumo clicável**: as bolinhas com o número de conectados, instáveis e sem atualização filtram a lista (tocar
+    de novo mostra todos); ao lado, o total de militares (M) e civis (C). O botão "Ocultar trilhas" saiu da lista
+    (fica em **Camadas → Trilhas**).
+  - **Letras e botões menores** no painel do responsável (a página do participante continua com botões grandes);
+    em telas de toque os botões mantêm pelo menos 36–40 px.
+  - **Cabeçalho mais baixo**: "Tempo real ativo" virou **Ao vivo** (no tablet, só a bolinha; o texto completo
+    aparece ao passar o mouse).
+  - **Faixa de alerta crítico em uma linha**: título e começo do texto; tocar no texto (▾) mostra o alerta inteiro,
+    com horário e quantos outros alertas críticos há. **Ver no mapa** e **Ciente** continuam à direita.
+  - **Camadas → Mostrar no mapa**: modos de um toque — **Tudo**, **Equipes** (pessoas e trilhas), **Cobertura**
+    (trilhas sobre os setores: o que já foi percorrido), **Setores**, **Pontos** (pontos de interesse e local da
+    operação), **Fotos** e **Relatos**. Cada modo liga só essas camadas; mexer numa camada depois vira
+    "personalizado". O botão **Camadas** fica destacado e mostra "só setores", "personalizado" etc. enquanto algo
+    estiver escondido. Nova camada **Pessoas** (esconde os marcadores sem parar o rastreamento). A escolha, inclusive
+    das trilhas, fica lembrada no aparelho.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.
@@ -1075,8 +1097,8 @@ encerrada, e o token fica após o `#` (não é enviado aos servidores nem aparec
 
 
 **Responsável**: login → **Nova operação** (nome/código e política de retenção) → **Convidar** →
-acompanhar o mapa. Na lista: **◎** centraliza o participante, **Trilha** mostra/oculta a trilha dele.
-O botão único **Ocultar trilhas / Mostrar trilhas** (o texto diz o que o toque faz) atua em todos. Toque no nome ou no marcador para abrir a
+acompanhar o mapa. Na lista (uma linha por pessoa), tocar na linha abre a ficha e leva o mapa até a pessoa; a
+**Trilha** dela fica na ficha e a de todos em **Camadas → Trilhas**. Toque no nome ou no marcador para abrir a
 **ficha** (dados, precisão, conversa, fotos, histórico de posições, comandos e estado das mensagens). Os comandos
 RETORNE, ATENÇÃO, MUDE A ROTA e PARE pedem confirmação antes do envio, e o texto pode ser complementado
 (ex.: "Retorne ao PC 2"). No mapa, **⤢** enquadra todos e a legenda abre/fecha nela mesma; nomes,
@@ -1215,7 +1237,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 3 | Aguardar até 20 s | o marcador verde **C** aparece no mapa, na posição real |
 | 4 | Civil caminha por 2–3 minutos | a trilha tracejada verde é desenhada |
 | 5 | Observar o painel | horário "há X s" e posição atualizam sozinhos |
-| 6 | Tocar em **Trilha** na lista; depois no botão **Ocultar trilhas** (vira **Mostrar trilhas**) e de novo | a trilha some/volta; o marcador continua andando e o histórico da ficha continua crescendo |
+| 6 | Tocar na pessoa na lista e em **Trilha** na ficha; depois em **Camadas → Trilhas** (desliga todas) e de novo | a trilha some/volta; o marcador continua andando e o histórico da ficha continua crescendo |
 | 7 | Tocar no nome ou no marcador | abre a ficha com coordenadas, precisão, horários e histórico |
 | 8 | Na ficha, enviar **PARE** | o operador confirma o envio; o painel mostra "Enviada" |
 | 9 | No celular do civil | alerta em tela cheia com vibração; ao tocar **CONFIRMAR**, o painel mostra "Recebida pelo aparelho" e depois "Confirmada às …" |

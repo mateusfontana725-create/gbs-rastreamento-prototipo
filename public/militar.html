@@ -234,6 +234,7 @@
           <span class="ico-msg" aria-hidden="true"></span><span class="rotulo-longo">Mensagens</span>
           <span class="contador" id="contador-msgs" hidden>0</span>
         </button>
+        <button class="btn btn-barra btn-pequeno btn-alerta-pendente" type="button" id="btn-alerta-pendente" hidden title="Mensagem de outro responsável aguardando sua resposta">✉ <span id="alerta-pendente-qtd">1</span> <span class="rotulo-longo">para você</span></button>
         <button class="btn btn-barra btn-pequeno" type="button" id="btn-convite" hidden title="Convidar participantes para esta operação"><span aria-hidden="true">＋</span> <span>Convidar</span></button>
         <div class="ferramentas" id="ferramentas">
           <button class="btn btn-barra btn-pequeno btn-ferramentas" type="button" id="btn-ferramentas" aria-label="Ferramentas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-ferramentas" title="Ferramentas da operação e do mapa">
@@ -609,8 +610,9 @@
   <!-- Mensagem recebida de outro responsável -->
   <div id="alerta-cmd" class="alerta-msg alerta-painel" hidden role="alertdialog" aria-modal="false" aria-labelledby="alerta-cmd-tit" aria-describedby="alerta-cmd-texto">
     <div class="alerta-cabeca">
+      <div class="sub">Mensagem de outro responsável</div>
       <div class="tit" id="alerta-cmd-tit"></div>
-      <div class="sub">MENSAGEM DE OUTRO RESPONSÁVEL</div>
+      <button class="alerta-fechar" type="button" id="alerta-cmd-fechar" aria-label="Fechar e responder depois" title="Fechar e responder depois">×</button>
     </div>
     <div class="alerta-corpo">
       <div class="alerta-texto" id="alerta-cmd-texto"></div>

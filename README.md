@@ -585,6 +585,13 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     aparece ao passar o mouse).
   - **Faixa de alerta crítico em uma linha**: título e começo do texto; tocar no texto (▾) mostra o alerta inteiro,
     com horário e quantos outros alertas críticos há. **Ver no mapa** e **Ciente** continuam à direita.
+  - **Mensagem de outro responsável** (CONFIRME, ATENÇÃO…): cartão pequeno no canto do mapa (também no celular,
+    sem ocupar a tela toda), com as respostas em botões normais e **×** (ou Esc) para **responder depois**. A
+    mensagem continua pendente: aparece no topo o botão **✉ N para você**, que reabre o cartão; uma mensagem nova
+    também reabre. Os avisos rápidos do rodapé ficaram menores (com o × de sempre).
+  - **Trilhas finas de longe**: a espessura (e o tracejado dos civis, o contorno claro e as marcas de falha)
+    acompanha o zoom — de perto como antes (4 px; 6 px a da pessoa selecionada) e, afastando, afina até 1,5 px,
+    para não cobrir o mapa.
   - **Camadas → Mostrar no mapa**: modos de um toque — **Tudo**, **Equipes** (pessoas e trilhas), **Cobertura**
     (trilhas sobre os setores: o que já foi percorrido), **Setores**, **Pontos** (pontos de interesse e local da
     operação), **Fotos** e **Relatos**. Cada modo liga só essas camadas; mexer numa camada depois vira

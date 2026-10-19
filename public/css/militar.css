@@ -1164,3 +1164,36 @@ body { font-size: 15px; }
 
 /* Camada "Pessoas" desligada: marcadores e grupos de pessoas escondidos (continuam rastreados) */
 #mapa.ocultar-pessoas .mk-wrap, #mapa.ocultar-pessoas .cluster-pessoas-wrap { display: none; }
+
+/* Mensagem de outro responsável: cartão compacto (nunca tela cheia), com × para responder depois */
+#alerta-cmd.alerta-painel {
+  position: fixed; inset: auto; z-index: 2800; top: 64px; right: 12px; width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 80px); border-radius: 10px; border: 2px solid var(--responsavel); box-shadow: 0 10px 34px rgba(0, 0, 0, .7);
+}
+@media (min-width: 861px) {
+  body:not(.lateral-oculta) #alerta-cmd.alerta-painel { right: calc(var(--larg-lateral, 320px) + 12px); }
+}
+#alerta-cmd .alerta-cabeca { padding: 8px 40px 10px 12px; text-align: left; }
+#alerta-cmd .alerta-cabeca::after { height: 3px; }
+#alerta-cmd .alerta-cabeca .tit { font-size: 1.05rem; letter-spacing: .04em; }
+#alerta-cmd .alerta-cabeca .sub { font-size: .62rem; margin: 0 0 2px; letter-spacing: .08em; }
+#alerta-cmd .alerta-corpo { padding: 10px 12px 12px; gap: 6px; width: 100%; }
+#alerta-cmd .alerta-texto { font-size: .95rem; font-weight: 700; }
+#alerta-cmd .alerta-meta { font-size: .72rem; }
+#alerta-cmd .alerta-botoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+#alerta-cmd .alerta-botoes .btn { flex: 1 1 auto; min-height: 34px; }
+#alerta-cmd .alerta-fila { font-size: .7rem; text-align: left; }
+#alerta-cmd.alerta-cmd-pare, #alerta-cmd.alerta-cmd-atencao { border-width: 2px; }
+.alerta-fechar {
+  position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 6px; background: rgba(0, 0, 0, .18); color: #fff; font-size: 1.3rem; line-height: 1; cursor: pointer;
+}
+.alerta-fechar:hover, .alerta-fechar:focus-visible { background: rgba(0, 0, 0, .35); outline: none; }
+@media (pointer: coarse) { .alerta-fechar { width: 40px; height: 40px; top: 2px; right: 2px; } }
+.btn-alerta-pendente { border-color: var(--responsavel) !important; color: var(--responsavel-texto) !important; }
+
+/* Avisos rápidos (rodapé) menores */
+.aviso { padding: 7px 10px; font-size: .8rem; font-weight: 600; }
+.aviso-fechar { width: 26px; height: 26px; margin: -4px -6px -4px 0; font-size: 1.15rem; }
+@media (pointer: coarse) { .aviso-fechar { width: 36px; height: 36px; margin: -9px -8px -9px 0; } }
+#avisos { width: min(420px, calc(100% - 24px)); gap: 6px; }

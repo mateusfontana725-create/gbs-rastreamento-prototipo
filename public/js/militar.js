@@ -147,7 +147,8 @@
     camadaPontos: null,         // fotos e relatos (agrupados quando próximos)
     legenda: null,
     rotulos: { agendar: function () {} },   // mapa-rotulos.js, ligado ao criar o mapa
-    filtroEstado: null,         // lista: só conectados / instáveis / sem atualização (tocar no resumo)
+    filtroEstado: null,
+    alertaAdiadas: new Set(),   // mensagens de outro responsável deixadas para responder depois (×)         // lista: só conectados / instáveis / sem atualização (tocar no resumo)
     prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, agrupar: true, pessoas: true, legenda: true, setores: true, pontos: true, local: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
     lateralOculta: Boolean(C.local.ler(CHAVE_LATERAL, false)),
     centralAba: 'msgs',
@@ -357,6 +358,13 @@
     });
     document.querySelector('#faixa-alerta .faixa-alerta-textos').addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.click(); }
+    });
+    $('alerta-cmd-fechar').addEventListener('click', adiarAlertaParaMim);
+    $('alerta-cmd').addEventListener('keydown', function (ev) { if (ev.key === 'Escape') adiarAlertaParaMim(); });
+    $('btn-alerta-pendente').addEventListener('click', function () {
+      est.alertaAdiadas.clear();
+      est.alertaAtual = null;
+      mostrarAlertaParaMim();
     });
     $('resumo').addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-estado]');
@@ -1505,6 +1513,7 @@
     montarCamadaPessoas();
     // Nomes pelo zoom e sem sobreposição (mapa-rotulos.js)
     est.rotulos = window.MapaRotulos ? window.MapaRotulos.instalar(mapa) : { agendar: function () {} };
+    mapa.on('zoomend', estilizarTrilhas);
     $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomes);
     atualizarMenu();
     setTimeout(function () { mapa.invalidateSize(); }, 50);
@@ -2506,7 +2515,24 @@
     return est.op && est.op.gps_lacuna_s ? est.op.gps_lacuna_s * 1000 : undefined;
   }
 
-  function pesoTrilha(p) { return est.selecionado === p.id ? 6 : 4; }
+  // Espessura pelo zoom: em pixels a linha não muda com o zoom, então de longe ela "engorda"
+  // em relação ao mapa e cobre tudo. De perto fica como antes; afastando, afina.
+  function fatorZoomTrilha() {
+    var z = est.mapa ? est.mapa.getZoom() : 17;
+    return z >= 17 ? 1 : z >= 16 ? 0.8 : z >= 15 ? 0.6 : z >= 14 ? 0.45 : 0.35;
+  }
+  function pesoTrilha(p) {
+    var f = fatorZoomTrilha();
+    return Math.max(1.5, Math.round((est.selecionado === p.id ? 6 : 4) * f * 10) / 10);
+  }
+  function pesoHalo(p) { return pesoTrilha(p) + (fatorZoomTrilha() >= 0.8 ? 4 : 2); }
+  // tracejado proporcional à espessura (de longe os traços ficam curtos e finos)
+  function tracoTrilha(tipo) {
+    var base = TIPOS[tipo].trilha;
+    if (!base) return null;
+    var f = Math.max(0.5, fatorZoomTrilha());
+    return base.split(' ').map(function (n) { return Math.max(2, Math.round(+n * f)); }).join(' ');
+  }
 
   function desenharTrilha(p) {
     if (!est.mapa) return;
@@ -2522,7 +2548,7 @@
     // Civis: contorno claro por baixo para a linha roxa aparecer sobre mata, satélite e topográfico.
     if (tipo === 'civil') {
       if (!p.halo) {
-        p.halo = L.polyline(segs, { color: '#ffffff', weight: pesoTrilha(p) + 4, opacity: 0.55, interactive: false, lineJoin: 'round', className: 'trilha-halo' });
+        p.halo = L.polyline(segs, { color: '#ffffff', weight: pesoHalo(p), opacity: fatorZoomTrilha() >= 0.8 ? 0.55 : 0.4, interactive: false, lineJoin: 'round', className: 'trilha-halo' });
       } else {
         p.halo.setLatLngs(segs);
       }
@@ -2533,7 +2559,7 @@
         color: corDoParticipante(p),
         weight: pesoTrilha(p),
         opacity: tipo === 'civil' ? 0.95 : 0.85,
-        dashArray: TIPOS[tipo].trilha,
+        dashArray: tracoTrilha(tipo),
         interactive: false,
         lineJoin: 'round',
         className: 'trilha trilha-' + tipo,
@@ -2559,23 +2585,31 @@
       var txtDur = dur < 120 ? dur + ' s' : Math.round(dur / 60) + ' min';
       var texto = 'Falha: sem posições registradas de ' + C.hora(l.t0) + ' a ' + C.hora(l.t1) + ' (' + txtDur + ')' +
         (l.impossivel ? ' — salto incoerente' : '') + '. O percurso real nesse trecho é desconhecido.';
-      L.polyline([l.de, l.ate], { color: '#9ca3af', weight: 2.5, opacity: 0.9, dashArray: '8 6', interactive: true, className: 'trilha-lacuna' })
+      L.polyline([l.de, l.ate], { color: '#9ca3af', weight: pesoLacuna(), opacity: 0.9, dashArray: '8 6', interactive: true, className: 'trilha-lacuna' })
         .bindTooltip(texto, { sticky: true })
         .addTo(p.lacunas);
-      L.circleMarker(l.de, { radius: 5, color: '#e5e7eb', weight: 2, fillColor: '#111827', fillOpacity: 1, className: 'falha-inicio' })
+      L.circleMarker(l.de, { radius: raioFalha(), color: '#e5e7eb', weight: 2, fillColor: '#111827', fillOpacity: 1, className: 'falha-inicio' })
         .bindTooltip('Início da falha · ' + nomeExibido(p) + ' · ' + C.hora(l.t0) + ' (último ponto antes da falha)')
         .addTo(p.lacunas);
-      L.circleMarker(l.ate, { radius: 5, color: '#111827', weight: 2, fillColor: '#e5e7eb', fillOpacity: 1, className: 'falha-fim' })
+      L.circleMarker(l.ate, { radius: raioFalha(), color: '#111827', weight: 2, fillColor: '#e5e7eb', fillOpacity: 1, className: 'falha-fim' })
         .bindTooltip('Fim da falha · ' + nomeExibido(p) + ' · ' + C.hora(l.t1) + ' (primeiro ponto depois da falha, ' + txtDur + ' sem posições)')
         .addTo(p.lacunas);
     });
   }
 
+  function pesoLacuna() { return Math.max(1.5, Math.round(2.5 * Math.max(0.6, fatorZoomTrilha()) * 10) / 10); }
+  function raioFalha() { return fatorZoomTrilha() >= 0.8 ? 5 : 3.5; }
+
   // A trilha de quem está com a ficha aberta fica mais grossa (fácil de seguir entre várias).
+  // Também refeita a cada zoom (espessura e tracejado acompanham o zoom).
   function estilizarTrilhas() {
     est.participantes.forEach(function (p) {
-      if (p.trilha) p.trilha.setStyle({ weight: pesoTrilha(p) });
-      if (p.halo) p.halo.setStyle({ weight: pesoTrilha(p) + 4 });
+      if (p.trilha) p.trilha.setStyle({ weight: pesoTrilha(p), dashArray: tracoTrilha(tipoDe(p.dados)) });
+      if (p.halo) p.halo.setStyle({ weight: pesoHalo(p), opacity: fatorZoomTrilha() >= 0.8 ? 0.55 : 0.4 });
+      if (p.lacunas) p.lacunas.eachLayer(function (l) {
+        if (l instanceof L.CircleMarker) l.setRadius(raioFalha());
+        else l.setStyle({ weight: pesoLacuna() });
+      });
       if (p.trilha && est.selecionado === p.id) p.trilha.bringToFront();
     });
   }
@@ -6177,6 +6211,14 @@
     mostrarAlertaParaMim();
   }
 
+  // "×" no cartão: deixa a resposta para depois. A mensagem continua pendente e um botão
+  // no topo ("✉ N para você") reabre o cartão; mensagem nova também reabre.
+  function adiarAlertaParaMim() {
+    pendentesParaMim().forEach(function (m) { est.alertaAdiadas.add(m.id); });
+    est.alertaAtual = null;
+    mostrarAlertaParaMim();
+  }
+
   function pendentesParaMim() {
     var lista = [];
     est.mensagens.forEach(function (m) {
@@ -6188,7 +6230,11 @@
   function mostrarAlertaParaMim() {
     var caixa = $('alerta-cmd');
     if (!caixa) return;
-    var pend = pendentesParaMim();
+    var todas = pendentesParaMim();
+    var pend = todas.filter(function (m) { return !est.alertaAdiadas.has(m.id); });
+    var bReabrir = $('btn-alerta-pendente');
+    bReabrir.hidden = !todas.length || Boolean(pend.length);
+    $('alerta-pendente-qtd').textContent = String(todas.length);
     if (!pend.length) {
       caixa.hidden = true;
       est.alertaAtual = null;
@@ -6210,14 +6256,14 @@
     var botoes = $('alerta-cmd-botoes');
     botoes.innerHTML = '';
     if (m.tipo === 'CONFIRME') {
-      botoes.appendChild(UI.el('button', { classe: 'btn btn-ok btn-gigante', type: 'button', texto: 'ESTOU BEM', onclick: function () { confirmarParaMim(m.id, 'ESTOU_BEM'); } }));
-      botoes.appendChild(UI.el('button', { classe: 'btn btn-primario btn-gigante', type: 'button', texto: 'PRECISO DE AJUDA', onclick: function () { confirmarParaMim(m.id, 'PRECISO_AJUDA'); } }));
+      botoes.appendChild(UI.el('button', { classe: 'btn btn-ok', type: 'button', texto: 'Estou bem', onclick: function () { confirmarParaMim(m.id, 'ESTOU_BEM'); } }));
+      botoes.appendChild(UI.el('button', { classe: 'btn btn-primario', type: 'button', texto: 'Preciso de ajuda', onclick: function () { confirmarParaMim(m.id, 'PRECISO_AJUDA'); } }));
     } else {
-      botoes.appendChild(UI.el('button', { classe: 'btn btn-escuro btn-gigante', type: 'button', texto: 'CONFIRMAR LEITURA', onclick: function () { confirmarParaMim(m.id, 'CIENTE'); } }));
+      botoes.appendChild(UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Confirmar leitura', onclick: function () { confirmarParaMim(m.id, 'CIENTE'); } }));
     }
     caixa.hidden = false;
     var b = botoes.querySelector('button');
-    if (b) b.focus();
+    if (b) b.focus({ preventScroll: true });
   }
 
   async function confirmarParaMim(id, resposta) {

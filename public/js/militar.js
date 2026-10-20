@@ -1358,6 +1358,7 @@
     mostrarFaixaAlerta();
     if (est.circuloPrecisao) { est.circuloPrecisao.remove(); est.circuloPrecisao = null; }
     if (est.camadaPontos) est.camadaPontos.clearLayers();
+    if (est.camadaPontosFixos) est.camadaPontosFixos.clearLayers();
     est.participantes = new Map();
     est.posIds = new Set();
     est.mensagens = new Map();
@@ -1487,6 +1488,7 @@
     var painelPontos = mapa.createPane('pontos');
     painelPontos.style.zIndex = 550;
     est.camadaPontos = criarGrupo().addTo(mapa);
+    est.camadaPontosFixos = L.layerGroup().addTo(mapa);
     // Grupo aberto em leque: as fotos e relatos sobem para ficar fáceis de tocar.
     est.camadaPontos.on('spiderfied', function () { painelPontos.style.zIndex = 650; });
     est.camadaPontos.on('unspiderfied', function () { painelPontos.style.zIndex = 550; });
@@ -1519,27 +1521,53 @@
     setTimeout(function () { mapa.invalidateSize(); }, 50);
   }
 
+  // Agrupamento único de tudo que é ponto no mapa: pontos de interesse, relatos e fotos.
+  // O círculo mostra quantos são e um anel com a proporção de cada tipo; "!" vermelho quando
+  // há área de risco ou pedido de ajuda dentro. De perto o raio diminui; vários no mesmo
+  // lugar se abrem em leque ao tocar.
+  var COR_TIPO_PONTO = { poi: '#38bdf8', relato: '#f97316', foto: '#a855f7' };
+  var ROTULO_TIPO_PONTO = { poi: ['ponto de interesse', 'pontos de interesse'], relato: ['relato', 'relatos'], foto: ['foto', 'fotos'] };
   function criarGrupo() {
     if (!L.markerClusterGroup) return L.featureGroup();   // biblioteca indisponível: sem agrupamento
     return L.markerClusterGroup({
       clusterPane: 'pontos',
       showCoverageOnHover: false,
-      maxClusterRadius: 45,
+      maxClusterRadius: function (z) { return z >= 17 ? 28 : 45; },
       spiderfyOnMaxZoom: true,
       zoomToBoundsOnClick: true,
       iconCreateFunction: function (grupo) {
-        var nf = 0, nr = 0;
-        grupo.getAllChildMarkers().forEach(function (m) { if (m.options.tipoPonto === 'foto') nf++; else nr++; });
-        var tipo = nf && nr ? 'misto' : nf ? 'fotos' : 'relatos';
-        var miolo = tipo === 'relatos' ? '<span class="cl-letra">!</span>' : '<span class="ico-camera"></span>';
+        var filhos = grupo.getAllChildMarkers();
+        var cont = { poi: 0, relato: 0, foto: 0 }, critico = false;
+        filhos.forEach(function (m) {
+          var t = cont[m.options.tipoPonto] != null ? m.options.tipoPonto : 'poi';
+          cont[t]++;
+          if (m.options.critico) critico = true;
+        });
+        var cores = [];
+        ['poi', 'relato', 'foto'].forEach(function (t) { for (var i = 0; i < cont[t]; i++) cores.push(COR_TIPO_PONTO[t]); });
+        var anel = window.MapaRotulos ? window.MapaRotulos.fatiasDeCor(cores) : cores[0] + ' 0deg 360deg';
+        var dica = ['poi', 'relato', 'foto'].filter(function (t) { return cont[t]; })
+          .map(function (t) { return cont[t] + ' ' + ROTULO_TIPO_PONTO[t][cont[t] === 1 ? 0 : 1]; }).join(', ') +
+          (critico ? ' · inclui área de risco ou pedido de ajuda' : '') + '. Toque para aproximar.';
         return L.divIcon({
           className: 'cluster-wrap',
-          html: '<div class="cluster cluster-' + tipo + '" title="' + nf + ' foto(s), ' + nr + ' relato(s)">' + miolo + '<b>' + (nf + nr) + '</b></div>',
-          iconSize: [40, 40],
-          iconAnchor: [20, 20],
+          html: '<div class="cluster cluster-pontos' + (critico ? ' cluster-critico' : '') + '" style="background:conic-gradient(' + anel + ')" title="' + C.esc(dica) + '">' +
+            '<b>' + filhos.length + '</b>' + (critico ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') + '</div>',
+          iconSize: [38, 38],
+          iconAnchor: [19, 19],
         });
       },
     });
+  }
+
+  // Cada marcador de ponto vai para o agrupamento, exceto os "fixos" (vítima encontrada),
+  // que ficam sempre soltos e por cima.
+  function camadaDoPonto(mk) { return mk.options.fixo ? est.camadaPontosFixos : est.camadaPontos; }
+  function mostrarPonto(mk, visivel) {
+    var c = mk && camadaDoPonto(mk);
+    if (!c) return;
+    if (visivel) { if (!c.hasLayer(mk)) c.addLayer(mk); }
+    else if (c.hasLayer(mk)) c.removeLayer(mk);
   }
 
   function linhaLegenda(icone, rotulo) {
@@ -1578,6 +1606,8 @@
       linhaLegenda('<span class="mk-relato mk-relato-legenda"><span>P</span></span>', 'Relato') +
       linhaLegenda('<span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span>', 'Ponto de interesse') +
       linhaLegenda('<span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span>', 'Base') +
+      linhaLegenda('<span class="cluster cluster-pontos cluster-legenda" style="background:conic-gradient(#38bdf8 0 120deg, #f97316 0 240deg, #a855f7 0)"><b>3</b></span>', 'Pontos, relatos e fotos agrupados') +
+      linhaLegenda('<span class="cluster-pessoas cluster-legenda" style="background:conic-gradient(#ef4444 0 180deg, #3b82f6 0)"><b>2</b></span>', 'Pessoas agrupadas') +
       linhaLegenda('<span class="mk-local mk-local-legenda" aria-hidden="true">◎</span>', 'Local da operação') +
       linhaLegenda('<span class="setor-legenda"></span>', 'Setor de busca') +
       linhaLegenda('<span class="lg-linha-rota"></span>', 'Rota até o destino') +
@@ -1585,6 +1615,7 @@
   }
 
   function marcadoresDe(tipo) {
+    if (tipo === 'pontos') return Array.from(est.pontosInt.values()).map(function (p) { return p.marcador; }).filter(Boolean);
     return Array.from((tipo === 'fotos' ? est.fotosMarc : est.relatosMarc).values());
   }
 
@@ -1602,13 +1633,15 @@
     est.prefsMapa[chave] = valor;
     C.local.gravar(CHAVE_PREFS_MAPA, est.prefsMapa);
     if (est.mapa) {
-      if ((chave === 'fotos' || chave === 'relatos') && est.camadaPontos) {
+      if ((chave === 'fotos' || chave === 'relatos' || chave === 'pontos') && est.camadaPontos) {
         var lista = marcadoresDe(chave);
+        var agrupados = lista.filter(function (mk) { return !mk.options.fixo; });
         if (est.camadaPontos.addLayers) {
-          if (valor) est.camadaPontos.addLayers(lista); else est.camadaPontos.removeLayers(lista);
+          if (valor) est.camadaPontos.addLayers(agrupados); else est.camadaPontos.removeLayers(agrupados);
         } else {
-          lista.forEach(function (mk) { if (valor) est.camadaPontos.addLayer(mk); else est.camadaPontos.removeLayer(mk); });
+          agrupados.forEach(function (mk) { mostrarPonto(mk, valor); });
         }
+        lista.forEach(function (mk) { if (mk.options.fixo) mostrarPonto(mk, valor); });
       }
       if (chave === 'legenda' && est.legenda) { if (valor) est.legenda.addTo(est.mapa); else est.legenda.remove(); }
       if (chave === 'setores' && est.camadaSetores) { if (valor) est.camadaSetores.addTo(est.mapa); else est.camadaSetores.remove(); }
@@ -3693,7 +3726,7 @@
     var tem = m.direcao === 'entrada' && m.lat != null && m.lng != null && m.categoria && m.categoria !== 'MENSAGEM';
     var mk = est.relatosMarc.get(m.id);
     if (!tem) {
-      if (mk) { est.camadaPontos.removeLayer(mk); est.relatosMarc.delete(m.id); }
+      if (mk) { mostrarPonto(mk, false); est.relatosMarc.delete(m.id); }
       return;
     }
     if (mk) return;
@@ -3705,10 +3738,12 @@
       alt: cat.rotulo,
       pane: 'pontos',        // participantes ficam por cima
       tipoPonto: 'relato',
+      critico: m.categoria === 'AJUDA',
+      fixo: m.categoria === 'VITIMA',   // vítima localizada: nunca some dentro de um grupo
     });
     mk.on('click', function () { abrirRelato(m.id); });
     est.relatosMarc.set(m.id, mk);
-    if (est.prefsMapa.relatos) est.camadaPontos.addLayer(mk);
+    mostrarPonto(mk, Boolean(est.prefsMapa.relatos));
   }
 
   function destacarNoMapa(grupo, mk, lat, lng) {
@@ -3732,7 +3767,8 @@
   function verRelatoNoMapa(m) {
     if (m.lat == null) return;
     if (!est.prefsMapa.relatos) definirPrefMapa('relatos', true);
-    destacarNoMapa(est.camadaPontos, est.relatosMarc.get(m.id), m.lat, m.lng);
+    var mkR = est.relatosMarc.get(m.id);
+    destacarNoMapa(mkR && camadaDoPonto(mkR), mkR, m.lat, m.lng);
   }
 
   function abrirRelato(id) {
@@ -4001,7 +4037,7 @@
         });
         mk.on('click', function () { abrirFoto(f.id); });
         est.fotosMarc.set(f.id, mk);
-        if (est.prefsMapa.fotos) est.camadaPontos.addLayer(mk);
+        mostrarPonto(mk, Boolean(est.prefsMapa.fotos));
       } else if (antiga && (antiga.lat !== f.lat || antiga.lng !== f.lng)) {
         mk.setLatLng([f.lat, f.lng]);
       }
@@ -4020,7 +4056,7 @@
 
   function removerFoto(id) {
     var mk = est.fotosMarc.get(id);
-    if (mk && est.camadaPontos) est.camadaPontos.removeLayer(mk);
+    mostrarPonto(mk, false);
     est.fotosMarc.delete(id);
     est.fotos.delete(id);
     agendarCentral();
@@ -4173,7 +4209,7 @@
         f.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () {
           fechar();
           if (!est.prefsMapa.fotos) definirPrefMapa('fotos', true);
-          destacarNoMapa(est.camadaPontos, est.fotosMarc.get(f.id), f.lat, f.lng);
+          destacarNoMapa(est.camadaPontos, est.fotosMarc.get(f.id), f.lat, f.lng);   // fotos sempre no agrupamento
         } }) : null,
         p ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ficha de ' + p.dados.nome, onclick: function () { fechar(); selecionar(p.id); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
@@ -4426,7 +4462,7 @@
     });
     if (completa) {
       est.pontosInt.forEach(function (p, id) {
-        if (!vistos.has(id)) { if (p.marcador) p.marcador.remove(); if (p.circulo) p.circulo.remove(); est.pontosInt.delete(id); }
+        if (!vistos.has(id)) { tirarPontoInt(p); est.pontosInt.delete(id); }
       });
     }
     renderizarAreas();
@@ -4441,7 +4477,7 @@
 
   function limparAreasDoMapa() {
     est.setores.forEach(function (s) { if (s.camada) s.camada.remove(); });
-    est.pontosInt.forEach(function (p) { if (p.marcador) p.marcador.remove(); });
+    est.pontosInt.forEach(tirarPontoInt);
     if (est.linhaDestino) { est.linhaDestino.remove(); est.linhaDestino = null; }
     if (est.marcaDestino) { est.marcaDestino.remove(); est.marcaDestino = null; }
     est.setores = new Map();
@@ -4590,11 +4626,20 @@
     });
   }
 
+  function tirarPontoInt(p) {
+    if (p.marcador) { mostrarPonto(p.marcador, false); p.marcador = null; }
+    if (p.circulo) { p.circulo.remove(); p.circulo = null; }
+    p._assinatura = null;
+  }
+
   function desenharPontoInt(p) {
     if (!est.mapa || !est.camadaPontosInt) return;
     var d = p.d;
-    if (p.marcador) { p.marcador.remove(); p.marcador = null; }
-    if (p.circulo) { p.circulo.remove(); p.circulo = null; }
+    // A sincronização redesenha a lista inteira: só refaz quando o ponto mudou (evita refazer o agrupamento)
+    var assinatura = [d.lat, d.lng, d.categoria, d.titulo, d.raio_m].join('|');
+    if (p.marcador && p._assinatura === assinatura) return;
+    tirarPontoInt(p);
+    p._assinatura = assinatura;
     var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
     // Área de risco: círculo do alarme de proximidade (quem entra é avisado).
     if (d.categoria === 'RISCO') {
@@ -4605,14 +4650,19 @@
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_BASE_PADRAO, color: '#0ea5e9', weight: 2, dashArray: '4 6',
         fillColor: '#0ea5e9', fillOpacity: 0.06, interactive: false, className: 'circulo-base' }).addTo(est.camadaPontosInt);
     }
-    var mk = L.marker([d.lat, d.lng], { icon: iconePontoInt(d), keyboard: true, riseOnHover: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo, zIndexOffset: -50 });
+    // O marcador entra no agrupamento junto com relatos e fotos (o círculo de risco/base continua sempre à vista).
+    var mk = L.marker([d.lat, d.lng], {
+      icon: iconePontoInt(d), keyboard: true, riseOnHover: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo,
+      pane: 'pontos', tipoPonto: 'poi', critico: d.categoria === 'RISCO', fixo: d.categoria === 'VITIMA_ENCONTRADA',
+    });
     mk.on('click', function () {
       if (est.desenho) { aoClicarNoMapa({ latlng: mk.getLatLng() }); return; }
       abrirPontoInt(d.id);
     });
-    mk.addTo(est.camadaPontosInt);
     p.marcador = mk;
+    mostrarPonto(mk, Boolean(est.prefsMapa.pontos));
   }
+
 
   /* ---------- Modo de desenho (tocar no mapa) ------------------------ */
   function mostrarBarraDesenho(texto, extra, botoes) {
@@ -5134,11 +5184,10 @@
     if (!est.mapa) return;
     if (!est.prefsMapa.pontos) definirPrefMapa('pontos', true);
     if (telaPequena()) fecharAreas();
-    UI.fecharModal();
-    est.mapa.setView([d.lat, d.lng], Math.max(est.mapa.getZoom(), 17));
     var p = est.pontosInt.get(d.id);
-    var el = p && p.marcador && p.marcador.getElement();
-    if (el) { el.classList.add('destaque'); setTimeout(function () { el.classList.remove('destaque'); }, 3500); }
+    var mk = p && p.marcador;
+    // dentro de um grupo: aproxima até o ponto aparecer sozinho e pisca
+    destacarNoMapa(mk && camadaDoPonto(mk), mk, d.lat, d.lng);
   }
 
   function abrirPontoInt(id) {
@@ -5204,8 +5253,7 @@
     try {
       await C.rpc('excluir_ponto', { p_id: d.id });
       var p = est.pontosInt.get(d.id);
-      if (p && p.marcador) p.marcador.remove();
-      if (p && p.circulo) p.circulo.remove();
+      if (p) tirarPontoInt(p);
       est.pontosInt.delete(d.id);
       renderizarAreas();
       UI.aviso('Ponto excluído.', 'ok');

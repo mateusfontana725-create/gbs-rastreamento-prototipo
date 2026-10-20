@@ -1197,3 +1197,23 @@ body { font-size: 15px; }
 .aviso-fechar { width: 26px; height: 26px; margin: -4px -6px -4px 0; font-size: 1.15rem; }
 @media (pointer: coarse) { .aviso-fechar { width: 36px; height: 36px; margin: -9px -8px -9px 0; } }
 #avisos { width: min(420px, calc(100% - 24px)); gap: 6px; }
+
+/* Pontos agrupados (pontos de interesse + relatos + fotos): anel com a cor de cada tipo,
+   número no meio e "!" vermelho quando há área de risco ou pedido de ajuda dentro */
+.cluster.cluster-pontos { position: relative; width: 38px; height: 38px; padding: 5px; display: grid; gap: 0; cursor: pointer; }
+.cluster-pontos b {
+  display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%;
+  background: #0a0d10; color: #fff; font: 800 12px/1 var(--mono);
+}
+.cl-alerta {
+  position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; display: grid; place-items: center;
+  border-radius: 50%; background: #dc2626; color: #fff; font: 900 11px/1 var(--fonte); font-style: normal;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px #000;
+}
+/* forma diferente das pessoas agrupadas (círculo): pontos agrupados são quadrados arredondados */
+.cluster.cluster-pontos { border-radius: 9px; }
+.cluster-pontos b { border-radius: 5px; }
+.cluster.cluster-pontos { place-items: stretch; align-content: stretch; }
+.legenda .cluster-legenda { display: inline-grid; width: 20px; height: 20px; padding: 3px; box-shadow: 0 0 0 1px #000; flex: none; }
+.legenda .cluster-legenda b { font-size: 8px; }
+.legenda .cluster-pessoas.cluster-legenda { border-radius: 50%; }

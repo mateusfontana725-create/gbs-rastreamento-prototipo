@@ -589,6 +589,15 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     sem ocupar a tela toda), com as respostas em botões normais e **×** (ou Esc) para **responder depois**. A
     mensagem continua pendente: aparece no topo o botão **✉ N para você**, que reabre o cartão; uma mensagem nova
     também reabre. Os avisos rápidos do rodapé ficaram menores (com o × de sempre).
+  - **Pontos, relatos e fotos agrupados juntos**: tudo que é ponto no mapa (pontos de interesse, relatos e fotos) entra
+    no mesmo agrupamento quando está perto. O grupo é um **quadrado arredondado** (as pessoas agrupadas são
+    círculos) com o número e um anel com a cor de cada tipo (azul-claro pontos de interesse, laranja relatos, roxo
+    fotos); um **!** vermelho avisa que há área de risco ou pedido de ajuda dentro. Passar o mouse diz quantos de
+    cada; tocar aproxima; vários no mesmo lugar abrem em leque. De perto (zoom 17+) o raio do agrupamento diminui.
+    **Vítima encontrada** (ponto ou relato) nunca entra no grupo, e os círculos das áreas de risco e da base
+    continuam sempre visíveis. **Ver no mapa** de um ponto agrupado aproxima até ele aparecer e pisca. As camadas
+    e os modos (Pontos, Relatos, Fotos) continuam ligando e desligando cada tipo. A legenda mostra os dois
+    agrupamentos.
   - **Trilhas finas de longe**: a espessura (e o tracejado dos civis, o contorno claro e as marcas de falha)
     acompanha o zoom — de perto como antes (4 px; 6 px a da pessoa selecionada) e, afastando, afina até 1,5 px,
     para não cobrir o mapa.

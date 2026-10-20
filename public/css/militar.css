@@ -1217,3 +1217,28 @@ body { font-size: 15px; }
 .legenda .cluster-legenda { display: inline-grid; width: 20px; height: 20px; padding: 3px; box-shadow: 0 0 0 1px #000; flex: none; }
 .legenda .cluster-legenda b { font-size: 8px; }
 .legenda .cluster-pessoas.cluster-legenda { border-radius: 50%; }
+
+/* Registro de vítima encontrada pelo responsável */
+.form-vitima h2 { margin: 0 0 4px; font-size: 1.1rem; color: #f0abfc; }
+.form-vitima > p.muted { margin: 0 0 12px; font-size: .8rem; }
+.vit-condicoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vit-condicao {
+  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border-radius: 8px; cursor: pointer;
+  border: 2px solid var(--borda-forte); background: var(--superficie-2); font-weight: 800; letter-spacing: .02em;
+}
+.vit-condicao input { accent-color: #d946ef; }
+.vit-condicao:has(input:checked) { border-color: #d946ef; background: rgba(217, 70, 239, .18); color: #fff; }
+.vit-condicao.vit-obito:has(input:checked) { border-color: #a855f7; background: rgba(59, 7, 100, .55); }
+.vit-ondes { display: grid; gap: 6px; }
+.vit-onde {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--borda); background: var(--superficie-2); font-size: .86rem; flex-wrap: wrap;
+}
+.vit-onde > span { display: grid; flex: 1 1 160px; }
+.vit-onde small { font-size: .72rem; }
+.vit-onde:has(input:checked) { border-color: var(--acento); }
+.vit-onde.desativada { opacity: .55; cursor: not-allowed; }
+.vit-onde .btn { margin-left: auto; }
+.btn-vitima { border-color: #d946ef; color: #f5d0fe; }
+.btn-vitima:hover { background: rgba(217, 70, 239, .18); }
+.menu-item.menu-vitima .ico-item { color: #e879f9; font-weight: 900; }

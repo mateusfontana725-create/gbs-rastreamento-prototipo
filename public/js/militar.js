@@ -339,6 +339,8 @@
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
+    $('ficha-vitima').addEventListener('click', function () { if (est.selecionado) abrirRegistroVitima({ encontrou: est.selecionado, onde: 'quem' }); });
+    $('menu-vitima').addEventListener('click', function () { fecharMenu(false); abrirRegistroVitima({}); });
     $('btn-excluir-op').addEventListener('click', function () { excluirOperacao(est.op); });
     document.querySelectorAll('[data-camada]').forEach(function (b) {
       b.addEventListener('click', function () { trocarCamada(b.getAttribute('data-camada')); });
@@ -1384,6 +1386,7 @@
     $('btn-encerrar').hidden = op.status !== 'ativa';
     $('btn-convite').hidden = op.status !== 'ativa';
     $('btn-registrar-foto').hidden = op.status !== 'ativa';
+    $('menu-vitima').hidden = op.status !== 'ativa';
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
@@ -3083,6 +3086,7 @@
       caixaDest.appendChild(UI.el('span', { classe: 'ficha-rota', id: 'ficha-rota', hidden: true }));
     }
     $('ficha-enviar-destino').hidden = tipoDe(d) === 'responsavel' || d.removido || est.op.status !== 'ativa';
+    $('ficha-vitima').hidden = tipoDe(d) === 'responsavel' || est.op.status !== 'ativa';
     desenharLinhaDestino();
     var ligar = $('ficha-ligar');
     ligar.hidden = !d.telefone;
@@ -4694,6 +4698,9 @@
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Usar minha posição', onclick: usarMinhaPosicaoNoDesenho }), cancelar]);
     } else if (tipo === 'destino') {
       mostrarBarraDesenho('Toque no mapa no DESTINO.', null, [cancelar]);
+    } else if (tipo === 'vitima') {
+      mostrarBarraDesenho('Toque no mapa onde a VÍTIMA foi encontrada.', null, [
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Usar minha posição', onclick: usarMinhaPosicaoNoDesenho }), cancelar]);
     }
   }
 
@@ -4737,6 +4744,10 @@
       var grupoPre = dz.grupo_id;
       cancelarDesenho();
       abrirEnviarDestino({ nome: 'Ponto marcado no mapa', lat: ll[0], lng: ll[1], participantes: pre, grupo_id: grupoPre });
+    } else if (dz.tipo === 'vitima') {
+      var estado = dz.estado || {};
+      cancelarDesenho();
+      abrirRegistroVitima(Object.assign({}, estado, { lat: ll[0], lng: ll[1], onde: 'mapa' }));
     } else if (dz.tipo === 'externo' && dz.aoClicar) {
       dz.aoClicar(ll);
     }
@@ -7423,6 +7434,121 @@
     C.rpc('verificar_retornos', { p_operacao: est.op.id }, 15000).then(function (n) { if (n) agendarMissoes(); }).catch(function () { /* tenta no próximo ciclo */ });
   }
 
+  /* ---------- Responsável registra "vítima encontrada" (migração 025) ---------- */
+  // Para quando a notícia chega por rádio, telefone ou pessoalmente. Mesmo registro do campo:
+  // alerta crítico aos responsáveis, diário, dashboard e relatório. A condição só os responsáveis veem.
+  // pre: { condicao, encontrou (id do participante), onde: 'mapa'|'gps'|'quem'|'nenhum', lat, lng }
+  function abrirRegistroVitima(pre) {
+    if (!est.op || est.op.status !== 'ativa') { UI.aviso('A operação não está ativa.', 'erro'); return; }
+    pre = pre || {};
+    var temPonto = pre.lat != null && pre.lng != null;
+    var pessoas = Array.from(est.participantes.values())
+      .filter(function (p) { return !p.dados.removido && tipoDe(p.dados) !== 'responsavel'; })
+      .sort(function (a, b) { return nomeExibido(a).localeCompare(nomeExibido(b), 'pt-BR'); });
+
+    var cond = UI.el('div', { classe: 'vit-condicoes', role: 'radiogroup', 'aria-label': 'Condição da vítima' }, [['viva', 'Com vida'], ['obito', 'Óbito']].map(function (c) {
+      return UI.el('label', { classe: 'vit-condicao vit-' + c[0] }, [
+        UI.el('input', { type: 'radio', name: 'vit-condicao', value: c[0], checked: pre.condicao === c[0] ? true : null }),
+        UI.el('span', { texto: c[1] }),
+      ]);
+    }));
+    var quem = UI.el('select', { classe: 'campo', id: 'vit-quem' }, [UI.el('option', { value: '', texto: '— não informar —' })].concat(pessoas.map(function (p) {
+      return UI.el('option', { value: p.id, selected: pre.encontrou === p.id ? true : null, texto: nomeExibido(p) + ' (' + TIPOS[tipoDe(p.dados)].rotulo.toLowerCase() + ')' });
+    })));
+
+    function opcaoOnde(valor, texto, extra) {
+      return UI.el('label', { classe: 'vit-onde', 'data-onde': valor }, [
+        UI.el('input', { type: 'radio', name: 'vit-onde', value: valor }),
+        UI.el('span', null, [UI.el('span', { texto: texto }), UI.el('small', { classe: 'muted', texto: extra || '' })]),
+      ]);
+    }
+    var btnMapa = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vit-escolher-mapa', texto: temPonto ? 'Escolher outro ponto' : 'Escolher no mapa' });
+    var optMapa = opcaoOnde('mapa', 'Ponto no mapa', temPonto ? window.Coords.formatar(pre.lat, pre.lng, est.prefsMapa.coord || 'dec') : 'ainda não escolhido');
+    optMapa.appendChild(btnMapa);
+    var optQuem = opcaoOnde('quem', 'Posição de quem encontrou', '');
+    var onde = UI.el('div', { classe: 'vit-ondes', role: 'radiogroup', 'aria-label': 'Local' }, [
+      optMapa,
+      opcaoOnde('gps', 'Minha localização', 'GPS deste aparelho'),
+      optQuem,
+      opcaoOnde('nenhum', 'Sem localização', 'registrar agora e marcar o local depois'),
+    ]);
+    function marcarOnde(v) { var r = onde.querySelector('input[value="' + v + '"]'); if (r && !r.disabled) r.checked = true; }
+    function posDeQuem() {
+      var p = est.participantes.get(quem.value);
+      return p ? posicaoAtual(p) : null;
+    }
+    function atualizarQuem() {
+      var pos = posDeQuem();
+      var r = optQuem.querySelector('input');
+      r.disabled = !pos;
+      optQuem.classList.toggle('desativada', !pos);
+      optQuem.querySelector('small').textContent = !quem.value ? 'escolha quem encontrou' : pos ? 'última posição ' + C.idade(pos.t) + ' · ± ' + Math.round(pos.prec || 0) + ' m' : 'essa pessoa ainda não tem posição';
+      if (r.disabled && r.checked) marcarOnde(temPonto ? 'mapa' : 'gps');
+    }
+    quem.addEventListener('change', function () { atualizarQuem(); if (posDeQuem() && !temPonto) marcarOnde('quem'); });
+    atualizarQuem();
+    if (!temPonto) optMapa.querySelector('input').disabled = true;
+    marcarOnde(pre.onde && (pre.onde !== 'mapa' || temPonto) ? pre.onde : temPonto ? 'mapa' : posDeQuem() ? 'quem' : 'gps');
+
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: 'Registrar vítima encontrada' });
+    var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
+      UI.el('h2', { texto: '✚ Vítima encontrada' }),
+      UI.el('p', { classe: 'muted', texto: 'Para quando a notícia chega por rádio, telefone ou pessoalmente. Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Condição' }), cond]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-quem', texto: 'Quem encontrou (opcional)' }), quem]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Onde' }), onde]),
+      erro,
+      UI.el('div', { classe: 'acoes-linha' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+
+    function estadoAtual() {
+      var c = form.querySelector('input[name="vit-condicao"]:checked');
+      return { condicao: c ? c.value : null, encontrou: quem.value || null };
+    }
+    btnMapa.addEventListener('click', function () {
+      var e = estadoAtual();
+      fechar();
+      iniciarDesenho('vitima', { estado: e });
+    });
+
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var e = estadoAtual();
+      var modo = (form.querySelector('input[name="vit-onde"]:checked') || {}).value;
+      if (!e.condicao) { erro.textContent = 'Escolha a condição: com vida ou óbito.'; erro.hidden = false; return; }
+      var args = { p_operacao: est.op.id, p_condicao: e.condicao, p_encontrou: e.encontrou };
+      btn.disabled = true;
+      try {
+        if (modo === 'mapa' && temPonto) {
+          args.p_lat = pre.lat; args.p_lng = pre.lng;
+        } else if (modo === 'gps') {
+          var g = await obterMinhaPosicao();
+          if (!g.ok) throw new Error('Sem a sua localização agora (' + g.motivo + '). Escolha no mapa ou a posição de quem encontrou.');
+          args.p_lat = g.lat; args.p_lng = g.lng; args.p_precisao = g.prec; args.p_posicao_em = new Date(g.t || Date.now()).toISOString();
+        } else if (modo === 'quem') {
+          var pq = posDeQuem();
+          if (!pq) throw new Error('Quem encontrou ainda não tem posição. Escolha outra opção.');
+          args.p_lat = pq.lat; args.p_lng = pq.lng; args.p_precisao = pq.prec; args.p_posicao_em = new Date(pq.t).toISOString();
+        }
+        var r = await C.rpc('responsavel_registrar_vitima', args);
+        if (r && r.mensagem) receberMensagem(r.mensagem, true);
+        if (r && r.registro) receberVitimasLoc([r.registro]);
+        fechar();
+        UI.aviso('Vítima encontrada registrada. Os responsáveis receberam o alerta.', 'ok', 7000);
+        sincronizar();
+        if (args.p_lat != null && est.mapa) est.mapa.setView([args.p_lat, args.p_lng], Math.max(est.mapa.getZoom(), 16));
+      } catch (e2) {
+        btn.disabled = false;
+        erro.textContent = e2.codigo === 'funcao_ausente' || /responsavel_registrar_vitima/.test(e2.message || '')
+          ? 'O servidor ainda não foi atualizado (falta a migração 025 no Supabase). Avise o responsável técnico.' : (e2.message || 'Não foi possível registrar.');
+        erro.hidden = false;
+      }
+    });
+  }
+
   /* ---------- "Encontrei a vítima" (condição só para os responsáveis) ---------- */
   async function carregarVitimasLoc() {
     if (!est.op || est.semVitimaLoc) return;
@@ -7802,6 +7928,7 @@
     alarme: function () { alarme(); },
     iniciarDesenho: iniciarDesenhoExterno,
     marcarPonto: function (lat, lng, extra) { abrirFormPontoInt(Object.assign({ lat: lat, lng: lng }, extra || {})); },
+    registrarVitima: function (lat, lng) { abrirRegistroVitima({ lat: lat, lng: lng, onde: 'mapa' }); },
     // Celular: recolhe a lista (gaveta) para a janela do ponto caber; devolve a altura que ainda cobre o mapa.
     liberarMapa: function () {
       if (!gaveta.ativa) return 0;

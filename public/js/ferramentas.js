@@ -118,6 +118,7 @@
       UI.el('div', { classe: 'info-ponto-acoes' }, [
         ativa || !P.op().dados_apagados_em ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⚑ Marcar ponto', onclick: function () { mapa.closePopup(); P.marcarPonto(lat, lng); } }) : null,
         ativa ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar como destino', onclick: function () { mapa.closePopup(); P.enviarDestino(lat, lng); } }) : null,
+        ativa && P.registrarVitima ? UI.el('button', { classe: 'btn btn-pequeno btn-vitima', type: 'button', texto: '✚ Vítima encontrada aqui', onclick: function () { mapa.closePopup(); P.registrarVitima(lat, lng); } }) : null,
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📏 Medir daqui', onclick: function () { mapa.closePopup(); medir([lat, lng]); } }),
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '◎ Anéis aqui', onclick: function () { mapa.closePopup(); alternarAneis({ id: 'p' + lat + ',' + lng, lat: lat, lng: lng, nome: 'Ponto' }); } }),
       ]),

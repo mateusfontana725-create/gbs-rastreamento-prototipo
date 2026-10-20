@@ -690,6 +690,14 @@ chave própria).
   da chamada, nunca na URL, e não aparece em notificações.
 - No painel: faixa de alerta própria (magenta; roxo escuro para óbito) com alarme, selo com a condição no
   relato, na ficha, na central e nos alertas, e marcador no mapa.
+- **O responsável também registra** (quando a notícia chega por rádio, telefone ou pessoalmente), por três
+  caminhos: **Ferramentas → Vítima encontrada**, **toque longo / botão direito no mapa → ✚ Vítima encontrada
+  aqui** e, na ficha de um participante, **✚ Encontrou a vítima**. O formulário pede a **condição** (com vida ou
+  óbito), **quem encontrou** (opcional) e **onde**: ponto no mapa (com **Escolher no mapa**, que volta ao
+  formulário sem perder o que foi preenchido), a localização deste aparelho, a última posição de quem encontrou
+  ou sem localização. Gera o mesmo registro do campo (alerta crítico aos responsáveis, diário, dashboard,
+  relatório e o ✚ no mapa), com "registrado por *responsável* (encontrada por *pessoa*)". Função
+  `responsavel_registrar_vitima` (migração **025**).
 
 ### Diário da operação
 
@@ -885,6 +893,7 @@ rastreamento-sar/
 │       ├── 009_trilha_offline.sql             envio em lote com confirmação e intervalo do GPS
 │       ├── 010_missoes_alertas.sql            destino para grupos, alertas e controle de retorno
 │       ├── 011_vitima_localizada.sql          "Encontrei a vítima" (condição só para responsáveis)
+│       ├── 025_responsavel_registra_vitima.sql o responsável registra a vítima encontrada pelo painel
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -996,7 +1005,9 @@ rastreamento-sar/
      atividade (diário e relatórios). Criador sem ser administrador segue com a regra de operação sem atividade.
    - **024** (`024_admin_excluir_relatorio.sql`): nova função `excluir_relatorio` (só administrador). O PDF vai para a fila
      de limpeza do Storage e a exclusão fica no diário (evento "Relatório excluído").
-   O `schema.sql` completo já inclui da 003 à 024.
+   - **025** (`025_responsavel_registra_vitima.sql`): nova função `responsavel_registrar_vitima` — o responsável
+     registra a vítima encontrada pelo painel (condição, quem encontrou e local), com o mesmo alerta e diário do campo.
+   O `schema.sql` completo já inclui da 003 à 025.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

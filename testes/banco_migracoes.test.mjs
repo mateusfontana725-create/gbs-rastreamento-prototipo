@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -281,6 +281,37 @@ chk(/participante_invalido/.test(await erroDe(rpc(anA, 'participante_registrar_v
 chk(/permission denied/.test(await erroDe(como(null, `select public.participante_registrar_vitima($1, 'viva')`, [pM.participante_id], 'anon'))), 'anon não chama a função');
 const pubV = (await db.query(`select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'vitima_localizacoes'`)).rows;
 chk(pubV.length === 1, 'vitima_localizacoes publicada no Realtime');
+
+console.log('Responsável registra vítima encontrada (migração 025)');
+{
+  const opV = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP VITIMA RESP', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uE = await usuario(null, true);
+  const enc = await rpc(uE, 'ingressar', { p_token: opV.token_militar, p_nome: 'Sd Achou', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const r = await rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'viva', p_lat: -22.95, p_lng: -43.25, p_precisao: 6,
+    p_posicao_em: new Date().toISOString(), p_encontrou: enc.participante_id });
+  chk(r.mensagem.categoria === 'VITIMA' && r.mensagem.texto === 'Localizada, ver protocolo' && r.registro.condicao === 'viva', 'responsável registra a vítima encontrada (mensagem neutra + condição)', r);
+  const rv = (await como(resp1, `select condicao, registrado_por_tipo, registrado_por_nome, lat from public.vitima_localizacoes where operacao_id = $1`, [opV.id])).rows;
+  chk(rv.length === 1 && rv[0].registrado_por_tipo === 'responsavel' && /Sgt Um \(encontrada por Sd Achou\)/.test(rv[0].registrado_por_nome) && rv[0].lat === -22.95,
+    'registro com quem registrou (responsável) e quem encontrou', rv);
+  const pr = (await db.query(`select tipo, nome from public.participantes where operacao_id = $1 and user_id = $2`, [opV.id, resp1])).rows;
+  chk(pr.length === 1 && pr[0].tipo === 'responsavel', 'o registro do responsável na operação é criado se faltava', pr);
+  const al = (await como(resp1, `select nivel, texto, participante_id from public.alertas where operacao_id = $1 and tipo = 'vitima_localizada'`, [opV.id])).rows;
+  chk(al.length === 1 && al[0].nivel === 'critico' && al[0].participante_id === enc.participante_id && !/viva|óbito|obito|morta/i.test(al[0].texto),
+    'alerta crítico neutro para os responsáveis, apontando quem encontrou', al);
+  const dv = (await como(resp1, `select titulo from public.diario where operacao_id = $1 and tipo = 'vitima_localizada'`, [opV.id])).rows;
+  chk(dv.length === 1 && /VIVA/.test(dv[0].titulo), 'entra no diário com a condição', dv);
+  chk((await como(uE, `select count(*)::int n from public.mensagens where categoria = 'VITIMA'`)).rows[0].n === 0, 'participante de campo não vê o registro do responsável');
+  const semLocal = await rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'obito' });
+  chk(semLocal.registro.lat === null && semLocal.registro.condicao === 'obito', 'pode registrar sem localização (segunda vítima, por exemplo)', semLocal.registro);
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'viva' }))), 'responsável de outra operação não registra');
+  chk(/sem_permissao/.test(await erroDe(rpc(uE, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'viva' }))), 'participante de campo não usa a função do responsável');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'ferida' }))), 'condição inválida: recusada');
+  chk(/posicao_invalida/.test(await erroDe(rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'viva', p_lat: -22.9 }))), 'só latitude, sem longitude: recusada');
+  chk(/participante_invalido/.test(await erroDe(rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'viva', p_encontrou: pM.participante_id }))), 'quem encontrou precisa ser desta operação');
+  chk(/permission denied/.test(await erroDe(como(null, `select public.responsavel_registrar_vitima($1, 'viva')`, [opV.id], 'anon'))), 'anon não chama a função');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opV.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opV.id, p_condicao: 'viva' }))), 'operação encerrada: não registra');
+}
 
 console.log('Tempo de permanência em setor');
 {
@@ -630,5 +661,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–024 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–025 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

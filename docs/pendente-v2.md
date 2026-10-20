@@ -11,6 +11,7 @@ e ainda não estiver no `v2` fica listado aqui, para levar quando for a hora. Ao
 | `7bec4a8` | Painel enxuto: lista em uma linha por pessoa (detalhes na ficha), resumo que filtra a lista, letras e botões menores, cabeçalho e faixa de alerta compactos, modos "Mostrar no mapa" (Tudo, Equipes, Cobertura, Setores, Pontos, Fotos, Relatos) e camada Pessoas. | `public/js/militar.js`, `public/js/mapa-rotulos.js`, `public/css/militar.css`, `public/militar.html`, `README.md` | Depende do commit anterior (mapa-rotulos.js). No `v2` o `militar.js` mudou: conferir `criarItemLista`/`atualizarItemLista` e `renderizarLista`. |
 | `dd59c4b` | Mensagem de outro responsável em cartão compacto com × (responder depois) e botão "✉ N para você" no topo; avisos do rodapé menores; trilhas afinam conforme o zoom. | `public/js/militar.js`, `public/css/militar.css`, `public/militar.html`, `README.md` | Depende dos commits anteriores da tabela. |
 | `ff3b1f9` | Pontos de interesse, relatos e fotos no mesmo agrupamento (quadrado com anel por tipo e "!" para risco/ajuda); vítima encontrada sempre solta; legenda com os agrupamentos. | `public/js/militar.js`, `public/css/militar.css`, `README.md` | Depende dos commits anteriores da tabela. |
+| `4249acf` | Responsável registra vítima encontrada pelo painel (Ferramentas, toque longo no mapa e ficha do participante). **Migração 025** (`responsavel_registrar_vitima`). | `supabase/migracoes/025_responsavel_registra_vitima.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/js/ferramentas.js`, `public/css/militar.css`, `public/militar.html`, `testes/banco_migracoes.test.mjs`, `README.md` | O banco é o mesmo para v1 e v2: a migração 025 só precisa rodar uma vez no Supabase. |
 
 ## Como levar
 
@@ -18,7 +19,7 @@ No branch `v2`, aplicar os commits da tabela, do mais antigo para o mais novo:
 
 ```
 git checkout v2
-git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9
+git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf
 ```
 
 Se o `cherry-pick` parar por conflito no `README.md`, mantenha as duas partes do texto e continue com

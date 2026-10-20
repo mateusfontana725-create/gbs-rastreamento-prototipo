@@ -12,6 +12,7 @@ e ainda não estiver no `v2` fica listado aqui, para levar quando for a hora. Ao
 | `dd59c4b` | Mensagem de outro responsável em cartão compacto com × (responder depois) e botão "✉ N para você" no topo; avisos do rodapé menores; trilhas afinam conforme o zoom. | `public/js/militar.js`, `public/css/militar.css`, `public/militar.html`, `README.md` | Depende dos commits anteriores da tabela. |
 | `ff3b1f9` | Pontos de interesse, relatos e fotos no mesmo agrupamento (quadrado com anel por tipo e "!" para risco/ajuda); vítima encontrada sempre solta; legenda com os agrupamentos. | `public/js/militar.js`, `public/css/militar.css`, `README.md` | Depende dos commits anteriores da tabela. |
 | `4249acf` | Responsável registra vítima encontrada pelo painel (Ferramentas, toque longo no mapa e ficha do participante). **Migração 025** (`responsavel_registrar_vitima`). | `supabase/migracoes/025_responsavel_registra_vitima.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/js/ferramentas.js`, `public/css/militar.css`, `public/militar.html`, `testes/banco_migracoes.test.mjs`, `README.md` | O banco é o mesmo para v1 e v2: a migração 025 só precisa rodar uma vez no Supabase. |
+| `17bafde` | Operação encerrada abre só para visualização (também depois da retenção); botões de alteração somem. **Migração 026** (servidor recusa alterações em operação encerrada). | `supabase/migracoes/026_operacao_encerrada_somente_leitura.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/js/ferramentas.js`, `public/js/relatorio.js`, `testes/banco_migracoes.test.mjs`, `README.md` | Banco compartilhado: a 026 roda uma vez só. No `v2`, conferir `renderizarOperacoes` e `renderizarCabecalho` no `militar.js`. |
 
 ## Como levar
 
@@ -19,7 +20,7 @@ No branch `v2`, aplicar os commits da tabela, do mais antigo para o mais novo:
 
 ```
 git checkout v2
-git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf
+git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde
 ```
 
 Se o `cherry-pick` parar por conflito no `README.md`, mantenha as duas partes do texto e continue com

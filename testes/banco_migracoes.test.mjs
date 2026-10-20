@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -665,10 +665,10 @@ console.log('Operação encerrada: somente leitura (migração 026)');
   const resE = await rpc(resp1, 'definir_resultado', { p_operacao: opE.id, p_resultado: 'nao_localizada', p_texto: '' });
   chk(resE.resultado === 'nao_localizada', 'encerrada: o resultado da operação continua podendo ser registrado', resE);
   chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'resultado'`, [opE.id])).rows[0].n === 1, 'e o evento automático do resultado entra no diário');
-  const apE = await rpc(resp1, 'apagar_dados_operacao', { p_operacao: opE.id });
+  chk(/apagar_dados_desativado/.test(await erroDe(rpc(resp1, 'apagar_dados_operacao', { p_operacao: opE.id })) || ''), 'encerrada: "apagar dados" está desativado (migração 027)');
   const depE = (await db.query(`select (select count(*) from public.setores where operacao_id=$1)::int s, (select count(*) from public.grupos where operacao_id=$1)::int g,
-    (select count(*) from public.vitimas where operacao_id=$1)::int v`, [opE.id])).rows[0];
-  chk(apE.dados_apagados_em && depE.s === 0 && depE.g === 0 && depE.v === 0, 'encerrada: apagar os dados (retenção) continua funcionando', depE);
+    (select count(*) from public.vitimas where operacao_id=$1)::int v, (select dados_apagados_em from public.operacoes where id=$1) a`, [opE.id])).rows[0];
+  chk(depE.s === 1 && depE.g === 1 && depE.v === 1 && depE.a === null, 'encerrada: os dados continuam guardados', depE);
   const opZ = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RETENCAO ZERO', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
   const uZ = await usuario(null, true);
   const pZ = await rpc(uZ, 'ingressar', { p_token: opZ.token_militar, p_nome: 'Sd Zero', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
@@ -676,28 +676,38 @@ console.log('Operação encerrada: somente leitura (migração 026)');
   await rpc(resp1, 'definir_membro', { p_grupo: gZ.id, p_participante: pZ.participante_id, p_papel: 'membro' });
   await rpc(resp1, 'salvar_setor', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ nome: 'SZ', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 200 }) });
   const encZ = await rpc(resp1, 'encerrar_operacao', { p_operacao: opZ.id });
-  chk(encZ.status === 'encerrada' && encZ.dados_apagados_em, 'encerrar com retenção "ao encerrar" (apaga na hora) continua funcionando', encZ);
+  const ficaZ = (await db.query(`select (select count(*) from public.participantes where operacao_id=$1)::int p, (select count(*) from public.grupo_membros where operacao_id=$1)::int m,
+    (select count(*) from public.setores where operacao_id=$1)::int s`, [opZ.id])).rows[0];
+  chk(encZ.status === 'encerrada' && !encZ.dados_apagados_em && encZ.expira_em === null && ficaZ.p === 1 && ficaZ.m === 1 && ficaZ.s === 1,
+    'encerrar não apaga nada, nem a operação antiga com "apagar ao encerrar" (migração 027)', { encZ, ficaZ });
   const exZ = await rpc(resp1, 'excluir_operacao', { p_operacao: opZ.id });
   chk(exZ.operacao === 'OP RETENCAO ZERO', 'excluir operação encerrada continua funcionando', exZ);
 }
 
-console.log('Retenção e exclusão');
-await rpc(resp1, 'encerrar_operacao', { p_operacao: op.id });
-await rpc(resp1, 'apagar_dados_operacao', { p_operacao: op.id });
-const cont = (await db.query(`select (select count(*) from public.vitimas where operacao_id=$1)::int v, (select count(*) from public.grupos where operacao_id=$1)::int g,
+console.log('Dados só saem ao excluir a operação (migração 027)');
+const contOp = async () => (await db.query(`select (select count(*) from public.vitimas where operacao_id=$1)::int v, (select count(*) from public.grupos where operacao_id=$1)::int g,
   (select count(*) from public.missoes where operacao_id=$1)::int m, (select count(*) from public.alertas where operacao_id=$1)::int a,
-  (select count(*) from public.arquivos_pendentes where bucket='vitimas')::int f, (select codigo from public.operacoes where id=$1) c, (select tipo from public.operacoes where id=$1) t`, [op.id])).rows[0];
-chk(cont.v === 0 && cont.g === 0 && cont.m === 0 && cont.a === 0, 'dados apagados: fichas, grupos, deslocamentos e alertas apagados', cont);
-chk((await db.query(`select count(*)::int n from public.vitima_localizacoes where operacao_id = $1`, [op.id])).rows[0].n === 0, 'dados apagados: registros de vítima localizada apagados');
-const diarioDepois = (await db.query(`select count(*)::int n, bool_or(tipo = 'dados_apagados') apagados, bool_or(tipo = 'observacao') obs from public.diario where operacao_id = $1`, [op.id])).rows[0];
-chk(diarioDepois.n > 10 && diarioDepois.apagados && diarioDepois.obs, 'dados apagados: o diário continua (com o registro da retenção)', diarioDepois);
-chk((await db.query(`select count(*)::int n from public.relatorios where operacao_id = $1`, [op.id])).rows[0].n === 1, 'dados apagados: o relatório continua');
+  (select count(*) from public.participantes where operacao_id=$1)::int p, (select count(*) from public.posicoes where operacao_id=$1)::int pos,
+  (select count(*) from public.mensagens where operacao_id=$1)::int msg, (select count(*) from public.vitima_localizacoes where operacao_id=$1)::int vl`, [op.id])).rows[0];
+const antes = await contOp();
+const encOp = await rpc(resp1, 'encerrar_operacao', { p_operacao: op.id });
+chk(encOp.status === 'encerrada' && encOp.expira_em === null && !encOp.dados_apagados_em, 'encerrar não marca prazo para apagar', encOp);
+chk(JSON.stringify(await contOp()) === JSON.stringify(antes) && antes.p > 0 && antes.pos > 0 && antes.v > 0, 'encerrar mantém participantes, trilhas, mensagens, fichas, grupos, deslocamentos e alertas', antes);
+chk(/apagar_dados_desativado/.test(await erroDe(rpc(resp1, 'apagar_dados_operacao', { p_operacao: op.id })) || ''), '"apagar dados agora" desativado');
+await db.query(`update public.operacoes set expira_em = now() - interval '1 day' where id = $1`, [op.id]);
+const purga = (await db.query(`select public.purgar_expiradas() r`)).rows[0].r;
+chk(purga.operacoes_apagadas === 0 && JSON.stringify(await contOp()) === JSON.stringify(antes), 'limpeza diária não apaga dados de operação, nem com prazo vencido', purga);
+chk((await db.query(`select dados_apagados_em from public.operacoes where id = $1`, [op.id])).rows[0].dados_apagados_em === null, 'a operação não fica marcada como apagada');
 const relDepois = await rpc(resp1, 'relatorio_operacao', { p_operacao: op.id });
-chk(relDepois.participantes.length === 0 && relDepois.diario.length > 10 && relDepois.operacao.resultado === 'localizada_obito', 'depois da retenção o relatório ainda sai com cadastro, resultado e diário');
-chk(cont.f === 1,'a foto da vítima entrou na fila de remoção do Storage (bucket vitimas)');
-chk(cont.c === 'OP TESTE' && cont.t === 'outras', 'o cadastro da operação continua (como o nome já continuava)');
+chk(relDepois.participantes.length > 0 && relDepois.diario.length > 10 && relDepois.operacao.resultado === 'localizada_obito', 'encerrada: o relatório sai completo (participantes, resultado e diário)');
+chk(/permission denied/.test(await erroDe(como(resp1, `select public.purgar_expiradas()`)) || ''), 'a limpeza diária só roda no servidor');
+const excOp = await rpc(resp1, 'excluir_operacao', { p_operacao: op.id });
+chk(excOp.operacao === 'OP TESTE' && (await db.query(`select count(*)::int n from public.operacoes where id = $1`, [op.id])).rows[0].n === 0, 'excluir a operação: aí sim tudo sai', excOp);
+const depoisExc = await contOp();
+chk(depoisExc.v === 0 && depoisExc.p === 0 && depoisExc.pos === 0 && depoisExc.msg === 0 && depoisExc.vl === 0, 'excluída: participantes, trilhas, mensagens, fichas e registros apagados', depoisExc);
+chk((await db.query(`select count(*)::int n from public.arquivos_pendentes where bucket = 'vitimas'`)).rows[0].n === 1, 'a foto da vítima entrou na fila de remoção do Storage (bucket vitimas)');
 const pend = await rpc(resp1, 'meus_arquivos_pendentes_v2', {});
-chk(pend.length === 1 && pend[0].bucket === 'vitimas', 'meus_arquivos_pendentes_v2 informa o bucket', pend);
+chk(pend.some((x) => x.bucket === 'vitimas'), 'meus_arquivos_pendentes_v2 informa o bucket', pend);
 const v2 = await rpc(resp1, 'salvar_vitima', { p_operacao: antiga.id, p_id: null, p_dados: JSON.stringify({ nome: 'Não identificada' }) });
 const exc = await rpc(resp1, 'excluir_operacao', { p_operacao: antiga.id });
 chk(exc.vitimas === 1 && v2.nome === 'Não identificada', 'excluir operação informa as fichas apagadas', exc);
@@ -711,5 +721,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–026 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–027 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -40,6 +40,7 @@
     texto_longo: 'Texto muito longo. Encurte e tente de novo.',
     codigo_invalido: 'Informe um nome ou código da operação com 2 a 80 caracteres.',
     retencao_invalida: 'Política de retenção inválida.',
+    apagar_dados_desativado: 'Os dados da operação ficam guardados. Para apagar, exclua a operação.',
     lote_invalido: 'Dados inválidos enviados ao servidor.',
     operacao_ativa: 'Encerre a operação antes de apagar os dados.',
     muitas_mensagens: 'Muitas mensagens enviadas no último minuto. Aguarde um pouco.',

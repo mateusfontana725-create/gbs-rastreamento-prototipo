@@ -267,7 +267,6 @@
     $('btn-voltar').addEventListener('click', function () { location.hash = ''; });
     $('btn-convite').addEventListener('click', abrirConvite);
     $('btn-encerrar').addEventListener('click', encerrarOperacao);
-    $('btn-apagar-faixa').addEventListener('click', function () { apagarDados(est.op); });
     // um botão só: o texto diz o que o toque vai fazer
     $('busca').addEventListener('input', function () { est.listaSuja = true; renderizarLista(); });
     $('btn-recolher').addEventListener('click', alternarLateral);
@@ -537,21 +536,16 @@
     return Boolean(est.op && est.op.status === 'ativa' && !est.op.dados_apagados_em);
   }
 
-  function textoRetencao(h) {
-    if (!h) return 'dados apagados ao encerrar';
-    if (h < 48) return 'dados apagados ' + h + ' h após encerrar';
-    return 'dados apagados ' + Math.round(h / 24) + ' dias após encerrar';
-  }
+  // Os dados ficam guardados depois de encerrar; só saem se a operação for excluída (migração 027).
+  // O valor gravado em retencao_horas ficou só para o servidor antigo, antes da migração.
+  var RETENCAO_SEGURA_H = 2160;
 
   function descricaoOp(op) {
     var cad = [window.Cadastro.textoTipo(op), op.acionado_em ? 'acionada ' + window.Cadastro.dataHora(op.acionado_em) : '', op.local_endereco || '']
       .filter(Boolean).join(' · ');
     var t;
-    if (op.status === 'ativa') t = 'Ativa desde ' + C.hora(op.criada_em, false) + ' · ' + textoRetencao(op.retencao_horas);
-    else {
-      t = 'Encerrada em ' + C.hora(op.encerrada_em, false);
-      t += op.dados_apagados_em ? ' · dados apagados' : ' · dados serão apagados em ' + C.hora(op.expira_em, false);
-    }
+    if (op.status === 'ativa') t = 'Ativa desde ' + C.hora(op.criada_em, false);
+    else t = 'Encerrada em ' + C.hora(op.encerrada_em, false) + (op.dados_apagados_em ? ' · dados apagados (regra antiga)' : '');
     return (cad ? cad + ' — ' : '') + t;
   }
 
@@ -709,7 +703,6 @@
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
       if (incompleta) funcoes.push({ texto: 'Completar cadastro', acao: function () { window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } }); } });
-      if (op.status !== 'ativa' && !op.dados_apagados_em) funcoes.push({ texto: 'Apagar dados agora', perigo: true, acao: function () { apagarDados(op); } });
       if (podeExcluir(op)) funcoes.push({ texto: 'Excluir operação', perigo: true, acao: function () { excluirOperacao(op); } });
       var acoes = UI.el('div', { classe: 'op-acoes' }, funcoes.length ? [menuLinha(funcoes)] : []);
       var deEquipe = est.usuario && op.responsavel_id !== est.usuario.id
@@ -736,9 +729,6 @@
   function abrirNovaOperacao() {
     var codigo = UI.el('input', { classe: 'campo', id: 'nova-codigo', maxlength: '80', required: true, autocomplete: 'off', placeholder: 'Ex.: BUSCA SERRA AZUL 09/10' });
     var campos = window.Cadastro.camposOperacao(null, { inicial: true, prefixo: 'nova' });
-    var retencao = UI.el('select', { classe: 'campo', id: 'nova-retencao' }, [
-      ['0', 'Ao encerrar'], ['24', '24 h após encerrar'], ['72', '3 dias após encerrar'], ['168', '7 dias após encerrar'], ['720', '30 dias após encerrar'],
-    ].map(function (o) { return UI.el('option', { value: o[0], selected: o[0] === '72' ? true : null, texto: o[1] }); }));
     var vitimas = secaoVitimasNovaOp();
     var erro = UI.el('p', { classe: 'erro-form', id: 'nova-erro', role: 'alert', hidden: true });
     var status = UI.el('div', { classe: 'nova-op-status', id: 'nova-status', role: 'status', hidden: true });
@@ -747,11 +737,7 @@
     var dadosOp = UI.el('fieldset', { classe: 'nova-op-dados', id: 'nova-op-dados' }, [
       UI.el('div', { classe: 'nova-op-linha' }, [
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'nova-codigo', texto: 'Nome ou código da operação *' }), codigo]),
-        UI.el('div', { classe: 'grupo' }, [
-          UI.el('label', { classe: 'rotulo', for: 'nova-retencao', texto: 'Apagar dados pessoais' }),
-          retencao,
-          UI.el('small', { classe: 'muted', texto: 'Participantes, trilhas, mensagens e fotos. O diário e os relatórios ficam guardados.' }),
-        ]),
+        UI.el('p', { classe: 'muted nova-op-guarda', texto: 'Os dados ficam guardados depois de encerrar (o painel abre só para consulta). Só saem se a operação for excluída.' }),
       ]),
       campos.elemento,
     ]);
@@ -773,7 +759,7 @@
       location.hash = '#op=' + ctx.op.id;
     }
     form.addEventListener('submit', function (ev) {
-      criarOperacao(ev, { codigo: codigo, campos: campos, retencao: retencao, vitimas: vitimas, dadosOp: dadosOp, erro: erro, status: status, btn: btn, cancelar: cancelar, ctx: ctx,
+      criarOperacao(ev, { codigo: codigo, campos: campos, vitimas: vitimas, dadosOp: dadosOp, erro: erro, status: status, btn: btn, cancelar: cancelar, ctx: ctx,
         fechar: function () { fechar(true); }, irParaOperacao: irParaOperacao });
     });
     // Fechar depois de criada (Esc, "Seguir sem elas"…) sempre leva à operação: nada se perde.
@@ -877,7 +863,7 @@
       var invalida = f.vitimas.validar();
       if (invalida) { erro.textContent = invalida; erro.hidden = false; return; }
       btn.disabled = true;
-      var args = { p_codigo: codigo, p_retencao_horas: Number(f.retencao.value), p_dados: dados };
+      var args = { p_codigo: codigo, p_retencao_horas: RETENCAO_SEGURA_H, p_dados: dados };
       try {
         var op;
         try {
@@ -1031,33 +1017,6 @@
         est.participantes.forEach(function (p) { sujarTrilha(p); });   // limite de falha pode ter mudado
       },
     });
-  }
-
-  async function apagarDados(op, jaOfereceu) {
-    if (!op) return;
-    if (jaOfereceu !== true && !(await oferecerRelatorio(op, 'Apagar os dados remove participantes, trilhas, mensagens e fotos.', function () { apagarDados(op, true); }))) return;
-    var r = await UI.confirmar({
-      titulo: 'Apagar os dados agora?',
-      texto: 'Serão apagados definitivamente todos os participantes, posições, trilhas e mensagens da operação "' +
-        op.codigo + '". Esta ação não pode ser desfeita. O diário e os relatórios gerados continuam guardados.',
-      ok: 'Apagar definitivamente',
-      perigo: true,
-    });
-    if (!r) return;
-    try {
-      var atual = await C.rpc('apagar_dados_operacao', { p_operacao: op.id });
-      var arq = await limparArquivosPendentes();
-      UI.aviso('Dados da operação apagados.' + (arq.falhas ? ' ' + textoFalhaArquivos(arq.falhas) : ''), arq.falhas ? 'erro' : 'ok', arq.falhas ? 12000 : 4000);
-      if (est.op && est.op.id === op.id) {
-        est.op = Object.assign(est.op, atual);
-        limparDadosDoMapa();
-        renderizarCabecalho();
-      } else {
-        mostrarOperacoes();
-      }
-    } catch (e) {
-      UI.aviso(e.message, 'erro');
-    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -1384,7 +1343,7 @@
     var op = est.op;
     $('op-codigo').textContent = op.codigo;
     var tipoOp = window.Cadastro.textoTipo(op);
-    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa · ' + textoRetencao(op.retencao_horas) : 'Operação encerrada');
+    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa' : 'Operação encerrada · só leitura');
     $('menu-dados-estado').textContent = 'tipo' in op && window.Cadastro.incompleto(op) ? 'cadastro incompleto' : '';
     $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
@@ -1404,8 +1363,7 @@
     faixa.hidden = op.status === 'ativa';
     if (op.status !== 'ativa') {
       $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> ' + C.esc('Operação encerrada em ' + C.hora(op.encerrada_em) + '. ' +
-        (op.dados_apagados_em ? 'Os dados pessoais foram apagados; o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados pessoais serão apagados automaticamente em ' + C.hora(op.expira_em, false) + '.'));
-      $('btn-apagar-faixa').hidden = Boolean(op.dados_apagados_em);
+        (op.dados_apagados_em ? 'Os dados pessoais foram apagados (regra antiga de retenção); o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados continuam guardados para consulta e análise.'));
     }
     atualizarTitulo();
   }
@@ -3469,12 +3427,8 @@
   async function encerrarOperacao(jaOfereceu) {
     var op = est.op;
     if (!op || op.status !== 'ativa') return;
-    if (jaOfereceu !== true && !(await oferecerRelatorio(op, op.retencao_horas
-      ? 'Os dados pessoais serão apagados ' + textoRetencao(op.retencao_horas).replace('dados apagados ', '') + ' após o encerramento.'
-      : 'Com retenção de 0 h, participantes, trilhas, mensagens e fotos são APAGADOS NO ENCERRAMENTO.', function () { encerrarOperacao(true); }))) return;
-    var ret = op.retencao_horas
-      ? 'As posições, trilhas e mensagens ficarão disponíveis para consulta e serão apagadas automaticamente ' + textoRetencao(op.retencao_horas).replace('dados apagados ', '') + '.'
-      : 'Todas as posições, trilhas e mensagens serão APAGADAS IMEDIATAMENTE.';
+    if (jaOfereceu !== true && !(await oferecerRelatorio(op, 'Depois de encerrar o painel fica só para consulta.', function () { encerrarOperacao(true); }))) return;
+    var ret = 'Nada é apagado: posições, trilhas, mensagens, fotos, setores e fichas continuam guardados e o painel abre só para consulta. Os dados só saem se a operação for excluída.';
     var r = await UI.confirmar({
       titulo: 'Encerrar a operação "' + op.codigo + '"?',
       texto: 'Os celulares dos participantes vão parar de enviar a localização e os links deixarão de funcionar. ' + ret,

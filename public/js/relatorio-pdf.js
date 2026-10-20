@@ -512,7 +512,7 @@
       listaIpo(marcas([['sim', 'Sim'], ['nao', 'Não']], i.imagens_anexas === true ? ['sim'] : i.imagens_anexas === false ? ['nao'] : [])),
       ficha([
         ['Responsável pelas informações', txt(i.responsavel_informacoes)],
-        ['Retenção dos dados', op.retencao_horas ? op.retencao_horas + ' h após o encerramento' : 'Apagados no encerramento'],
+        ['Guarda dos dados', op.dados_apagados_em ? 'Dados pessoais apagados em ' + dataHora(op.dados_apagados_em) + ' (regra antiga de retenção)' : 'Guardados até a exclusão da operação'],
       ]),
     ]);
   }

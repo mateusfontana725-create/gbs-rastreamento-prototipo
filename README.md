@@ -711,8 +711,8 @@ chave própria).
   destino, registrar foto ou vítima, grupos (novo/editar/excluir/link/membros), editar dados da operação e fichas
   de vítima, equipe de responsáveis, novo registro/editar no diário, ciente, liberar saída, remover/reincluir,
   orientações e mensagens. O **servidor também recusa** essas alterações (migração 026).
-- Continuam: **Relatório final (PDF)** e o resultado da operação, **Apagar dados agora** e **Excluir operação**
-  (para quem pode).
+- Continuam: **Relatório final (PDF)** e o resultado da operação e **Excluir operação** (para quem pode).
+  Os dados não são apagados ao encerrar (migração 027).
 
 ### Diário da operação
 
@@ -910,6 +910,7 @@ rastreamento-sar/
 │       ├── 011_vitima_localizada.sql          "Encontrei a vítima" (condição só para responsáveis)
 │       ├── 025_responsavel_registra_vitima.sql o responsável registra a vítima encontrada pelo painel
 │       ├── 026_operacao_encerrada_somente_leitura.sql operação encerrada: só leitura (servidor)
+│       ├── 027_dados_so_saem_ao_excluir.sql   encerrar não apaga: dados só saem ao excluir a operação
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1026,8 +1027,11 @@ rastreamento-sar/
    - **026** (`026_operacao_encerrada_somente_leitura.sql`): operação encerrada fica **só para leitura** no servidor.
      Gatilhos recusam (`operacao_encerrada`) alterações feitas pelo app em setores, pontos, grupos e membros, fichas
      de vítima, destinos, equipe de responsáveis, remoção/liberação/reinclusão de participantes, anotações do diário e
-     no cadastro da operação. Seguem permitidos: resultado, relatório, apagar dados (retenção) e excluir a operação.
-   O `schema.sql` completo já inclui da 003 à 026.
+     no cadastro da operação. Seguem permitidos: resultado, relatório e excluir a operação.
+   - **027** (`027_dados_so_saem_ao_excluir.sql`): **encerrar não apaga nada**. `encerrar_operacao` e a limpeza diária
+     (`purgar_expiradas`) deixam de apagar dados de operação e `apagar_dados_operacao` fica desativada
+     (`apagar_dados_desativado`). Os dados só saem ao **excluir** a operação. Prazos pendentes são anulados.
+   O `schema.sql` completo já inclui da 003 à 027.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -1143,7 +1147,7 @@ encerrada, e o token fica após o `#` (não é enviado aos servidores nem aparec
 - **Minha conta** (todos os responsáveis): trocar a própria senha.
 
 
-**Responsável**: login → **Nova operação** (nome/código e política de retenção) → **Convidar** →
+**Responsável**: login → **Nova operação** (nome/código) → **Convidar** →
 acompanhar o mapa. Na lista (uma linha por pessoa), tocar na linha abre a ficha e leva o mapa até a pessoa; a
 **Trilha** dela fica na ficha e a de todos em **Camadas → Trilhas**. Toque no nome ou no marcador para abrir a
 **ficha** (dados, precisão, conversa, fotos, histórico de posições, comandos e estado das mensagens). Os comandos
@@ -1164,18 +1168,23 @@ o celular tem link para **ligar** direto.
 relatar pista/vestígio/objeto/obstáculo) e **Fotos** (**TIRAR FOTO** ou **Escolher da galeria**).
 
 **Encerrar**: **Ferramentas → Encerrar operação** → os celulares param de enviar e mostram "Operação encerrada".
-Os dados são apagados conforme a retenção escolhida:
+**Nada é apagado** (migração 027): participantes, posições, trilhas, mensagens, fotos, setores, pontos, grupos,
+fichas e registros continuam guardados para consulta e análise, e o painel abre só para visualização.
 
-| Retenção escolhida | O que acontece |
+| Situação | O que acontece com os dados |
 |---|---|
-| Ao encerrar | participantes, posições, trilhas, mensagens e fotos são apagados **no mesmo instante** |
-| 24 h / 3 / 7 / 30 dias | os dados ficam disponíveis para consulta e são apagados pela limpeza diária após o prazo |
-| Qualquer uma | a opção **Apagar dados agora** (menu **⋮** da linha) apaga antecipadamente |
-| Excluir operação | apaga tudo **e a própria operação** (some da lista), na hora — ver seção 1 |
+| Encerrar a operação | ficam guardados (painel só leitura) |
+| Limpeza diária | não apaga dados de operação |
+| Excluir operação | apaga tudo **e a própria operação** (some da lista), na hora — ver seção 1. É o único jeito de apagar |
 
-Salvaguardas: operações esquecidas abertas por mais de 30 dias são encerradas automaticamente, e
-identidades anônimas sem participação há mais de 7 dias são removidas. A limpeza roda todo dia às
-07:00 UTC (04:00 de Brasília) pelo Vercel Cron, que chama `/api/limpeza` com o `CRON_SECRET`.
+A antiga escolha "Apagar dados pessoais" (ao encerrar, 24 h, 3/7/30 dias) saiu da criação da operação, e o
+**Apagar dados agora** foi desativado (no painel e no servidor). Operações cujos dados já tinham sido apagados pela
+regra antiga continuam abrindo com o cadastro, o diário e os relatórios.
+
+Salvaguardas: operações esquecidas abertas por mais de 30 dias são encerradas automaticamente (sem apagar nada),
+e identidades anônimas que não participam de nenhuma operação guardada há mais de 7 dias são removidas. A limpeza
+roda todo dia às 07:00 UTC (04:00 de Brasília) pelo Vercel Cron, que chama `/api/limpeza` com o `CRON_SECRET`
+(também apaga do Storage os arquivos de operações excluídas).
 
 ---
 
@@ -1184,7 +1193,7 @@ identidades anônimas sem participação há mais de 7 dias são removidas. A li
 | Requisito | Como foi implementado |
 |---|---|
 | Consentimento explícito | o GPS só é solicitado depois do toque em INICIAR, com aviso claro sobre localização, CPF e celular; o encerramento é pedido ao responsável, que libera a saída |
-| Dados pessoais (LGPD) | CPF e celular são vistos **só pelos responsáveis da operação**, validados no servidor, guardados só com dígitos, exibidos mascarados por padrão e **apagados junto com a operação** pela política de retenção. Recomenda-se registrar a finalidade (identificação e contato em operação de busca) no controle de tratamento de dados da corporação |
+| Dados pessoais (LGPD) | CPF e celular são vistos **só pelos responsáveis da operação**, validados no servidor, guardados só com dígitos, exibidos mascarados por padrão e **apagados quando a operação é excluída** (encerrar não apaga, migração 027). Recomenda-se registrar a finalidade (identificação e contato em operação de busca) no controle de tratamento de dados da corporação |
 | Cadastro de responsáveis | só administradores ativos; excluir só quem não tem histórico (migração 017); a criação do login e a troca de senha passam pela função de servidor `/api/responsaveis`, que confere o administrador com o login dele e só então usa a chave secreta (que nunca vai ao navegador). Desativar um responsável corta o acesso a todas as operações na hora |
 | Vários responsáveis | o acesso a cada operação vale para o criador e para quem ele (ou a equipe) adicionar; todos precisam continuar cadastrados em `responsaveis`. Remover alguém da equipe corta o acesso na hora |
 | Acesso restrito ao painel | login por e-mail/senha **e** cadastro na tabela `responsaveis`; o link público não concede acesso |
@@ -1291,7 +1300,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 10 | Pôr o celular do civil em modo avião por 1–2 min, andando | o civil vê "Sem internet · N posições guardadas"; o painel passa a "Sinal instável" e depois "Sem atualização", com o marcador desbotado |
 | 11 | Desligar o modo avião | os pontos guardados chegam, a trilha é completada sem duplicar e o estado volta a "Conectado" |
 | 12 | No celular do civil, abrir `/militar.html` | pede login; com a sessão do civil não há acesso ao painel nem às posições |
-| 13 | Encerrar a operação | o celular mostra "Operação encerrada"; com retenção "Ao encerrar", os dados somem na hora; com prazo, somem após a limpeza diária |
+| 13 | Encerrar a operação | o celular mostra "Operação encerrada"; no painel a operação abre só para consulta e todos os dados continuam (só saem ao excluir) |
 | 14 | No celular do civil, tocar em **Solicitar encerramento** | o painel toca alarme e mostra "Pediu para sair"; o rastreamento continua; ao **Liberar saída**, o celular mostra "Saída liberada" |
 | 15 | Adicionar um segundo responsável em **Equipe** e abrir a operação nos dois painéis (**Minha posição** liga sozinha) | cada um vê o outro no mapa (losango vermelho com R); mensagem de um para o outro chega como alerta |
 | 16 | Abrir o painel no celular (em pé e deitado) e no tablet | mapa, lista e ficha ficam utilizáveis, sem rolagem lateral |

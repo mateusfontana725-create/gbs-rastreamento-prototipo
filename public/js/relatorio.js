@@ -115,7 +115,8 @@
       filtros.appendChild(UI.el('button', { classe: 'btn btn-pequeno' + (c[0] === 'todas' ? ' btn-ativo' : ''), type: 'button', 'data-cat': c[0],
         'aria-pressed': String(c[0] === 'todas'), texto: c[1], onclick: function () { diario.filtro = c[0]; render(); } }));
     });
-    var btnNova = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-nova', texto: '+ Novo registro', onclick: function () { formObservacao(null); } });
+    // operação encerrada: diário só para leitura (o servidor também recusa, migração 026)
+    var btnNova = op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-nova', texto: '+ Novo registro', onclick: function () { formObservacao(null); } }) : null;
     var btnAtualizar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Atualizar', onclick: function () { recarregar(); } });
     var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatório final (PDF)', onclick: function () { fechar(); abrirRelatorio(op); } });
 
@@ -192,7 +193,7 @@
     var manual = e.origem === 'manual';
     var acoes = UI.el('div', { classe: 'diario-item-acoes' }, [
       e.lat != null && P() && P().mapa() ? UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Ver no mapa', onclick: function () { verNoMapa(e); } }) : null,
-      manual ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { formObservacao(e); } }) : null,
+      manual && diario.op && diario.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { formObservacao(e); } }) : null,
       manual && e.versao > 1 ? UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Histórico (' + (e.versao - 1) + ')', onclick: function () { abrirHistorico(e); } }) : null,
     ]);
     return UI.el('li', { classe: 'diario-item cat-' + e.categoria + (e.nivel === 'critico' ? ' critico' : '') + (manual ? ' manual' : '') }, [

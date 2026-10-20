@@ -699,6 +699,21 @@ chave própria).
   relatório e o ✚ no mapa), com "registrado por *responsável* (encontrada por *pessoa*)". Função
   `responsavel_registrar_vitima` (migração **025**).
 
+### Operação encerrada: painel só para visualização
+
+- Os responsáveis da operação e os administradores continuam abrindo o painel depois de encerrar
+  (lista de operações → clicar na linha ou **⋮ → Ver painel (só leitura)**), inclusive depois que a retenção apagou
+  os dados pessoais (aí ficam o cadastro, o local, o diário, o dashboard e os relatórios).
+- Mapa, trilhas, setores, pontos, relatos, fotos, ficha dos participantes, conversa, central, grupos,
+  deslocamentos, dashboard e diário aparecem normalmente. A faixa do topo diz **Somente visualização** e a
+  pílula **Encerrada · só leitura**; não há faixa vermelha nem alarme de alertas antigos.
+- Somem os botões de alteração: convidar, marcar ponto, novo setor, editar/ajustar/excluir setor e ponto, enviar
+  destino, registrar foto ou vítima, grupos (novo/editar/excluir/link/membros), editar dados da operação e fichas
+  de vítima, equipe de responsáveis, novo registro/editar no diário, ciente, liberar saída, remover/reincluir,
+  orientações e mensagens. O **servidor também recusa** essas alterações (migração 026).
+- Continuam: **Relatório final (PDF)** e o resultado da operação, **Apagar dados agora** e **Excluir operação**
+  (para quem pode).
+
 ### Diário da operação
 
 - **Ferramentas → Diário da operação** (ou **Diário da operação** no menu **⋮** da linha na lista de operações): registro cronológico agrupado
@@ -894,6 +909,7 @@ rastreamento-sar/
 │       ├── 010_missoes_alertas.sql            destino para grupos, alertas e controle de retorno
 │       ├── 011_vitima_localizada.sql          "Encontrei a vítima" (condição só para responsáveis)
 │       ├── 025_responsavel_registra_vitima.sql o responsável registra a vítima encontrada pelo painel
+│       ├── 026_operacao_encerrada_somente_leitura.sql operação encerrada: só leitura (servidor)
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1007,7 +1023,11 @@ rastreamento-sar/
      de limpeza do Storage e a exclusão fica no diário (evento "Relatório excluído").
    - **025** (`025_responsavel_registra_vitima.sql`): nova função `responsavel_registrar_vitima` — o responsável
      registra a vítima encontrada pelo painel (condição, quem encontrou e local), com o mesmo alerta e diário do campo.
-   O `schema.sql` completo já inclui da 003 à 025.
+   - **026** (`026_operacao_encerrada_somente_leitura.sql`): operação encerrada fica **só para leitura** no servidor.
+     Gatilhos recusam (`operacao_encerrada`) alterações feitas pelo app em setores, pontos, grupos e membros, fichas
+     de vítima, destinos, equipe de responsáveis, remoção/liberação/reinclusão de participantes, anotações do diário e
+     no cadastro da operação. Seguem permitidos: resultado, relatório, apagar dados (retenção) e excluir a operação.
+   O `schema.sql` completo já inclui da 003 à 026.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*

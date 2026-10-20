@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -631,6 +631,56 @@ chk(estGeral.perfis.every((p) => p.fichas === null && p.mediana_km === null), 'p
 chk(!/Idosa Teste|cpf/i.test(JSON.stringify(estGeral)), 'estudo geral não traz nomes');
 chk(/permission denied/.test(await erroDe(como(null, `select public.estudo_geral()`, [], 'anon'))), 'anônimo não vê o estudo geral');
 
+console.log('Operação encerrada: somente leitura (migração 026)');
+{
+  const opE = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP SO LEITURA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uE1 = await usuario(null, true);
+  const pE = await rpc(uE1, 'ingressar', { p_token: opE.token_militar, p_nome: 'Cb Leitura', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const sE = await rpc(resp1, 'salvar_setor', { p_operacao: opE.id, p_id: null, p_dados: JSON.stringify({ nome: 'S1', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 200 }) });
+  const ptE = await rpc(resp1, 'salvar_ponto', { p_operacao: opE.id, p_id: null, p_dados: JSON.stringify({ categoria: 'OUTRO', titulo: 'P1', lat: -22.9, lng: -43.2 }) });
+  const gE = await rpc(resp1, 'salvar_grupo', { p_operacao: opE.id, p_id: null, p_dados: JSON.stringify({ nome: 'G' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: gE.id, p_participante: pE.participante_id, p_papel: 'membro' });
+  const vE = await rpc(resp1, 'salvar_vitima', { p_operacao: opE.id, p_id: null, p_dados: JSON.stringify({ nome: 'Fulano' }) });
+  const obE = await rpc(resp1, 'diario_adicionar', { p_operacao: opE.id, p_ocorrido_em: new Date().toISOString(), p_texto: 'antes de encerrar' });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opE.id });
+  const bloqueado = async (rot, p) => chk(/operacao_encerrada/.test(await erroDe(p) || ''), 'encerrada: ' + rot + ' é recusado');
+  await bloqueado('editar setor', rpc(resp1, 'salvar_setor', { p_operacao: opE.id, p_id: sE.id, p_dados: JSON.stringify({ status: 'concluido' }) }));
+  await bloqueado('criar setor', rpc(resp1, 'salvar_setor', { p_operacao: opE.id, p_id: null, p_dados: JSON.stringify({ nome: 'S2', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 200 }) }));
+  await bloqueado('excluir setor', rpc(resp1, 'excluir_setor', { p_id: sE.id }));
+  await bloqueado('excluir ponto', rpc(resp1, 'excluir_ponto', { p_id: ptE.id }));
+  await bloqueado('excluir grupo', rpc(resp1, 'excluir_grupo', { p_id: gE.id }));
+  await bloqueado('tirar membro do grupo', rpc(resp1, 'remover_membro', { p_grupo: gE.id, p_participante: pE.participante_id }));
+  await bloqueado('excluir ficha da vítima', rpc(resp1, 'excluir_vitima', { p_id: vE.id }));
+  await bloqueado('adicionar responsável', rpc(resp1, 'adicionar_responsavel', { p_operacao: opE.id, p_email: 'r2@cbm' }));
+  await bloqueado('anotação no diário', rpc(resp1, 'diario_adicionar', { p_operacao: opE.id, p_ocorrido_em: new Date().toISOString(), p_texto: 'depois' }));
+  await bloqueado('editar anotação do diário', rpc(resp1, 'diario_editar', { p_id: obE.id, p_ocorrido_em: new Date().toISOString(), p_texto: 'mudou' }));
+  await bloqueado('editar o cadastro', rpc(resp1, 'atualizar_operacao', { p_operacao: opE.id, p_dados: JSON.stringify({ descricao: 'mudou' }) }));
+  await bloqueado('editar o IPO', rpc(resp1, 'salvar_ipo_operacao', { p_operacao: opE.id, p_ipo: JSON.stringify({ natureza: 'X' }) }));
+  await bloqueado('remover participante', rpc(resp1, 'remover_participante', { p_participante: pE.participante_id }));
+  const contE = (await db.query(`select (select count(*) from public.setores where operacao_id=$1)::int s, (select count(*) from public.pontos_interesse where operacao_id=$1)::int p,
+    (select count(*) from public.grupo_membros where operacao_id=$1)::int m, (select count(*) from public.vitimas where operacao_id=$1)::int v,
+    (select descricao from public.operacoes where id=$1) d`, [opE.id])).rows[0];
+  chk(contE.s === 1 && contE.p === 1 && contE.m === 1 && contE.v === 1 && contE.d === '', 'nada foi alterado', contE);
+  chk((await como(resp1, `select count(*)::int n from public.setores where operacao_id = $1`, [opE.id])).rows[0].n === 1, 'responsável continua vendo os dados da operação encerrada');
+  const resE = await rpc(resp1, 'definir_resultado', { p_operacao: opE.id, p_resultado: 'nao_localizada', p_texto: '' });
+  chk(resE.resultado === 'nao_localizada', 'encerrada: o resultado da operação continua podendo ser registrado', resE);
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'resultado'`, [opE.id])).rows[0].n === 1, 'e o evento automático do resultado entra no diário');
+  const apE = await rpc(resp1, 'apagar_dados_operacao', { p_operacao: opE.id });
+  const depE = (await db.query(`select (select count(*) from public.setores where operacao_id=$1)::int s, (select count(*) from public.grupos where operacao_id=$1)::int g,
+    (select count(*) from public.vitimas where operacao_id=$1)::int v`, [opE.id])).rows[0];
+  chk(apE.dados_apagados_em && depE.s === 0 && depE.g === 0 && depE.v === 0, 'encerrada: apagar os dados (retenção) continua funcionando', depE);
+  const opZ = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RETENCAO ZERO', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uZ = await usuario(null, true);
+  const pZ = await rpc(uZ, 'ingressar', { p_token: opZ.token_militar, p_nome: 'Sd Zero', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const gZ = await rpc(resp1, 'salvar_grupo', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ nome: 'GZ' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: gZ.id, p_participante: pZ.participante_id, p_papel: 'membro' });
+  await rpc(resp1, 'salvar_setor', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ nome: 'SZ', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 200 }) });
+  const encZ = await rpc(resp1, 'encerrar_operacao', { p_operacao: opZ.id });
+  chk(encZ.status === 'encerrada' && encZ.dados_apagados_em, 'encerrar com retenção "ao encerrar" (apaga na hora) continua funcionando', encZ);
+  const exZ = await rpc(resp1, 'excluir_operacao', { p_operacao: opZ.id });
+  chk(exZ.operacao === 'OP RETENCAO ZERO', 'excluir operação encerrada continua funcionando', exZ);
+}
+
 console.log('Retenção e exclusão');
 await rpc(resp1, 'encerrar_operacao', { p_operacao: op.id });
 await rpc(resp1, 'apagar_dados_operacao', { p_operacao: op.id });
@@ -661,5 +711,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–025 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–026 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

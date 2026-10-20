@@ -109,14 +109,14 @@
     var alt = UI.el('span', { classe: 'muted', texto: 'consultando…' });
     var deMim = UI.el('span', { classe: 'muted', texto: 'calculando…' });
     var ativa = P.op() && P.op().status === 'ativa';
-    var podeDesenhar = P.op() && !P.op().dados_apagados_em;
+    var podeDesenhar = ativa;
     var caixa = UI.el('div', { classe: 'info-ponto' }, [
       UI.el('strong', { texto: 'Ponto no mapa' }),
       P.blocoCoordenadas(lat, lng),
       UI.el('div', null, ['Altitude: ', alt]),
       UI.el('div', null, ['Da sua posição: ', deMim]),
       UI.el('div', { classe: 'info-ponto-acoes' }, [
-        ativa || !P.op().dados_apagados_em ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⚑ Marcar ponto', onclick: function () { mapa.closePopup(); P.marcarPonto(lat, lng); } }) : null,
+        ativa ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⚑ Marcar ponto', onclick: function () { mapa.closePopup(); P.marcarPonto(lat, lng); } }) : null,
         ativa ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar como destino', onclick: function () { mapa.closePopup(); P.enviarDestino(lat, lng); } }) : null,
         ativa && P.registrarVitima ? UI.el('button', { classe: 'btn btn-pequeno btn-vitima', type: 'button', texto: '✚ Vítima encontrada aqui', onclick: function () { mapa.closePopup(); P.registrarVitima(lat, lng); } }) : null,
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📏 Medir daqui', onclick: function () { mapa.closePopup(); medir([lat, lng]); } }),
@@ -352,7 +352,7 @@
   }
 
   function infoImportado(p) {
-    var ativa = P.op() && !P.op().dados_apagados_em;
+    var ativa = P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em;
     return UI.el('div', { classe: 'info-ponto' }, [
       UI.el('strong', { texto: p.nome }), p.descricao ? UI.el('div', { classe: 'muted', texto: p.descricao }) : null,
       P.blocoCoordenadas(p.lat, p.lng),
@@ -375,7 +375,7 @@
       atual.importados.forEach(function (imp) {
         var d = imp.dados;
         var resumo = [d.pontos.length + ' ponto(s)', d.linhas.length + ' trilha(s)/rota(s)', d.areas.length + ' área(s)'].join(' · ');
-        var ativa = P.op() && !P.op().dados_apagados_em;
+        var ativa = P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em;
         lista.appendChild(UI.el('li', { classe: 'item-importado' }, [
           UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', checked: imp.visivel ? true : null, onchange: function () { imp.visivel = this.checked; salvarImportados(); desenharImportados(); } }),
             UI.el('strong', { texto: ' ' + imp.nome })]),

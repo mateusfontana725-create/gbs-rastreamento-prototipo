@@ -532,6 +532,11 @@
   /* ------------------------------------------------------------------ */
   /* Operações                                                            */
   /* ------------------------------------------------------------------ */
+  // Operação encerrada: o painel abre só para visualização (o servidor também recusa alterações, migração 026).
+  function podeAlterar() {
+    return Boolean(est.op && est.op.status === 'ativa' && !est.op.dados_apagados_em);
+  }
+
   function textoRetencao(h) {
     if (!h) return 'dados apagados ao encerrar';
     if (h < 48) return 'dados apagados ' + h + ' h após encerrar';
@@ -693,10 +698,10 @@
       var selo = op.status === 'ativa'
         ? UI.el('span', { classe: 'selo selo-ok', texto: 'Ativa' })
         : UI.el('span', { classe: 'selo selo-neutro', texto: 'Encerrada' });
-      var semPainel = Boolean(op.dados_apagados_em);
-      // Funções desta operação, no menu ⋮ da linha
+      // Encerrada também abre (só visualização), inclusive depois da retenção (cadastro, diário e relatórios)
+      var semPainel = false;
       var funcoes = [];
-      if (!semPainel) funcoes.push({ texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver dados', acao: function () { abrirOperacao(op); } });
+      funcoes.push({ texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver painel (só leitura)', acao: function () { abrirOperacao(op); } });
       if (window.Relatorio) {
         funcoes.push({ texto: 'Diário da operação', acao: function () { window.Relatorio.abrirDiario(op); } });
         funcoes.push({ texto: 'Relatório final (PDF)', acao: function () { window.Relatorio.abrirRelatorio(op); } });
@@ -704,7 +709,7 @@
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
       if (incompleta) funcoes.push({ texto: 'Completar cadastro', acao: function () { window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } }); } });
-      if (op.status !== 'ativa' && !semPainel) funcoes.push({ texto: 'Apagar dados agora', perigo: true, acao: function () { apagarDados(op); } });
+      if (op.status !== 'ativa' && !op.dados_apagados_em) funcoes.push({ texto: 'Apagar dados agora', perigo: true, acao: function () { apagarDados(op); } });
       if (podeExcluir(op)) funcoes.push({ texto: 'Excluir operação', perigo: true, acao: function () { excluirOperacao(op); } });
       var acoes = UI.el('div', { classe: 'op-acoes' }, funcoes.length ? [menuLinha(funcoes)] : []);
       var deEquipe = est.usuario && op.responsavel_id !== est.usuario.id
@@ -1014,7 +1019,7 @@
   function abrirDadosOperacao() {
     if (!est.op) return;
     window.Cadastro.abrirDados(est.op, {
-      editavel: true,
+      editavel: podeAlterar(),
       limparArquivos: limparArquivosPendentes,
       verNoMapa: function (op) { verLocalNoMapa(op); },
       aoSalvar: function (atual) {
@@ -1383,6 +1388,7 @@
     $('menu-dados-estado').textContent = 'tipo' in op && window.Cadastro.incompleto(op) ? 'cadastro incompleto' : '';
     $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
+    $('menu-destino').hidden = op.status !== 'ativa';
     $('btn-encerrar').hidden = op.status !== 'ativa';
     $('btn-convite').hidden = op.status !== 'ativa';
     $('btn-registrar-foto').hidden = op.status !== 'ativa';
@@ -1390,13 +1396,15 @@
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
-    ['menu-setor-raio', 'menu-setor-poligono', 'menu-ponto'].forEach(function (id) { $(id).hidden = Boolean(op.dados_apagados_em); });
+    ['menu-setor-raio', 'menu-setor-poligono', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
+    // encerrada: painel só para consulta (botões de alteração somem; o servidor também recusa)
+    $('tela-painel').classList.toggle('op-somente-leitura', op.status !== 'ativa');
     if (op.status !== 'ativa' && est.compartilhando) pararMinhaPosicao(true);
     var faixa = $('faixa-encerrada');
     faixa.hidden = op.status === 'ativa';
     if (op.status !== 'ativa') {
-      $('faixa-encerrada-texto').textContent = 'Operação encerrada em ' + C.hora(op.encerrada_em) + '. ' +
-        (op.dados_apagados_em ? 'Os dados foram apagados.' : 'Os dados serão apagados automaticamente em ' + C.hora(op.expira_em, false) + '.');
+      $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> ' + C.esc('Operação encerrada em ' + C.hora(op.encerrada_em) + '. ' +
+        (op.dados_apagados_em ? 'Os dados pessoais foram apagados; o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados pessoais serão apagados automaticamente em ' + C.hora(op.expira_em, false) + '.'));
       $('btn-apagar-faixa').hidden = Boolean(op.dados_apagados_em);
     }
     atualizarTitulo();
@@ -2139,7 +2147,9 @@
     var pil = $('pilula');
     if (!pil) return;
     var cls, txt;
-    if (navigator.onLine === false || (est.syncFalhou && est.tempoReal !== 'ok')) {
+    if (est.op && est.op.status !== 'ativa') {
+      cls = 'parado'; txt = 'Encerrada · só leitura';
+    } else if (navigator.onLine === false || (est.syncFalhou && est.tempoReal !== 'ok')) {
       cls = 'sem_atualizacao'; txt = 'Sem conexão — reconectando';
     } else if (est.tempoReal === 'ok') {
       cls = 'conectado'; txt = 'Ao vivo';
@@ -3129,10 +3139,10 @@
         UI.el('strong', { texto: 'PEDIU PARA ENCERRAR às ' + C.hora(d.saida_solicitada_em, false) + '.' }),
         d.saida_motivo ? UI.el('div', { texto: 'Motivo: ' + d.saida_motivo }) : null,
         UI.el('div', { classe: 'muted', texto: 'O rastreamento continua até você decidir.' }),
-        UI.el('div', { classe: 'acoes-linha' }, [
+        podeAlterar() ? UI.el('div', { classe: 'acoes-linha' }, [
           UI.el('button', { classe: 'btn btn-ok btn-pequeno', type: 'button', texto: 'Liberar saída', onclick: function () { liberarSaida(p.id); } }),
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Pedir para continuar', onclick: function () { recusarSaida(p.id); } }),
-        ]),
+        ]) : null,
       ]));
     }
 
@@ -3798,7 +3808,7 @@
       UI.el('div', { classe: 'modal-acoes' }, [
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
         p ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
-        est.op && !est.op.dados_apagados_em ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
+        podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]));
@@ -4938,7 +4948,7 @@
         ? 'Parte da área que ficou a até ' + FAIXA_COBERTURA_M + ' m de algum rastro. Não prova que o setor foi vasculhado: só a equipe confirma, marcando "Concluído".'
         : 'Nenhum rastro GPS passou por este setor ainda.' }),
     ]);
-    var podeEditar = !est.op.dados_apagados_em;
+    var podeEditar = podeAlterar();
     var botoesStatus = UI.el('div', { classe: 'status-setor', role: 'group', 'aria-label': 'Situação do setor' }, Object.keys(STATUS_SETOR).map(function (k) {
       return UI.el('button', {
         classe: 'btn btn-pequeno status-' + k + (d.status === k ? ' btn-ativo' : ''), type: 'button', 'data-status': k,
@@ -4968,7 +4978,7 @@
           fechar();
           abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: d.participante_id ? [d.participante_id] : [] });
         } }) : null,
-        UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'setor-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirSetor(d); } }),
+        podeEditar ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'setor-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirSetor(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]));
@@ -5220,7 +5230,7 @@
     var foto = d.foto_id && est.fotos.get(d.foto_id);
     var blocoFoto = foto ? UI.el('div', { classe: 'ponto-foto' }, [miniatura(foto, [foto.id])]) : null;
     var ativa = est.op.status === 'ativa';
-    var editavel = !est.op.dados_apagados_em;
+    var editavel = podeAlterar();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-ponto' }, [
       UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]), ' ' + d.titulo]),
       dl,
@@ -5232,7 +5242,7 @@
         ativa ? UI.el('button', { classe: 'btn', type: 'button', texto: foto ? 'Trocar foto' : 'Anexar foto', onclick: function () { fechar(); anexarFotoPonto(d); } }) : null,
         window.Ferramentas ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-aneis', texto: window.Ferramentas.temAneis(d.id) ? '◎ Tirar anéis de distância' : '◎ Anéis de distância',
           onclick: function () { fechar(); window.Ferramentas.alternarAneis({ id: d.id, lat: d.lat, lng: d.lng, nome: d.titulo }); } }) : null,
-        UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'ponto-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirPontoInt(d); } }),
+        editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'ponto-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirPontoInt(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]));
@@ -5595,7 +5605,7 @@
     $('qtd-setores').textContent = String(est.setores.size);
     $('qtd-pontos-int').textContent = String(est.pontosInt.size);
     if ($('painel-areas').hidden) return;
-    var editavel = est.op && !est.op.dados_apagados_em;
+    var editavel = podeAlterar();
     ['areas-novo-raio', 'areas-novo-poligono', 'areas-novo-ponto'].forEach(function (i) { $(i).hidden = !editavel; });
     ulS.innerHTML = '';
     $('setores-vazio').hidden = est.setores.size > 0;
@@ -6370,7 +6380,7 @@
             UI.el('div', { classe: 'muted', texto: r.email || '' }),
           ]),
         ]);
-        if (souCriador && !r.criador && !eu) {
+        if (souCriador && !r.criador && !eu && podeAlterar()) {
           var bRem = UI.el('button', { classe: 'btn btn-perigo btn-pequeno', type: 'button', texto: 'Remover' });
           bRem.addEventListener('click', async function () {
             var ok = await UI.confirmar({ titulo: 'Remover ' + r.nome + ' da operação?', texto: r.nome + ' deixa de ter acesso a esta operação. O que a pessoa já registrou continua no histórico.', ok: 'Remover', perigo: true });
@@ -6417,7 +6427,7 @@
       UI.el('h2', { id: 'modal-titulo', texto: 'Responsáveis da operação' }),
       UI.el('p', { classe: 'ajuda', texto: 'Todos os responsáveis abaixo veem o mapa, os participantes, as posições uns dos outros e as mensagens desta operação, e podem enviar orientações.' + (souCriador ? '' : ' Só quem criou a operação pode remover responsáveis.') }),
       lista,
-      form,
+      podeAlterar() ? form : UI.el('p', { classe: 'muted', texto: 'Operação encerrada: a equipe não pode ser alterada.' }),
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
 
@@ -7077,7 +7087,7 @@
     var bloco = $('ficha-grupos-bloco'), caixa = $('ficha-grupos');
     if (est.semGrupos || !est.grupos.size) { bloco.hidden = true; caixa._assinatura = ''; return; }
     var meus = gruposDe(p.id);
-    var editavel = !est.op.dados_apagados_em;
+    var editavel = podeAlterar();
     var assinatura = p.id + '|' + JSON.stringify(meus) + '|' + Array.from(est.grupos.keys()).join(',') + '|' + editavel;
     bloco.hidden = false;
     if (caixa._assinatura === assinatura) return;   // não refaz a cada 5 s (os campos perderiam o que está sendo escolhido)
@@ -7143,7 +7153,7 @@
   function abrirGrupos() {
     if (!est.op) return;
     var corpo = UI.el('div', { classe: 'corpo-grupos' });
-    var editavel = !est.op.dados_apagados_em;
+    var editavel = podeAlterar();
     function render() {
       corpo.innerHTML = '';
       if (est.semGrupos) {
@@ -7170,7 +7180,7 @@
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { fechar(); abrirLinkGrupo(g.id); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: function () { fechar(); escolherDestino([], g.id); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormGrupo(g); } }) : null,
-            UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }),
+            editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }) : null,
           ]),
         ]);
       })));
@@ -7243,7 +7253,7 @@
   function abrirMembrosGrupo(gid) {
     var g = est.grupos.get(gid);
     if (!g) return;
-    var editavel = !est.op.dados_apagados_em;
+    var editavel = podeAlterar();
     var corpo = UI.el('div');
     function render() {
       corpo.innerHTML = '';
@@ -7684,7 +7694,7 @@
   function mostrarFaixaAlerta() {
     var criticos = Array.from(est.alertas.values()).filter(function (a) { return a.nivel === 'critico' && !a.reconhecido_em; })
       .sort(function (a, b) { return a.id - b.id; });
-    var a = criticos[0] || null;
+    var a = est.op && est.op.status === 'ativa' ? criticos[0] || null : null;   // encerrada: sem faixa nem alarme
     est.alertaFaixa = a;
     var faixa = $('faixa-alerta');
     if (!a) {
@@ -7757,7 +7767,7 @@
           (a.reconhecido_em ? 'Ciente: ' + (a.reconhecido_por_nome || '') + ' às ' + C.hora(a.reconhecido_em, false) + '.' : '') }),
         UI.el('div', { classe: 'acoes-linha' }, [
           a.lat != null || a.grupo_id ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verAlertaNoMapa(a); } }) : null,
-          !a.reconhecido_em ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Ciente', onclick: function () { reconhecerAlerta(a.id); } }) : null,
+          !a.reconhecido_em && est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Ciente', onclick: function () { reconhecerAlerta(a.id); } }) : null,
         ]),
       ]));
     });

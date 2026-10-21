@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -684,6 +684,70 @@ console.log('Operação encerrada: somente leitura (migração 026)');
   chk(exZ.operacao === 'OP RETENCAO ZERO', 'excluir operação encerrada continua funcionando', exZ);
 }
 
+console.log('Trilhas desenhadas à mão (migração 028)');
+{
+  const pubT = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(pubT.includes('trilhas_manuais') && pubT.includes('operacoes'), 'trilhas e operações publicadas no Realtime (painel e mapa do dashboard)', pubT);
+  const opT = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TRILHAS', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre', local_lat: -23.44, local_lng: -51.25 }) });
+  const uT = await usuario(null, true);
+  const pT = await rpc(uT, 'ingressar', { p_token: opT.token_militar, p_nome: 'Sd Trilha', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const gT = await rpc(resp1, 'salvar_grupo', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ nome: 'Alfa' }) });
+  const sT = await rpc(resp1, 'salvar_setor', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ nome: 'S1', forma: 'poligono', pontos: [[-23.44, -51.25], [-23.44, -51.24], [-23.45, -51.24]] }) });
+  const pontos = [[-23.4401, -51.2501], [-23.4405, -51.2490], [-23.4399, -51.2480], [-23.4410, -51.2475], [-23.4420, -51.2481]];
+  const cid = '7c1d2b8e-4f1a-4c3e-9b2a-1a2b3c4d5e6f';
+  const t1 = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({
+    client_id: cid, nome: 'Margem do córrego', estado: 'planejada', pontos, grupo_id: gT.id, participante_id: pT.participante_id, observacoes: 'Ida pela margem esquerda' }) });
+  chk(t1.estado === 'planejada' && t1.percorrida_em === null && t1.criado_por_nome === 'Sgt Um' && t1.grupo_id === gT.id, 'cria trilha planejada (salvar não marca como percorrida)', t1);
+  chk(JSON.stringify(t1.pontos) === JSON.stringify(pontos), 'os pontos ficam na ordem em que foram marcados');
+  chk(t1.comprimento_m > 300 && t1.comprimento_m < 600, 'comprimento calculado pelo servidor (m)', t1.comprimento_m);
+  const t1b = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ client_id: cid, nome: 'Margem do córrego', estado: 'planejada', pontos }) });
+  const nT = async () => (await db.query(`select count(*)::int n from public.trilhas_manuais where operacao_id = $1`, [opT.id])).rows[0].n;
+  chk(t1b.id === t1.id && await nT() === 1, 'reenviar o mesmo desenho (mesmo client_id) não duplica');
+  chk(/nome_repetido/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({
+    client_id: '8c1d2b8e-4f1a-4c3e-9b2a-1a2b3c4d5e6f', nome: 'MARGEM DO CÓRREGO', estado: 'planejada', pontos }) })) || ''), 'nome repetido na mesma operação: recusado');
+  chk(/trilha_invalida/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({
+    client_id: '9c1d2b8e-4f1a-4c3e-9b2a-1a2b3c4d5e6f', nome: 'Um ponto só', estado: 'planejada', pontos: [[-23.44, -51.25]] }) })) || ''), 'linha com 1 ponto: recusada');
+  chk(/trilha_invalida/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({
+    client_id: '9c1d2b8e-4f1a-4c3e-9b2a-1a2b3c4d5e6f', nome: 'Fora do mundo', estado: 'planejada', pontos: [[-23.44, -51.25], [95, -51.2]] }) })) || ''), 'coordenada inválida: recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({
+    client_id: '9c1d2b8e-4f1a-4c3e-9b2a-1a2b3c4d5e6f', nome: 'Sem estado', pontos }) })) || ''), 'sem informar planejada/percorrida: recusado');
+  chk(/responsavel_trajeto_invalido/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ participante_id: pA.participante_id }) })) || ''), 'participante de outra operação: recusado');
+  chk(/grupo_invalido/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ grupo_id: g.id }) })) || ''), 'grupo de outra operação: recusado');
+  chk(/data_invalida/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ estado: 'percorrida', percorrida_em: new Date(Date.now() + 3600e3).toISOString() }) })) || ''), 'percorrida no futuro: recusada');
+  chk((await como(resp2, `select count(*)::int n from public.trilhas_manuais`)).rows[0].n === 0, 'responsável de outra operação não lê as trilhas');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ nome: 'Invasão' }) })) || ''), 'responsável de outra operação não altera');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'excluir_trilha_manual', { p_id: t1.id })) || ''), 'responsável de outra operação não exclui');
+  chk(/sem_permissao/.test(await erroDe(rpc(uT, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ nome: 'X' }) })) || ''), 'participante (celular) não altera trilhas');
+  chk(/permission denied/.test(await erroDe(como(resp1, `insert into public.trilhas_manuais (operacao_id, client_id, nome, estado, pontos, criado_por_nome) values ($1, gen_random_uuid(), 'Direto', 'planejada', '[[0,1],[1,1]]', 'x')`, [opT.id])) || ''), 'gravação direta na tabela: bloqueada (só pela função)');
+  const novos = [[-23.4401, -51.2501], [-23.4430, -51.2470]];
+  const t1c = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ pontos: novos.concat([[-23.4440, -51.2460]]), nome: 'Margem do córrego (trecho 1)' }) });
+  chk(t1c.pontos.length === 3 && t1c.estado === 'planejada' && t1c.observacoes === 'Ida pela margem esquerda', 'editar o traçado e o nome mantém os outros campos', t1c);
+  const quando = new Date(Date.now() - 1800e3).toISOString();
+  const t1d = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ estado: 'percorrida', percorrida_em: quando }) });
+  chk(t1d.estado === 'percorrida' && Math.abs(new Date(t1d.percorrida_em) - new Date(quando)) < 1000 && t1d.percorrida_por_nome === 'Sgt Um', 'marcar como percorrida guarda quando e quem informou', t1d);
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'trilha_percorrida'`, [opT.id])).rows[0].n === 1, 'trajeto percorrido entra no diário');
+  const t1e = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ estado: 'planejada' }) });
+  chk(t1e.estado === 'planejada' && t1e.percorrida_em === null, 'voltar para planejada limpa o horário de percurso', t1e);
+  const t2 = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({
+    client_id: 'ac1d2b8e-4f1a-4c3e-9b2a-1a2b3c4d5e6f', nome: 'Picada norte', estado: 'percorrida', pontos: [[-23.43, -51.25], [-23.431, -51.251], [-23.432, -51.249]] }) });
+  chk(t2.estado === 'percorrida' && t2.percorrida_em, 'criar já como percorrida (escolha do usuário): horário = agora', t2);
+  const sDepois = (await db.query(`select status, pontos from public.setores where id = $1`, [sT.id])).rows[0];
+  chk(sDepois.status === 'pendente' && JSON.stringify(sDepois.pontos) === JSON.stringify(sT.pontos), 'trilhas não mudam setores (nem a situação do setor)', sDepois);
+  await rpc(resp1, 'excluir_trilha_manual', { p_id: t2.id });
+  const fica = (await db.query(`select (select count(*) from public.trilhas_manuais where operacao_id=$1)::int t, (select count(*) from public.setores where operacao_id=$1)::int s,
+    (select count(*) from public.participantes where operacao_id=$1)::int p, (select count(*) from public.grupos where operacao_id=$1)::int g`, [opT.id])).rows[0];
+  chk(fica.t === 1 && fica.s === 1 && fica.p === 1 && fica.g === 1, 'excluir uma trilha apaga só ela', fica);
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'trilha_excluida'`, [opT.id])).rows[0].n === 1, 'exclusão registrada no diário');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opT.id });
+  chk((await como(resp1, `select count(*)::int n from public.trilhas_manuais where operacao_id = $1`, [opT.id])).rows[0].n === 1, 'encerrada: as trilhas continuam visíveis');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: t1.id, p_dados: JSON.stringify({ nome: 'Depois' }) })) || ''), 'encerrada: não edita trilha');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({
+    client_id: 'bc1d2b8e-4f1a-4c3e-9b2a-1a2b3c4d5e6f', nome: 'Nova', estado: 'planejada', pontos }) })) || ''), 'encerrada: não cria trilha');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'excluir_trilha_manual', { p_id: t1.id })) || ''), 'encerrada: não exclui trilha');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opT.id });
+  chk((await db.query(`select count(*)::int n from public.trilhas_manuais where operacao_id = $1`, [opT.id])).rows[0].n === 0, 'excluir a operação apaga as trilhas dela');
+}
+
 console.log('Dados só saem ao excluir a operação (migração 027)');
 const contOp = async () => (await db.query(`select (select count(*) from public.vitimas where operacao_id=$1)::int v, (select count(*) from public.grupos where operacao_id=$1)::int g,
   (select count(*) from public.missoes where operacao_id=$1)::int m, (select count(*) from public.alertas where operacao_id=$1)::int a,
@@ -721,5 +785,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–027 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–028 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

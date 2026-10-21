@@ -268,7 +268,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   **responsável** (um participante da operação) e/ou **equipe** (texto livre, ex.: "Equipe Alfa"),
   **situação** (**Pendente** — contorno tracejado, **Em andamento**, **Concluído** — preenchimento mais
   claro), observações, **área aproximada** (m², hectares ou km²), quem criou e quando, quem alterou e quando.
-- **Editar**: tocar no setor (ou em **Lista de setores e pontos**) abre os detalhes: botões de situação,
+- **Editar**: tocar no setor (ou em **Lista de setores, trilhas e pontos**) abre os detalhes: botões de situação,
   **Editar** (nome, cor, responsável, equipe, observações, raio), **Ajustar limites** (arrastar os cantos;
   ◇ cria um canto novo; tocar num canto remove; no círculo, arrastar o centro e mudar o raio),
   **Excluir** (com confirmação) e **Enviar o centro como destino**.
@@ -280,6 +280,37 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   estimativa; o setor só fica **Concluído** quando um responsável marca.
 - O participante atribuído vê o contorno do **seu** setor no mapa do celular ("Seu setor: A-1").
 - Ficam salvos no Supabase (tabela `setores`) e aparecem em tempo real para os outros responsáveis.
+
+### Trilhas desenhadas à mão (planejadas ou percorridas)
+
+Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **linha**, um caminho). Exige a
+**migração 028**; sem ela, a lista avisa e o botão não aparece (o resto do painel segue normal).
+
+- **Desenhar**: **Ferramentas → Desenhar trilha** (ou **Lista de setores, trilhas e pontos → ＋ Desenhar
+  trilha**). Toque no mapa ponto a ponto, na ordem do caminho (o 1º ponto fica verde). A barra mostra pontos e
+  comprimento e tem **Desfazer ponto**, **Limpar** (pede confirmação com mais de 2 pontos), **Concluir trilha**
+  (a partir de 2 pontos) e **Cancelar** (pede confirmação). Até 2000 pontos.
+- **Concluir** abre o formulário: **nome** (único na operação), **situação** — o usuário escolhe
+  **Planejada** (caminho previsto) ou **Percorrida** (já feita, com **data e hora**); nada é marcado sozinho —,
+  grupo, responsável pelo trajeto (participante), equipe e observações. Origem: "desenhada à mão no mapa".
+- **Falha ao salvar** (sem internet, nome repetido…): o erro aparece no formulário e o desenho **não se perde**
+  — fica na tela e guardado no aparelho; **Tentar de novo** reenvia. Se a página fechar, ao desenhar de novo o
+  painel oferece **Retomar o desenho não salvo**. Cada desenho tem um identificador próprio: repetir o envio
+  ou recarregar a página **não cria trilha duplicada**.
+- **No mapa**: planejada = **tracejado amarelo**; percorrida = **linha branca contínua**; as duas com contorno
+  escuro e marcas de início/fim — diferentes do **rastro de GPS** (fino, na cor da pessoa, gravado pelo
+  aparelho). Ficam acima dos setores e abaixo dos rastros de GPS e dos marcadores.
+- **Consultar e gerenciar**: tocar na linha (ou na lista) abre os detalhes (situação, comprimento, equipe,
+  quem criou/alterou e quando) com **Ver no mapa**, **Ocultar/Mostrar**, **Informar como percorrida**,
+  **Editar dados**, **Editar traçado** (os pontos voltam para a barra de desenho; Cancelar devolve o traçado
+  salvo) e **Excluir** (com confirmação; quem desenhou, quem criou a operação ou um administrador).
+- **Ocultar**: uma a uma (👁 na lista; vale só neste aparelho) ou por categoria em **Camadas → Trilhas
+  desenhadas · planejadas / · percorridas**. Os modos **Tudo** e **Cobertura** mostram as trilhas desenhadas.
+- **Não é cobertura**: uma trilha (mesmo percorrida) **não** conclui setor nem entra em cálculo de área
+  vasculhada. O diário registra quando um trajeto é informado como percorrido e quando uma trilha é excluída.
+- Banco: tabela `trilhas_manuais` (leitura só pelos responsáveis da operação; gravação só pelas funções
+  `salvar_trilha_manual` e `excluir_trilha_manual`, que conferem a permissão). Operação encerrada: só leitura.
+  Tempo real entre os responsáveis.
 
 ### Pontos de interesse
 
@@ -541,7 +572,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Participantes e equipes**: Convidar participantes, Grupos, Deslocamentos de grupos, Enviar destino
     a participantes;
   - **Registros e Setores**: Registrar foto, Marcar ponto de interesse, Novo setor por raio, Novo setor desenhando a
-    área, Lista de setores e pontos, Exportar (escolher o que sai), Importar;
+    área, Desenhar trilha, Lista de setores, trilhas e pontos, Exportar (escolher o que sai), Importar;
   - **Mapa e navegação**: Ir para coordenada, Medir distância e área (o **⤢** do mapa enquadra todos);
   - **Configurações e manutenção**: Formato das coordenadas, **Tema** (Escuro ou Claro; o padrão é o escuro e a escolha fica no aparelho), Diagnóstico do GPS;
   - **Encerrar ou excluir · ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
@@ -756,6 +787,18 @@ dado de participante sai do banco nesses painéis.
   distância do ULV à localização (faixas de 1 km), distância e tempo (mediana, metade central, média, tempo até localizar),
   perfis das vítimas e condição (com vida / em óbito). Vale para todas as operações a que o responsável tem acesso
   (administrador: todas). A escolha fica salva neste navegador.
+- **Mapa do Paraná** (logo abaixo dos cartões de números): limites do estado, das 10 mesorregiões (com nome)
+  e, de perto (zoom 9+), dos 399 municípios (IBGE, simplificados, em `js/parana-geo.js`, baixado só quando o
+  mapa abre). Cada operação aparece no **local cadastrado** (`local_lat`/`local_lng`) — nunca na posição de um
+  participante. Cor pela situação (**verde = ativa**, **cinza tracejado = encerrada**) e letra pelo tipo
+  (T, A, Ae, O); a legenda só mostra situações e tipos que existem. Operações próximas são agrupadas (o anel
+  mostra a proporção ativas/encerradas). Tocar num marcador mostra nome, tipo/natureza, município e
+  mesorregião (calculados pelos limites; perto da divisa podem cair no vizinho), data e hora do acionamento,
+  situação, responsável (pela função `listar_responsaveis`), número de participantes, resumo da descrição e
+  **Abrir operação** (o mapa só mostra operações que o responsável já pode abrir — RLS). Operações sem
+  coordenadas são contadas abaixo do mapa (**Ver quais**). Atualiza em tempo real (com a migração 028) e a
+  cada minuto; falha do Supabase mostra aviso com **Tentar de novo** e mantém o último estado. A roda do
+  mouse só dá zoom depois de clicar no mapa (rolar a página não mexe nele).
 - **Cabeçalho:** um único botão **☰ Menu** abre a lista de ações (Responsáveis, Minha conta, Sair). A troca
   entre Dashboard e Operações fica só nos botões da tela.
 - **Interativo (tocar abre os detalhes, por cima; Fechar volta ao dashboard):**
@@ -911,6 +954,7 @@ rastreamento-sar/
 │       ├── 025_responsavel_registra_vitima.sql o responsável registra a vítima encontrada pelo painel
 │       ├── 026_operacao_encerrada_somente_leitura.sql operação encerrada: só leitura (servidor)
 │       ├── 027_dados_so_saem_ao_excluir.sql   encerrar não apaga: dados só saem ao excluir a operação
+│       ├── 028_trilhas_manuais.sql            trilhas desenhadas à mão (planejadas/percorridas); operações no Realtime
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1031,7 +1075,11 @@ rastreamento-sar/
    - **027** (`027_dados_so_saem_ao_excluir.sql`): **encerrar não apaga nada**. `encerrar_operacao` e a limpeza diária
      (`purgar_expiradas`) deixam de apagar dados de operação e `apagar_dados_operacao` fica desativada
      (`apagar_dados_desativado`). Os dados só saem ao **excluir** a operação. Prazos pendentes são anulados.
-   O `schema.sql` completo já inclui da 003 à 027.
+   - **028** (`028_trilhas_manuais.sql`): tabela `trilhas_manuais` (trilhas desenhadas à mão, planejadas ou
+     percorridas) com RLS de leitura para os responsáveis da operação, funções `salvar_trilha_manual` /
+     `excluir_trilha_manual`, gatilhos (operação encerrada só leitura, diário) e inclusão de `trilhas_manuais`
+     e `operacoes` no Realtime (mapa do dashboard). Só cria objetos novos; não apaga nada.
+   O `schema.sql` completo já inclui da 003 à 028.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -1373,6 +1421,15 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Mapa do dashboard e trilhas desenhadas (versão 2026-10-21)**: banco — `npm run test:banco` (334
+  verificações, migrações 007–028: criar planejada/percorrida, ordem dos pontos, sem duplicar pelo client_id,
+  nome repetido, geometria inválida, outro responsável não lê/altera/exclui, gravação direta recusada,
+  encerrada só leitura, diário, setores intocados, exclusão em cascata). Navegador (Chromium, banco simulado):
+  fluxo completo de desenho (82: desfazer, limpar, cancelar, falha ao salvar sem perder o desenho e sem
+  duplicar, recarregar, percorrida, editar traçado, ocultar, camadas, excluir; computador e celular),
+  retomada do rascunho, encerrada só leitura, banco sem a 028, e o mapa do Paraná (30: posição logo abaixo
+  dos cartões, marcadores, agrupamento, legenda, popup, sem coordenadas, atualização, erro do Supabase,
+  abrir operação; computador e celular). **Não testado**: Supabase real com a 028 aplicada e celulares físicos.
 - **Não testado**: o **openrouteservice real** (não há chave neste ambiente e a rede de testes não chega
   ao serviço; foi usado um simulador com o mesmo formato), o **Supabase Realtime real** e **celulares
   físicos** (GPS real em mata/cidade/carro, tela bloqueada, economia de bateria, cada navegador). Faça o

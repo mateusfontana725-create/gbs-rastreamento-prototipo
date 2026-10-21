@@ -149,7 +149,7 @@
     rotulos: { agendar: function () {} },   // mapa-rotulos.js, ligado ao criar o mapa
     filtroEstado: null,
     alertaAdiadas: new Set(),   // mensagens de outro responsável deixadas para responder depois (×)         // lista: só conectados / instáveis / sem atualização (tocar no resumo)
-    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, agrupar: true, pessoas: true, legenda: true, setores: true, pontos: true, local: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
+    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, agrupar: true, pessoas: true, legenda: true, setores: true, pontos: true, local: true, tmPlanejadas: true, tmPercorridas: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
     lateralOculta: Boolean(C.local.ler(CHAVE_LATERAL, false)),
     centralAba: 'msgs',
     // setores, pontos de interesse e destinos
@@ -171,6 +171,16 @@
     assinaturaConversa: '',
     // cadastro da operação
     marcaLocal: null,           // marcador do local da operação no mapa
+    // trilhas desenhadas à mão (migração 028)
+    trilhasManuais: new Map(),  // id → { d: dados, camada }
+    camadaTrilhasManuais: null,
+    canalTrilhas: null,
+    timerTrilhas: null,
+    timerCanalTrilhas: null,
+    semTrilhasManuais: false,
+    erroTrilhasManuais: null,
+    trilhasOcultas: null,
+    trilhasOcultasOp: null,
     // grupos
     grupos: new Map(),          // id → grupo
     membros: new Map(),         // grupo_id → Map(participante_id → vínculo {papel, origem…})
@@ -325,6 +335,7 @@
     // Áreas e pontos
     $('menu-setor-raio').addEventListener('click', function () { iniciarDesenho('raio'); });
     $('menu-setor-poligono').addEventListener('click', function () { iniciarDesenho('poligono'); });
+    $('menu-trilha').addEventListener('click', function () { iniciarDesenhoTrilha(); });
     $('menu-ponto').addEventListener('click', function () { iniciarDesenho('ponto'); });
     $('menu-destino').addEventListener('click', function () { escolherDestino([]); });
     $('menu-areas').addEventListener('click', abrirAreas);
@@ -332,6 +343,9 @@
     $('areas-novo-raio').addEventListener('click', function () { iniciarDesenho('raio'); });
     $('areas-novo-poligono').addEventListener('click', function () { iniciarDesenho('poligono'); });
     $('areas-novo-ponto').addEventListener('click', function () { iniciarDesenho('ponto'); });
+    $('areas-nova-trilha').addEventListener('click', function () { iniciarDesenhoTrilha(); });
+    $('opt-desenhadas-planejadas').addEventListener('click', function () { definirPrefMapa('tmPlanejadas', est.prefsMapa.tmPlanejadas === false); });
+    $('opt-desenhadas-percorridas').addEventListener('click', function () { definirPrefMapa('tmPercorridas', est.prefsMapa.tmPercorridas === false); });
     $('opt-setores').addEventListener('click', function () { definirPrefMapa('setores', !est.prefsMapa.setores); });
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
@@ -1171,6 +1185,7 @@
     await carregarTudo();
     assinarTempoReal();
     assinarTempoRealExtras();
+    assinarTrilhasManuais();
     est.timerStatus = setInterval(atualizarEstados, 5000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
@@ -1265,6 +1280,7 @@
       try { C.cliente.removeChannel(est.canalExtras); } catch (e) { /* ignora */ }
       est.canalExtras = null;
     }
+    encerrarTrilhasManuais();
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -1355,7 +1371,7 @@
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
-    ['menu-setor-raio', 'menu-setor-poligono', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
+    ['menu-setor-raio', 'menu-setor-poligono', 'menu-trilha', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
     // encerrada: painel só para consulta (botões de alteração somem; o servidor também recusa)
     $('tela-painel').classList.toggle('op-somente-leitura', op.status !== 'ativa');
     if (op.status !== 'ativa' && est.compartilhando) pararMinhaPosicao(true);
@@ -1470,6 +1486,9 @@
     painelRotSetor.style.pointerEvents = 'none';
     est.camadaSetores = L.layerGroup();
     est.camadaPontosInt = L.layerGroup();
+    // Trilhas desenhadas à mão: acima dos setores e abaixo dos rastros de GPS e dos marcadores.
+    mapa.createPane('trilhasDesenhadas').style.zIndex = 390;
+    est.camadaTrilhasManuais = L.layerGroup().addTo(mapa);
     if (est.prefsMapa.setores) est.camadaSetores.addTo(mapa);
     if (est.prefsMapa.pontos) est.camadaPontosInt.addTo(mapa);
     mapa.on('click', aoClicarNoMapa);
@@ -1579,6 +1598,9 @@
       linhaLegenda('<span class="cluster-pessoas cluster-legenda" style="background:conic-gradient(#ef4444 0 180deg, #3b82f6 0)"><b>2</b></span>', 'Pessoas agrupadas') +
       linhaLegenda('<span class="mk-local mk-local-legenda" aria-hidden="true">◎</span>', 'Local da operação') +
       linhaLegenda('<span class="setor-legenda"></span>', 'Setor de busca') +
+      linhaLegenda('<span class="lg-trilha-gps"></span>', 'Trilha de GPS (registrada pelo aparelho)') +
+      linhaLegenda('<span class="lg-trilha-desenhada lg-planejada"></span>', 'Trilha desenhada · planejada') +
+      linhaLegenda('<span class="lg-trilha-desenhada lg-percorrida"></span>', 'Trilha desenhada · percorrida') +
       linhaLegenda('<span class="lg-linha-rota"></span>', 'Rota até o destino') +
       linhaLegenda('<span class="lg-lacuna"></span>', 'Falha');
   }
@@ -1616,6 +1638,7 @@
       if (chave === 'setores' && est.camadaSetores) { if (valor) est.camadaSetores.addTo(est.mapa); else est.camadaSetores.remove(); }
       if (chave === 'pontos' && est.camadaPontosInt) { if (valor) est.camadaPontosInt.addTo(est.mapa); else est.camadaPontosInt.remove(); }
       if (chave === 'local') desenharLocalOp();
+      if (chave === 'tmPlanejadas' || chave === 'tmPercorridas') redesenharTrilhasManuais();
       if (chave === 'nomes') $('mapa').classList.toggle('esconder-rotulos', !valor);
       if (chave === 'agrupar') montarCamadaPessoas();
       if (chave === 'pessoas' && est.camadaPessoas) {
@@ -1734,17 +1757,21 @@
   /* ---------- Modos rápidos do mapa ("mostrar só …") ----------------- */
   // Cada modo liga exatamente estas camadas e desliga as outras; mexer numa camada
   // depois vira "personalizado". O rastreamento e os dados não mudam, só o que aparece.
-  var CAMADAS_MODO = ['pessoas', 'trilhas', 'setores', 'pontos', 'relatos', 'fotos', 'local'];
+  var CAMADAS_MODO = ['pessoas', 'trilhas', 'desenhadas', 'setores', 'pontos', 'relatos', 'fotos', 'local'];
   var MODOS_MAPA = {
     tudo: { rotulo: 'Tudo', liga: CAMADAS_MODO },
     equipes: { rotulo: 'Equipes', liga: ['pessoas', 'trilhas'] },
-    cobertura: { rotulo: 'Cobertura', liga: ['trilhas', 'setores'] },
+    cobertura: { rotulo: 'Cobertura', liga: ['trilhas', 'desenhadas', 'setores'] },
     setores: { rotulo: 'Setores', liga: ['setores'] },
     pontos: { rotulo: 'Pontos', liga: ['pontos', 'local'] },
     fotos: { rotulo: 'Fotos', liga: ['fotos'] },
     relatos: { rotulo: 'Relatos', liga: ['relatos'] },
   };
-  function camadaLigada(k) { return k === 'trilhas' ? todasTrilhasVisiveis() : Boolean(est.prefsMapa[k]); }
+  function camadaLigada(k) {
+    if (k === 'trilhas') return todasTrilhasVisiveis();
+    if (k === 'desenhadas') return est.prefsMapa.tmPlanejadas !== false && est.prefsMapa.tmPercorridas !== false;
+    return Boolean(est.prefsMapa[k]);
+  }
   function modoMapaAtual() {
     var achado = null;
     Object.keys(MODOS_MAPA).some(function (m) {
@@ -1762,6 +1789,7 @@
       var quer = modo.liga.indexOf(k) >= 0;
       if (camadaLigada(k) === quer) return;
       if (k === 'trilhas') definirTodasTrilhas(quer, true);
+      else if (k === 'desenhadas') { definirPrefMapa('tmPlanejadas', quer); definirPrefMapa('tmPercorridas', quer); }
       else definirPrefMapa(k, quer);
     });
     atualizarMenu();
@@ -1782,6 +1810,8 @@
     $('opt-relatos').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.relatos)));
     $('opt-setores').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.setores)));
     $('opt-pontos').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pontos)));
+    $('opt-desenhadas-planejadas').setAttribute('aria-pressed', String(est.prefsMapa.tmPlanejadas !== false));
+    $('opt-desenhadas-percorridas').setAttribute('aria-pressed', String(est.prefsMapa.tmPercorridas !== false));
     $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomes)));
     $('opt-agrupar').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.agrupar)));
     $('opt-pessoas').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pessoas)));
@@ -4395,6 +4425,7 @@
       if (!est.erroAreas) console.warn('Setores/pontos indisponíveis:', e.message);
       est.erroAreas = true;
     }
+    await carregarTrilhasManuais();   // trata os próprios erros (banco sem a migração 028 não derruba setores)
   }
 
   function agendarAreas() {
@@ -4448,9 +4479,11 @@
     est.pontosInt.forEach(tirarPontoInt);
     if (est.linhaDestino) { est.linhaDestino.remove(); est.linhaDestino = null; }
     if (est.marcaDestino) { est.marcaDestino.remove(); est.marcaDestino = null; }
+    est.trilhasManuais.forEach(function (t) { if (t.camada) t.camada.remove(); });
     est.setores = new Map();
     est.pontosInt = new Map();
     est.destinos = new Map();
+    est.trilhasManuais = new Map();
     renderizarAreas();
   }
 
@@ -4662,6 +4695,8 @@
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Usar minha posição', onclick: usarMinhaPosicaoNoDesenho }), cancelar]);
     } else if (tipo === 'destino') {
       mostrarBarraDesenho('Toque no mapa no DESTINO.', null, [cancelar]);
+    } else if (tipo === 'trilha') {
+      // barra própria (atualizarBarraTrilha), montada por iniciarDesenhoTrilha
     } else if (tipo === 'vitima') {
       mostrarBarraDesenho('Toque no mapa onde a VÍTIMA foi encontrada.', null, [
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Usar minha posição', onclick: usarMinhaPosicaoNoDesenho }), cancelar]);
@@ -4685,6 +4720,17 @@
       if (dz.pontos.length >= 3) L.polygon(dz.pontos, { color: cor, weight: 2, fillOpacity: 0.12, dashArray: '6 4', interactive: false }).addTo(dz.camadaTemp);
       else if (dz.pontos.length === 2) L.polyline(dz.pontos, { color: cor, weight: 2, dashArray: '6 4', interactive: false }).addTo(dz.camadaTemp);
       dz.pontos.forEach(function (p) { L.circleMarker(p, { radius: 5, color: '#000', weight: 1.5, fillColor: cor, fillOpacity: 1, interactive: false }).addTo(dz.camadaTemp); });
+    } else if (dz.tipo === 'trilha') {
+      // ordem dos pontos visível: linha contínua + vértices; início verde, último ponto maior
+      if (dz.pontos.length >= 2) {
+        L.polyline(dz.pontos, { color: '#0b1220', weight: 7, opacity: 0.6, interactive: false }).addTo(dz.camadaTemp);
+        L.polyline(dz.pontos, { color: '#facc15', weight: 3, interactive: false }).addTo(dz.camadaTemp);
+      }
+      dz.pontos.forEach(function (p, i) {
+        var ultimo = i === dz.pontos.length - 1;
+        L.circleMarker(p, { radius: ultimo ? 6 : 4, color: '#0b1220', weight: 1.5, fillColor: i === 0 ? '#22c55e' : '#facc15', fillOpacity: 1, interactive: false,
+          className: 'vertice-trilha' }).addTo(dz.camadaTemp);
+      });
     }
   }
 
@@ -4700,6 +4746,12 @@
       dz.pontos.push(ll);
       redesenharTemp();
       atualizarBarraPoligono();
+    } else if (dz.tipo === 'trilha') {
+      if (dz.pontos.length >= 2000) { UI.aviso('Limite de 2000 pontos por trilha.', 'erro'); return; }
+      dz.pontos.push(ll);
+      redesenharTemp();
+      gravarRascunhoTrilha();
+      atualizarBarraTrilha();
     } else if (dz.tipo === 'ponto') {
       $('barra-desenho').hidden = true;
       abrirFormPontoInt({ lat: ll[0], lng: ll[1] });
@@ -5558,9 +5610,12 @@
     if (!ulS) return;
     $('qtd-setores').textContent = String(est.setores.size);
     $('qtd-pontos-int').textContent = String(est.pontosInt.size);
+    $('qtd-trilhas').textContent = String(est.trilhasManuais.size);
     if ($('painel-areas').hidden) return;
     var editavel = podeAlterar();
     ['areas-novo-raio', 'areas-novo-poligono', 'areas-novo-ponto'].forEach(function (i) { $(i).hidden = !editavel; });
+    $('areas-nova-trilha').hidden = !editavel || est.semTrilhasManuais;
+    renderizarListaTrilhas();
     ulS.innerHTML = '';
     $('setores-vazio').hidden = est.setores.size > 0;
     est.setores.forEach(function (s) {
@@ -5590,6 +5645,443 @@
           UI.el('small', { classe: 'muted', texto: cat.rotulo + ' · ' + C.hora(d.criado_em, false) + ' · ' + d.criado_por_nome }),
         ]),
       ])]));
+    });
+  }
+
+  /* ---------- Trilhas desenhadas à mão (migração 028) --------------- */
+  // Linha marcada ponto a ponto pelo responsável: PLANEJADA (caminho previsto) ou PERCORRIDA
+  // (informada pelo usuário como já feita). Não é rastro de GPS e não muda a situação dos setores.
+  // Visual próprio, que nenhum rastro GPS usa: linha com contorno escuro e marcas de início e fim.
+  var ESTADO_TRILHA = {
+    planejada: { rotulo: 'Planejada', dica: 'caminho previsto, ainda não percorrido', cor: '#facc15', traco: '10 8', selo: 'selo-trilha-planejada' },
+    percorrida: { rotulo: 'Percorrida', dica: 'informada como já percorrida pela equipe', cor: '#ffffff', traco: null, selo: 'selo-trilha-percorrida' },
+  };
+  var CHAVE_RASCUNHO_TRILHA = 'gbs-rascunho-trilha-';   // + id da operação: desenho em andamento guardado no aparelho
+  var CHAVE_TRILHAS_OCULTAS = 'gbs-trilhas-ocultas-';   // + id da operação: trilhas escondidas uma a uma
+
+  function comprimentoLinhaM(pts) {
+    var m = 0;
+    for (var i = 1; i < pts.length; i++) m += C.distancia(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+    return m;
+  }
+  function formatarComprimento(m) {
+    return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' km';
+  }
+  function trilhasOcultas() {
+    if (!est.op) return new Set();
+    if (!est.trilhasOcultas || est.trilhasOcultasOp !== est.op.id) {
+      est.trilhasOcultas = new Set(C.local.ler(CHAVE_TRILHAS_OCULTAS + est.op.id, []) || []);
+      est.trilhasOcultasOp = est.op.id;
+    }
+    return est.trilhasOcultas;
+  }
+  function gravarTrilhasOcultas() {
+    if (est.op) C.local.gravar(CHAVE_TRILHAS_OCULTAS + est.op.id, Array.from(trilhasOcultas()));
+  }
+  function prefEstadoTrilha(estado) { return estado === 'percorrida' ? 'tmPercorridas' : 'tmPlanejadas'; }
+  function trilhaManualVisivel(d) {
+    return est.prefsMapa[prefEstadoTrilha(d.estado)] !== false && !trilhasOcultas().has(d.id);
+  }
+
+  function desenharTrilhaManual(t) {
+    if (t.camada) { t.camada.remove(); t.camada = null; }
+    if (!est.mapa || !est.camadaTrilhasManuais) return;
+    var d = t.d;
+    if (est.desenho && est.desenho.tipo === 'trilha' && est.desenho.trilhaId === d.id) return;   // traçado sendo editado
+    if (!trilhaManualVisivel(d) || !Array.isArray(d.pontos) || d.pontos.length < 2) return;
+    var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
+    var g = L.featureGroup();
+    var opc = { pane: 'trilhasDesenhadas', lineJoin: 'round', lineCap: 'round' };
+    L.polyline(d.pontos, Object.assign({ color: '#0b1220', weight: 8, opacity: 0.72, className: 'trilha-desenhada-contorno' }, opc)).addTo(g);
+    L.polyline(d.pontos, Object.assign({ color: e.cor, weight: 3.5, opacity: 1, dashArray: e.traco, className: 'trilha-desenhada trilha-desenhada-' + d.estado }, opc)).addTo(g);
+    var ini = d.pontos[0], fim = d.pontos[d.pontos.length - 1];
+    L.circleMarker(ini, Object.assign({ radius: 5, color: '#0b1220', weight: 2, fillColor: e.cor, fillOpacity: 1 }, opc)).addTo(g);
+    L.circleMarker(fim, Object.assign({ radius: 6, color: e.cor, weight: 2.5, fillColor: '#0b1220', fillOpacity: 1 }, opc)).addTo(g);
+    g.bindTooltip(C.esc(d.nome) + ' · ' + e.rotulo.toLowerCase(), { sticky: true, className: 'rotulo-trilha-desenhada' });
+    g.on('click', function (ev) {
+      if (est.desenho) return;   // durante um desenho o toque é do mapa
+      L.DomEvent.stopPropagation(ev);
+      abrirTrilhaManual(d.id);
+    });
+    g.addTo(est.camadaTrilhasManuais);
+    t.camada = g;
+  }
+
+  function redesenharTrilhasManuais() {
+    est.trilhasManuais.forEach(desenharTrilhaManual);
+  }
+
+  function aplicarTrilhasManuais(lista, completa) {
+    var vistos = new Set();
+    lista.forEach(function (d) {
+      vistos.add(d.id);
+      var t = est.trilhasManuais.get(d.id);
+      if (!t) { t = { d: d, camada: null }; est.trilhasManuais.set(d.id, t); }
+      else t.d = d;
+      desenharTrilhaManual(t);
+    });
+    if (completa) {
+      est.trilhasManuais.forEach(function (t, id) {
+        if (!vistos.has(id)) { if (t.camada) t.camada.remove(); est.trilhasManuais.delete(id); }
+      });
+    }
+    renderizarAreas();
+  }
+
+  async function carregarTrilhasManuais() {
+    if (!est.op || est.semTrilhasManuais) return;
+    var opId = est.op.id;
+    try {
+      var lista = await C.consultar(C.cliente.from('trilhas_manuais').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true }));
+      if (!est.op || est.op.id !== opId) return;
+      aplicarTrilhasManuais(lista || [], true);
+      est.erroTrilhasManuais = null;
+    } catch (e) {
+      // banco sem a migração 028: o resto do painel segue; a lista avisa
+      if (/trilhas_manuais/.test(String(e.original && (e.original.message || e.original.details) || e.message)) || e.codigo === 'funcao_ausente') est.semTrilhasManuais = true;
+      est.erroTrilhasManuais = e.message;
+      renderizarAreas();
+    }
+  }
+
+  // Tempo real em canal próprio: se a tabela ainda não existir no banco, o canal principal não cai.
+  function assinarTrilhasManuais() {
+    if (!est.op || est.semTrilhasManuais) return;
+    var opId = est.op.id;
+    if (est.canalTrilhas) { try { C.cliente.removeChannel(est.canalTrilhas); } catch (e) { /* ignora */ } }
+    try {
+      est.canalTrilhas = C.cliente.channel('op-trilhas-' + opId + '-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'trilhas_manuais', filter: 'operacao_id=eq.' + opId }, agendarTrilhasManuais)
+        .subscribe(function (status) {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            clearTimeout(est.timerCanalTrilhas);
+            est.timerCanalTrilhas = setTimeout(function () { if (est.op && est.op.id === opId) { carregarTrilhasManuais(); assinarTrilhasManuais(); } }, 60000);
+          }
+        });
+    } catch (e) { /* sem tempo real: recarrega ao abrir a operação e ao salvar */ }
+  }
+  function agendarTrilhasManuais() {
+    clearTimeout(est.timerTrilhas);
+    est.timerTrilhas = setTimeout(carregarTrilhasManuais, 400);
+  }
+  function encerrarTrilhasManuais() {
+    clearTimeout(est.timerTrilhas);
+    clearTimeout(est.timerCanalTrilhas);
+    if (est.canalTrilhas) { try { C.cliente.removeChannel(est.canalTrilhas); } catch (e) { /* ignora */ } }
+    est.canalTrilhas = null;
+    est.trilhasManuais.forEach(function (t) { if (t.camada) t.camada.remove(); });
+    est.trilhasManuais = new Map();
+    est.semTrilhasManuais = false;
+    est.erroTrilhasManuais = null;
+  }
+
+  /* --- desenho: tocar no mapa marca os pontos na ordem --- */
+  function rascunhoTrilha() { return est.op ? C.local.ler(CHAVE_RASCUNHO_TRILHA + est.op.id, null) : null; }
+  function gravarRascunhoTrilha() {
+    var dz = est.desenho;
+    if (!est.op || !dz || dz.tipo !== 'trilha' || dz.trilhaId) return;
+    if (dz.pontos.length) C.local.gravar(CHAVE_RASCUNHO_TRILHA + est.op.id, { client_id: dz.client_id, pontos: dz.pontos, em: Date.now() });
+    else apagarRascunhoTrilha();
+  }
+  function apagarRascunhoTrilha() {
+    if (est.op) { try { localStorage.removeItem(CHAVE_RASCUNHO_TRILHA + est.op.id); } catch (e) { /* ignora */ } }
+  }
+
+  // Nova trilha (retoma o desenho não salvo deste aparelho, se houver) ou edição do traçado (trilhaId).
+  async function iniciarDesenhoTrilha(trilhaId) {
+    if (!est.mapa || !est.op || !podeAlterar()) return;
+    if (est.semTrilhasManuais) { UI.aviso(C.traduzirErro({ message: 'funcao_ausente' }), 'erro', 9000); return; }
+    var opc = { client_id: C.uuid(), pontos: [] };
+    if (trilhaId) {
+      var t = est.trilhasManuais.get(trilhaId);
+      if (!t) return;
+      opc = { trilhaId: trilhaId, pontos: t.d.pontos.map(function (p) { return [p[0], p[1]]; }),
+        // cancelar a edição devolve o traçado salvo ao mapa
+        aoCancelar: function () { var t2 = est.trilhasManuais.get(trilhaId); if (t2) desenharTrilhaManual(t2); } };
+    } else {
+      var r = rascunhoTrilha();
+      if (r && Array.isArray(r.pontos) && r.pontos.length) {
+        var retomar = await UI.confirmar({
+          titulo: 'Retomar a trilha não salva?',
+          texto: 'Há um desenho com ' + r.pontos.length + ' ponto(s) que não foi salvo neste aparelho' + (r.em ? ' (' + C.hora(new Date(r.em).toISOString()) + ')' : '') + '.',
+          ok: 'Retomar desenho', cancelar: 'Começar do zero',
+        });
+        if (retomar) opc = { client_id: r.client_id || C.uuid(), pontos: r.pontos };
+        else apagarRascunhoTrilha();
+      }
+    }
+    iniciarDesenho('trilha', opc);
+    if (trilhaId) desenharTrilhaManual(est.trilhasManuais.get(trilhaId));   // esconde o traçado antigo enquanto edita
+    redesenharTemp();
+    atualizarBarraTrilha();
+    if (opc.pontos.length) est.mapa.fitBounds(L.latLngBounds(opc.pontos), { padding: [60, 60], maxZoom: 17 });
+  }
+
+  function atualizarBarraTrilha() {
+    var dz = est.desenho;
+    if (!dz || dz.tipo !== 'trilha') return;
+    var n = dz.pontos.length;
+    var compr = n > 1 ? ' · ' + formatarComprimento(comprimentoLinhaM(dz.pontos)) : '';
+    var texto = (dz.trilhaId ? 'Editando o traçado: ' : 'Desenhando trilha: ') +
+      (n < 2 ? 'toque no mapa para marcar o caminho, ponto a ponto (' + n + ' de no mínimo 2).' : n + ' pontos' + compr + '. Continue tocando ou conclua.');
+    mostrarBarraDesenho(texto, null, [
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-desfazer', texto: 'Desfazer ponto', disabled: n ? null : true, onclick: function () {
+        dz.pontos.pop(); redesenharTemp(); gravarRascunhoTrilha(); atualizarBarraTrilha();
+      } }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-limpar', texto: 'Limpar', disabled: n ? null : true, onclick: async function () {
+        if (n > 2 && !(await UI.confirmar({ titulo: 'Limpar os ' + n + ' pontos?', texto: 'O desenho em andamento recomeça do zero (a trilha salva não muda).', ok: 'Limpar', perigo: true }))) return;
+        if (est.desenho !== dz) return;
+        dz.pontos = []; redesenharTemp(); gravarRascunhoTrilha(); atualizarBarraTrilha();
+      } }),
+      UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'trilha-concluir', texto: dz.trilhaId ? 'Salvar traçado' : 'Concluir trilha', disabled: n >= 2 ? null : true, onclick: concluirTrilha }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-cancelar', texto: 'Cancelar', onclick: cancelarDesenhoTrilha }),
+    ]);
+  }
+
+  async function cancelarDesenhoTrilha() {
+    var dz = est.desenho;
+    if (!dz || dz.tipo !== 'trilha') return;
+    if (dz.pontos.length >= 2 && !dz.trilhaId) {
+      var ok = await UI.confirmar({ titulo: 'Descartar este desenho?', texto: 'Os ' + dz.pontos.length + ' pontos marcados não serão salvos.', ok: 'Descartar', cancelar: 'Continuar desenhando', perigo: true });
+      if (!ok || est.desenho !== dz) return;
+    }
+    if (!dz.trilhaId) apagarRascunhoTrilha();
+    cancelarDesenho();
+  }
+
+  async function concluirTrilha() {
+    var dz = est.desenho;
+    if (!dz || dz.tipo !== 'trilha' || dz.pontos.length < 2) return;
+    if (!dz.trilhaId) { $('barra-desenho').hidden = true; abrirFormTrilha(null); return; }
+    // edição do traçado: salva só a geometria
+    var btn = $('trilha-concluir');
+    if (btn) btn.disabled = true;
+    try {
+      var res = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: dz.trilhaId, p_dados: { pontos: dz.pontos } });
+      cancelarDesenho();
+      aplicarTrilhasManuais([res]);
+      UI.aviso('Traçado da trilha "' + res.nome + '" salvo.', 'ok');
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      UI.aviso('Traçado não salvo: ' + e.message + (e.rede ? ' O desenho continua na tela: tente de novo.' : ''), 'erro', 9000);
+    }
+  }
+
+  // Formulário da trilha. d = trilha existente (editar dados) ou null (nova, com os pontos do desenho).
+  function abrirFormTrilha(d, estadoInicial) {
+    var dz = est.desenho;
+    var novo = !d;
+    if (novo && (!dz || dz.tipo !== 'trilha')) return;
+    var pontos = novo ? dz.pontos.slice() : d.pontos;
+    var nome = UI.el('input', { classe: 'campo', id: 'trilha-nome', maxlength: '80', required: true, value: novo ? '' : d.nome,
+      placeholder: 'Ex.: Margem esquerda do córrego – Equipe Alfa', autofocus: true });
+    var estadoAtual = novo ? estadoInicial || null : estadoInicial || d.estado;
+    var estados = UI.el('div', { classe: 'opcoes-estado-trilha', role: 'radiogroup', 'aria-labelledby': 'trilha-estado-rot' }, Object.keys(ESTADO_TRILHA).map(function (k) {
+      var e = ESTADO_TRILHA[k];
+      return UI.el('label', { classe: 'opcao-estado-trilha' }, [
+        UI.el('input', { type: 'radio', name: 'trilha-estado', value: k, checked: k === estadoAtual ? true : null }),
+        UI.el('span', { classe: 'lg-trilha-desenhada lg-' + k, 'aria-hidden': 'true' }),
+        UI.el('span', null, [UI.el('strong', { texto: e.rotulo }), UI.el('small', { classe: 'muted', texto: ' — ' + e.dica })]),
+      ]);
+    }));
+    var quando = UI.el('input', { classe: 'campo', id: 'trilha-percorrida-em', type: 'datetime-local', max: paraCampoDataHora(C.agora()),
+      value: paraCampoDataHora(!novo && d.percorrida_em ? d.percorrida_em : C.agora()) });
+    var grupoQuando = UI.el('div', { classe: 'grupo', hidden: estadoAtual !== 'percorrida' }, [
+      UI.el('label', { classe: 'rotulo', for: 'trilha-percorrida-em', texto: 'Quando foi percorrida' }), quando]);
+    estados.addEventListener('change', function () {
+      grupoQuando.hidden = ((form.querySelector('input[name="trilha-estado"]:checked') || {}).value) !== 'percorrida';
+    });
+    var grupoSel = UI.el('select', { classe: 'campo', id: 'trilha-grupo' }, [UI.el('option', { value: '', texto: '— nenhum grupo —' })].concat(
+      Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); }).map(function (g) {
+        return UI.el('option', { value: g.id, selected: !novo && d.grupo_id === g.id ? true : null, texto: g.nome });
+      })));
+    var part = opcoesParticipantes(novo ? null : d.participante_id, true);
+    part.id = 'trilha-participante';
+    var equipe = UI.el('input', { classe: 'campo', id: 'trilha-equipe', maxlength: '60', value: novo ? '' : d.equipe || '', placeholder: 'Ex.: Equipe Alfa (se não for um grupo cadastrado)' });
+    var obs = UI.el('textarea', { classe: 'campo', id: 'trilha-obs', maxlength: '1000', rows: '2' });
+    obs.value = novo ? '' : d.observacoes || '';
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btnSalvar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'trilha-salvar', texto: novo ? 'Salvar trilha' : 'Salvar' });
+    var salvo = false;
+    var form = UI.el('form', { classe: 'form-trilha', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Nova trilha desenhada' : 'Editar trilha' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Operação ' + est.op.codigo + ' · ' + pontos.length + ' pontos · ' + formatarComprimento(comprimentoLinhaM(pontos)) +
+        '. Trilha desenhada à mão: não é rastro de GPS e não conclui setores.' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-nome', texto: 'Nome da trilha' }), nome]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', id: 'trilha-estado-rot', texto: 'Situação (escolha uma)' }), estados]),
+      grupoQuando,
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-grupo', texto: 'Grupo (opcional)' }), grupoSel]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-participante', texto: 'Responsável pelo trajeto (opcional)' }), part]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-equipe', texto: 'Equipe (opcional)' }), equipe]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-obs', texto: 'Observações (opcional)' }), obs]),
+      erro,
+      UI.el('div', { classe: 'modal-acoes' }, [
+        UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-voltar', texto: novo ? 'Voltar ao desenho' : 'Cancelar', onclick: function () { fechar(); } }),
+        btnSalvar,
+      ]),
+    ]);
+    function mostrarErro(t) { erro.textContent = t; erro.hidden = false; }
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var estado = (form.querySelector('input[name="trilha-estado"]:checked') || {}).value;
+      var dados = {
+        nome: nome.value.replace(/\s+/g, ' ').trim(),
+        grupo_id: grupoSel.value || null,
+        participante_id: part.value || null,
+        equipe: equipe.value.trim(),
+        observacoes: obs.value.trim(),
+      };
+      if (!dados.nome) { mostrarErro('Informe o nome da trilha.'); nome.focus(); return; }
+      var repetido = Array.from(est.trilhasManuais.values()).some(function (t) {
+        return t.d.id !== (d && d.id) && t.d.nome.trim().toLowerCase() === dados.nome.toLowerCase();
+      });
+      if (repetido) { mostrarErro('Já existe uma trilha com esse nome nesta operação. Use um nome que identifique o trajeto.'); nome.focus(); return; }
+      if (!estado) { mostrarErro('Escolha se a trilha é planejada ou já foi percorrida.'); return; }
+      dados.estado = estado;
+      if (estado === 'percorrida') {
+        var iso = quando.value ? new Date(quando.value) : null;
+        if (!iso || isNaN(iso) || iso.getTime() > Date.now() + 120000) { mostrarErro('Informe quando a trilha foi percorrida (não pode estar no futuro).'); return; }
+        dados.percorrida_em = iso.toISOString();
+      }
+      if (novo) { dados.pontos = pontos; dados.client_id = dz.client_id; }
+      btnSalvar.disabled = true;
+      btnSalvar.textContent = 'Salvando…';
+      try {
+        var res = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: novo ? null : d.id, p_dados: dados });
+        salvo = true;
+        if (novo) { apagarRascunhoTrilha(); cancelarDesenho(); }
+        fechar(true);
+        aplicarTrilhasManuais([res]);
+        UI.aviso(novo ? 'Trilha "' + res.nome + '" salva (' + ESTADO_TRILHA[res.estado].rotulo.toLowerCase() + ').' : 'Trilha salva.', 'ok');
+      } catch (e) {
+        // o desenho continua na tela e guardado no aparelho: dá para tentar de novo sem redesenhar
+        mostrarErro('Não foi possível salvar: ' + e.message + (novo ? ' O desenho não foi perdido: tente de novo.' : ''));
+        btnSalvar.disabled = false;
+        btnSalvar.textContent = novo ? 'Tentar de novo' : 'Salvar';
+      }
+    });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () {
+      // fechar sem salvar volta ao desenho (nada se perde)
+      if (!salvo && novo && est.desenho === dz) { atualizarBarraTrilha(); }
+    } });
+  }
+
+  function paraCampoDataHora(v) {
+    var ms = C.paraMs(v);
+    if (ms == null) return '';
+    var x = new Date(ms);
+    function d2(n) { return (n < 10 ? '0' : '') + n; }
+    return x.getFullYear() + '-' + d2(x.getMonth() + 1) + '-' + d2(x.getDate()) + 'T' + d2(x.getHours()) + ':' + d2(x.getMinutes());
+  }
+
+  function equipeDaTrilha(d) {
+    var partes = [];
+    var g = d.grupo_id && est.grupos.get(d.grupo_id);
+    if (g) partes.push('Grupo ' + g.nome);
+    var p = d.participante_id && est.participantes.get(d.participante_id);
+    if (p) partes.push(nomeExibido(p));
+    if (d.equipe) partes.push(d.equipe);
+    return partes.join(' · ');
+  }
+
+  function verTrilhaNoMapa(d) {
+    if (!est.mapa) return;
+    if (est.prefsMapa[prefEstadoTrilha(d.estado)] === false) definirPrefMapa(prefEstadoTrilha(d.estado), true);
+    if (trilhasOcultas().has(d.id)) alternarTrilhaOculta(d.id);
+    if (telaPequena()) fecharAreas();
+    UI.fecharModal();
+    est.mapa.fitBounds(L.latLngBounds(d.pontos), { padding: [50, 50], maxZoom: 17 });
+  }
+
+  function alternarTrilhaOculta(id) {
+    var s = trilhasOcultas();
+    if (s.has(id)) s.delete(id); else s.add(id);
+    gravarTrilhasOcultas();
+    var t = est.trilhasManuais.get(id);
+    if (t) desenharTrilhaManual(t);
+    renderizarAreas();
+  }
+
+  function abrirTrilhaManual(id) {
+    var t = est.trilhasManuais.get(id);
+    if (!t) return;
+    var d = t.d;
+    var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
+    var dl = UI.el('dl', { classe: 'dados' });
+    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
+    linha('Situação', e.rotulo + ' — ' + e.dica);
+    if (d.estado === 'percorrida' && d.percorrida_em) linha('Percorrida em', C.hora(d.percorrida_em) + (d.percorrida_por_nome ? ' (informado por ' + d.percorrida_por_nome + ')' : ''));
+    linha('Comprimento', formatarComprimento(d.comprimento_m != null ? d.comprimento_m : comprimentoLinhaM(d.pontos)) + ' · ' + d.pontos.length + ' pontos');
+    linha('Equipe', equipeDaTrilha(d) || 'Não informada');
+    linha('Origem', 'Desenhada à mão no mapa (não é rastro de GPS)');
+    linha('Criada', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
+    if (d.atualizado_por_nome && d.atualizado_em !== d.criado_em) linha('Alterada', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome);
+    if (d.observacoes) linha('Observações', d.observacoes);
+    var editavel = podeAlterar();
+    var oculta = trilhasOcultas().has(d.id);
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-trilha' }, [
+      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'lg-trilha-desenhada lg-' + d.estado, 'aria-hidden': 'true' }), ' ' + d.nome]),
+      UI.el('p', { classe: 'ajuda', texto: 'Uma linha indica o trajeto, não que toda a área em volta foi vasculhada. A situação dos setores não muda por causa das trilhas.' }),
+      dl,
+      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verTrilhaNoMapa(d); } }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-ocultar', texto: oculta ? 'Mostrar no mapa' : 'Ocultar no mapa', onclick: function () { fechar(); alternarTrilhaOculta(d.id); } }),
+        editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { fechar(); abrirFormTrilha(d, 'percorrida'); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar', texto: 'Editar dados', onclick: function () { fechar(); abrirFormTrilha(d); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar-tracado', texto: 'Editar traçado', onclick: function () { fechar(); iniciarDesenhoTrilha(d.id); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'trilha-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirTrilhaManual(d); } }) : null,
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
+    ]));
+  }
+
+  async function excluirTrilhaManual(d) {
+    var r = await UI.confirmar({
+      titulo: 'Excluir a trilha "' + d.nome + '"?',
+      texto: 'A linha desenhada some do mapa de todos os responsáveis. Setores, participantes e rastros de GPS não são afetados.',
+      ok: 'Excluir trilha',
+      perigo: true,
+    });
+    if (!r) return;
+    try {
+      await C.rpc('excluir_trilha_manual', { p_id: d.id });
+      var t = est.trilhasManuais.get(d.id);
+      if (t && t.camada) t.camada.remove();
+      est.trilhasManuais.delete(d.id);
+      renderizarAreas();
+      UI.aviso('Trilha excluída.', 'ok');
+    } catch (e) {
+      UI.aviso(e.codigo === 'sem_permissao' ? 'Só quem desenhou a trilha, quem criou a operação ou um administrador pode excluí-la.' : e.message, 'erro', 7000);
+    }
+  }
+
+  function renderizarListaTrilhas() {
+    var ul = $('lista-trilhas');
+    ul.innerHTML = '';
+    var vazio = $('trilhas-vazio');
+    vazio.hidden = est.trilhasManuais.size > 0;
+    vazio.textContent = est.semTrilhasManuais ? 'Trilhas desenhadas indisponíveis: o banco ainda não tem a migração 028.'
+      : est.erroTrilhasManuais ? 'Não foi possível carregar as trilhas: ' + est.erroTrilhasManuais
+      : 'Nenhuma trilha desenhada.';
+    var ocultas = trilhasOcultas();
+    Array.from(est.trilhasManuais.values()).sort(function (a, b) { return a.d.nome.localeCompare(b.d.nome, 'pt-BR'); }).forEach(function (t) {
+      var d = t.d;
+      var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
+      var oculta = ocultas.has(d.id);
+      var catOff = est.prefsMapa[prefEstadoTrilha(d.estado)] === false;
+      var sub = [formatarComprimento(d.comprimento_m != null ? d.comprimento_m : comprimentoLinhaM(d.pontos)), equipeDaTrilha(d) || d.criado_por_nome].join(' · ');
+      ul.appendChild(UI.el('li', { classe: 'item-trilha' + (oculta || catOff ? ' trilha-oculta' : '') }, [
+        UI.el('button', { classe: 'item-area', type: 'button', 'data-trilha': d.id, onclick: function () { abrirTrilhaManual(d.id); } }, [
+          UI.el('span', { classe: 'lg-trilha-desenhada lg-' + d.estado, 'aria-hidden': 'true' }),
+          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.nome }), UI.el('small', { classe: 'muted', texto: sub })]),
+          UI.el('span', { classe: 'selo ' + e.selo, texto: e.rotulo }),
+        ]),
+        UI.el('button', { classe: 'btn-olho', type: 'button', 'data-olho-trilha': d.id, 'aria-pressed': String(!oculta),
+          title: catOff ? 'Categoria "' + e.rotulo.toLowerCase() + '" desligada nas camadas' : oculta ? 'Mostrar no mapa' : 'Ocultar no mapa',
+          'aria-label': (oculta ? 'Mostrar ' : 'Ocultar ') + d.nome + ' no mapa', texto: oculta ? '◌' : '◉',
+          onclick: function () { alternarTrilhaOculta(d.id); } }),
+      ]));
     });
   }
 
@@ -7874,6 +8366,7 @@
     mapa: function () { return est.mapa; },
     op: function () { return est.op; },
     usuario: function () { return est.usuario; },
+    trilhasManuais: function () { return Array.from(est.trilhasManuais.values()).map(function (t) { return t.d; }); },
     admin: function () { return Boolean(est.responsavel && est.responsavel.admin); },
     selecionado: function () { return est.selecionado; },
     participantes: function () { return Array.from(est.participantes.values()); },

@@ -276,7 +276,8 @@
               <button class="menu-item" type="button" id="menu-ponto"><span class="ico-item" aria-hidden="true">▾</span><span>Marcar ponto de interesse</span></button>
               <button class="menu-item" type="button" id="menu-setor-raio"><span class="ico-item" aria-hidden="true">◯</span><span>Novo setor por raio</span></button>
               <button class="menu-item" type="button" id="menu-setor-poligono"><span class="ico-item" aria-hidden="true">⬠</span><span>Novo setor desenhando a área</span></button>
-              <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Lista de setores e pontos</span></button>
+              <button class="menu-item" type="button" id="menu-trilha"><span class="ico-item" aria-hidden="true">〰</span><span>Desenhar trilha</span><small class="menu-estado">planejada ou percorrida</small></button>
+              <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Lista de setores, trilhas e pontos</span></button>
               <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar (escolher o que sai)</span></button>
               <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo (GPX, KML, KMZ…)</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
             </details>
@@ -376,7 +377,9 @@
             <h4 id="cm-op">Camadas (ligar uma a uma)</h4>
             <div class="camadas-lista">
               <button class="camada-item" type="button" id="opt-pessoas" aria-pressed="true"><span class="camada-sinal sinal-pessoa" aria-hidden="true"></span><span>Pessoas</span></button>
-              <button class="camada-item" type="button" id="opt-trilhas" aria-pressed="true"><span class="camada-sinal sinal-trilha" aria-hidden="true"></span><span>Trilhas</span></button>
+              <button class="camada-item" type="button" id="opt-trilhas" aria-pressed="true"><span class="camada-sinal sinal-trilha" aria-hidden="true"></span><span>Trilhas de GPS</span></button>
+              <button class="camada-item" type="button" id="opt-desenhadas-planejadas" aria-pressed="true"><span class="camada-sinal sinal-desenhada-planejada" aria-hidden="true"></span><span>Trilhas desenhadas · planejadas</span></button>
+              <button class="camada-item" type="button" id="opt-desenhadas-percorridas" aria-pressed="true"><span class="camada-sinal sinal-desenhada-percorrida" aria-hidden="true"></span><span>Trilhas desenhadas · percorridas</span></button>
               <button class="camada-item" type="button" id="opt-setores" aria-pressed="true"><span class="camada-sinal sinal-setor" aria-hidden="true"></span><span>Setores</span></button>
               <button class="camada-item" type="button" id="opt-pontos" aria-pressed="true"><span class="camada-sinal sinal-ponto" aria-hidden="true"></span><span>Pontos de interesse</span></button>
               <button class="camada-item" type="button" id="opt-relatos" aria-pressed="true"><span class="camada-sinal sinal-relato" aria-hidden="true"></span><span>Relatos</span></button>
@@ -456,8 +459,8 @@
       <!-- Setores de busca e pontos de interesse -->
       <aside class="central painel-areas" id="painel-areas" hidden aria-labelledby="areas-titulo" role="dialog">
         <div class="ficha-cabeca central-cabeca">
-          <h2 id="areas-titulo">Setores e pontos</h2>
-          <button class="btn btn-pequeno" type="button" id="areas-fechar" aria-label="Fechar setores e pontos">Fechar</button>
+          <h2 id="areas-titulo">Setores, trilhas e pontos</h2>
+          <button class="btn btn-pequeno" type="button" id="areas-fechar" aria-label="Fechar setores, trilhas e pontos">Fechar</button>
         </div>
         <div class="ficha-corpo">
           <div class="ficha-bloco">
@@ -468,6 +471,15 @@
             </div>
             <ul class="lista-areas" id="lista-setores"></ul>
             <p class="muted" id="setores-vazio">Nenhum setor ainda.</p>
+          </div>
+          <div class="ficha-bloco">
+            <h3>Trilhas desenhadas (<span id="qtd-trilhas">0</span>)</h3>
+            <p class="ajuda">Caminhos marcados à mão: <b>planejados</b> (tracejado amarelo) ou <b>percorridos</b> (linha branca). Não são rastro de GPS e não concluem setores.</p>
+            <div class="acoes-linha">
+              <button class="btn btn-pequeno" type="button" id="areas-nova-trilha">＋ Desenhar trilha</button>
+            </div>
+            <ul class="lista-areas" id="lista-trilhas"></ul>
+            <p class="muted" id="trilhas-vazio">Nenhuma trilha desenhada.</p>
           </div>
           <div class="ficha-bloco">
             <h3>Pontos de interesse (<span id="qtd-pontos-int">0</span>)</h3>

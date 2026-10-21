@@ -380,7 +380,7 @@
     var topo = el('header', { classe: 'dash-topo' }, [
       el('div', null, [
         el('h2', { texto: 'Dashboard' }),
-        el('p', { classe: 'muted', texto: 'Todas as operações a que você tem acesso. Só números, sem identificação.' }),
+        el('p', { classe: 'muted', texto: 'Todas as operações a que você tem acesso. Os números não identificam vítimas; o mapa mostra o local de cada operação.' }),
       ]),
       el('div', { classe: 'dash-acoes' }, [
         el('span', { classe: 'dash-atualizado muted', texto: 'Atualizado em ' + dataHora(d.gerado_em) }),
@@ -512,7 +512,7 @@
     });
 
     return [
-      topo, kpis, leitura,
+      topo, kpis, secaoMapaParana(), leitura,
       el('div', { classe: 'dash-grade' }, [grafMeses, grafTipos, grafDist, resumoDist, grafPerfis, grafCond]),
     ];
   }
@@ -939,6 +939,317 @@
     return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cSet, cOcorr])];
   }
 
+  /* ------------------------------ mapa do Paraná (operações) ------------------------------ */
+  // Cada operação aparece no LOCAL cadastrado (operacoes.local_lat/local_lng) — nunca na posição de um participante.
+  // Limites do estado, das mesorregiões e dos municípios: js/parana-geo.js (IBGE), carregado só quando o mapa abre.
+  var LIMITES_PR = [[-26.72, -54.62], [-22.51, -48.02]];
+  var STATUS_OP = {
+    ativa: { rotulo: 'Ativa', cor: '#22c55e' },
+    encerrada: { rotulo: 'Encerrada', cor: '#94a3b8' },
+  };
+  var LETRA_TIPO = { terrestre: 'T', aquatica: 'A', aerea: 'Ae', outras: 'O', sem_tipo: '?' };
+  var ATUALIZAR_MAPA_MS = 60000;   // conferência periódica (o tempo real cobre o resto)
+  var mapaDash = null;             // { mapa, no, marcadores: Map, camada, canal, timer, sujo }
+  var promessaGeo = null, geoDec = null;
+
+  function pararMapa() {
+    var m = mapaDash;
+    mapaDash = null;
+    if (!m) return;
+    clearInterval(m.timer);
+    document.removeEventListener('visibilitychange', m.aoVoltar);
+    if (m.canal) { try { C.cliente.removeChannel(m.canal); } catch (e) { /* ignora */ } }
+    try { m.mapa.remove(); } catch (e) { /* ignora */ }
+  }
+
+  function carregarGeo() {
+    if (raiz.ParanaGeo) return Promise.resolve(raiz.ParanaGeo);
+    if (!promessaGeo) {
+      promessaGeo = new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = 'js/parana-geo.js';
+        s.onload = function () { if (raiz.ParanaGeo) resolve(raiz.ParanaGeo); else reject(new Error('arquivo de limites vazio')); };
+        s.onerror = function () { reject(new Error('não foi possível baixar os limites do Paraná')); };
+        document.head.appendChild(s);
+      });
+      promessaGeo.catch(function () { promessaGeo = null; });
+    }
+    return promessaGeo;
+  }
+
+  // polyline (algoritmo do Google), precisão 1e-3, latitude primeiro
+  function decodificar(str) {
+    var pts = [], i = 0, lat = 0, lng = 0;
+    while (i < str.length) {
+      var r = [0, 0];
+      for (var k = 0; k < 2; k++) {
+        var res = 0, sh = 0, b;
+        do { b = str.charCodeAt(i++) - 63; res |= (b & 0x1f) << sh; sh += 5; } while (b >= 0x20);
+        r[k] = res & 1 ? ~(res >> 1) : res >> 1;
+      }
+      lat += r[0]; lng += r[1];
+      pts.push([lat / 1e3, lng / 1e3]);
+    }
+    return pts;
+  }
+
+  function geoDecodificado(g) {
+    if (geoDec) return geoDec;
+    geoDec = {
+      estado: g.estado.map(decodificar),
+      regioes: g.regioes.map(function (r) { return { nome: r.nome, centro: r.centro, aneis: r.aneis.map(decodificar) }; }),
+      municipios: g.municipios.map(function (m) { return { nome: m[0], regiao: m[1], caixa: m[2], aneis: m[3].map(decodificar) }; }),
+    };
+    return geoDec;
+  }
+
+  function dentroDoAnel(lat, lng, anel) {
+    var dentro = false;
+    for (var i = 0, j = anel.length - 1; i < anel.length; j = i++) {
+      var yi = anel[i][0], xi = anel[i][1], yj = anel[j][0], xj = anel[j][1];
+      if ((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi) dentro = !dentro;
+    }
+    return dentro;
+  }
+
+  // Município e mesorregião do ponto (limites simplificados: perto da divisa pode cair no vizinho).
+  function localNoParana(lat, lng) {
+    if (!geoDec) return null;
+    for (var i = 0; i < geoDec.municipios.length; i++) {
+      var m = geoDec.municipios[i], c = m.caixa;
+      if (lat < c[0] || lat > c[2] || lng < c[1] || lng > c[3]) continue;
+      if (m.aneis.some(function (a) { return dentroDoAnel(lat, lng, a); })) return { municipio: m.nome, regiao: geoDec.regioes[m.regiao] ? geoDec.regioes[m.regiao].nome : '' };
+    }
+    return { fora: true };
+  }
+
+  function temCoordenada(o) {
+    return o.local_lat != null && o.local_lng != null && isFinite(o.local_lat) && isFinite(o.local_lng) &&
+      Math.abs(o.local_lat) <= 90 && Math.abs(o.local_lng) <= 180 && !(o.local_lat === 0 && o.local_lng === 0);
+  }
+  function statusDe(o) { return o.status === 'ativa' ? 'ativa' : 'encerrada'; }
+  function tipoDe(o) { return LETRA_TIPO[o.tipo] ? o.tipo : 'sem_tipo'; }
+  function naturezaDe(o) {
+    var base = o.tipo === 'outras' && o.tipo_outro ? 'Outras – ' + o.tipo_outro : TIPOS[tipoDe(o)];
+    var nat = o.ipo && o.ipo.natureza;
+    return nat ? base + ' · ' + nat : base;
+  }
+
+  function iconeOp(o) {
+    var st = statusDe(o), tp = tipoDe(o);
+    return L.divIcon({
+      className: 'dash-mk-wrap',
+      html: '<span class="dash-mk dash-mk-' + st + '" style="--cor:' + STATUS_OP[st].cor + '"><b>' + LETRA_TIPO[tp] + '</b></span>',
+      iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14],
+    });
+  }
+
+  function iconeGrupoOps(cluster) {
+    var filhos = cluster.getAllChildMarkers();
+    var ativas = filhos.filter(function (mk) { return mk.options.statusOp === 'ativa'; }).length;
+    var ang = Math.round(ativas / filhos.length * 360);
+    return L.divIcon({
+      className: 'dash-cluster-wrap',
+      html: '<span class="dash-cluster" style="background:conic-gradient(' + STATUS_OP.ativa.cor + ' 0 ' + ang + 'deg,' + STATUS_OP.encerrada.cor + ' 0)" title="' +
+        ativas + ' ativa(s), ' + (filhos.length - ativas) + ' encerrada(s)"><b>' + filhos.length + '</b></span>',
+      iconSize: [38, 38], iconAnchor: [19, 19],
+    });
+  }
+
+  function popupOp(o) {
+    var st = statusDe(o);
+    var loc = localNoParana(o.local_lat, o.local_lng);
+    var onde = !loc ? 'Município: carregando limites…' : loc.fora ? 'Fora dos limites do Paraná' : loc.municipio + ' · ' + loc.regiao;
+    var quando = o.acionado_em || o.criada_em;
+    var resp = el('dd', { texto: 'carregando…' });
+    var part = el('dd', { texto: 'carregando…' });
+    var compacto = Boolean(mapaDash && mapaDash.no.clientWidth < 480);   // celular: popup menor, botão sempre à vista
+    var limite = compacto ? 90 : 160;
+    var desc = (o.descricao || '').replace(/\s+/g, ' ').trim();
+    if (desc.length > limite) desc = desc.slice(0, limite - 3) + '…';
+    var no = el('div', { classe: 'dash-pop' + (compacto ? ' dash-pop-compacto' : '') }, [
+      el('strong', { classe: 'dash-pop-titulo', texto: o.codigo || 'Operação' }),
+      el('span', { classe: 'dash-pop-status dash-pop-' + st, texto: STATUS_OP[st].rotulo + (st === 'encerrada' && o.encerrada_em ? ' em ' + dataHora(o.encerrada_em) : '') }),
+      el('dl', { classe: 'dash-pop-dados' }, [
+        el('dt', { texto: 'Tipo' }), el('dd', { texto: naturezaDe(o) }),
+        el('dt', { texto: 'Local' }), el('dd', { classe: 'dash-pop-onde', texto: onde }),
+        el('dt', { texto: 'Acionada' }), el('dd', { texto: quando ? dataHora(quando) : '—' }),
+        el('dt', { texto: 'Responsável' }), resp,
+        el('dt', { texto: 'Participantes' }), part,
+      ]),
+      desc ? el('p', { classe: 'dash-pop-desc', texto: desc }) : null,
+      el('button', { classe: 'btn btn-pequeno btn-escuro dash-pop-abrir', type: 'button', texto: o.dados_apagados_em ? 'Abrir operação (dados apagados)' : st === 'ativa' ? 'Abrir operação' : 'Abrir operação (só leitura)',
+        onclick: function () { pararMapa(); abrirOperacao(o.id); } }),
+    ]);
+    // dados que dependem da permissão: o banco só devolve o que este responsável pode ver
+    C.rpc('listar_responsaveis', { p_operacao: o.id }).then(function (l) {
+      var cri = (l || []).filter(function (r) { return r.criador; })[0] || (l || [])[0];
+      resp.textContent = cri ? cri.nome + ((l || []).length > 1 ? ' (+' + (l.length - 1) + ')' : '') : 'não informado';
+    }).catch(function () { resp.textContent = 'indisponível'; });
+    C.cliente.from('participantes').select('id', { count: 'exact', head: true }).eq('operacao_id', o.id).neq('tipo', 'responsavel').eq('removido', false)
+      .then(function (r) { part.textContent = r.error ? 'indisponível' : String(r.count == null ? '—' : r.count); }, function () { part.textContent = 'indisponível'; });
+    return no;
+  }
+
+  function legendaMapa(ops) {
+    var st = {}, tp = {};
+    ops.forEach(function (o) { st[statusDe(o)] = (st[statusDe(o)] || 0) + 1; tp[tipoDe(o)] = (tp[tipoDe(o)] || 0) + 1; });
+    var itens = [];
+    ['ativa', 'encerrada'].forEach(function (k) {
+      if (st[k]) itens.push(el('li', null, [el('span', { classe: 'dash-mk dash-mk-' + k + ' dash-mk-leg', style: '--cor:' + STATUS_OP[k].cor }), STATUS_OP[k].rotulo + ' (' + st[k] + ')']));
+    });
+    Object.keys(LETRA_TIPO).forEach(function (k) {
+      if (tp[k]) itens.push(el('li', null, [el('span', { classe: 'dash-mk-letra', texto: LETRA_TIPO[k] }), TIPOS[k] + ' (' + tp[k] + ')']));
+    });
+    if (ops.length > 1) itens.push(el('li', null, [el('span', { classe: 'dash-cluster dash-cluster-leg', style: 'background:conic-gradient(' + STATUS_OP.ativa.cor + ' 0 180deg,' + STATUS_OP.encerrada.cor + ' 0)' }, [el('b', { texto: '2' })]), 'Operações próximas agrupadas']));
+    return itens.length ? el('ul', { classe: 'dash-mapa-legenda' }, itens) : el('p', { classe: 'muted dash-mapa-legenda', texto: 'Nenhuma operação com local cadastrado.' });
+  }
+
+  function desenharLimites(m, g) {
+    var d = geoDecodificado(g);
+    var tela = L.canvas({ padding: 0.3 });
+    if (!m.mapa.getPane('rotulosRegiao')) m.mapa.createPane('rotulosRegiao').style.zIndex = 450;   // abaixo dos marcadores
+    var municipios = L.layerGroup(d.municipios.map(function (x) {
+      return L.polygon(x.aneis, { renderer: tela, color: '#94a3b8', weight: 0.6, opacity: 0.55, fill: false, interactive: false });
+    }));
+    L.layerGroup(d.regioes.map(function (r) {
+      return L.polygon(r.aneis, { renderer: tela, color: '#f59e0b', weight: 1.4, opacity: 0.75, dashArray: '5 5', fill: false, interactive: false });
+    })).addTo(m.mapa);
+    L.polygon(d.estado, { renderer: tela, color: '#f59e0b', weight: 2.6, opacity: 0.95, fillColor: '#f59e0b', fillOpacity: 0.04, interactive: false }).addTo(m.mapa);
+    var rotulos = L.layerGroup(d.regioes.map(function (r) {
+      return L.marker(r.centro, { pane: 'rotulosRegiao', interactive: false, keyboard: false, icon: L.divIcon({ className: 'dash-rotulo-regiao', html: '<span>' + C.esc(r.nome) + '</span>', iconSize: null }) });
+    }));
+    function porZoom() {
+      var z = m.mapa.getZoom();
+      if (z >= 9) municipios.addTo(m.mapa); else municipios.remove();
+      if (z <= 9) rotulos.addTo(m.mapa); else rotulos.remove();
+    }
+    m.mapa.on('zoomend', porZoom);
+    porZoom();
+  }
+
+  async function atualizarMapa(m) {
+    if (mapaDash !== m) return;
+    m.sujo = false;
+    var ops;
+    try {
+      ops = await C.consultarTudo(function () {
+        return C.cliente.from('operacoes').select('id,codigo,tipo,tipo_outro,status,acionado_em,criada_em,encerrada_em,dados_apagados_em,local_lat,local_lng,local_endereco,descricao,ipo')
+          .order('criada_em', { ascending: false });
+      });
+    } catch (e) {
+      if (mapaDash !== m) return;
+      m.aviso.hidden = false;
+      m.aviso.textContent = 'Não foi possível atualizar as operações do mapa: ' + e.message + (m.marcadores.size ? ' Mostrando o último carregamento.' : '');
+      m.aviso.appendChild(el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Tentar de novo', onclick: function () { atualizarMapa(m); } }));
+      return;
+    }
+    if (mapaDash !== m) return;
+    m.aviso.hidden = true;
+    var comLocal = ops.filter(temCoordenada), semLocal = ops.filter(function (o) { return !temCoordenada(o); });
+    var vistos = new Set();
+    comLocal.forEach(function (o) {
+      vistos.add(o.id);
+      var assinatura = [o.local_lat, o.local_lng, o.status, o.tipo, o.codigo, o.encerrada_em, o.descricao, o.dados_apagados_em].join('|');
+      var x = m.marcadores.get(o.id);
+      if (x && x.assinatura === assinatura) { x.o = o; return; }
+      if (x) m.camada.removeLayer(x.mk);
+      var mk = L.marker([o.local_lat, o.local_lng], { icon: iconeOp(o), statusOp: statusDe(o), title: o.codigo || 'Operação', alt: o.codigo || 'Operação', keyboard: true });
+      var item = { o: o, mk: mk, assinatura: assinatura };
+      // o popup nunca passa da altura do mapa (no celular ele rola por dentro e o botão continua alcançável)
+      var alturaPop = Math.max(180, (m.no.clientHeight || 340) - 70);
+      mk.bindPopup(function () { return popupOp(item.o); }, { maxWidth: Math.min(300, (m.no.clientWidth || 300) - 50), minWidth: 200, maxHeight: alturaPop,
+        className: 'dash-popup', autoPanPadding: [12, 12] });
+      m.camada.addLayer(mk);
+      m.marcadores.set(o.id, item);
+    });
+    m.marcadores.forEach(function (x, id) { if (!vistos.has(id)) { m.camada.removeLayer(x.mk); m.marcadores.delete(id); } });
+    m.legenda.replaceChildren(legendaMapa(comLocal));
+    m.semLocal.replaceChildren();
+    m.semLocal.hidden = !semLocal.length;
+    if (semLocal.length) {
+      m.semLocal.appendChild(el('span', { texto: semLocal.length + (semLocal.length === 1 ? ' operação sem coordenadas do local não aparece' : ' operações sem coordenadas do local não aparecem') + ' no mapa. ' }));
+      m.semLocal.appendChild(el('button', { classe: 'link-botao', type: 'button', texto: 'Ver quais', onclick: function () {
+        abrirDetalhe({ titulo: 'Operações sem local no mapa', subtitulo: 'Cadastre o local (Dados da operação) para que apareçam no mapa.',
+          lista: semLocal.map(itemOperacao), nota: 'Toque numa operação para abri-la.' });
+      } }));
+    }
+    m.contagem.textContent = comLocal.length + ' no mapa';
+  }
+
+  function iniciarMapa(caixa, no) {
+    if (!raiz.L || !document.body.contains(no)) return;
+    pararMapa();
+    var mapa = L.map(no, { zoomSnap: 0.5, minZoom: 5, maxZoom: 18, scrollWheelZoom: false, maxBounds: L.latLngBounds(LIMITES_PR).pad(0.9), worldCopyJump: false });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · limites: IBGE',
+    }).addTo(mapa);
+    mapa.fitBounds(LIMITES_PR, { padding: [8, 8] });
+    // rolar a página não dá zoom sem querer: a roda só vale depois de tocar no mapa
+    mapa.on('click focus', function () { mapa.scrollWheelZoom.enable(); });
+    mapa.on('mouseout blur', function () { mapa.scrollWheelZoom.disable(); });
+    var camada = L.markerClusterGroup
+      ? L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 44, spiderfyOnMaxZoom: true, iconCreateFunction: iconeGrupoOps })
+      : L.featureGroup();
+    camada.addTo(mapa);
+    var m = {
+      mapa: mapa, no: no, camada: camada, marcadores: new Map(), canal: null, timer: null, sujo: false,
+      aviso: caixa.querySelector('.dash-mapa-aviso'), legenda: caixa.querySelector('.dash-mapa-legenda-caixa'),
+      semLocal: caixa.querySelector('.dash-mapa-sem-local'), contagem: caixa.querySelector('.dash-mapa-n'),
+    };
+    mapaDash = m;
+    m.aoVoltar = function () { if (!document.hidden && m.sujo) atualizarMapa(m); };
+    document.addEventListener('visibilitychange', m.aoVoltar);
+    carregarGeo().then(function (g) {
+      if (mapaDash !== m) return;
+      desenharLimites(m, g);
+      m.marcadores.forEach(function (x) { if (x.mk.isPopupOpen()) x.mk.setPopupContent(popupOp(x.o)); });
+    }).catch(function (e) {
+      if (mapaDash !== m) return;
+      caixa.querySelector('.dash-mapa-nota').textContent = 'Limites de municípios e regiões indisponíveis (' + e.message + '). As operações continuam no mapa.';
+    });
+    atualizarMapa(m);
+    // tempo real (migração 028 põe "operacoes" na publicação); sem ele, a conferência periódica cobre
+    try {
+      m.canal = C.cliente.channel('dash-operacoes-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operacoes' }, function () {
+          if (mapaDash !== m) return;
+          clearTimeout(m.atraso);
+          m.atraso = setTimeout(function () { if (document.hidden || !visivel(m)) m.sujo = true; else atualizarMapa(m); }, 600);
+        })
+        .subscribe();
+    } catch (e) { m.canal = null; }
+    m.timer = setInterval(function () {
+      if (mapaDash !== m) return;
+      if (!document.body.contains(m.no)) { pararMapa(); return; }
+      if (document.hidden || !visivel(m)) { m.sujo = true; return; }
+      atualizarMapa(m);
+    }, ATUALIZAR_MAPA_MS);
+  }
+  function visivel(m) { return m.no.offsetParent !== null; }
+
+  function secaoMapaParana() {
+    var no = el('div', { classe: 'dash-mapa', role: 'region', 'aria-label': 'Mapa do Paraná com as operações' });
+    var caixa = el('section', { classe: 'dash-card dash-mapa-card', 'aria-labelledby': 'dash-mapa-titulo' }, [
+      el('div', { classe: 'dash-card-topo' }, [
+        el('h3', { id: 'dash-mapa-titulo', texto: 'Operações no mapa do Paraná' }),
+        el('span', { classe: 'dash-n dash-mapa-n', texto: '…' }),
+      ]),
+      el('p', { classe: 'dash-pergunta dash-mapa-nota', texto: 'Cada marcador fica no local cadastrado da operação. Toque num marcador para ver os dados; a roda do mouse dá zoom depois de clicar no mapa.' }),
+      el('p', { classe: 'erro-form dash-mapa-aviso', role: 'alert', hidden: true }),
+      no,
+      el('div', { classe: 'dash-mapa-legenda-caixa' }),
+      el('p', { classe: 'muted dash-mapa-sem-local', hidden: true }),
+    ]);
+    if (!raiz.L) {
+      no.replaceWith(el('p', { classe: 'erro-form', texto: 'Mapa indisponível: a biblioteca de mapas não carregou (verifique a conexão).' }));
+      return caixa;
+    }
+    // o dashboard é montado fora da página e inserido depois: o mapa começa quando a caixa já está na tela
+    setTimeout(function () { iniciarMapa(caixa, no); }, 0);
+    return caixa;
+  }
+
   /* ------------------------------ carregamento ------------------------------ */
   async function carregar(elemento, chamada, desenhar) {
     elemento.innerHTML = '';
@@ -957,6 +1268,7 @@
 
   raiz.Dashboard = {
     geral: function (elemento) {
+      pararMapa();
       cacheOps = cacheLocalizadas = null;
       return carregar(elemento, function () { return C.rpc('estudo_geral'); }, renderGeral);
     },
@@ -973,5 +1285,7 @@
       }, function (x, alvo) { return renderOperacao(x.d, x.r, op, alvo); });
     },
     calcularEsforco: calcularEsforco,
+    pararMapa: pararMapa,
+    localNoParana: function (lat, lng) { return localNoParana(lat, lng); },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -86,6 +86,13 @@
     'Invalid login credentials': 'E-mail ou senha incorretos.',
     'Email not confirmed': 'E-mail ainda não confirmado no Supabase.',
     'Anonymous sign-ins are disabled': 'O ingresso de participantes está desativado no servidor (login anônimo). Avise o responsável.',
+    // trilhas desenhadas à mão (migração 028)
+    trilha_invalida: 'Traçado inválido: a trilha precisa de 2 a 2000 pontos com coordenadas válidas.',
+    trilha_nao_encontrada: 'Esta trilha não existe mais (pode ter sido excluída por outro responsável).',
+    nome_trilha_invalido: 'Informe o nome da trilha (até 80 caracteres).',
+    nome_repetido: 'Já existe uma trilha com esse nome nesta operação.',
+    responsavel_trajeto_invalido: 'O responsável escolhido não participa desta operação.',
+    grupo_invalido: 'O grupo escolhido não pertence a esta operação (pode ter sido excluído).',
   };
 
   function textoDoErro(err) {

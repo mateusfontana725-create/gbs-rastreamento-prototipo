@@ -15,6 +15,7 @@ e ainda não estiver no `v2` fica listado aqui, para levar quando for a hora. Ao
 | `17bafde` | Operação encerrada abre só para visualização (também depois da retenção); botões de alteração somem. **Migração 026** (servidor recusa alterações em operação encerrada). | `supabase/migracoes/026_operacao_encerrada_somente_leitura.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/js/ferramentas.js`, `public/js/relatorio.js`, `testes/banco_migracoes.test.mjs`, `README.md` | Banco compartilhado: a 026 roda uma vez só. No `v2`, conferir `renderizarOperacoes` e `renderizarCabecalho` no `militar.js`. |
 | `706633c` | Dados só saem ao excluir a operação: encerrar e a limpeza diária não apagam; sem "Apagar dados pessoais" na criação e sem "Apagar dados agora". **Migração 027**. | `supabase/migracoes/027_dados_so_saem_ao_excluir.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/js/relatorio-pdf.js`, `public/js/comunicacao.js`, `public/militar.html`, `testes/banco_migracoes.test.mjs`, `README.md` | Banco compartilhado: a 027 roda uma vez só. No `v2`, conferir `abrirNovaOperacao`, `encerrarOperacao` e `renderizarCabecalho`. |
 | `2f305ab` | Mapa do Paraná no dashboard (operações no local cadastrado, limites IBGE, agrupamento, popup com "Abrir operação") e ferramenta **Desenhar trilha** (planejada/percorrida, sem duplicar, desenho preservado em falha). **Migração 028** (`trilhas_manuais`; `operacoes` no Realtime). | `supabase/migracoes/028_trilhas_manuais.sql` (nova), `supabase/schema.sql`, `public/js/parana-geo.js` (novo), `public/js/dashboard.js`, `public/js/militar.js`, `public/js/comunicacao.js`, `public/militar.html`, `public/css/militar.css`, `testes/banco_migracoes.test.mjs`, `README.md` | Banco compartilhado: a 028 roda uma vez só. No `v2`, conferir `iniciarDesenho`, `aoClicarNoMapa`, `renderizarAreas` e `CAMADAS_MODO` no `militar.js`. |
+| `cef47d1` | Trilha desenhada **à mão livre** (arrastar o dedo/mouse), com emenda pelas pontas, Desfazer traço e Mover mapa. | `public/js/militar.js`, `public/css/militar.css`, `README.md` | Depende do `2f305ab`. |
 
 ## Como levar
 
@@ -22,7 +23,7 @@ No branch `v2`, aplicar os commits da tabela, do mais antigo para o mais novo:
 
 ```
 git checkout v2
-git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab
+git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab cef47d1
 ```
 
 Se o `cherry-pick` parar por conflito no `README.md`, mantenha as duas partes do texto e continue com

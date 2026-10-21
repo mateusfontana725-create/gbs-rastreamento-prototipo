@@ -286,10 +286,14 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **linha**, um caminho). Exige a
 **migração 028**; sem ela, a lista avisa e o botão não aparece (o resto do painel segue normal).
 
-- **Desenhar**: **Ferramentas → Desenhar trilha** (ou **Lista de setores, trilhas e pontos → ＋ Desenhar
-  trilha**). Toque no mapa ponto a ponto, na ordem do caminho (o 1º ponto fica verde). A barra mostra pontos e
-  comprimento e tem **Desfazer ponto**, **Limpar** (pede confirmação com mais de 2 pontos), **Concluir trilha**
-  (a partir de 2 pontos) e **Cancelar** (pede confirmação). Até 2000 pontos.
+- **Desenhar à mão livre**: **Ferramentas → Desenhar trilha** (ou **Lista de setores, trilhas e pontos → ＋
+  Desenhar trilha**). Segure e arraste o dedo (ou o mouse) sobre o mapa, como uma caneta: a linha segue o
+  movimento (não liga pontos com retas; o traço é suavizado sem perder a forma). Ao soltar, continue
+  arrastando a partir do **círculo branco** (fim) — ou do verde (início) — para emendar na mesma linha; um
+  traço começado longe das pontas é recusado com aviso. Tocar sem arrastar não marca nada. Enquanto desenha,
+  o mapa fica parado; **dois dedos** dão zoom, a roda do mouse também, e **✋ Mover mapa** libera o arrasto do
+  mapa (toque em **✎ Desenhar** para voltar). A barra mostra o comprimento e tem **Desfazer traço** (desfaz o
+  último traço inteiro), **Limpar** (pede confirmação), **Concluir trilha** e **Cancelar** (pede confirmação).
 - **Concluir** abre o formulário: **nome** (único na operação), **situação** — o usuário escolhe
   **Planejada** (caminho previsto) ou **Percorrida** (já feita, com **data e hora**); nada é marcado sozinho —,
   grupo, responsável pelo trajeto (participante), equipe e observações. Origem: "desenhada à mão no mapa".
@@ -302,8 +306,8 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   aparelho). Ficam acima dos setores e abaixo dos rastros de GPS e dos marcadores.
 - **Consultar e gerenciar**: tocar na linha (ou na lista) abre os detalhes (situação, comprimento, equipe,
   quem criou/alterou e quando) com **Ver no mapa**, **Ocultar/Mostrar**, **Informar como percorrida**,
-  **Editar dados**, **Editar traçado** (os pontos voltam para a barra de desenho; Cancelar devolve o traçado
-  salvo) e **Excluir** (com confirmação; quem desenhou, quem criou a operação ou um administrador).
+  **Editar dados**, **Editar traçado** (a linha volta para o modo de desenho: dá para estender a partir das pontas ou
+  **Limpar** e redesenhar; Cancelar devolve o traçado salvo) e **Excluir** (com confirmação; quem desenhou, quem criou a operação ou um administrador).
 - **Ocultar**: uma a uma (👁 na lista; vale só neste aparelho) ou por categoria em **Camadas → Trilhas
   desenhadas · planejadas / · percorridas**. Os modos **Tudo** e **Cobertura** mostram as trilhas desenhadas.
 - **Não é cobertura**: uma trilha (mesmo percorrida) **não** conclui setor nem entra em cálculo de área
@@ -1425,7 +1429,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   verificações, migrações 007–028: criar planejada/percorrida, ordem dos pontos, sem duplicar pelo client_id,
   nome repetido, geometria inválida, outro responsável não lê/altera/exclui, gravação direta recusada,
   encerrada só leitura, diário, setores intocados, exclusão em cascata). Navegador (Chromium, banco simulado):
-  fluxo completo de desenho (82: desfazer, limpar, cancelar, falha ao salvar sem perder o desenho e sem
+  fluxo completo de desenho à mão livre (92 com mouse e 6 com toque real — um dedo desenha, dois dão zoom, a página não rola: desfazer traço, emendar no fim, traço longe recusado, mover mapa, limpar, cancelar, falha ao salvar sem perder o desenho e sem
   duplicar, recarregar, percorrida, editar traçado, ocultar, camadas, excluir; computador e celular),
   retomada do rascunho, encerrada só leitura, banco sem a 028, e o mapa do Paraná (30: posição logo abaixo
   dos cartões, marcadores, agrupamento, legenda, popup, sem coordenadas, atualização, erro do Supabase,

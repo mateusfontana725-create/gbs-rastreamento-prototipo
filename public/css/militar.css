@@ -1331,3 +1331,8 @@ body { font-size: 15px; }
 .leaflet-tooltip.rotulo-trilha-desenhada::before { display: none; }
 html[data-tema="claro"] .selo.selo-trilha-planejada { color: #713f12; background: #fef3c7; border-color: #ca8a04; }
 html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; background: #f1f5f9; border-color: #334155; }
+/* desenho de trilha à mão livre: o arrasto desenha (não rola a página nem move o mapa) */
+#mapa.desenho-livre, #mapa.desenho-livre * { touch-action: none; }
+#mapa.desenho-livre, #mapa.desenho-livre .leaflet-interactive { cursor: crosshair; }
+#mapa.desenho-mover, #mapa.desenho-mover .leaflet-interactive { cursor: grab; }
+#trilha-mover[aria-pressed="true"] { border-color: var(--acento); color: var(--acento); }

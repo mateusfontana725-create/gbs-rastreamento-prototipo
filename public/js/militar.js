@@ -352,6 +352,7 @@
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
+    $('ficha-renomear').addEventListener('click', function () { var p = est.participantes.get(est.selecionado); if (p) renomearParticipante(p); });
     $('ficha-vitima').addEventListener('click', function () { if (est.selecionado) abrirRegistroVitima({ encontrou: est.selecionado, onde: 'quem' }); });
     $('menu-vitima').addEventListener('click', function () { fecharMenu(false); abrirRegistroVitima({}); });
     $('btn-excluir-op').addEventListener('click', function () { excluirOperacao(est.op); });
@@ -1372,6 +1373,9 @@
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
     ['menu-setor-raio', 'menu-setor-poligono', 'menu-trilha', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
+    // atalhos do topo do menu: some a faixa inteira quando nenhum se aplica (operação encerrada)
+    var rapido = document.querySelector('#menu-ferramentas .menu-rapido');
+    if (rapido) rapido.hidden = !Array.from(rapido.children).some(function (b) { return !b.hidden; });
     // encerrada: painel só para consulta (botões de alteração somem; o servidor também recusa)
     $('tela-painel').classList.toggle('op-somente-leitura', op.status !== 'ativa');
     if (op.status !== 'ativa' && est.compartilhando) pararMinhaPosicao(true);
@@ -1558,25 +1562,51 @@
     else if (c.hasLayer(mk)) c.removeLayer(mk);
   }
 
-  function linhaLegenda(icone, rotulo) {
-    return '<div class="legenda-linha">' + icone + '<span><b>' + rotulo + '</b></span></div>';
+  // Legenda editável: cada linha tem uma chave; o usuário pode trocar o texto ou ocultar a linha.
+  // Fica guardado neste aparelho (vale para todas as operações). Os nomes dos grupos vêm do cadastro.
+  var CHAVE_LEGENDA = 'gbs-legenda';
+  var ITENS_LEGENDA = [
+    { chave: 'militar', secao: 'part', icone: '<span class="simbolo simbolo-militar"><span>M</span></span>', padrao: 'Militar' },
+    { chave: 'civil', secao: 'part', icone: '<span class="simbolo simbolo-civil"><span>C</span></span>', padrao: 'Civil' },
+    { chave: 'responsavel', secao: 'part', icone: '<span class="simbolo simbolo-responsavel"><span>R</span></span>', padrao: 'Responsável da operação' },
+    { chave: 'resp_grupo', secao: 'part', icone: '<span class="lg-resp-grupo"><span class="simbolo simbolo-militar em-grupo" style="--cor-grupo:' + GRUPO_CORES[0] + ';background:' + GRUPO_CORES[0] + '"><span>M</span></span></span>', padrao: 'Responsável do grupo' },
+    { chave: 'antigo', secao: 'part', icone: '<span class="antigo"><span class="simbolo simbolo-civil" style="background:#6b7280"><span>·</span></span></span>', padrao: 'Última posição antiga' },
+    { chave: 'foto', secao: 'mapa', icone: '<span class="mk-foto mk-foto-legenda"><span class="ico-camera"></span></span>', padrao: 'Foto' },
+    { chave: 'relato', secao: 'mapa', icone: '<span class="mk-relato mk-relato-legenda"><span>P</span></span>', padrao: 'Relato' },
+    { chave: 'poi', secao: 'mapa', icone: '<span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span>', padrao: 'Ponto de interesse' },
+    { chave: 'base', secao: 'mapa', icone: '<span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span>', padrao: 'Base' },
+    { chave: 'cluster_pontos', secao: 'mapa', icone: '<span class="cluster cluster-pontos cluster-legenda" style="background:conic-gradient(#38bdf8 0 120deg, #f97316 0 240deg, #a855f7 0)"><b>3</b></span>', padrao: 'Pontos, relatos e fotos agrupados' },
+    { chave: 'cluster_pessoas', secao: 'mapa', icone: '<span class="cluster-pessoas cluster-legenda" style="background:conic-gradient(#ef4444 0 180deg, #3b82f6 0)"><b>2</b></span>', padrao: 'Pessoas agrupadas' },
+    { chave: 'local', secao: 'mapa', icone: '<span class="mk-local mk-local-legenda" aria-hidden="true">◎</span>', padrao: 'Local da operação' },
+    { chave: 'setor', secao: 'mapa', icone: '<span class="setor-legenda"></span>', padrao: 'Setor de busca' },
+    { chave: 'trilha_gps', secao: 'mapa', icone: '<span class="lg-trilha-gps"></span>', padrao: 'Trilha de GPS (registrada pelo aparelho)' },
+    { chave: 'trilha_planejada', secao: 'mapa', icone: '<span class="lg-trilha-desenhada lg-planejada"></span>', padrao: 'Trilha desenhada · planejada' },
+    { chave: 'trilha_percorrida', secao: 'mapa', icone: '<span class="lg-trilha-desenhada lg-percorrida"></span>', padrao: 'Trilha desenhada · percorrida' },
+    { chave: 'rota', secao: 'mapa', icone: '<span class="lg-linha-rota"></span>', padrao: 'Rota até o destino' },
+    { chave: 'falha', secao: 'mapa', icone: '<span class="lg-lacuna"></span>', padrao: 'Falha' },
+  ];
+  function prefsLegenda() {
+    var v = C.local.ler(CHAVE_LEGENDA, null) || {};
+    return { rotulos: v.rotulos || {}, ocultos: v.ocultos || {} };
+  }
+
+  function linhaLegenda(item, pref) {
+    var texto = pref.rotulos[item.chave] || item.padrao;
+    return '<div class="legenda-linha" data-legenda="' + item.chave + '">' + item.icone + '<span><b>' + C.esc(texto) + '</b></span></div>';
   }
 
   function renderizarLegenda() {
     var corpo = est.legendaCorpo;
     if (!corpo || !est.participantes || !est.membros) return;
-    var presentes = { militar: false, civil: false, responsavel: false };
+    var pref = prefsLegenda();
+    var presentes = { militar: false, civil: false, responsavel: false, resp_grupo: false, antigo: false };
     est.participantes.forEach(function (p) { if (!p.dados.removido) presentes[tipoDe(p.dados)] = true; });
-    var linhas = [];
-    if (presentes.militar) linhas.push(linhaLegenda('<span class="simbolo simbolo-militar"><span>M</span></span>', 'Militar'));
-    if (presentes.civil) linhas.push(linhaLegenda('<span class="simbolo simbolo-civil"><span>C</span></span>', 'Civil'));
-    if (presentes.responsavel) linhas.push(linhaLegenda('<span class="simbolo simbolo-responsavel"><span>R</span></span>', 'Responsável da operação'));
-    var temRespGrupo = false;
-    est.membros.forEach(function (mapa) { mapa.forEach(function (m) { if (m.papel === 'responsavel') temRespGrupo = true; }); });
-    if (temRespGrupo) linhas.push(linhaLegenda('<span class="lg-resp-grupo"><span class="simbolo simbolo-militar em-grupo" style="--cor-grupo:' + GRUPO_CORES[0] + ';background:' + GRUPO_CORES[0] + '"><span>M</span></span></span>', 'Responsável do grupo'));
-    if (est.participantes.size) {
-      var ultimas = Array.from(est.participantes.values()).some(function (p) { return !p.dados.removido && posicaoAntiga(p); });
-      if (ultimas) linhas.push(linhaLegenda('<span class="antigo"><span class="simbolo simbolo-civil" style="background:#6b7280"><span>·</span></span></span>', 'Última posição antiga'));
+    est.membros.forEach(function (mapa) { mapa.forEach(function (m) { if (m.papel === 'responsavel') presentes.resp_grupo = true; }); });
+    presentes.antigo = Array.from(est.participantes.values()).some(function (p) { return !p.dados.removido && posicaoAntiga(p); });
+    function linhas(secao) {
+      return ITENS_LEGENDA.filter(function (it) {
+        return it.secao === secao && !pref.ocultos[it.chave] && (secao !== 'part' || presentes[it.chave]);
+      }).map(function (it) { return linhaLegenda(it, pref); }).join('');
     }
     var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
     var listaGrupos = grupos.length
@@ -1585,24 +1615,54 @@
         return '<li><span class="legenda-cor" style="background:' + C.esc(g.cor) + '"></span><span class="legenda-grupo-nome">' + C.esc(g.nome) + '</span><small class="muted">' + n + ' integrante' + (n === 1 ? '' : 's') + '</small></li>';
       }).join('') + '</ul>'
       : '<p class="muted legenda-vazio">Nenhum grupo cadastrado nesta operação.</p>';
+    var noMapa = linhas('mapa');
     corpo.innerHTML =
       '<h4 class="legenda-titulo">Participantes</h4>' +
-      (linhas.join('') || '<p class="muted legenda-vazio">Nenhum participante ainda.</p>') +
+      (linhas('part') || '<p class="muted legenda-vazio">Nenhum participante ainda.</p>') +
       '<h4 class="legenda-titulo">Grupos ativos</h4>' + listaGrupos +
-            '<h4 class="legenda-titulo">No mapa</h4>' +
-      linhaLegenda('<span class="mk-foto mk-foto-legenda"><span class="ico-camera"></span></span>', 'Foto') +
-      linhaLegenda('<span class="mk-relato mk-relato-legenda"><span>P</span></span>', 'Relato') +
-      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-ENCONTRO"><span>E</span></span>', 'Ponto de interesse') +
-      linhaLegenda('<span class="mk-poi mk-poi-legenda poi-BASE"><span>B</span></span>', 'Base') +
-      linhaLegenda('<span class="cluster cluster-pontos cluster-legenda" style="background:conic-gradient(#38bdf8 0 120deg, #f97316 0 240deg, #a855f7 0)"><b>3</b></span>', 'Pontos, relatos e fotos agrupados') +
-      linhaLegenda('<span class="cluster-pessoas cluster-legenda" style="background:conic-gradient(#ef4444 0 180deg, #3b82f6 0)"><b>2</b></span>', 'Pessoas agrupadas') +
-      linhaLegenda('<span class="mk-local mk-local-legenda" aria-hidden="true">◎</span>', 'Local da operação') +
-      linhaLegenda('<span class="setor-legenda"></span>', 'Setor de busca') +
-      linhaLegenda('<span class="lg-trilha-gps"></span>', 'Trilha de GPS (registrada pelo aparelho)') +
-      linhaLegenda('<span class="lg-trilha-desenhada lg-planejada"></span>', 'Trilha desenhada · planejada') +
-      linhaLegenda('<span class="lg-trilha-desenhada lg-percorrida"></span>', 'Trilha desenhada · percorrida') +
-      linhaLegenda('<span class="lg-linha-rota"></span>', 'Rota até o destino') +
-      linhaLegenda('<span class="lg-lacuna"></span>', 'Falha');
+      (noMapa ? '<h4 class="legenda-titulo">No mapa</h4>' + noMapa : '') +
+      '<button type="button" class="btn btn-pequeno legenda-editar" id="legenda-editar">✎ Editar legenda</button>';
+    corpo.querySelector('#legenda-editar').addEventListener('click', abrirEditarLegenda);
+  }
+
+  function abrirEditarLegenda() {
+    var pref = prefsLegenda();
+    var campos = {};
+    var secoes = [['part', 'Participantes (só aparecem os tipos que estão na operação)'], ['mapa', 'No mapa']];
+    var corpo = secoes.map(function (sec) {
+      return UI.el('fieldset', { classe: 'legenda-edicao' }, [UI.el('legend', { texto: sec[1] })].concat(ITENS_LEGENDA.filter(function (it) { return it.secao === sec[0]; }).map(function (it) {
+        var txt = UI.el('input', { classe: 'campo campo-pequeno', maxlength: '60', value: pref.rotulos[it.chave] || '', placeholder: it.padrao, 'aria-label': 'Texto para "' + it.padrao + '"' });
+        var ver = UI.el('input', { type: 'checkbox', checked: pref.ocultos[it.chave] ? null : true, 'aria-label': 'Mostrar "' + it.padrao + '" na legenda' });
+        campos[it.chave] = { txt: txt, ver: ver };
+        var ico = UI.el('span', { classe: 'legenda-edicao-ico', 'aria-hidden': 'true' });
+        ico.innerHTML = it.icone;
+        return UI.el('div', { classe: 'legenda-edicao-linha', 'data-legenda': it.chave }, [ver, ico, txt]);
+      })));
+    });
+    var fechar = UI.abrirModal(UI.el('form', { classe: 'form-legenda', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault();
+      var novo = { rotulos: {}, ocultos: {} };
+      Object.keys(campos).forEach(function (k) {
+        var t = campos[k].txt.value.replace(/\s+/g, ' ').trim();
+        if (t) novo.rotulos[k] = t;
+        if (!campos[k].ver.checked) novo.ocultos[k] = true;
+      });
+      C.local.gravar(CHAVE_LEGENDA, novo);
+      fechar();
+      renderizarLegenda();
+      UI.aviso('Legenda atualizada (neste aparelho).', 'ok');
+    } }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Editar legenda do mapa' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Troque o texto de cada item (vazio = texto padrão) ou desmarque para tirar da legenda. Só muda a legenda, não o mapa. Fica guardado neste aparelho. Os nomes dos grupos se mudam em Ferramentas → Grupos.' }),
+    ].concat(corpo).concat([
+      UI.el('div', { classe: 'modal-acoes' }, [
+        UI.el('button', { classe: 'btn', type: 'button', id: 'legenda-padrao', texto: 'Restaurar padrão', onclick: function () {
+          Object.keys(campos).forEach(function (k) { campos[k].txt.value = ''; campos[k].ver.checked = true; });
+        } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'legenda-salvar', texto: 'Salvar' }),
+      ]),
+    ])));
   }
 
   function marcadoresDe(tipo) {
@@ -2154,11 +2214,23 @@
   /* ------------------------------------------------------------------ */
   /* Participantes                                                        */
   /* ------------------------------------------------------------------ */
+  // Nome de exibição dado pelo responsável (migração 029): vale no painel inteiro;
+  // o nome que a pessoa digitou fica em nome_original (mostrado na ficha).
+  function normalizarNomeParticipante(row) {
+    if (!row || !('nome' in row)) return row;
+    var r = Object.assign({}, row);
+    r.nome_original = row.nome;
+    if (row.nome_painel) r.nome = row.nome_painel;
+    return r;
+  }
+
   function upsertParticipante(row) {
+    row = normalizarNomeParticipante(row);
     var p = est.participantes.get(row.id);
     if (!p) {
       p = { id: row.id, dados: row, pontos: [], trilhaVisivel: est.prefsMapa.trilhas !== false, marcador: null, trilha: null, li: null, cor: null };
       est.participantes.set(row.id, p);
+      est.nomesCurtos = null;
       atribuirCores();
       // pontos que chegaram antes do cadastro do participante
       var orfaos = est.pontosOrfaos.filter(function (o) { return o.participante_id === row.id; });
@@ -2173,6 +2245,10 @@
         alarme();
       }
       p.dados = Object.assign({}, antigo, row);
+      if (antigo.nome !== p.dados.nome || Boolean(antigo.removido) !== Boolean(p.dados.removido)) {
+        if (p.li) { p.li.remove(); p.li = null; }
+        renovarNomesCurtos();
+      }
       // não regride a última posição se um ponto mais novo já chegou pelo fluxo de posições
       if (antigo.ultima_posicao_em && row.ultima_posicao_em &&
           C.paraMs(row.ultima_posicao_em) < C.paraMs(antigo.ultima_posicao_em)) {
@@ -2230,6 +2306,106 @@
   function corDoParticipante(p) {
     var g = grupoDoParticipante(p);
     return g ? g.cor : p.cor;
+  }
+
+  /* ---------- Nomes curtos no mapa ---------------------------------- */
+  // No mapa o nome aparece abreviado ("João S.", "Sgt. Oliveira"); o completo aparece ao passar
+  // o cursor (ou tocar) no marcador e na ficha. Dois nomes que ficariam iguais ganham o sobrenome.
+  var PARTICULAS_NOME = { da: 1, de: 1, di: 1, do: 1, du: 1, das: 1, dos: 1, e: 1 };
+  var POSTO_GRAD = /^(sd|cb|sgt|subten|st|asp|ten|tc|cap|maj|cel|gen|cmt|[1-3][º°o])\.?$/i;
+  function abreviarNome(nome) {
+    var n = String(nome || '').replace(/\s+/g, ' ').trim();
+    if (n.length <= 12) return n;
+    var w = n.split(' ');
+    var i = 0, posto = [];
+    while (i < w.length - 1 && POSTO_GRAD.test(w[i])) { posto.push(w[i]); i++; }
+    var resto = w.slice(i).filter(function (x) { return !PARTICULAS_NOME[x.toLowerCase()] && /[0-9A-Za-zÀ-ÿ]/.test(x); });
+    if (!resto.length) return n.slice(0, 11) + '…';
+    if (posto.length) return posto.join(' ') + ' ' + resto[resto.length - 1];   // posto + nome de guerra
+    if (resto.length === 1) return resto[0].length > 14 ? resto[0].slice(0, 13) + '…' : resto[0];
+    return resto[0] + ' ' + resto[resto.length - 1].charAt(0).toUpperCase() + '.';
+  }
+  function primeiroEUltimo(nome) {
+    var w = String(nome || '').trim().split(/\s+/).filter(function (x) { return !PARTICULAS_NOME[x.toLowerCase()]; });
+    return w.length > 1 ? w[0] + ' ' + w[w.length - 1] : String(nome || '');
+  }
+  function calcularNomesCurtos() {
+    var mapa = new Map(), etapas = [abreviarNome, primeiroEUltimo, function (n) { return n; }];
+    var lista = Array.from(est.participantes.values()).filter(function (p) { return !p.dados.removido; });
+    var pendentes = lista;
+    etapas.forEach(function (f) {
+      if (!pendentes.length) return;
+      var cont = {};
+      pendentes.forEach(function (p) { var k = f(p.dados.nome).toLowerCase(); cont[k] = (cont[k] || 0) + 1; });
+      // também conta quem já foi resolvido (não repetir um nome curto já usado)
+      mapa.forEach(function (v) { var k = v.toLowerCase(); cont[k] = (cont[k] || 0) + 1; });
+      var prox = [];
+      pendentes.forEach(function (p) {
+        var c = f(p.dados.nome);
+        if (cont[c.toLowerCase()] === 1 || f === etapas[2]) mapa.set(p.id, c); else prox.push(p);
+      });
+      pendentes = prox;
+    });
+    return mapa;
+  }
+  function nomeCurto(p) {
+    if (!est.nomesCurtos) est.nomesCurtos = calcularNomesCurtos();
+    var c = est.nomesCurtos.get(p.id) || abreviarNome(p.dados.nome);
+    return ehEu(p) ? c + ' (você)' : c;
+  }
+  function htmlNomeMapa(p) {
+    var curto = nomeCurto(p), todo = nomeExibido(p);
+    return curto === todo ? '<span class="mk-nc">' + C.esc(todo) + '</span>'
+      : '<span class="mk-nc">' + C.esc(curto) + '</span><span class="mk-nl">' + C.esc(todo) + '</span>';
+  }
+  // Algum nome mudou ou alguém entrou/saiu: refaz os nomes curtos de todos (um pode ter ganho sobrenome).
+  function renovarNomesCurtos() {
+    est.nomesCurtos = null;
+    est.participantes.forEach(function (p) {
+      var el = p.marcador && p.marcador.getElement();
+      var n = el && el.querySelector('.mk-nome');
+      if (n) n.innerHTML = htmlNomeMapa(p);
+      if (p.marcador && p.marcador.getElement()) p.marcador.getElement().title = nomeExibido(p) + ' (' + TIPOS[tipoDe(p.dados)].rotulo + ')';
+    });
+    est.rotulos.agendar();
+  }
+
+  // O responsável muda o nome mostrado no painel (o nome que a pessoa digitou fica guardado).
+  function renomearParticipante(p) {
+    var d = p.dados;
+    var original = d.nome_original || d.nome;
+    var campo = UI.el('input', { classe: 'campo', id: 'renomear-nome', maxlength: '40', value: d.nome, autofocus: true });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nome' });
+    var form = UI.el('form', { novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Renomear participante' }),
+      UI.el('p', { classe: 'ajuda', texto: 'O novo nome aparece para os responsáveis, no mapa e nas listas. A pessoa continua vendo o nome que ela digitou (' + original + ').' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'renomear-nome', texto: 'Nome no painel' }), campo]),
+      erro,
+      UI.el('div', { classe: 'modal-acoes' }, [
+        d.nome_painel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao nome original', onclick: function () { salvar(''); } }) : null,
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        btn,
+      ]),
+    ]);
+    async function salvar(nome) {
+      erro.hidden = true;
+      if (nome && (nome.length < 2 || nome.length > 40)) { erro.textContent = 'Use de 2 a 40 caracteres.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var r = await C.rpc('renomear_participante', { p_participante: p.id, p_nome: nome });
+        fechar();
+        upsertParticipante(Object.assign({}, p.dados, { nome: r.nome, nome_painel: r.nome_painel }));
+        renderizarLista();
+        UI.aviso(r.nome_painel ? 'Nome alterado para "' + r.nome_painel + '".' : 'Voltou ao nome original.', 'ok');
+      } catch (e) {
+        btn.disabled = false;
+        erro.textContent = e.codigo === 'funcao_ausente' ? 'O banco ainda não tem a migração 029 (renomear participantes).' : e.message;
+        erro.hidden = false;
+      }
+    }
+    form.addEventListener('submit', function (ev) { ev.preventDefault(); salvar(campo.value.replace(/\s+/g, ' ').trim()); });
+    var fechar = UI.abrirModal(form);
   }
 
   function nomeExibido(p) {
@@ -2369,7 +2545,7 @@
 
   function criarIcone(p) {
     var html = '<div class="' + classesMarcador(p) + '">' + htmlSimbolo(p) +
-      '<div class="mk-rotulo"><span class="mk-nome">' + C.esc(nomeExibido(p)) + '</span><small class="mk-idade">' + C.esc(textoRotulo(p)) + '</small></div>' +
+      '<div class="mk-rotulo"><span class="mk-nome">' + htmlNomeMapa(p) + '</span><small class="mk-idade">' + C.esc(textoRotulo(p)) + '</small></div>' +
       '</div>';
     return L.divIcon({ className: 'mk-wrap', html: html, iconSize: [0, 0] });
   }
@@ -2470,7 +2646,8 @@
     var cls = classesMarcador(p);
     if (mk.className !== cls) { mk.className = cls; est.rotulos.agendar(); }
     var nome = el.querySelector('.mk-nome');
-    if (nome && nome.textContent !== nomeExibido(p)) nome.textContent = nomeExibido(p);
+    var htmlNome = htmlNomeMapa(p);
+    if (nome && nome.getAttribute('data-h') !== htmlNome) { nome.innerHTML = htmlNome; nome.setAttribute('data-h', htmlNome); }
     var idade = el.querySelector('.mk-idade');
     var txt = textoRotulo(p);
     if (idade && idade.textContent !== txt) idade.textContent = txt;
@@ -2887,7 +3064,7 @@
     p.li.classList.toggle('alerta-saida', saida && !ajuda);
     p.li.classList.toggle('li-antigo', e.cod !== 'conectado' && tipoDe(d) !== 'responsavel');
     var busca = $('busca').value.trim().toLowerCase();
-    p.li.hidden = (Boolean(busca) && d.nome.toLowerCase().indexOf(busca) === -1) || !visivelNoFiltro(p) ||
+    p.li.hidden = (Boolean(busca) && (d.nome + ' ' + (d.nome_original || '')).toLowerCase().indexOf(busca) === -1) || !visivelNoFiltro(p) ||
       (est.filtroEstado && !d.removido && (tipoDe(d) === 'responsavel' || estadoDe(p).cod !== est.filtroEstado));
   }
 
@@ -3050,6 +3227,10 @@
     var eu = ehEu(p);
     var ehResp = tipoDe(d) === 'responsavel';
     $('ficha-nome').textContent = nomeExibido(p);
+    $('ficha-renomear').hidden = !podeAlterar() || eu;
+    var orig = d.nome_original && d.nome_original !== d.nome ? d.nome_original : '';
+    $('ficha-nome-original').hidden = !orig;
+    $('ficha-nome-original').textContent = orig ? 'Nome informado pela pessoa: ' + orig : '';
     $('ficha-simbolo').innerHTML = htmlSimbolo(p);
 
     // Topo da ficha: tipo e situação numa linha só. O essencial fica à vista;
@@ -5234,7 +5415,9 @@
     var ativa = est.op.status === 'ativa';
     var editavel = podeAlterar();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-ponto' }, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]), ' ' + d.titulo]),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-acao' }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]), ' ' + d.titulo,
+        editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-renomear', type: 'button', id: 'ponto-renomear', title: 'Renomear o ponto', 'aria-label': 'Renomear o ponto', texto: '✎',
+          onclick: function () { fechar(); renomearPonto(d); } }) : null]),
       dl,
       blocoFoto,
       UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
@@ -5251,6 +5434,34 @@
     altitudeEm(d.lat, d.lng).then(function (m) {
       alt.textContent = m == null ? 'indisponível (sem conexão com o modelo de terreno)' : '≈ ' + Math.round(m).toLocaleString('pt-BR') + ' m (modelo de terreno, aproximado)';
     });
+  }
+
+  function renomearPonto(d) {
+    var campo = UI.el('input', { classe: 'campo', id: 'ponto-novo-nome', maxlength: '80', value: d.titulo, autofocus: true });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nome' });
+    var form = UI.el('form', { novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Renomear ponto' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-novo-nome', texto: 'Nome do ponto' }), campo]),
+      erro,
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      var titulo = campo.value.replace(/\s+/g, ' ').trim();
+      if (!titulo) { erro.textContent = 'Informe o nome do ponto.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var res = await C.rpc('salvar_ponto', { p_operacao: est.op.id, p_id: d.id, p_dados: { titulo: titulo } });
+        fechar();
+        aplicarPontos([res]);
+        UI.aviso('Ponto renomeado para "' + res.titulo + '".', 'ok');
+      } catch (e) {
+        btn.disabled = false;
+        erro.textContent = e.message; erro.hidden = false;
+      }
+    });
+    var fechar = UI.abrirModal(form);
   }
 
   function anexarFotoPonto(d) {
@@ -7802,7 +8013,7 @@
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'grupo-nome', texto: 'Nome do grupo' }), nome]),
       UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor' }), cores]),
       UI.el('label', { classe: 'linha-opcao' }, [mil, ' Quem entrar pelo link do grupo pode se identificar como militar']),
-      UI.el('p', { classe: 'ajuda', texto: 'Sem esta opção, quem entra pelo link do grupo aparece sempre como civil (CPF e celular obrigatórios). O papel de responsável do grupo só é dado aqui no painel.' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Sem esta opção, quem entra pelo link do grupo aparece sempre como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.' }),
       erro,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
     ]);

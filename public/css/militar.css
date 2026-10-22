@@ -1336,3 +1336,43 @@ html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; backgroun
 #mapa.desenho-livre, #mapa.desenho-livre .leaflet-interactive { cursor: crosshair; }
 #mapa.desenho-mover, #mapa.desenho-mover .leaflet-interactive { cursor: grab; }
 #trilha-mover[aria-pressed="true"] { border-color: var(--acento); color: var(--acento); }
+
+/* Menu Ferramentas: atalhos das ações mais usadas, em grade no topo */
+.menu-rapido { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px 10px 10px; border-bottom: 1px solid var(--borda); }
+.menu-rapido[hidden] { display: none; }
+.menu-item.menu-atalho {
+  flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; min-height: 54px; padding: 6px 10px;
+  border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); font-weight: 600; font-size: .82rem; line-height: 1.2;
+}
+.menu-item.menu-atalho .ico-item, .menu-item.menu-atalho .ico-camera { font-size: 1rem; }
+.menu-item.menu-atalho:hover { border-color: var(--acento); }
+.menu-item.menu-atalho.menu-vitima { border-color: rgba(217, 70, 239, .55); }
+
+/* Ficha e detalhes: nome com botão de renomear */
+.ficha-nome-linha, .titulo-com-acao { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ficha-nome-linha h2 { margin: 0; }
+.btn-renomear { min-height: 26px; padding: 0 7px; font-size: .8rem; }
+.titulo-com-acao .btn-renomear { margin-left: 4px; }
+.ficha-nome-original { display: block; font-size: .72rem; margin-top: 1px; }
+
+/* Rótulos do mapa: nome curto; o completo aparece ao passar o cursor, ao focar ou selecionado */
+.mk-nl { display: none; }
+.leaflet-marker-icon:hover .mk-nc, .leaflet-marker-icon:focus .mk-nc, .mk.selecionado .mk-nc { display: none; }
+.leaflet-marker-icon:hover .mk-nl, .leaflet-marker-icon:focus .mk-nl, .mk.selecionado .mk-nl { display: inline; }
+.mapa-adaptativo .leaflet-marker-icon:hover .mk-nome, .mapa-adaptativo .leaflet-marker-icon:focus .mk-nome { max-width: none; }
+/* menos texto no mapa: "há X min" só para quem está com posição antiga, pede atenção ou está selecionado */
+.mapa-adaptativo .mk:not(.antigo):not(.ajuda):not(.saida):not(.selecionado) .mk-idade { display: none; }
+/* setor: só o nome no mapa (a situação aparece pelo estilo do contorno e nos detalhes) */
+.mapa-adaptativo .rs-status { display: none; }
+/* pontos: nome longo encurtado; inteiro ao passar o cursor */
+.mapa-adaptativo .mk-poi-rotulo { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapa-adaptativo .leaflet-marker-icon:hover .mk-poi-rotulo, .mapa-adaptativo .leaflet-marker-icon:focus .mk-poi-rotulo { max-width: none; }
+
+/* Legenda editável */
+.legenda-editar { width: 100%; margin-top: 8px; }
+.form-legenda { display: grid; gap: 10px; }
+.legenda-edicao { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; margin: 0; display: grid; gap: 6px; }
+.legenda-edicao legend { font-size: .76rem; color: var(--texto-2); padding: 0 4px; }
+.legenda-edicao-linha { display: grid; grid-template-columns: auto 30px minmax(0, 1fr); align-items: center; gap: 8px; }
+.legenda-edicao-ico { display: inline-grid; place-items: center; }
+.legenda-edicao-linha:has(input[type="checkbox"]:not(:checked)) .campo, .legenda-edicao-linha:has(input[type="checkbox"]:not(:checked)) .legenda-edicao-ico { opacity: .45; }

@@ -8,7 +8,7 @@ ao celular de cada participante.
   mensagens nos dois sentidos, relatos de campo, fotos georreferenciadas, equipe de responsáveis e a
   posição de cada responsável. Funciona no computador, no tablet e no celular.
 - **`/civil.html#t=…`**: página do participante. Só abre com o link (ou QR Code) gerado pelo painel.
-  O participante informa nome, CPF e celular, conversa com a equipe, relata pistas e envia fotos;
+  O participante informa nome, celular e (opcionalmente) CPF, conversa com a equipe, relata pistas e envia fotos;
   o encerramento do rastreamento é feito pelo responsável.
 
 Tecnologias: HTML/CSS/JavaScript puros, Leaflet + OpenStreetMap, **Supabase** (Postgres, Auth,
@@ -220,7 +220,18 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   pedido de ajuda, o âmbar da seleção e as trilhas roxas e azuis. Grupos que já existiam mantêm a cor salva.
 - **Legenda**: começa **recolhida** (um toque em **▤ Legenda** abre e fecha). Mostra só os tipos presentes
   na operação, o distintivo do responsável do grupo, a lista **Grupos ativos** (gerada dos grupos cadastrados,
-  com a cor e a quantidade de integrantes) e os símbolos do mapa.
+  com a cor e a quantidade de integrantes) e os símbolos do mapa. **✎ Editar legenda** troca o texto de cada
+  item (ex.: "Militar" → "Bombeiro") ou tira o item da legenda; **Restaurar padrão** desfaz. Muda só os textos
+  da legenda e fica guardado neste aparelho; os nomes dos grupos se mudam em **Grupos**.
+- **Nomes no mapa**: os participantes aparecem com o nome **abreviado** ("Lucas F.", "João S."; com posto ou
+  graduação, posto + nome de guerra: "Sgt. Oliveira"). Se dois nomes ficariam iguais, ganham o sobrenome
+  ("João Pereira", "João Pinto"). O nome **completo** aparece ao passar o cursor no marcador, ao focar pelo
+  teclado, no participante selecionado e na ficha. "Há X min" só aparece para quem está com a posição antiga,
+  pede atenção ou está selecionado; o rótulo do setor mostra só o nome (a situação fica no estilo e nos detalhes);
+  nomes de pontos muito longos são encurtados e aparecem inteiros ao passar o cursor.
+- **Renomear**: o **✎** ao lado do nome na **ficha do participante** dá um nome de exibição no painel (ex.:
+  "Lucas – Drone"); a ficha mostra também o nome que a pessoa digitou, que não muda, e **Voltar ao nome original**
+  desfaz. Vale para todos os responsáveis (migração 029). O **✎** nos detalhes de um **ponto de interesse** renomeia o ponto.
 - **Grupos no mapa do participante**: cada civil vê, além de si mesmo, os **integrantes dos grupos em comum**
   (civis, militares ou responsáveis), na cor do grupo, com o nome, a última posição e a atualização a cada
   15 s. Ele **não** vê quem está só em outro grupo; militares e responsáveis **sem grupo** continuam visíveis
@@ -571,15 +582,15 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Pessoas próximas agrupadas** de longe (até o zoom 15): um círculo com o número de pessoas e um anel com as cores dos
     grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
     nunca entra no agrupamento. Desliga em **Camadas → Agrupar pessoas próximas** (preferência lembrada no aparelho).
-- O menu **Ferramentas** é organizado em grupos recolhíveis (o aberto/fechado fica lembrado no aparelho):
-  - **Operação**: Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis;
-  - **Participantes e equipes**: Convidar participantes, Grupos, Deslocamentos de grupos, Enviar destino
-    a participantes;
-  - **Registros e Setores**: Registrar foto, Marcar ponto de interesse, Novo setor por raio, Novo setor desenhando a
-    área, Desenhar trilha, Lista de setores, trilhas e pontos, Exportar (escolher o que sai), Importar;
-  - **Mapa e navegação**: Ir para coordenada, Medir distância e área (o **⤢** do mapa enquadra todos);
-  - **Configurações e manutenção**: Formato das coordenadas, **Tema** (Escuro ou Claro; o padrão é o escuro e a escolha fica no aparelho), Diagnóstico do GPS;
-  - **Encerrar ou excluir · ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
+- O menu **Ferramentas** começa pelas ações mais usadas em campo e segue em grupos recolhíveis (o aberto/fechado
+  fica lembrado no aparelho):
+  - **Atalhos no topo** (sempre à vista): Vítima encontrada, Marcar ponto, Registrar foto e Enviar destino;
+  - **Desenhar no mapa** (aberto): Setor desenhando a área, Setor por raio, Desenhar trilha e a lista Setores, trilhas e pontos;
+  - **Equipes** (aberto): Grupos e Deslocamentos de grupos;
+  - **Mapa e arquivos**: Ir para coordenada, Medir distância e área, Importar arquivo e Exportar (o **⤢** do mapa enquadra todos);
+  - **Operação**: Dados da operação, Diário, Dashboard, Relatório final (PDF), Equipe de responsáveis;
+  - **Configurações**: Formato das coordenadas, **Tema** (Escuro ou Claro; o padrão é o escuro e a escolha fica no aparelho), Diagnóstico do GPS;
+  - **Ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
     quem pode; confirmação reforçada: lista o que será apagado e exige **digitar o nome da operação**).
   - O menu fecha só por ação intencional: ao escolher uma **ação** (abre janela, inicia desenho…), em
@@ -959,6 +970,7 @@ rastreamento-sar/
 │       ├── 026_operacao_encerrada_somente_leitura.sql operação encerrada: só leitura (servidor)
 │       ├── 027_dados_so_saem_ao_excluir.sql   encerrar não apaga: dados só saem ao excluir a operação
 │       ├── 028_trilhas_manuais.sql            trilhas desenhadas à mão (planejadas/percorridas); operações no Realtime
+│       ├── 029_nomes_painel_cpf_opcional.sql  CPF opcional para civis; nome de exibição do participante no painel
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1083,7 +1095,11 @@ rastreamento-sar/
      percorridas) com RLS de leitura para os responsáveis da operação, funções `salvar_trilha_manual` /
      `excluir_trilha_manual`, gatilhos (operação encerrada só leitura, diário) e inclusão de `trilhas_manuais`
      e `operacoes` no Realtime (mapa do dashboard). Só cria objetos novos; não apaga nada.
-   O `schema.sql` completo já inclui da 003 à 028.
+   - **029** (`029_nomes_painel_cpf_opcional.sql`): `ingressar` aceita civil **sem CPF** (CPF informado continua
+     conferido; celular segue obrigatório para civis); coluna `participantes.nome_painel` e função
+     `renomear_participante` (só responsáveis da operação; encerrada: só leitura; um novo ingresso da pessoa não
+     apaga o nome dado no painel). Não apaga nada.
+   O `schema.sql` completo já inclui da 003 à 029.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -1208,9 +1224,9 @@ RETORNE, ATENÇÃO, MUDE A ROTA e PARE pedem confirmação antes do envio, e o t
 camadas (Mapa, Topográfico, Satélite), fotos e relatos ficam em **Ferramentas** (seção 1); a lista
 de participantes tem os próprios botões de ocultar/mostrar.
 
-**Participante**: abre o link → digita nome, **CPF** e **celular** → **INICIAR RASTREAMENTO** → permite
-a localização. CPF e celular são obrigatórios para civis e opcionais para militares (link de
-militares); o CPF é conferido pelos dígitos verificadores. Deve manter a página aberta e a tela
+**Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **INICIAR RASTREAMENTO** → permite
+a localização. O **CPF é opcional** para todos (migração 029); se informado, é conferido pelos dígitos
+verificadores. O celular é obrigatório para civis e opcional para militares (link de militares). Deve manter a página aberta e a tela
 ligada (a opção "Manter a tela ligada" já vem marcada). Para sair, toca em **Solicitar encerramento**.
 
 **Na ficha do participante**, o CPF aparece mascarado (`***.456.789-**`, com o botão "mostrar") e
@@ -1425,6 +1441,12 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Menu, nomes no mapa, renomear, legenda e CPF opcional (versão 2026-10-22)**: banco — 347 verificações
+  (migrações 007–029: civil sem CPF, CPF inválido recusado, celular continua obrigatório, nome de exibição,
+  novo ingresso não apaga o nome, outro responsável/participante não renomeia, gravação direta recusada,
+  encerrada só leitura). Navegador (banco simulado, computador e celular): menu (atalhos, grupos), nomes
+  abreviados e sem colisão, nome completo ao passar o cursor, renomear participante e ponto, legenda
+  editada/ocultada/restaurada e lembrada após recarregar (38), e página do participante entrando sem CPF (5).
 - **Mapa do dashboard e trilhas desenhadas (versão 2026-10-21)**: banco — `npm run test:banco` (334
   verificações, migrações 007–028: criar planejada/percorrida, ordem dos pontos, sem duplicar pelo client_id,
   nome repetido, geometria inválida, outro responsável não lê/altera/exclui, gravação direta recusada,

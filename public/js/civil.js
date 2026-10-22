@@ -399,7 +399,7 @@
     return !$('ini-tipo-escolha').hidden && marcado ? marcado.value : 'civil';
   }
 
-  // CPF e celular: obrigatórios para civis, opcionais para militares.
+  // CPF: opcional para todos. Celular: obrigatório para civis, opcional para militares.
   function marcarOpcionais() {
     var opcional = tipoEscolhido() === 'militar';
     document.querySelectorAll('[data-opcional]').forEach(function (e) { e.hidden = !opcional; });
@@ -445,7 +445,7 @@
     var cpf = digitos($('ini-cpf').value);
     var tel = digitos($('ini-tel').value);
     var obrigatorio = tipo === 'civil';
-    if ((obrigatorio || cpf) && !cpfValido(cpf)) {
+    if (cpf && !cpfValido(cpf)) {
       erroInicio('CPF inválido. Confira os 11 números.');
       $('ini-cpf').focus();
       return;
@@ -524,7 +524,10 @@
         finalizar({ operacao_encerrada: 'encerrada', participante_removido: 'removido', participante_liberado: 'liberado' }[e.codigo]);
         return;
       }
-      erroInicio(e.rede ? 'Sem conexão com a internet. Verifique os dados móveis ou o Wi-Fi e tente novamente.' : e.message);
+      // servidor ainda sem a migração 029: civil sem CPF é recusado lá
+      erroInicio(e.rede ? 'Sem conexão com a internet. Verifique os dados móveis ou o Wi-Fi e tente novamente.'
+        : e.codigo === 'cpf_invalido' && !dados.cpf ? 'Nesta operação o CPF ainda é obrigatório para civis. Informe o CPF e toque em COMEÇAR.'
+        : e.message);
     } finally {
       estado.entrando = false;
       btn.disabled = false;

@@ -253,42 +253,45 @@
                 <button class="btn btn-pequeno" type="button" id="gps-alerta-como">Como liberar</button>
               </div>
             </div>
+            <!-- Mais usadas em campo: sempre à vista, no topo -->
+            <section class="menu-rapido" aria-label="Ações rápidas">
+              <button class="menu-item menu-atalho menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
+              <button class="menu-item menu-atalho" type="button" id="menu-ponto"><span class="ico-item" aria-hidden="true">▾</span><span>Marcar ponto</span></button>
+              <button class="menu-item menu-atalho" type="button" id="btn-registrar-foto"><span class="ico-camera" aria-hidden="true"></span><span>Registrar foto</span></button>
+              <button class="menu-item menu-atalho" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
+            </section>
             <!-- Grupos por função (recolhíveis; o estado fica lembrado no aparelho).
                  As camadas do mapa e o modo 3D ficam no painel "Camadas", sobre o mapa. -->
-            <details class="menu-grupo" data-grupo="operacao" open>
+            <details class="menu-grupo" data-grupo="desenhar" open>
+              <summary><h3 id="mg-desenhar">Desenhar no mapa</h3></summary>
+              <button class="menu-item" type="button" id="menu-setor-poligono"><span class="ico-item" aria-hidden="true">⬠</span><span>Setor desenhando a área</span></button>
+              <button class="menu-item" type="button" id="menu-setor-raio"><span class="ico-item" aria-hidden="true">◯</span><span>Setor por raio</span></button>
+              <button class="menu-item" type="button" id="menu-trilha"><span class="ico-item" aria-hidden="true">〰</span><span>Desenhar trilha</span></button>
+              <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
+            </details>
+            <details class="menu-grupo" data-grupo="equipes" open>
+              <summary><h3 id="mg-equipes">Equipes</h3></summary>
+              <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
+              <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
+            </details>
+            <details class="menu-grupo" data-grupo="mapa">
+              <summary><h3 id="mg-mapa">Mapa e arquivos</h3></summary>
+              <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
+              <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
+              <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
+              <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar</span></button>
+              <p class="menu-sol" id="menu-sol" hidden></p>
+            </details>
+            <details class="menu-grupo" data-grupo="operacao">
               <summary><h3 id="mg-op">Operação</h3></summary>
               <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
-              <button class="menu-item" type="button" id="menu-dashboard"><span class="ico-item" aria-hidden="true">▦</span><span>Dashboard da operação</span></button>
-              <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário da operação</span></button>
+              <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
+              <button class="menu-item" type="button" id="menu-dashboard"><span class="ico-item" aria-hidden="true">▦</span><span>Dashboard</span></button>
               <button class="menu-item" type="button" id="menu-relatorio"><span class="ico-item" aria-hidden="true">▤</span><span>Relatório final (PDF)</span></button>
               <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
             </details>
-            <details class="menu-grupo" data-grupo="equipes" open>
-              <summary><h3 id="mg-equipes">Participantes e equipes</h3></summary>
-              <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino a participantes</span></button>
-            </details>
-            <details class="menu-grupo" data-grupo="registros" open>
-              <summary><h3 id="mg-registros">Registros e Setores</h3></summary>
-              <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span><small class="menu-estado">registrar</small></button>
-              <button class="menu-item" type="button" id="btn-registrar-foto"><span class="ico-camera" aria-hidden="true"></span><span>Registrar foto</span></button>
-              <button class="menu-item" type="button" id="menu-ponto"><span class="ico-item" aria-hidden="true">▾</span><span>Marcar ponto de interesse</span></button>
-              <button class="menu-item" type="button" id="menu-setor-raio"><span class="ico-item" aria-hidden="true">◯</span><span>Novo setor por raio</span></button>
-              <button class="menu-item" type="button" id="menu-setor-poligono"><span class="ico-item" aria-hidden="true">⬠</span><span>Novo setor desenhando a área</span></button>
-              <button class="menu-item" type="button" id="menu-trilha"><span class="ico-item" aria-hidden="true">〰</span><span>Desenhar trilha</span><small class="menu-estado">planejada ou percorrida</small></button>
-              <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Lista de setores, trilhas e pontos</span></button>
-              <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar (escolher o que sai)</span></button>
-              <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo (GPX, KML, KMZ…)</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
-            </details>
-            <details class="menu-grupo" data-grupo="mapa">
-              <summary><h3 id="mg-mapa">Mapa e navegação</h3></summary>
-              <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
-              <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
-              <p class="menu-sol" id="menu-sol" hidden></p>
-            </details>
             <details class="menu-grupo" data-grupo="config">
-              <summary><h3 id="mg-config">Configurações e manutenção</h3></summary>
+              <summary><h3 id="mg-config">Configurações</h3></summary>
               <label class="menu-item menu-select" for="opt-coord"><span class="ico-item" aria-hidden="true">#</span><span>Formato das coordenadas</span>
                 <select id="opt-coord" class="campo campo-pequeno" aria-label="Formato das coordenadas">
                   <option value="dec">Graus decimais</option><option value="gms">Graus, min, seg</option><option value="gmd">Graus e min decimais</option>
@@ -305,10 +308,10 @@
             </details>
             <!-- Ações que não podem ser desfeitas: sempre no fim, separadas, com confirmação -->
             <section class="menu-grupo menu-zona-perigo" id="menu-zona-perigo" aria-labelledby="mg-perigo">
-              <h3 id="mg-perigo">Encerrar ou excluir · ações definitivas</h3>
-              <button class="menu-item menu-perigo" type="button" id="btn-encerrar"><span class="ico-item" aria-hidden="true">■</span><span>Encerrar operação</span><small class="menu-estado">pede confirmação</small></button>
+              <h3 id="mg-perigo">Ações definitivas</h3>
+              <button class="menu-item menu-perigo" type="button" id="btn-encerrar"><span class="ico-item" aria-hidden="true">■</span><span>Encerrar operação</span></button>
               <div class="menu-separador-perigo" aria-hidden="true"></div>
-              <button class="menu-item menu-perigo menu-excluir" type="button" id="btn-excluir-op" hidden><span class="ico-item" aria-hidden="true">✕</span><span>Excluir operação</span><small class="menu-estado">definitivo · digite o nome para confirmar</small></button>
+              <button class="menu-item menu-perigo menu-excluir" type="button" id="btn-excluir-op" hidden><span class="ico-item" aria-hidden="true">✕</span><span>Excluir operação</span></button>
             </section>
           </div>
         </div>
@@ -557,7 +560,11 @@
         <div class="ficha-cabeca">
           <span id="ficha-simbolo"></span>
           <div class="ficha-titulo">
-            <h2 id="ficha-nome"></h2>
+            <div class="ficha-nome-linha">
+              <h2 id="ficha-nome"></h2>
+              <button class="btn btn-pequeno btn-renomear" type="button" id="ficha-renomear" title="Mudar o nome mostrado no painel" aria-label="Renomear participante" hidden>✎</button>
+            </div>
+            <small class="ficha-nome-original muted" id="ficha-nome-original" hidden></small>
             <div class="ficha-resumo" id="ficha-resumo"></div>
           </div>
           <button class="btn btn-pequeno" type="button" id="ficha-fechar" aria-label="Fechar ficha">Fechar</button>

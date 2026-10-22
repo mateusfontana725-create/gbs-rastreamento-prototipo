@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -748,6 +748,30 @@ console.log('Trilhas desenhadas à mão (migração 028)');
   chk((await db.query(`select count(*)::int n from public.trilhas_manuais where operacao_id = $1`, [opT.id])).rows[0].n === 0, 'excluir a operação apaga as trilhas dela');
 }
 
+console.log('Nomes no painel e CPF opcional (migração 029)');
+{
+  const opN = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP NOMES', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const u1 = await usuario(null, true), u2 = await usuario(null, true), u3 = await usuario(null, true);
+  const semCpf = await rpc(u1, 'ingressar', { p_token: opN.token_civil, p_nome: 'Civil Sem Documento', p_tipo: 'civil', p_cpf: null, p_telefone: tel });
+  chk(semCpf.participante_id && semCpf.tipo === 'civil', 'civil entra sem CPF', semCpf);
+  chk(/cpf_invalido/.test(await erroDe(rpc(u2, 'ingressar', { p_token: opN.token_civil, p_nome: 'Civil CPF Errado', p_tipo: 'civil', p_cpf: '12345678900', p_telefone: tel }))), 'CPF informado e inválido: recusado');
+  chk(/telefone_invalido/.test(await erroDe(rpc(u2, 'ingressar', { p_token: opN.token_civil, p_nome: 'Civil Sem Celular', p_tipo: 'civil', p_cpf: null, p_telefone: null }))), 'civil sem celular: continua recusado');
+  const comCpf = await rpc(u3, 'ingressar', { p_token: opN.token_civil, p_nome: 'Civil Com CPF', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  chk((await db.query(`select cpf from public.participantes where id = $1`, [comCpf.participante_id])).rows[0].cpf === cpf, 'CPF válido continua gravado');
+  const r1 = await rpc(resp1, 'renomear_participante', { p_participante: semCpf.participante_id, p_nome: '  Voluntário   da  Ponte ' });
+  chk(r1.nome_painel === 'Voluntário da Ponte' && r1.nome === 'Civil Sem Documento', 'responsável dá nome de exibição; nome original preservado', r1);
+  await rpc(u1, 'ingressar', { p_token: opN.token_civil, p_nome: 'Civil Sem Documento', p_tipo: 'civil', p_cpf: null, p_telefone: tel });
+  chk((await db.query(`select nome_painel from public.participantes where id = $1`, [semCpf.participante_id])).rows[0].nome_painel === 'Voluntário da Ponte', 'novo ingresso da pessoa não apaga o nome dado pelo responsável');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'renomear_participante', { p_participante: semCpf.participante_id, p_nome: 'Outro' }))), 'responsável de outra operação não renomeia');
+  chk(/sem_permissao/.test(await erroDe(rpc(u3, 'renomear_participante', { p_participante: semCpf.participante_id, p_nome: 'Outro' }))), 'participante não renomeia ninguém');
+  chk(/nome_invalido/.test(await erroDe(rpc(resp1, 'renomear_participante', { p_participante: semCpf.participante_id, p_nome: 'X' }))), 'nome com 1 letra: recusado');
+  chk(/permission denied/.test(await erroDe(como(u1, `update public.participantes set nome_painel = 'Hack' where id = $1`, [semCpf.participante_id]))), 'gravação direta na tabela: recusada');
+  const r2 = await rpc(resp1, 'renomear_participante', { p_participante: semCpf.participante_id, p_nome: '' });
+  chk(r2.nome_painel === null, 'nome vazio volta ao nome original');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opN.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'renomear_participante', { p_participante: semCpf.participante_id, p_nome: 'Depois' }))), 'operação encerrada: só leitura');
+}
+
 console.log('Dados só saem ao excluir a operação (migração 027)');
 const contOp = async () => (await db.query(`select (select count(*) from public.vitimas where operacao_id=$1)::int v, (select count(*) from public.grupos where operacao_id=$1)::int g,
   (select count(*) from public.missoes where operacao_id=$1)::int m, (select count(*) from public.alertas where operacao_id=$1)::int a,
@@ -785,5 +809,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–028 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–029 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

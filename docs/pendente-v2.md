@@ -22,6 +22,7 @@ e ainda não estiver no `v2` fica listado aqui, para levar quando for a hora. Ao
 | `df88093` | Rota até um participante (ficha: da minha localização, de uma base ou de outro participante; acompanha a pessoa) e controle de tempo dos deslocamentos (horários combinados de início/retorno, tolerância, alertas de atraso, sem comunicação e comunicação restabelecida). **Migração 032**. | `supabase/migracoes/032_controle_tempo_missoes.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/js/comunicacao.js`, `public/militar.html`, `public/css/estilos.css`, `testes/banco_migracoes.test.mjs`, `README.md` | Banco compartilhado: a 032 roda uma vez só (depois da 010). No `v2`, conferir `abrirEnviarDestino`, `enviarDestinoAoGrupo`, `abrirMissoes` e `verificarRetornosPainel` no `militar.js`. O app Android já gera `ultimo_contato_em` pelo sinal de vida; nada muda nele. |
 | `8874daa` | Mapa mais limpo: sem nomes (balão ao clicar), ficha/detalhes com dois cliques ou clicar e segurar, símbolos translúcidos e menores pelo zoom, trilhas finas, fileiras de botões no menu "⋮ Mais". | `public/js/militar.js`, `public/js/mapa-rotulos.js`, `public/js/ferramentas.js`, `public/militar.html`, `public/css/militar.css`, `README.md` | Só interface (sem migração). No `v2`, conferir `atualizarMarcador`, os marcadores de relato/foto/ponto/setor e a ficha no `militar.html`. |
 | `46893eb` | Desenhar trilha e desenhar trajeto unificados: ao concluir, escolher trilha percorrida, planejada ou enviar para alguém percorrer (e guardar como planejada). | `public/js/militar.js`, `public/militar.html`, `public/css/militar.css`, `README.md` | Só interface. Depende dos commits anteriores da tabela. |
+| `9da2253` | Mapa do Paraná (dashboard): operações encerradas em vermelho, bolinha sem a letra do tipo, nomes das regiões menores e translúcidos. | `public/js/dashboard.js`, `public/css/militar.css`, `README.md` | Só interface. Depende do `2f305ab`. |
 
 ## Como levar
 
@@ -29,7 +30,7 @@ No branch `v2`, aplicar os commits da tabela, do mais antigo para o mais novo:
 
 ```
 git checkout v2
-git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab cef47d1 4510001 a0ae264 b078abd df88093 8874daa 46893eb
+git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab cef47d1 4510001 a0ae264 b078abd df88093 8874daa 46893eb 9da2253
 ```
 
 Se o `cherry-pick` parar por conflito no `README.md`, mantenha as duas partes do texto e continue com

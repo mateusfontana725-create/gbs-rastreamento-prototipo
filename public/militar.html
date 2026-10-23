@@ -348,49 +348,55 @@
             <strong>Mapa e camadas</strong>
             <button class="btn btn-pequeno camadas-fechar" type="button" id="camadas-fechar" aria-label="Fechar o painel de camadas">✕</button>
           </div>
-          <section class="camadas-secao" aria-labelledby="cm-mostrar">
-            <h4 id="cm-mostrar">Mostrar no mapa</h4>
-            <div class="modos-mapa" role="group" aria-labelledby="cm-mostrar">
-              <button class="modo-mapa" type="button" data-modo-mapa="tudo" aria-pressed="true" title="Todas as camadas">Tudo</button>
-              <button class="modo-mapa" type="button" data-modo-mapa="equipes" aria-pressed="false" title="Só as pessoas e as trilhas">Equipes</button>
-              <button class="modo-mapa" type="button" data-modo-mapa="cobertura" aria-pressed="false" title="Trilhas sobre os setores: o que já foi percorrido">Cobertura</button>
-              <button class="modo-mapa" type="button" data-modo-mapa="setores" aria-pressed="false" title="Só os setores de busca">Setores</button>
-              <button class="modo-mapa" type="button" data-modo-mapa="pontos" aria-pressed="false" title="Só os pontos de interesse e o local da operação">Pontos</button>
-              <button class="modo-mapa" type="button" data-modo-mapa="fotos" aria-pressed="false" title="Só as fotos">Fotos</button>
-              <button class="modo-mapa" type="button" data-modo-mapa="relatos" aria-pressed="false" title="Só os relatos (pistas, objetos, pedidos de ajuda…)">Relatos</button>
+          <section class="camadas-secao camadas-base" aria-label="Tipo de mapa e visualização">
+            <div>
+              <h4 id="cm-base">Tipo de mapa</h4>
+              <div class="seg" role="radiogroup" aria-labelledby="cm-base">
+                <button class="seg-opcao" type="button" role="radio" data-camada="osm" aria-checked="true">Mapa</button>
+                <button class="seg-opcao" type="button" role="radio" data-camada="topo" aria-checked="false">Topográfico</button>
+                <button class="seg-opcao" type="button" role="radio" data-camada="satelite" aria-checked="false">Satélite</button>
+              </div>
             </div>
-          </section>
-          <section class="camadas-secao" aria-labelledby="cm-base">
-            <h4 id="cm-base">Tipo de mapa</h4>
-            <div class="seg" role="radiogroup" aria-labelledby="cm-base">
-              <button class="seg-opcao" type="button" role="radio" data-camada="osm" aria-checked="true">Mapa</button>
-              <button class="seg-opcao" type="button" role="radio" data-camada="topo" aria-checked="false">Topográfico</button>
-              <button class="seg-opcao" type="button" role="radio" data-camada="satelite" aria-checked="false">Satélite</button>
-            </div>
-          </section>
-          <section class="camadas-secao" aria-labelledby="cm-modo">
-            <h4 id="cm-modo">Visualização</h4>
-            <div class="seg">
-              <button class="seg-opcao" type="button" id="modo-2d" aria-pressed="true">Plano 2D</button>
-              <button class="seg-opcao" type="button" id="menu-3d" aria-pressed="false">Relevo 3D</button>
+            <div>
+              <h4 id="cm-modo">Visualização</h4>
+              <div class="seg">
+                <button class="seg-opcao" type="button" id="modo-2d" aria-pressed="true">Plano 2D</button>
+                <button class="seg-opcao" type="button" id="menu-3d" aria-pressed="false">Relevo 3D</button>
+              </div>
             </div>
             <p class="camadas-nota" id="nota-3d" hidden></p>
           </section>
-          <section class="camadas-secao" aria-labelledby="cm-op">
-            <h4 id="cm-op">Camadas (ligar uma a uma)</h4>
-            <div class="camadas-lista">
-              <button class="camada-item" type="button" id="opt-pessoas" aria-pressed="true"><span class="camada-sinal sinal-pessoa" aria-hidden="true"></span><span>Pessoas</span></button>
-              <button class="camada-item" type="button" id="opt-trilhas" aria-pressed="true"><span class="camada-sinal sinal-trilha" aria-hidden="true"></span><span>Trilhas de GPS</span></button>
-              <button class="camada-item" type="button" id="opt-desenhadas-planejadas" aria-pressed="true"><span class="camada-sinal sinal-desenhada-planejada" aria-hidden="true"></span><span>Trilhas desenhadas · planejadas</span></button>
-              <button class="camada-item" type="button" id="opt-desenhadas-percorridas" aria-pressed="true"><span class="camada-sinal sinal-desenhada-percorrida" aria-hidden="true"></span><span>Trilhas desenhadas · percorridas</span></button>
-              <button class="camada-item" type="button" id="opt-setores" aria-pressed="true"><span class="camada-sinal sinal-setor" aria-hidden="true"></span><span>Setores</span></button>
-              <button class="camada-item" type="button" id="opt-pontos" aria-pressed="true"><span class="camada-sinal sinal-ponto" aria-hidden="true"></span><span>Pontos de interesse</span></button>
-              <button class="camada-item" type="button" id="opt-relatos" aria-pressed="true"><span class="camada-sinal sinal-relato" aria-hidden="true"></span><span>Relatos</span></button>
-              <button class="camada-item" type="button" id="opt-fotos" aria-pressed="true"><span class="camada-sinal sinal-foto" aria-hidden="true"></span><span>Fotos</span></button>
-              <button class="camada-item" type="button" id="opt-local" aria-pressed="true"><span class="camada-sinal sinal-local" aria-hidden="true"></span><span>Local da operação</span></button>
-              <button class="camada-item" type="button" id="opt-nomes" aria-pressed="false"><span class="camada-sinal sinal-nome" aria-hidden="true">Aa</span><span>Nomes no mapa</span></button>
-              <button class="camada-item" type="button" id="opt-agrupar" aria-pressed="true" title="De longe, quem está perto um do outro vira um círculo com o número de pessoas"><span class="camada-sinal sinal-agrupar" aria-hidden="true">3</span><span>Agrupar pessoas próximas</span></button>
-              <button class="camada-item" type="button" id="opt-meteo" aria-pressed="false"><span class="camada-sinal sinal-meteo" aria-hidden="true">☂</span><span>Meteorologia</span></button>
+          <!-- O que aparece no mapa: um botão por camada (aceso = visível), agrupados por assunto -->
+          <section class="camadas-secao" aria-labelledby="cm-mostrar">
+            <div class="camadas-titulo-linha">
+              <h4 id="cm-mostrar">Mostrar no mapa</h4>
+              <button class="btn-link-camadas" type="button" data-modo-mapa="tudo" aria-pressed="true" title="Acender todas as camadas">Mostrar tudo</button>
+            </div>
+            <div class="grupo-camadas" role="group" aria-labelledby="gc-equipes">
+              <h5 id="gc-equipes">Equipes</h5>
+              <div class="chips-camadas">
+                <button class="chip-camada" type="button" id="opt-pessoas" aria-pressed="true"><span class="camada-sinal sinal-pessoa" aria-hidden="true"></span><span class="chip-txt">Pessoas</span></button>
+                <button class="chip-camada" type="button" id="opt-trilhas" aria-pressed="true"><span class="camada-sinal sinal-trilha" aria-hidden="true"></span><span class="chip-txt">Trilhas de GPS</span></button>
+                <button class="chip-camada" type="button" id="opt-agrupar" aria-pressed="true" title="De longe, quem está perto um do outro vira um círculo com o número de pessoas"><span class="camada-sinal sinal-agrupar" aria-hidden="true">3</span><span class="chip-txt">Agrupar próximas</span></button>
+                <button class="chip-camada" type="button" id="opt-nomes" aria-pressed="false"><span class="camada-sinal sinal-nome" aria-hidden="true">Aa</span><span class="chip-txt">Nomes</span></button>
+              </div>
+            </div>
+            <div class="grupo-camadas" role="group" aria-labelledby="gc-busca">
+              <h5 id="gc-busca">Planejamento da busca</h5>
+              <div class="chips-camadas">
+                <button class="chip-camada" type="button" id="opt-setores" aria-pressed="true"><span class="camada-sinal sinal-setor" aria-hidden="true"></span><span class="chip-txt">Setores</span></button>
+                <button class="chip-camada" type="button" id="opt-desenhadas-planejadas" aria-pressed="true"><span class="camada-sinal sinal-desenhada-planejada" aria-hidden="true"></span><span class="chip-txt">Trilhas planejadas</span></button>
+                <button class="chip-camada" type="button" id="opt-desenhadas-percorridas" aria-pressed="true"><span class="camada-sinal sinal-desenhada-percorrida" aria-hidden="true"></span><span class="chip-txt">Trilhas percorridas</span></button>
+                <button class="chip-camada" type="button" id="opt-pontos" aria-pressed="true"><span class="camada-sinal sinal-ponto" aria-hidden="true"></span><span class="chip-txt">Pontos de interesse</span></button>
+                <button class="chip-camada" type="button" id="opt-local" aria-pressed="true"><span class="camada-sinal sinal-local" aria-hidden="true"></span><span class="chip-txt">Local da operação</span></button>
+              </div>
+            </div>
+            <div class="grupo-camadas" role="group" aria-labelledby="gc-campo">
+              <h5 id="gc-campo">Registros do campo</h5>
+              <div class="chips-camadas">
+                <button class="chip-camada" type="button" id="opt-relatos" aria-pressed="true"><span class="camada-sinal sinal-relato" aria-hidden="true"></span><span class="chip-txt">Relatos</span></button>
+                <button class="chip-camada" type="button" id="opt-fotos" aria-pressed="true"><span class="camada-sinal sinal-foto" aria-hidden="true"></span><span class="chip-txt">Fotos</span></button>
+              </div>
             </div>
           </section>
         </div>

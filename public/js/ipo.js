@@ -14,24 +14,25 @@
     ['scuba', 'Mergulho com equipamento SCUBA'], ['livre', 'Mergulho livre'], ['rede', 'Rede de busca/garatéia'],
     ['superficie', 'Busca de superfície com embarcações'], ['margens', 'Busca terrestre nas margens/areia'], ['aeronave', 'Busca com aeronave'],
   ];
-  // Natureza da ocorrência: escolha numa lista; "Outra" abre um campo para descrever.
-  var NATUREZAS = ['BUSCA TERRESTRE – PESSOA', 'BUSCA AQUÁTICA – PESSOA', 'BUSCA TERRESTRE/AQUÁTICA – PESSOA', 'BUSCA AÉREA – PESSOA', 'RESGATE'];
+  // Natureza da ocorrência: só busca aquática ou terrestre; "Outro" abre um campo para descrever.
+  // (Operações antigas com outra natureza continuam com o texto gravado, como "Outro".)
+  var NATUREZAS = ['BUSCA AQUÁTICA – PESSOA', 'BUSCA TERRESTRE – PESSOA'];
   var OUTRA_NATUREZA = '__outra__';
   // Perfis da vítima (estudos): valores fixos gravados no banco; o formulário só seleciona.
   var PERFIS_VITIMA = [['idoso', 'Idoso'], ['crianca', 'Criança'], ['adolescente', 'Adolescente'], ['demencia', 'Alzheimer / demência'],
     ['autismo', 'Autismo (TEA)'], ['deficiencia_intelectual', 'Deficiência intelectual'], ['transtorno_mental', 'Transtorno mental'], ['outro', 'Outro']];
   var MAX_TEXTO = 300, MAX_LONGO = 1000;
 
-  // Natureza → tipo da operação (o tipo não é mais escolhido à parte: vem da natureza)
+  // Natureza → tipo da operação (o tipo não é mais escolhido à parte: vem da natureza).
+  // Só as duas da lista viram aquática/terrestre; qualquer outra (o "Outro" descrito) é "outras".
   function semAcento(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
   function ehAquatica(natureza) { return semAcento(natureza).indexOf('AQUATIC') >= 0; }
   function tipoDaNatureza(natureza) {
     var limpo = String(natureza || '').replace(/\s+/g, ' ').trim();
     var t = semAcento(limpo);
     if (!limpo) return { tipo: null, tipo_outro: null };
-    if (t.indexOf('AQUATIC') >= 0) return { tipo: 'aquatica', tipo_outro: null };
-    if (t.indexOf('TERRESTRE') >= 0) return { tipo: 'terrestre', tipo_outro: null };
-    if (t.indexOf('AEREA') >= 0 || t.indexOf('AEREO') >= 0) return { tipo: 'aerea', tipo_outro: null };
+    if (t === semAcento(NATUREZAS[0])) return { tipo: 'aquatica', tipo_outro: null };
+    if (t === semAcento(NATUREZAS[1])) return { tipo: 'terrestre', tipo_outro: null };
     return { tipo: 'outras', tipo_outro: limpo.slice(0, 60) };
   }
   // Data e hora (campo datetime-local) → ISO; vazio ou inválido → ''

@@ -734,6 +734,7 @@
 
   // Vista da tela inicial: "dashboard" (painel de estatísticas) ou "lista" (operações). Fica salva neste navegador.
   function vistaAtual() {
+    if (/[?&]vista=dashboard\b/.test(location.search)) return 'dashboard';   // aberto em outra janela pelo próprio Dashboard
     try { return localStorage.getItem('gbs.vista') === 'lista' ? 'lista' : 'dashboard'; } catch (e) { return 'dashboard'; }
   }
 
@@ -1582,6 +1583,19 @@
     });
     est.legenda = new Legenda();
     est.legenda.addTo(mapa);   // sempre no mapa; abre e fecha tocando em "Legenda"
+    // Meteorologia: botão próprio logo acima da legenda (liga/desliga o painel de tempo; js/meteo.js)
+    var BotaoMeteo = L.Control.extend({
+      options: { position: 'bottomleft' },
+      onAdd: function () {
+        var div = L.DomUtil.create('div', 'controle-meteo');
+        var ligada = window.MeteoPainel && window.MeteoPainel.estado ? Boolean(window.MeteoPainel.estado().ligada) : false;
+        div.innerHTML = '<button class="btn-meteo-mapa" type="button" id="opt-meteo" aria-pressed="' + ligada + '" title="Radar, previsão e alertas do tempo na área">☂ Meteorologia</button>';
+        L.DomEvent.disableClickPropagation(div);
+        div.firstChild.addEventListener('click', function () { if (window.MeteoPainel && window.MeteoPainel.alternar) window.MeteoPainel.alternar(); });
+        return div;
+      },
+    });
+    new BotaoMeteo().addTo(mapa);   // adicionado depois: fica acima da legenda
 
     // Grupos: cada grupo com o ícone de olho (mostrar só o grupo / restaurar tudo).
     var Grupos = L.Control.extend({

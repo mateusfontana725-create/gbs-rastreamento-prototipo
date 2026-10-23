@@ -239,11 +239,11 @@
     var naturezaConhecida = window.Ipo.NATUREZAS.indexOf(ipo.natureza) >= 0;
     var naturezaSel = UI.el('select', { classe: 'campo', id: id('natureza') }, [UI.el('option', { value: '', texto: '— escolha —' })].concat(
       window.Ipo.NATUREZAS.map(function (n) { return UI.el('option', { value: n, selected: naturezaConhecida && ipo.natureza === n ? true : null, texto: n }); }),
-      [UI.el('option', { value: window.Ipo.OUTRA_NATUREZA, selected: ipo.natureza && !naturezaConhecida ? true : null, texto: 'Outros (descrever)' })]));
+      [UI.el('option', { value: window.Ipo.OUTRA_NATUREZA, selected: ipo.natureza && !naturezaConhecida ? true : null, texto: 'Outro (descrever)' })]));
     var naturezaOutra = UI.el('input', { classe: 'campo', id: id('natureza-outra'), maxlength: '300', autocomplete: 'off',
       placeholder: 'Descreva a natureza da ocorrência', value: naturezaConhecida ? '' : ipo.natureza || '' });
     var grupoOutraNat = UI.el('div', { classe: 'grupo', hidden: !(ipo.natureza && !naturezaConhecida) }, [
-      UI.el('label', { classe: 'rotulo', for: id('natureza-outra'), texto: 'Qual natureza?' }), naturezaOutra]);
+      UI.el('label', { classe: 'rotulo', for: id('natureza-outra'), texto: 'Descreva a natureza (outro)' }), naturezaOutra]);
     naturezaSel.addEventListener('change', function () {
       grupoOutraNat.hidden = naturezaSel.value !== window.Ipo.OUTRA_NATUREZA;
       if (!grupoOutraNat.hidden) naturezaOutra.focus();

@@ -152,6 +152,9 @@
     }
     return cacheLocalizadas;
   }
+  // Para os gráficos: só aquática e terrestre; o resto (aérea, outras, sem tipo) vira "Outros"
+  var GRUPOS_TIPO = { aquatica: 'Aquática', terrestre: 'Terrestre', outras: 'Outros' };
+  function grupoTipo(t) { return t === 'aquatica' || t === 'terrestre' ? t : 'outras'; }
   function mesDaOperacao(o) {
     var t = Date.parse(o.acionado_em || o.criada_em);
     return isNaN(t) ? null : new Date(t).toISOString().slice(0, 7);
@@ -277,6 +280,43 @@
     return s;
   }
 
+  // Duas colunas por item, lado a lado (ex.: aquática e terrestre em cada mês).
+  // itens: [{ rotulo, valores: { chave: n } }]; series: [{ chave, rotulo, classe }]; aoClicar(item, serie).
+  function colunasDuplas(itens, series, rotuloGrafico, aoClicar) {
+    var W = 640, H = 230, base = 186, topo = 30, margem = 12;
+    var slot = (W - margem * 2) / Math.max(itens.length, 1);
+    var larg = Math.min(16, slot * 0.34), vao = 2;
+    var max = itens.reduce(function (m, it) { return series.reduce(function (mm, se) { return Math.max(mm, it.valores[se.chave] || 0); }, m); }, 0) || 1;
+    var s = svg(W, H, rotuloGrafico);
+    [0.5, 1].forEach(function (f) {
+      var y = base - (base - topo) * f;
+      s.appendChild(sv('line', { x1: margem, x2: W - margem, y1: y, y2: y, class: 'dash-grade-linha' }));
+    });
+    s.appendChild(sv('line', { x1: margem, x2: W - margem, y1: base, y2: base, class: 'dash-base' }));
+    itens.forEach(function (it, i) {
+      var meio = margem + i * slot + slot / 2;
+      var x0 = meio - (series.length * larg + (series.length - 1) * vao) / 2;
+      series.forEach(function (se, k) {
+        var v = it.valores[se.chave] || 0, x = x0 + k * (larg + vao);
+        var g = sv('g', { class: 'dash-col dash-col-' + se.classe });
+        if (aoClicar) {
+          g.appendChild(sv('title', null, it.rotulo + ' · ' + se.rotulo + ': ' + v + ' · toque para ver'));
+          g.appendChild(sv('rect', { x: x - vao / 2, y: topo - 20, width: larg + vao, height: base - topo + 26, class: 'dash-alvo' }));
+        }
+        if (!v) g.appendChild(sv('rect', { x: x, y: base - 3, width: larg, height: 3, rx: 1.5, class: 'dash-zero' }));
+        else {
+          var h = Math.max(5, (base - topo) * (v / max));
+          g.appendChild(sv('rect', { x: x, y: base - h, width: larg, height: h, rx: 3, class: 'dash-barra-' + se.classe }));
+          g.appendChild(sv('text', { x: x + larg / 2, y: base - h - 6, 'text-anchor': 'middle', class: 'dash-valor dash-valor-peq' }, String(v)));
+        }
+        if (aoClicar) clicavel(g, function () { aoClicar(it, se); });
+        s.appendChild(g);
+      });
+      s.appendChild(sv('text', { x: meio, y: base + 20, 'text-anchor': 'middle', class: 'dash-eixo' }, it.rotulo));
+    });
+    return s;
+  }
+
   // Barras horizontais em grade: rótulo | barra | valor · percentual. Alinham por construção.
   function barrasHorizontais(linhas, total, aoClicar) {
     var max = linhas.reduce(function (m, l) { return Math.max(m, l.valor || 0); }, 0) || 1;
@@ -372,7 +412,10 @@
   function renderGeral(d, elemento) {
     var ops = d.operacoes, dist = d.distancia_km, loc = d.localizacoes;
     var meses = ultimos12(ops.por_mes);
-    var tipos = Object.keys(ops.por_tipo || {}).map(function (t) { return { chave: t, rotulo: TIPOS[t] || t, valor: ops.por_tipo[t] }; });
+    var somaTipo = { aquatica: 0, terrestre: 0, outras: 0 };
+    Object.keys(ops.por_tipo || {}).forEach(function (t) { somaTipo[grupoTipo(t)] += ops.por_tipo[t] || 0; });
+    var tipos = ['aquatica', 'terrestre', 'outras'].filter(function (k) { return somaTipo[k] > 0 || k !== 'outras'; })
+      .map(function (k) { return { chave: k, rotulo: GRUPOS_TIPO[k], valor: somaTipo[k] }; });
     var condicoes = Object.keys(loc.por_condicao || {}).map(function (c) { return { chave: c, rotulo: CONDICOES[c] || c, valor: loc.por_condicao[c] }; });
     var totalCond = condicoes.reduce(function (t, i) { return t + (i.valor || 0); }, 0);
     var comLocalizacao = loc.operacoes_com_localizacao;
@@ -385,6 +428,9 @@
       el('div', { classe: 'dash-acoes' }, [
         el('span', { classe: 'dash-atualizado muted', texto: 'Atualizado em ' + dataHora(d.gerado_em) }),
         el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Atualizar', onclick: function () { raiz.Dashboard.geral(elemento); } }),
+        /[?&]vista=dashboard\b/.test(location.search) ? null : el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-nova-janela', texto: '↗ Abrir em outra janela',
+          title: 'Dica: deixe o Dashboard numa janela (ou outro monitor) e as operações na outra',
+          onclick: function () { window.open(location.pathname + '?vista=dashboard', 'gbs-dashboard', 'noopener'); } }),
       ]),
     ]);
 
@@ -412,23 +458,47 @@
       temOculto(d) ? el('p', { classe: 'dash-nota-oculto muted', texto: 'Números com menos de ' + d.k_minimo + ' casos aparecem como "oculto", para que ninguém seja identificado.' }) : null,
     ]);
 
-    var grafMeses = cartao({
-      span: 8, titulo: 'Operações por mês', n: ops.total, pergunta: 'Quantas operações começaram em cada mês, nos últimos 12 meses?',
-      corpo: [colunas(meses.map(function (m) { return { mes: m.mes, rotulo: MESES[Number(m.mes.slice(5)) - 1], valor: m.n }; }), 'Operações por mês',
+    // Por mês: duas colunas (aquática e terrestre), contadas da lista de operações do usuário.
+    // Sem a lista (falha ao carregar), volta à coluna única do total.
+    var corpoMeses, notaMeses;
+    if (Array.isArray(d.opsLista)) {
+      var porMes = {};
+      meses.forEach(function (m) { porMes[m.mes] = { aquatica: 0, terrestre: 0, outras: 0 }; });
+      d.opsLista.forEach(function (o) { var m = mesDaOperacao(o); if (porMes[m]) porMes[m][grupoTipo(o.tipo)]++; });
+      var outrasPeriodo = meses.reduce(function (t, m) { return t + porMes[m.mes].outras; }, 0);
+      var series = [{ chave: 'aquatica', rotulo: 'Aquática', classe: 'aq' }, { chave: 'terrestre', rotulo: 'Terrestre', classe: 'te' }];
+      corpoMeses = [
+        colunasDuplas(meses.map(function (m) { return { mes: m.mes, rotulo: MESES[Number(m.mes.slice(5)) - 1], valores: porMes[m.mes] }; }), series, 'Operações por mês: aquáticas e terrestres',
+          function (it, se) {
+            var n = it.valores[se.chave];
+            abrirDetalhe({ titulo: 'Operações ' + (se.chave === 'aquatica' ? 'aquáticas' : 'terrestres') + ' de ' + rotuloMes(it.mes),
+              subtitulo: n + (n === 1 ? ' operação começou' : ' operações começaram') + ' neste mês.',
+              lista: listaOperacoes(function (o) { return mesDaOperacao(o) === it.mes && grupoTipo(o.tipo) === se.chave; }), vazio: 'Nenhuma operação.', nota: nota });
+          }),
+        el('ul', { classe: 'dash-legenda-series' }, series.map(function (se) { return el('li', null, [el('span', { classe: 'dash-serie dash-serie-' + se.classe }), se.rotulo]); })),
+      ];
+      notaMeses = 'Toque numa coluna para ver as operações.' + (outrasPeriodo ? ' ' + outrasPeriodo + ' operação(ões) de outros tipos no período aparecem em "Operações por tipo".' : '');
+    } else {
+      corpoMeses = [colunas(meses.map(function (m) { return { mes: m.mes, rotulo: MESES[Number(m.mes.slice(5)) - 1], valor: m.n }; }), 'Operações por mês',
         function (it) {
           abrirDetalhe({ titulo: 'Operações de ' + rotuloMes(it.mes), subtitulo: it.valor + (it.valor === 1 ? ' operação começou' : ' operações começaram') + ' neste mês.',
             lista: listaOperacoes(function (o) { return mesDaOperacao(o) === it.mes; }), vazio: 'Nenhuma operação neste mês.', nota: nota });
-        })],
-      nota: 'Toque numa coluna para ver as operações do mês.',
+        })];
+      notaMeses = 'Toque numa coluna para ver as operações do mês.';
+    }
+    var grafMeses = cartao({
+      span: 8, titulo: 'Operações por mês', n: ops.total, pergunta: 'Quantas buscas aquáticas e terrestres começaram em cada mês, nos últimos 12 meses?',
+      corpo: corpoMeses,
+      nota: notaMeses,
     });
 
     var grafTipos = cartao({
       span: 4, titulo: 'Operações por tipo', n: ops.total, pergunta: 'Que tipo de operação predomina?',
       corpo: [barrasHorizontais(tipos, ops.total, function (t) {
         abrirDetalhe({ titulo: 'Operações: ' + t.rotulo, subtitulo: t.valor + ' de ' + ops.total + ' (' + percentual(t.valor, ops.total) + ').',
-          lista: listaOperacoes(function (o) { return (o.tipo || 'sem_tipo') === t.chave; }), vazio: 'Nenhuma operação deste tipo.', nota: nota });
+          lista: listaOperacoes(function (o) { return grupoTipo(o.tipo) === t.chave; }), vazio: 'Nenhuma operação deste tipo.', nota: nota });
       })],
-      nota: 'Toque num tipo para ver as operações.',
+      nota: '"Outros": as que não são busca aquática nem terrestre. Toque num tipo para ver as operações.',
     });
 
     var grafDist = cartao({
@@ -1268,7 +1338,10 @@
     geral: function (elemento) {
       pararMapa();
       cacheOps = cacheLocalizadas = null;
-      return carregar(elemento, function () { return C.rpc('estudo_geral'); }, renderGeral);
+      return carregar(elemento, function () {
+        return Promise.all([C.rpc('estudo_geral'), operacoesDoUsuario().catch(function () { return null; })])
+          .then(function (r) { Object.defineProperty(r[0], 'opsLista', { value: r[1], enumerable: false }); return r[0]; });   // fora do temOculto
+      }, renderGeral);
     },
     // opcoes.resumo: função que devolve o resumo do painel (trilhas, grupos, setores, ocorrências).
     // O estudo do banco (vítimas) é opcional: se faltar a migração, o restante aparece mesmo assim.

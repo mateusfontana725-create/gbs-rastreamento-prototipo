@@ -1467,3 +1467,89 @@ a.menu-linha-item { text-decoration: none; }
 .opcao-desenho-btn:hover, .opcao-desenho-btn:focus-visible { background: var(--superficie-3); outline: none; }
 .opcao-desenho-btn .item-area-txt { display: grid; gap: 2px; }
 .opcao-desenho-extra { padding: 0 12px 10px; font-size: .85rem; }
+
+/* =====================================================================
+ * Painel de camadas: um botão por camada (aceso = visível), em grupos
+ * ===================================================================== */
+.camadas-painel { width: 340px; }
+.camadas-base { display: grid; gap: 8px; }
+.camadas-titulo-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.btn-link-camadas {
+  border: 0; background: none; padding: 2px 0; color: var(--acento); font: 700 .74rem var(--fonte); cursor: pointer;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.btn-link-camadas[aria-pressed="true"] { color: var(--texto-3); cursor: default; }
+.btn-link-camadas:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.grupo-camadas { margin-top: 8px; }
+.grupo-camadas h5 { margin: 0 0 5px; font: 600 .68rem var(--fonte); color: var(--texto-3); text-transform: uppercase; letter-spacing: .08em; }
+.chips-camadas { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip-camada {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 3px 10px 3px 7px;
+  border: 1px solid var(--borda-forte); border-radius: 999px; background: transparent; color: var(--texto-3);
+  font: 600 .8rem/1.1 var(--fonte); cursor: pointer; transition: background .12s, border-color .12s, color .12s;
+}
+.chip-camada:hover { border-color: #4a5763; color: var(--texto-2); }
+.chip-camada:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+.chip-camada .camada-sinal { width: 16px; opacity: .45; filter: grayscale(.6); }
+.chip-camada[aria-pressed="true"] { border-color: rgba(245, 158, 11, .7); background: rgba(245, 158, 11, .13); color: var(--texto); }
+.chip-camada[aria-pressed="true"] .camada-sinal { opacity: 1; filter: none; }
+.chip-camada[aria-pressed="false"] .chip-txt { text-decoration: line-through; text-decoration-color: rgba(134, 147, 160, .55); }
+@media (pointer: coarse) { .chip-camada { min-height: 40px; padding: 6px 12px 6px 9px; } }
+html[data-tema="claro"] .chip-camada[aria-pressed="true"] { background: rgba(217, 119, 6, .12); border-color: #d97706; }
+
+/* Botão da meteorologia, logo acima da legenda */
+.controle-meteo { margin-bottom: 6px !important; }
+.btn-meteo-mapa {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border-radius: var(--raio);
+  border: 1px solid var(--borda-forte); background: var(--vidro); color: var(--texto-2); cursor: pointer; box-shadow: var(--sombra);
+  font-family: var(--fonte-titulo); font-weight: 600; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase;
+}
+.btn-meteo-mapa:hover { color: var(--texto); border-color: #4a5763; }
+.btn-meteo-mapa[aria-pressed="true"] { border-color: #38bdf8; color: #bae6fd; background: rgba(8, 47, 73, .92); }
+.btn-meteo-mapa:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+@media (pointer: coarse) { .btn-meteo-mapa { min-height: 44px; } }
+html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--texto-2); }
+
+/* =====================================================================
+ * Formulários e modais mais horizontais (computador e tablet deitado).
+ * Celular e tablet em pé continuam em uma coluna.
+ *  - modal com formulário fica largo (até 940 px);
+ *  - todo bloco com 2+ campos (.grupo) vira grade de 2 colunas: cada campo ocupa
+ *    uma coluna; títulos, textos de ajuda, abas, avisos e botões ocupam a linha toda;
+ *  - campos com listas de opções grandes ocupam a linha toda, com as opções lado a lado.
+ * ===================================================================== */
+@media (min-width: 900px) and (orientation: landscape) {
+  .modal:has(.grupo ~ .grupo) { width: min(940px, calc(100vw - 48px)); }
+  .modal :is(form, div, section, fieldset):has(> .grupo ~ .grupo) {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; align-items: start; grid-auto-flow: row dense;
+  }
+  .modal :is(form, div, section, fieldset):has(> .grupo ~ .grupo) > * { grid-column: 1 / -1; min-width: 0; }
+  .modal :is(form, div, section, fieldset):has(> .grupo ~ .grupo) > :is(.grupo, .grupo-duplo) { grid-column: auto; }
+  .modal :is(form, div, section, fieldset):has(> .grupo ~ .grupo) > .grupo:has(.cat-pontos, .lista-destino, .opcoes-modo, .opcoes-estado-trilha, table, .lista-areas, .grupo-largo) { grid-column: 1 / -1; }
+  .modal :is(form, div, section, fieldset):has(> .grupo ~ .grupo) > .grupo-largo { grid-column: 1 / -1; }
+  .modal .grupo { margin-bottom: 14px; }
+  .modal .opcoes-modo { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .modal .cat-pontos { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .modal textarea.campo { min-height: 78px; }
+  .modal .modal-acoes { justify-content: flex-end; }
+  .modal .modal-acoes .btn { flex: 0 1 200px; }
+  .modal :is(form, div):has(> .grupo ~ .grupo) > .detalhes-prazos { grid-column: 1 / -1; }
+  .modal .campos-prazos { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; }
+  .modal .campos-prazos > .ajuda { grid-column: 1 / -1; }
+  /* fichas de dados (dt/dd): dois pares por linha */
+  .modal:has(dl.dados) { width: min(940px, calc(100vw - 48px)); }
+  .modal dl.dados { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr) minmax(120px, max-content) minmax(0, 1fr); gap: 6px 14px; align-items: baseline; }
+  .modal dl.dados dt, .modal dl.dados dd { margin: 0; }
+}
+
+/* Dashboard: aquática × terrestre por mês */
+.dash-barra-aq { fill: #38bdf8; }
+.dash-barra-te { fill: #f59e0b; }
+.dash-valor-peq { font-size: 11px; }
+.dash-legenda-series { list-style: none; display: flex; gap: 16px; margin: 4px 0 0; padding: 0; font-size: .8rem; color: var(--texto-2); }
+.dash-legenda-series li { display: inline-flex; align-items: center; gap: 6px; }
+.dash-serie { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.dash-serie-aq { background: #38bdf8; }
+.dash-serie-te { background: #f59e0b; }
+/* o painel do tempo abre acima do botão "Meteorologia" e da legenda (não cobre o botão) */
+.meteo-painel { bottom: 140px; max-height: min(52vh, calc(100% - 200px)); }

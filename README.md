@@ -464,7 +464,7 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 
 ### Meteorologia: radar, previsão e alertas
 
-Camada **Meteorologia** no painel de camadas (Camadas operacionais), com o aviso no mapa e um painel próprio.
+Botão **☂ Meteorologia** no mapa, logo acima da **Legenda** (liga/desliga); o painel abre logo acima do botão, com o aviso no mapa.
 Nenhum dado é simulado no aplicativo: tudo vem de `/api/meteo` (servidor). Quando uma fonte falha, o painel diz qual,
 e o mapa e o rastreamento continuam funcionando.
 
@@ -726,12 +726,12 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Trilhas finas de longe**: a espessura (e o tracejado dos civis, o contorno claro e as marcas de falha)
     acompanha o zoom — de perto como antes (4 px; 6 px a da pessoa selecionada) e, afastando, afina até 1,5 px,
     para não cobrir o mapa.
-  - **Camadas → Mostrar no mapa**: modos de um toque — **Tudo**, **Equipes** (pessoas e trilhas), **Cobertura**
-    (trilhas sobre os setores: o que já foi percorrido), **Setores**, **Pontos** (pontos de interesse e local da
-    operação), **Fotos** e **Relatos**. Cada modo liga só essas camadas; mexer numa camada depois vira
-    "personalizado". O botão **Camadas** fica destacado e mostra "só setores", "personalizado" etc. enquanto algo
-    estiver escondido. Nova camada **Pessoas** (esconde os marcadores sem parar o rastreamento). A escolha, inclusive
-    das trilhas, fica lembrada no aparelho.
+  - **Camadas → Mostrar no mapa**: **um botão por camada** (aceso = aparece; apagado = riscado), agrupados em
+    **Equipes** (Pessoas, Trilhas de GPS, Agrupar próximas, Nomes), **Planejamento da busca** (Setores, Trilhas
+    planejadas, Trilhas percorridas, Pontos de interesse, Local da operação) e **Registros do campo** (Relatos,
+    Fotos), mais **Mostrar tudo**. Acima ficam **Tipo de mapa** e **Visualização (2D/3D)**. O botão **Camadas** mostra
+    "personalizado" enquanto algo estiver escondido. A escolha fica lembrada no aparelho; esconder **Pessoas** não
+    para o rastreamento.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.
@@ -896,7 +896,7 @@ encontrada em relação ao **ULV** (último local visto). Os painéis mostram **
 dado de participante sai do banco nesses painéis.
 
 - **Tela inicial, alternador "▦ Dashboard" / "☰ Operações"** (botões na própria tela): o Dashboard mostra cartões de números, leitura em texto e
-  gráficos desenhados em SVG e em grade (sem bibliotecas externas), cada um com o tamanho da amostra (n): operações por mês (12 meses), operações por tipo (barras),
+  gráficos desenhados em SVG e em grade (sem bibliotecas externas), cada um com o tamanho da amostra (n): operações por mês (12 meses, **duas colunas por mês: aquática e terrestre**; as de outros tipos são avisadas abaixo), operações por tipo (**Aquática, Terrestre e Outros**, que junta aérea, outras e sem tipo),
   distância do ULV à localização (faixas de 1 km), distância e tempo (mediana, metade central, média, tempo até localizar),
   perfis das vítimas e condição (com vida / em óbito). Vale para todas as operações a que o responsável tem acesso
   (administrador: todas). A escolha fica salva neste navegador.
@@ -970,8 +970,10 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
   Em celular, o formulário tem uma coluna só; em tablet e PC (a partir de 760 px) as seções ficam lado a lado
   (Ocorrência | Solicitante, Busca | Observação) e a janela é mais larga. Na criação, Local | Ocorrência e
   nome da operação e retenção na mesma linha.
-- **Tipo da operação** não é escolhido à parte: vem da **natureza** (busca aquática → aquática; terrestre → terrestre;
-  aérea → aérea; qualquer outra → "outras", com a própria natureza). O **meio líquido** só aparece para busca aquática.
+- **Natureza**: **BUSCA AQUÁTICA – PESSOA**, **BUSCA TERRESTRE – PESSOA** ou **Outro (descrever)**, que abre um campo
+  para a descrição. Operações antigas com outra natureza aparecem como "Outro" com o texto gravado.
+- **Tipo da operação** não é escolhido à parte: vem da **natureza** (aquática → aquática; terrestre → terrestre;
+  "Outro" → "outras", com a própria descrição). O **meio líquido** só aparece para busca aquática.
   As coordenadas do cadastro são as do último avistamento: não há um segundo campo de coordenadas.
 - **Vítimas do IPO = fichas de vítima.** A ficha tem nome, idade, nascimento, sexo, origem, perfil e **foto** (migração 021).
   O mesmo formulário da ficha aparece na criação da operação e em Dados da operação → Editar.
@@ -1556,6 +1558,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Formulários e modais horizontais (versão 2026-10-23)**: no computador e no tablet deitado, modais com formulário
+  ficam largos (até 940 px) com os campos em **duas colunas** (textos de ajuda, abas, listas de opções grandes e botões
+  na linha toda; opções como "A pé / Trilha / Carro" lado a lado) e fichas de dados com dois pares por linha. Celular e
+  tablet em pé continuam em uma coluna. Navegador (t28 — 23): camadas agrupadas sem repetição, Mostrar tudo, meteorologia
+  acima da legenda (liga/desliga, painel sem cobrir o botão), modais em 2 colunas sem rolagem no computador e em 1
+  coluna no celular/tablet em pé, natureza com 3 opções, gráfico por mês com aquática × terrestre, por tipo com Outros,
+  **↗ Abrir em outra janela** no Dashboard (a janela nova abre direto no Dashboard).
 - **Mapa limpo (versão 2026-10-23)**: navegador (banco simulado, t27 — 23): nenhum nome no mapa, balão no clique
   (preso ao ponto) sem abrir a ficha, ficha por dois cliques (sem zoom), por clicar e segurar e pelo toque longo, arrastar
   não abre, lista abre direto, ficha com "⋮ Mais", símbolos e agrupamentos menores de longe, translúcidos (quem pede

@@ -52,11 +52,20 @@
     $('meteo-som').textContent = est.som ? '🔔 Som ligado' : '🔕 Som desligado';
   }
 
+  // O painel abre logo acima do botão "Meteorologia" (que fica acima da legenda, no mapa)
+  function posicionarPainel() {
+    var bt = $('opt-meteo'), pn = $('meteo-painel');
+    if (!bt || !pn || pn.hidden || !pn.offsetParent) return;
+    var rc = pn.offsetParent.getBoundingClientRect(), rb = bt.getBoundingClientRect();
+    if (!rb.height) return;
+    pn.style.bottom = Math.max(10, Math.round(rc.bottom - rb.top + 8)) + 'px';
+  }
+
   function ligar(valor) {
     est.ligada = valor;
     gravarLocal(CHAVE_LIG, valor);
     atualizarBotoes();
-    if (valor) { prepararSom(); $('meteo-painel').hidden = false; consultar(); }
+    if (valor) { prepararSom(); $('meteo-painel').hidden = false; posicionarPainel(); consultar(); }
     else { parar(); $('meteo-painel').hidden = true; }
     aplicarCamadas();
     desenharSituacao();
@@ -426,9 +435,10 @@
 
   function iniciar() {
     atualizarBotoes();
-    $('opt-meteo').addEventListener('click', function () { ligar(!est.ligada); });
     $('meteo-fechar').addEventListener('click', function () { $('meteo-painel').hidden = true; });
-    $('meteo-aviso-ver').addEventListener('click', function () { $('meteo-painel').hidden = false; desenharSituacao(); });
+    $('meteo-aviso-ver').addEventListener('click', function () { $('meteo-painel').hidden = false; posicionarPainel(); desenharSituacao(); });
+    window.addEventListener('resize', posicionarPainel);
+    document.addEventListener('toggle', function () { setTimeout(posicionarPainel, 0); }, true);   // a legenda abriu/fechou
     $('meteo-aviso-ocultar').addEventListener('click', function () { est.avisoOculto = true; desenharAviso(); });
     $('meteo-mais-alertas').addEventListener('click', function () { est.verTodos = !est.verTodos; desenharAlertas(); });
     $('meteo-range').addEventListener('input', function () { parar(); mostrarQuadro(Number(this.value)); });
@@ -439,7 +449,7 @@
     $('meteo-som').addEventListener('click', function () { est.som = !est.som; gravarLocal(CHAVE_SOM, est.som); if (est.som) prepararSom(); desenharSituacao(); });
     $('meteo-atualizar').addEventListener('click', function () { consultar(); });
 
-    if (est.ligada) $('meteo-painel').hidden = false;
+    if (est.ligada) { $('meteo-painel').hidden = false; var posTent = setInterval(function () { if ($('opt-meteo')) { clearInterval(posTent); posicionarPainel(); } }, 500); }
     setTimeout(consultar, 2500);
     setInterval(function () { if (document.visibilityState === 'visible') consultar(); }, INTERVALO_MS);
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') consultar(); });
@@ -447,5 +457,5 @@
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
-  window.MeteoPainel = { consultar: consultar, estado: function () { return est; } };
+  window.MeteoPainel = { consultar: consultar, estado: function () { return est; }, alternar: function () { ligar(!est.ligada); } };   // o botão fica no mapa (militar.js)
 })();

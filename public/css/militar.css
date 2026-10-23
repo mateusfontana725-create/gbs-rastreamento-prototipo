@@ -1460,3 +1460,11 @@ a.menu-linha-item { text-decoration: none; }
 .esconder-rotulos .mk-import-rotulo { display: none; }
 .balao-mapa .info-ponto { display: grid; gap: 3px; }
 .balao-mapa .info-ponto .acoes-linha { margin-top: 4px; }
+
+/* Desenho concluído: trilha feita, planejada ou enviar para alguém percorrer */
+.lista-escolha-desenho { display: grid; gap: 8px; }
+.opcao-desenho { border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.opcao-desenho-btn { width: 100%; border: 0; background: transparent; text-align: left; padding: 10px 12px; cursor: pointer; color: var(--texto); }
+.opcao-desenho-btn:hover, .opcao-desenho-btn:focus-visible { background: var(--superficie-3); outline: none; }
+.opcao-desenho-btn .item-area-txt { display: grid; gap: 2px; }
+.opcao-desenho-extra { padding: 0 12px 10px; font-size: .85rem; }

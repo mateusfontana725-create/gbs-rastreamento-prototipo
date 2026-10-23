@@ -347,16 +347,18 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **linha**, um caminho). Exige a
 **migração 028**; sem ela, a lista avisa e o botão não aparece (o resto do painel segue normal).
 
-- **Desenhar à mão livre**: **Ferramentas → Desenhar trilha** (ou **Lista de setores, trilhas e pontos → ＋
-  Desenhar trilha**). Segure e arraste o dedo (ou o mouse) sobre o mapa, como uma caneta: a linha segue o
+- **Desenhar à mão livre**: **Ferramentas → Desenhar trilha / trajeto** (ou **Lista de setores, trilhas e pontos → ＋
+  Desenhar trilha / trajeto**) — uma ferramenta só para trilhas e trajetos. Segure e arraste o dedo (ou o mouse) sobre o mapa, como uma caneta: a linha segue o
   movimento (não liga pontos com retas; o traço é suavizado sem perder a forma). Ao soltar, continue
   arrastando a partir do **círculo branco** (fim) — ou do verde (início) — para emendar na mesma linha; um
   traço começado longe das pontas é recusado com aviso. Tocar sem arrastar não marca nada. Enquanto desenha,
   o mapa fica parado; **dois dedos** dão zoom, a roda do mouse também, e **✋ Mover mapa** libera o arrasto do
   mapa (toque em **✎ Desenhar** para voltar). A barra mostra o comprimento e tem **Desfazer traço** (desfaz o
-  último traço inteiro), **Limpar** (pede confirmação), **Concluir trilha** e **Cancelar** (pede confirmação).
-- **Concluir** abre o formulário: **nome** (único na operação), **situação** — o usuário escolhe
-  **Planejada** (caminho previsto) ou **Percorrida** (já feita, com **data e hora**); nada é marcado sozinho —,
+  último traço inteiro), **Limpar** (pede confirmação), **Concluir…** e **Cancelar** (pede confirmação).
+- **Concluir…** pergunta o que é o desenho: **✔ Trilha já percorrida**, **📋 Trilha planejada** ou **➝ Enviar para
+  alguém percorrer** (abre o envio de destino com o trajeto; **Guardar também no mapa como trilha planejada** vem
+  marcado e registra a trilha com o nome do destino e quem recebeu). **Voltar ao desenho** não perde nada.
+- As duas primeiras abrem o formulário: **nome** (único na operação), **situação** (já marcada pela escolha),
   grupo, responsável pelo trajeto (participante), equipe e observações. Origem: "desenhada à mão no mapa".
 - **Falha ao salvar** (sem internet, nome repetido…): o erro aparece no formulário e o desenho **não se perde**
   — fica na tela e guardado no aparelho; **Tentar de novo** reenvia. Se a página fechar, ao desenhar de novo o
@@ -385,9 +387,9 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 
 ### Trajeto desenhado enviado como destino
 
-- **Ferramentas → Desenhar trajeto e enviar** (ou **🧭 Destino** na ficha → **✎ Desenhar o trajeto**): desenhe à
-  mão o caminho que a equipe deve fazer (mesma ferramenta das trilhas: arrastar, emendar pelas pontas, Desfazer
-  traço, Mover mapa) e toque em **Enviar trajeto…**. Escolha **pessoas** ou um **grupo** (com o mesmo controle de
+- **Ferramentas → Desenhar trilha / trajeto** → **Concluir…** → **Enviar para alguém percorrer** (ou **🧭 Enviar
+  destino** na ficha → **✎ Desenhar o trajeto**, que vai direto ao envio): desenhe à mão o caminho que a equipe deve
+  fazer (arrastar, emendar pelas pontas, Desfazer traço, Mover mapa). Escolha **pessoas** ou um **grupo** (com o mesmo controle de
   missão, base e prazo de retorno dos deslocamentos de grupo) e como vão percorrer (a pé, trilha, carro — só para
   estimar o tempo). Fechar a janela sem enviar volta ao desenho.
 - Uma **linha importada** também pode ser enviada: tocar nela → **Enviar como trajeto**.

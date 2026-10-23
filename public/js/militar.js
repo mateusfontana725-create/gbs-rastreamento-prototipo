@@ -340,7 +340,6 @@
     $('menu-setor-raio').addEventListener('click', function () { iniciarDesenho('raio'); });
     $('menu-setor-poligono').addEventListener('click', function () { iniciarDesenho('poligono'); });
     $('menu-trilha').addEventListener('click', function () { iniciarDesenhoTrilha(); });
-    $('menu-trajeto').addEventListener('click', function () { iniciarDesenhoTrajeto([], null); });
     $('menu-ponto').addEventListener('click', function () { iniciarDesenho('ponto'); });
     $('menu-destino').addEventListener('click', function () { escolherDestino([]); });
     $('menu-areas').addEventListener('click', abrirAreas);
@@ -1502,7 +1501,7 @@
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
-    ['menu-setor-raio', 'menu-setor-poligono', 'menu-trilha', 'menu-trajeto', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
+    ['menu-setor-raio', 'menu-setor-poligono', 'menu-trilha', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
     // atalhos do topo do menu: some a faixa inteira quando nenhum se aplica (operação encerrada)
     var rapido = document.querySelector('#menu-ferramentas .menu-rapido');
     if (rapido) rapido.hidden = !Array.from(rapido.children).some(function (b) { return !b.hidden; });
@@ -5884,7 +5883,7 @@
       var n = nome.value.replace(/\s+/g, ' ').trim();
       if (!n) { erro.textContent = 'Informe o nome do destino.'; erro.hidden = false; return; }
       if (modoGrupo) {
-        enviarDestinoAoGrupo({ form: form, btn: btn, erro: erro, fechar: function () { fechar(true); if (alvo.aoEnviar) alvo.aoEnviar(); }, alvo: alvo, nome: n, modo: modoSel,
+        enviarDestinoAoGrupo({ form: form, btn: btn, erro: erro, fechar: function () { fechar(true); if (alvo.aoEnviar) alvo.aoEnviar({ nome: n, grupo_id: selGrupo.value || null, participantes: [] }); }, alvo: alvo, nome: n, modo: modoSel,
           grupo: selGrupo.value, publico: (form.querySelector('input[name="destino-publico"]:checked') || {}).value || 'todos',
           base: selBase.value || null, raio: Number(raioBase.value), prazo: Number(prazo.value), prazos: prazosGrupo });
         return;
@@ -5914,7 +5913,7 @@
         }
       }
       fechar(true);
-      if (ok && alvo.aoEnviar) alvo.aoEnviar();
+      if (ok && alvo.aoEnviar) alvo.aoEnviar({ nome: n, grupo_id: null, participantes: ids });
       else if (!ok && alvo.aoCancelar) alvo.aoCancelar();   // nada enviado: o desenho continua
       if (ok) UI.aviso((traj ? 'Trajeto "' : 'Destino "') + n + '" enviado a ' + ok + ' participante(s). ' + (traj ? 'Eles seguem a linha desenhada no celular.' : 'Eles veem a distância e a direção no celular.'), 'ok', 7000);
       if (falhas.length) UI.aviso('Não enviado para ' + falhas.join('; '), 'erro', 10000);
@@ -6620,7 +6619,7 @@
     var texto = dz.mover
       ? 'Mover mapa: arraste e dê zoom. Toque em "Desenhar" para continuar.'
       : n < 2 ? (traj ? 'Trajeto para enviar: desenhe, na ordem, o caminho que a equipe deve fazer (segure e arraste).'
-        : (dz.trilhaId ? 'Editando o traçado: ' : 'Desenhar trilha: ') + 'segure e arraste sobre o mapa, como uma caneta.')
+        : (dz.trilhaId ? 'Editando o traçado: ' : 'Desenhar trilha ou trajeto: ') + 'segure e arraste sobre o mapa, como uma caneta. Ao concluir, escolha: trilha feita, planejada ou enviar para alguém percorrer.')
         : (traj ? 'Trajeto · ' : dz.trilhaId ? 'Editando o traçado · ' : 'Trilha · ') + compr + ' · continue arrastando a partir do círculo branco. Dois dedos: zoom.';
     mostrarBarraDesenho(texto, null, [
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-desfazer', texto: 'Desfazer traço', disabled: dz.tracos.length ? null : true, onclick: function () { desfazerTraco(dz); } }),
@@ -6631,7 +6630,7 @@
       } }),
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-mover', 'aria-pressed': String(Boolean(dz.mover)),
         texto: dz.mover ? '✎ Desenhar' : '✋ Mover mapa', onclick: function () { dz.mover = !dz.mover; if (dz.aplicarModo) dz.aplicarModo(); atualizarBarraTrilha(); } }),
-      UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'trilha-concluir', texto: traj ? 'Enviar trajeto…' : dz.trilhaId ? 'Salvar traçado' : 'Concluir trilha',
+      UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'trilha-concluir', texto: traj ? 'Enviar trajeto…' : dz.trilhaId ? 'Salvar traçado' : 'Concluir…',
         disabled: n >= 2 ? null : true, onclick: traj ? concluirTrajeto : concluirTrilha }),
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-cancelar', texto: 'Cancelar', onclick: cancelarDesenhoTrilha }),
     ]);
@@ -6675,7 +6674,7 @@
   async function concluirTrilha() {
     var dz = est.desenho;
     if (!dz || dz.tipo !== 'trilha' || dz.pontos.length < 2) return;
-    if (!dz.trilhaId) { $('barra-desenho').hidden = true; abrirFormTrilha(null); return; }
+    if (!dz.trilhaId) { $('barra-desenho').hidden = true; escolherDestinoDoDesenho(dz); return; }
     // edição do traçado: salva só a geometria
     var btn = $('trilha-concluir');
     if (btn) btn.disabled = true;
@@ -6687,6 +6686,63 @@
     } catch (e) {
       if (btn) btn.disabled = false;
       UI.aviso('Traçado não salvo: ' + e.message + (e.rede ? ' O desenho continua na tela: tente de novo.' : ''), 'erro', 9000);
+    }
+  }
+
+  // Uma ferramenta só para desenhar: ao concluir, a pessoa escolhe se o desenho é uma trilha já
+  // feita, uma trilha planejada (só registrar) ou um trajeto para alguém percorrer (enviar como
+  // destino; pode ficar também registrado como trilha planejada). Fechar volta ao desenho.
+  function escolherDestinoDoDesenho(dz) {
+    var compr = formatarComprimento(comprimentoLinhaM(dz.pontos));
+    var guardar = UI.el('input', { type: 'checkbox', id: 'desenho-guardar-planejada', checked: true });
+    var escolhido = false;
+    function opcao(id, titulo, texto, acao, extra) {
+      return UI.el('div', { classe: 'opcao-desenho' }, [
+        UI.el('button', { classe: 'item-area opcao-desenho-btn', type: 'button', id: id, onclick: function () { escolhido = true; fechar(true); acao(); } }, [
+          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: titulo }), UI.el('small', { classe: 'muted', texto: texto })]),
+        ]),
+        extra || null,
+      ]);
+    }
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'escolha-desenho' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'O que é este desenho? (' + compr + ')' }),
+      UI.el('div', { classe: 'lista-escolha-desenho' }, [
+        opcao('desenho-feita', '✔ Trilha já percorrida', 'Registrar o caminho que uma equipe ou drone já fez (com quando).', function () { abrirFormTrilha(null, 'percorrida'); }),
+        opcao('desenho-planejada', '📋 Trilha planejada', 'Registrar no mapa um caminho a fazer, sem enviar a ninguém agora.', function () { abrirFormTrilha(null, 'planejada'); }),
+        opcao('desenho-enviar', '➝ Enviar para alguém percorrer', 'A pessoa ou o grupo segue a linha no celular, do início (verde) ao fim.', function () { enviarDesenhoComoTrajeto(dz, guardar.checked); },
+          UI.el('label', { classe: 'linha-opcao opcao-desenho-extra' }, [guardar, ' Guardar também no mapa como trilha planejada'])),
+      ]),
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao desenho', onclick: function () { fechar(); } })]),
+    ]), { aoFechar: function () { if (!escolhido && est.desenho === dz) atualizarBarraTrilha(); } });
+  }
+
+  function enviarDesenhoComoTrajeto(dz, guardar) {
+    var fim = dz.pontos[dz.pontos.length - 1];
+    abrirEnviarDestino({
+      nome: 'Trajeto', lat: fim[0], lng: fim[1], trajeto: dz.pontos.slice(),
+      aoCancelar: function () { if (est.desenho === dz) atualizarBarraTrilha(); },   // fechou sem enviar: volta ao desenho
+      aoEnviar: function (env) {
+        var pontos = dz.pontos.slice(), clientId = dz.client_id;
+        if (est.desenho === dz) { apagarRascunhoTrilha(); cancelarDesenho(); }
+        if (guardar) registrarTrajetoComoTrilha(pontos, clientId, env || {});
+      },
+    });
+  }
+
+  // O trajeto enviado fica no mapa como trilha planejada (com quem recebeu). O envio já foi feito:
+  // uma falha aqui só avisa (o client_id evita duplicar se repetir).
+  async function registrarTrajetoComoTrilha(pontos, clientId, env) {
+    var nome = String(env.nome || 'Trajeto').slice(0, 70);
+    var usados = new Set(Array.from(est.trilhasManuais.values()).map(function (t) { return t.d.nome.trim().toLowerCase(); }));
+    if (usados.has(nome.toLowerCase())) nome = nome + ' (' + C.hora(new Date().toISOString(), false) + ')';
+    var dados = { client_id: clientId || C.uuid(), nome: nome, estado: 'planejada', pontos: pontos, meio: 'equipe',
+      grupo_id: env.grupo_id || null, participante_id: env.participantes && env.participantes.length === 1 ? env.participantes[0] : null,
+      observacoes: 'Trajeto enviado como destino.' };
+    try {
+      var res = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: null, p_dados: dados });
+      aplicarTrilhasManuais([res]);
+    } catch (e) {
+      UI.aviso('O trajeto foi enviado, mas não ficou registrado como trilha planejada: ' + e.message, 'erro', 10000);
     }
   }
 

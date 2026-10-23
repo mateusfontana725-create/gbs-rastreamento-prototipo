@@ -1389,3 +1389,14 @@ html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; backgroun
 .imp-tipo { text-align: center; color: var(--texto-3); }
 .campo-cor { width: 34px; height: 26px; padding: 0; border: 1px solid var(--borda-forte); border-radius: 4px; background: none; cursor: pointer; }
 .campo-cor:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Encerramento com o resultado da busca */
+.form-encerrar { display: grid; gap: 10px; }
+.opcoes-resultado { display: grid; gap: 6px; }
+.opcao-resultado { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--borda); background: var(--superficie-2); }
+.opcao-resultado > span { display: grid; gap: 2px; min-width: 0; }
+.opcao-resultado small { font-size: .74rem; }
+.opcao-resultado:has(input:checked) { border-color: var(--acento); }
+.opcao-resultado[data-resultado="localizada"]:has(input:checked) { border-color: #d946ef; }
+.enc-outra { margin-top: 6px; font-size: .84rem; }
+.form-vitima #vit-nome, .form-vitima #vit-quem-texto { margin-top: 6px; }

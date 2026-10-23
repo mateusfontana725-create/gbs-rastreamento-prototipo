@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -816,6 +816,40 @@ console.log('Percursos de equipes e drones; trajeto desenhado como destino (migr
   chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'definir_destino_trajeto', { p_participante: pa.participante_id, p_nome: 'X', p_trajeto: JSON.stringify(linha) }))), 'operação encerrada: recusado');
 }
 
+console.log('Vítima encontrada com detalhes e resultado no encerramento (migração 031)');
+{
+  const opV2 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP VITIMA DETALHE', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uE2 = await usuario(null, true);
+  const pE2 = await rpc(uE2, 'ingressar', { p_token: opV2.token_militar, p_nome: 'Sd Achou', p_tipo: 'militar', p_cpf: null, p_telefone: null });
+  const fic = await rpc(resp1, 'salvar_vitima', { p_operacao: opV2.id, p_id: null, p_dados: JSON.stringify({ nome: 'Seu Antônio' }) });
+  const r1 = await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({
+    condicao: 'viva', lat: -23.44, lng: -51.25, encontrou: pE2.participante_id, vitima_id: fic.id,
+    local_descricao: 'Margem esquerda do córrego, sob a ponte', observacoes: 'Hipotermia leve; levado pelo SAMU ao HU' }) });
+  chk(r1.registro.vitima_id === fic.id && r1.registro.condicao === 'viva' && r1.registro.local_descricao === 'Margem esquerda do córrego, sob a ponte'
+    && /HU/.test(r1.registro.observacoes) && /Sd Achou/.test(r1.registro.registrado_por_nome), 'registra ficha, condição, local, estado e quem encontrou', r1.registro);
+  const alerta = (await db.query(`select titulo from public.alertas where operacao_id = $1 and tipo = 'vitima_localizada'`, [opV2.id])).rows;
+  chk(alerta.length === 1, 'dispara o alerta de vítima localizada (como a 025)');
+  const di = (await db.query(`select titulo, detalhe from public.diario where operacao_id = $1 and tipo = 'vitima_localizada'`, [opV2.id])).rows;
+  chk(di.length === 1 && /Seu Antônio/.test(di[0].titulo) && /sob a ponte/.test(di[0].detalhe) && /SAMU/.test(di[0].detalhe), 'diário (e relatório) com a vítima, o local e o estado', di);
+  const r2 = await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({
+    condicao: 'obito', vitima_nome: 'Criança não identificada', encontrada_por: 'Morador da chácara', local_descricao: 'Poço' }) });
+  chk(r2.vitima && r2.vitima.nome === 'Criança não identificada' && r2.registro.vitima_id === r2.vitima.id && r2.registro.encontrada_por_texto === 'Morador da chácara'
+    && r2.registro.lat === null, 'cria a ficha só com o nome; quem encontrou fora do sistema; sem GPS', r2.registro);
+  chk(/encontrada por Morador/.test(r2.registro.registrado_por_nome), 'nome de quem encontrou aparece no registro');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({ condicao: 'talvez' }) }))), 'condição inválida: recusada');
+  chk(/vitima_nao_encontrada/.test(await erroDe(rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({ condicao: 'viva', vitima_id: v.id }) }))), 'ficha de outra operação: recusada');
+  chk(/posicao_invalida/.test(await erroDe(rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({ condicao: 'viva', lat: -23.4 }) }))), 'só latitude, sem longitude: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({ condicao: 'viva' }) }))), 'responsável de outra operação não registra');
+  chk(/sem_permissao/.test(await erroDe(rpc(uE2, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({ condicao: 'viva' }) }))), 'participante não usa a função do painel');
+  chk((await como(uE2, `select count(*)::int n from public.vitima_localizacoes where operacao_id = $1`, [opV2.id])).rows[0].n === 0, 'participante não lê a condição nem os detalhes');
+  // encerramento: resultado registrado e operação encerrada
+  await rpc(resp1, 'definir_resultado', { p_operacao: opV2.id, p_resultado: 'localizada_viva', p_texto: 'Localizado sob a ponte.' });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opV2.id });
+  const opF = (await db.query(`select status, resultado, resultado_texto from public.operacoes where id = $1`, [opV2.id])).rows[0];
+  chk(opF.status === 'encerrada' && opF.resultado === 'localizada_viva' && opF.resultado_texto === 'Localizado sob a ponte.', 'encerramento com o resultado registrado', opF);
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opV2.id, p_dados: JSON.stringify({ condicao: 'viva' }) }))), 'operação encerrada: não registra mais');
+}
+
 console.log('Dados só saem ao excluir a operação (migração 027)');
 const contOp = async () => (await db.query(`select (select count(*) from public.vitimas where operacao_id=$1)::int v, (select count(*) from public.grupos where operacao_id=$1)::int g,
   (select count(*) from public.missoes where operacao_id=$1)::int m, (select count(*) from public.alertas where operacao_id=$1)::int a,
@@ -853,5 +887,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–030 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–031 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -3640,14 +3640,90 @@
     var op = est.op;
     if (!op || op.status !== 'ativa') return;
     if (jaOfereceu !== true && !(await oferecerRelatorio(op, 'Depois de encerrar o painel fica só para consulta.', function () { encerrarOperacao(true); }))) return;
-    var ret = 'Nada é apagado: posições, trilhas, mensagens, fotos, setores e fichas continuam guardados e o painel abre só para consulta. Os dados só saem se a operação for excluída.';
-    var r = await UI.confirmar({
-      titulo: 'Encerrar a operação "' + op.codigo + '"?',
-      texto: 'Os celulares dos participantes vão parar de enviar a localização e os links deixarão de funcionar. ' + ret,
-      ok: 'Encerrar operação',
-      perigo: true,
+    abrirEncerramento();
+  }
+
+  // Encerrar com o resultado da busca. "Vítima localizada" abre o mesmo formulário do botão
+  // "Vítima encontrada" (ficha, condição, estado, quem encontrou e local); o resultado vai para a
+  // operação (o mesmo do relatório final) e só então a operação é encerrada.
+  function abrirEncerramento(pre) {
+    var op = est.op;
+    if (!op || op.status !== 'ativa') return;
+    pre = pre || {};
+    var regs = Array.from(est.vitimasLoc.values()).sort(function (a, b) { return String(a.registrado_em).localeCompare(String(b.registrado_em)); });
+    var ultimo = regs[regs.length - 1] || null;
+    var OPCOES = [
+      ['localizada', 'Vítima localizada', ultimo
+        ? 'já registrada' + (regs.length > 1 ? ' (' + regs.length + ' registros)' : '') + ': ' + CONDICAO_VITIMA[ultimo.condicao].toLowerCase() + (ultimo.local_descricao ? ' · ' + ultimo.local_descricao : '')
+        : 'abre o formulário de vítima encontrada (ficha, condição, local e quem encontrou)'],
+      ['nao_localizada', 'Vítima não localizada', 'busca suspensa ou encerrada sem localizar'],
+      ['outro', 'Outro desfecho', 'descreva abaixo'],
+      ['sem', 'Encerrar sem informar o resultado', 'dá para informar depois em Relatório final'],
+    ];
+    var inicial = pre.escolha || (op.resultado === 'nao_localizada' ? 'nao_localizada' : op.resultado === 'outro' ? 'outro' : ultimo || /^localizada/.test(op.resultado || '') ? 'localizada' : null);
+    var opcoes = UI.el('div', { classe: 'opcoes-resultado', role: 'radiogroup', 'aria-label': 'Resultado da busca' }, OPCOES.map(function (o) {
+      return UI.el('label', { classe: 'opcao-resultado', 'data-resultado': o[0] }, [
+        UI.el('input', { type: 'radio', name: 'enc-resultado', value: o[0], checked: inicial === o[0] ? true : null }),
+        UI.el('span', null, [UI.el('strong', { texto: o[1] }), UI.el('small', { classe: 'muted', texto: o[2] })]),
+      ]);
+    }));
+    var outraVitima = UI.el('input', { type: 'checkbox', id: 'enc-outra-vitima' });
+    var blocoOutra = ultimo ? UI.el('label', { classe: 'linha-opcao enc-outra' }, [outraVitima, ' Registrar outra vítima encontrada agora']) : null;
+    var texto = UI.el('textarea', { classe: 'campo', id: 'enc-texto', rows: '3', maxlength: '4000', placeholder: 'Resumo do desfecho: onde, quando e em que condições; encaminhamentos.' });
+    texto.value = pre.texto != null ? pre.texto : op.resultado_texto || '';
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'enc-confirmar', texto: 'Encerrar operação' });
+    function escolha() { return (form.querySelector('input[name="enc-resultado"]:checked') || {}).value || null; }
+    function atualizar() {
+      var e = escolha();
+      if (blocoOutra) blocoOutra.hidden = e !== 'localizada';
+      var registrar = e === 'localizada' && (!ultimo || outraVitima.checked);
+      btn.textContent = registrar ? 'Registrar a vítima…' : 'Encerrar operação';
+      texto.parentNode.hidden = e === 'sem';
+    }
+    var form = UI.el('form', { classe: 'form-encerrar', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Encerrar a operação "' + op.codigo + '"' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Os celulares dos participantes vão parar de enviar a localização e os links deixarão de funcionar. ' +
+        'Nada é apagado: o painel abre só para consulta e os dados só saem se a operação for excluída.' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Resultado da busca' }), opcoes, blocoOutra]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'enc-texto', texto: 'Descrição do desfecho (aparece no relatório)' }), texto]),
+      erro,
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    opcoes.addEventListener('change', atualizar);
+    outraVitima.addEventListener('change', atualizar);
+    atualizar();
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var e = escolha(), t = texto.value.trim();
+      if (!e) { erro.textContent = 'Escolha o resultado da busca (ou "Encerrar sem informar o resultado").'; erro.hidden = false; return; }
+      if (e === 'outro' && !t) { erro.textContent = 'Descreva o desfecho.'; erro.hidden = false; texto.focus(); return; }
+      if (e === 'localizada' && (!ultimo || outraVitima.checked)) {
+        // o mesmo formulário do botão "Vítima encontrada"; ao registrar, segue o encerramento
+        fechar();
+        abrirRegistroVitima({
+          aoRegistrar: function (r, condicao) { concluirEncerramento(condicao === 'obito' ? 'localizada_obito' : 'localizada_viva', t); },
+          aoVoltar: function () { abrirEncerramento({ escolha: e, texto: texto.value }); },
+        });
+        return;
+      }
+      fechar();
+      var res = e === 'localizada' ? (ultimo.condicao === 'obito' ? 'localizada_obito' : 'localizada_viva') : e === 'sem' ? null : e;
+      concluirEncerramento(res, t);
     });
-    if (!r) return;
+  }
+
+  async function concluirEncerramento(resultado, texto) {
+    var op = est.op;
+    if (!op || op.status !== 'ativa') return;
+    try {
+      if (resultado) Object.assign(est.op, await C.rpc('definir_resultado', { p_operacao: op.id, p_resultado: resultado, p_texto: texto || '' }));
+    } catch (e) {
+      UI.aviso('Resultado não registrado (' + e.message + '). A operação NÃO foi encerrada: tente de novo.', 'erro', 10000);
+      return;
+    }
     try {
       var atual = await C.rpc('encerrar_operacao', { p_operacao: op.id });
       est.op = Object.assign(est.op, atual);
@@ -3659,9 +3735,9 @@
       } else {
         atualizarEstados();
       }
-      UI.aviso('Operação encerrada.', 'ok');
+      UI.aviso('Operação encerrada' + (resultado ? ' com o resultado registrado.' : '.'), 'ok', 7000);
     } catch (e) {
-      UI.aviso(e.message, 'erro');
+      UI.aviso((resultado ? 'O resultado foi registrado, mas a operação não foi encerrada: ' : '') + e.message, 'erro', 10000);
     }
   }
 
@@ -8331,7 +8407,23 @@
     }));
     var quem = UI.el('select', { classe: 'campo', id: 'vit-quem' }, [UI.el('option', { value: '', texto: '— não informar —' })].concat(pessoas.map(function (p) {
       return UI.el('option', { value: p.id, selected: pre.encontrou === p.id ? true : null, texto: nomeExibido(p) + ' (' + TIPOS[tipoDe(p.dados)].rotulo.toLowerCase() + ')' });
-    })));
+    })).concat([UI.el('option', { value: '__outra', selected: pre.encontrou === '__outra' ? true : null, texto: 'Outra pessoa (fora do sistema)…' })]));
+    var quemTexto = UI.el('input', { classe: 'campo', id: 'vit-quem-texto', maxlength: '120', value: pre.encontradaPor || '', placeholder: 'Ex.: morador da chácara, PM, SAMU', hidden: pre.encontrou !== '__outra' });
+    quem.addEventListener('change', function () { quemTexto.hidden = quem.value !== '__outra'; if (!quemTexto.hidden) quemTexto.focus(); });
+    // Ficha da vítima: escolher uma já cadastrada ou criar agora só com o nome
+    var ficha = UI.el('select', { classe: 'campo', id: 'vit-ficha' }, [UI.el('option', { value: '', texto: '— não informar —' }),
+      UI.el('option', { value: '__nova', selected: pre.vitimaId === '__nova' ? true : null, texto: '＋ Nova vítima (informar o nome)' })]);
+    var fichaNome = UI.el('input', { classe: 'campo', id: 'vit-nome', maxlength: '80', value: pre.vitimaNome || '', placeholder: 'Nome ou "Não identificada"', hidden: pre.vitimaId !== '__nova' });
+    ficha.addEventListener('change', function () { fichaNome.hidden = ficha.value !== '__nova'; if (!fichaNome.hidden) fichaNome.focus(); });
+    C.consultar(C.cliente.from('vitimas').select('id,nome,idade').eq('operacao_id', est.op.id).order('criado_em', { ascending: true })).then(function (lista) {
+      (lista || []).forEach(function (v, i) {
+        ficha.insertBefore(UI.el('option', { value: v.id, texto: v.nome + (v.idade != null ? ' (' + v.idade + ' anos)' : '') }), ficha.lastChild);
+        if (pre.vitimaId === v.id || (!pre.vitimaId && lista.length === 1 && i === 0)) ficha.value = v.id;   // uma só vítima: já vem escolhida
+      });
+    }).catch(function () { /* sem fichas: segue com nome ou sem informar */ });
+    var localDesc = UI.el('input', { classe: 'campo', id: 'vit-local', maxlength: '500', value: pre.localDescricao || '', placeholder: 'Ex.: margem esquerda do córrego, sob a ponte' });
+    var obs = UI.el('textarea', { classe: 'campo', id: 'vit-obs', maxlength: '1000', rows: '2', placeholder: 'Ex.: consciente, hipotermia leve; levada pelo SAMU ao HU' });
+    obs.value = pre.observacoes || '';
 
     function opcaoOnde(valor, texto, extra) {
       return UI.el('label', { classe: 'vit-onde', 'data-onde': valor }, [
@@ -8351,7 +8443,7 @@
     ]);
     function marcarOnde(v) { var r = onde.querySelector('input[value="' + v + '"]'); if (r && !r.disabled) r.checked = true; }
     function posDeQuem() {
-      var p = est.participantes.get(quem.value);
+      var p = est.participantes.get(participanteQuem());
       return p ? posicaoAtual(p) : null;
     }
     function atualizarQuem() {
@@ -8359,30 +8451,39 @@
       var r = optQuem.querySelector('input');
       r.disabled = !pos;
       optQuem.classList.toggle('desativada', !pos);
-      optQuem.querySelector('small').textContent = !quem.value ? 'escolha quem encontrou' : pos ? 'última posição ' + C.idade(pos.t) + ' · ± ' + Math.round(pos.prec || 0) + ' m' : 'essa pessoa ainda não tem posição';
+      optQuem.querySelector('small').textContent = !participanteQuem() ? 'escolha quem encontrou (participante)' : pos ? 'última posição ' + C.idade(pos.t) + ' · ± ' + Math.round(pos.prec || 0) + ' m' : 'essa pessoa ainda não tem posição';
       if (r.disabled && r.checked) marcarOnde(temPonto ? 'mapa' : 'gps');
     }
+    function participanteQuem() { return quem.value && quem.value !== '__outra' ? quem.value : null; }
     quem.addEventListener('change', function () { atualizarQuem(); if (posDeQuem() && !temPonto) marcarOnde('quem'); });
     atualizarQuem();
     if (!temPonto) optMapa.querySelector('input').disabled = true;
     marcarOnde(pre.onde && (pre.onde !== 'mapa' || temPonto) ? pre.onde : temPonto ? 'mapa' : posDeQuem() ? 'quem' : 'gps');
 
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: 'Registrar vítima encontrada' });
+    var noEncerramento = typeof pre.aoRegistrar === 'function';
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: noEncerramento ? 'Registrar e continuar o encerramento' : 'Registrar vítima encontrada' });
     var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
       UI.el('h2', { texto: '✚ Vítima encontrada' }),
-      UI.el('p', { classe: 'muted', texto: 'Para quando a notícia chega por rádio, telefone ou pessoalmente. Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.' }),
+      UI.el('p', { classe: 'muted', texto: noEncerramento
+        ? 'Registre a vítima antes de encerrar: entra no diário, no relatório e no resultado da operação. A condição só os responsáveis veem.'
+        : 'Para quando a notícia chega por rádio, telefone ou pessoalmente. Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.' }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-ficha', texto: 'Vítima' }), ficha, fichaNome]),
       UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Condição' }), cond]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-quem', texto: 'Quem encontrou (opcional)' }), quem]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Onde' }), onde]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-obs', texto: 'Estado da vítima e encaminhamento (opcional)' }), obs]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-quem', texto: 'Quem encontrou (opcional)' }), quem, quemTexto]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Onde foi encontrada' }), onde]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-local', texto: 'Descrição do local (opcional)' }), localDesc]),
       erro,
-      UI.el('div', { classe: 'acoes-linha' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.el('div', { classe: 'acoes-linha' }, [UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); } }), btn]),
     ]);
     var fechar = UI.abrirModal(form, { fecharNoFundo: false });
 
+    // Tudo o que foi preenchido (para voltar ao formulário depois de escolher o ponto no mapa).
     function estadoAtual() {
       var c = form.querySelector('input[name="vit-condicao"]:checked');
-      return { condicao: c ? c.value : null, encontrou: quem.value || null };
+      return { condicao: c ? c.value : null, encontrou: quem.value || null, encontradaPor: quemTexto.value, vitimaId: ficha.value || null,
+        vitimaNome: fichaNome.value, localDescricao: localDesc.value, observacoes: obs.value, aoRegistrar: pre.aoRegistrar, aoVoltar: pre.aoVoltar };
     }
     btnMapa.addEventListener('click', function () {
       var e = estadoAtual();
@@ -8396,7 +8497,8 @@
       var e = estadoAtual();
       var modo = (form.querySelector('input[name="vit-onde"]:checked') || {}).value;
       if (!e.condicao) { erro.textContent = 'Escolha a condição: com vida ou óbito.'; erro.hidden = false; return; }
-      var args = { p_operacao: est.op.id, p_condicao: e.condicao, p_encontrou: e.encontrou };
+      if (e.vitimaId === '__nova' && !e.vitimaNome.trim()) { erro.textContent = 'Informe o nome da nova vítima (ou "Não identificada").'; erro.hidden = false; fichaNome.focus(); return; }
+      var args = { p_operacao: est.op.id, p_condicao: e.condicao, p_encontrou: participanteQuem() };
       btn.disabled = true;
       try {
         if (modo === 'mapa' && temPonto) {
@@ -8410,10 +8512,24 @@
           if (!pq) throw new Error('Quem encontrou ainda não tem posição. Escolha outra opção.');
           args.p_lat = pq.lat; args.p_lng = pq.lng; args.p_precisao = pq.prec; args.p_posicao_em = new Date(pq.t).toISOString();
         }
-        var r = await C.rpc('responsavel_registrar_vitima', args);
+        var dados = { condicao: e.condicao, encontrou: participanteQuem(), encontrada_por: quem.value === '__outra' ? e.encontradaPor.trim() : '',
+          vitima_id: e.vitimaId && e.vitimaId !== '__nova' ? e.vitimaId : null, vitima_nome: e.vitimaId === '__nova' ? e.vitimaNome.trim() : '',
+          local_descricao: e.localDescricao.trim(), observacoes: e.observacoes.trim(),
+          lat: args.p_lat, lng: args.p_lng, precisao: args.p_precisao, posicao_em: args.p_posicao_em };
+        var r, semDetalhes = false;
+        try {
+          r = await C.rpc('registrar_vitima_encontrada', { p_operacao: est.op.id, p_dados: dados });
+        } catch (e3) {
+          if (e3.codigo !== 'funcao_ausente') throw e3;
+          // banco sem a migração 031: registra o essencial (condição, local, quem encontrou)
+          r = await C.rpc('responsavel_registrar_vitima', args);
+          semDetalhes = Boolean(dados.vitima_id || dados.vitima_nome || dados.encontrada_por || dados.local_descricao || dados.observacoes);
+        }
         if (r && r.mensagem) receberMensagem(r.mensagem, true);
         if (r && r.registro) receberVitimasLoc([r.registro]);
         fechar();
+        if (semDetalhes) UI.aviso('Registrado sem a ficha, o local descrito, quem encontrou (fora do sistema) e o estado: o banco ainda não tem a migração 031.', 'erro', 10000);
+        if (noEncerramento) { pre.aoRegistrar(r, e.condicao, dados); return; }
         UI.aviso('Vítima encontrada registrada. Os responsáveis receberam o alerta.', 'ok', 7000);
         sincronizar();
         if (args.p_lat != null && est.mapa) est.mapa.setView([args.p_lat, args.p_lng], Math.max(est.mapa.getZoom(), 16));
@@ -8465,7 +8581,8 @@
   }
 
   function textoRegistroVitima(r) {
-    return 'Condição: ' + CONDICAO_VITIMA[r.condicao] + ' · registrado por ' + r.registrado_por_nome +
+    return 'Condição: ' + CONDICAO_VITIMA[r.condicao] + (r.local_descricao ? ' · local: ' + r.local_descricao : '') +
+      (r.observacoes ? ' · ' + r.observacoes : '') + ' · registrado por ' + r.registrado_por_nome +
       ' (' + r.registrado_por_tipo + ') em ' + C.hora(r.registrado_em) +
       (r.lat != null ? ' · ' + C.coord(r.lat) + ', ' + C.coord(r.lng) + ' (' + C.precisao(r.precisao) + ')' : ' · sem localização do GPS');
   }

@@ -777,6 +777,19 @@ chave própria).
   ou sem localização. Gera o mesmo registro do campo (alerta crítico aos responsáveis, diário, dashboard,
   relatório e o ✚ no mapa), com "registrado por *responsável* (encontrada por *pessoa*)". Função
   `responsavel_registrar_vitima` (migração **025**).
+- **Detalhes do registro** (migração **031**, função `registrar_vitima_encontrada`): o mesmo formulário também
+  pede **qual vítima** (a ficha já cadastrada — com uma só, ela já vem escolhida — ou **＋ Nova vítima**, que cria
+  a ficha só com o nome), **estado da vítima e encaminhamento** (lesões, SAMU, hospital), **quem encontrou** fora
+  do sistema (**Outra pessoa…**: morador, PM, SAMU) e a **descrição do local** (margem do rio, fundo de vale…). Tudo
+  vai para o alerta, o diário e, por ele, o relatório final. Sem a 031 no banco, registra o essencial e avisa que
+  os detalhes não foram salvos.
+- **Encerramento com o resultado**: **Ferramentas → Encerrar operação** abre o **resultado da busca** — **Vítima
+  localizada** (já registrada vem marcada, com a condição; senão abre o **mesmo formulário de vítima encontrada** e,
+  ao registrar, segue o encerramento; "Registrar outra vítima encontrada agora" para mais de uma), **Vítima não
+  localizada**, **Outro desfecho** (com descrição obrigatória) ou **Encerrar sem informar o resultado** — e a
+  descrição do desfecho. O resultado é o mesmo do **Relatório final** (localizada com vida / em óbito / não
+  localizada / outro) e é gravado antes de encerrar; se a gravação falhar, a operação não é encerrada. **Voltar** no
+  formulário da vítima retorna ao encerramento sem perder o texto.
 
 ### Operação encerrada: painel só para visualização
 
@@ -1005,6 +1018,7 @@ rastreamento-sar/
 │       ├── 028_trilhas_manuais.sql            trilhas desenhadas à mão (planejadas/percorridas); operações no Realtime
 │       ├── 029_nomes_painel_cpf_opcional.sql  CPF opcional para civis; nome de exibição do participante no painel
 │       ├── 030_percursos_trajetos.sql         meio/cor/origem das trilhas; trajeto desenhado como destino
+│       ├── 031_vitima_encontrada_detalhes.sql ficha, estado, local e quem encontrou no registro da vítima
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1136,7 +1150,10 @@ rastreamento-sar/
    - **030** (`030_percursos_trajetos.sql`): `trilhas_manuais` ganha `meio`, `cor`, `origem` e `arquivo`;
      `destinos` e `missoes` ganham `trajeto`; funções `definir_destino_trajeto` e `enviar_trajeto_grupo`;
      `meu_destino` e `mapa_do_participante` devolvem o trajeto. Exige a 028. Não apaga nada.
-   O `schema.sql` completo já inclui da 003 à 030.
+   - **031** (`031_vitima_encontrada_detalhes.sql`): `vitima_localizacoes` ganha `vitima_id`, `encontrada_por_texto`,
+     `local_descricao` e `observacoes`; função `registrar_vitima_encontrada` (formulário completo numa transação, cria
+     a ficha só com o nome se preciso); o diário da vítima localizada leva esses detalhes. Não apaga nada.
+   O `schema.sql` completo já inclui da 003 à 031.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -1478,6 +1495,11 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Vítima encontrada e encerramento com resultado (versão 2026-10-23)**: banco — 379 verificações (migrações
+  007–031: ficha escolhida ou criada, estado, local, quem encontrou fora do sistema, alerta e diário com os detalhes,
+  permissões, participante não lê, resultado + encerramento, encerrada recusa). Navegador (banco simulado): formulário
+  completo pelo botão, encerramento com vítima já registrada, sem registro (abre o mesmo formulário, Voltar sem
+  perder o texto, óbito), não localizada, outro desfecho, sem resultado, banco sem a 031 (18).
 - **Trilhas de equipes e drones, arquivos e trajetos (versão 2026-10-23)**: `npm test` inclui as rotas desenhadas
   (18: distância, tempo, curvas com tremor de mão ignorado, progresso, simplificação até 2000 pontos, escolha
   traçado × cálculo). Banco — 365 verificações (migrações 007–030: meio/cor/origem, trajeto para pessoa e grupo,

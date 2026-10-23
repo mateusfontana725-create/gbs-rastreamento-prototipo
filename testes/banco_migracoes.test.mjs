@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -772,6 +772,50 @@ console.log('Nomes no painel e CPF opcional (migração 029)');
   chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'renomear_participante', { p_participante: semCpf.participante_id, p_nome: 'Depois' }))), 'operação encerrada: só leitura');
 }
 
+console.log('Percursos de equipes e drones; trajeto desenhado como destino (migração 030)');
+{
+  const opR = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TRAJETOS', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uA = await usuario(null, true), uB = await usuario(null, true), uX = await usuario(null, true);
+  const pa = await rpc(uA, 'ingressar', { p_token: opR.token_militar, p_nome: 'Sd Alfa', p_tipo: 'militar', p_cpf: null, p_telefone: null });
+  const pb = await rpc(uB, 'ingressar', { p_token: opR.token_militar, p_nome: 'Sd Bravo', p_tipo: 'militar', p_cpf: null, p_telefone: null });
+  const gR = await rpc(resp1, 'salvar_grupo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ nome: 'Equipe R' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: gR.id, p_participante: pa.participante_id, p_papel: 'responsavel' });
+  await rpc(resp1, 'definir_membro', { p_grupo: gR.id, p_participante: pb.participante_id, p_papel: 'membro' });
+  const linha = [[-23.4401, -51.2501], [-23.4405, -51.2490], [-23.4399, -51.2480], [-23.4420, -51.2470]];
+  // trilha de drone importada
+  const td = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({
+    client_id: '11111111-2222-4333-8444-555555555555', nome: 'Voo drone 1', estado: 'percorrida', pontos: linha, meio: 'drone', cor: '#ff00aa', origem: 'importada', arquivo: 'voo1.kmz' }) });
+  chk(td.meio === 'drone' && td.cor === '#ff00aa' && td.origem === 'importada' && td.arquivo === 'voo1.kmz', 'trilha registra meio (drone), cor, origem e arquivo', td);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opR.id, p_id: td.id, p_dados: JSON.stringify({ meio: 'foguete' }) }))), 'meio desconhecido: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_trilha_manual', { p_operacao: opR.id, p_id: td.id, p_dados: JSON.stringify({ cor: 'vermelho' }) }))), 'cor fora do formato #rrggbb: recusada');
+  const td2 = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opR.id, p_id: td.id, p_dados: JSON.stringify({ cor: '', nome: 'Voo drone 1 (setor norte)' }) });
+  chk(td2.cor === null && td2.meio === 'drone' && td2.origem === 'importada', 'edição: cor volta ao padrão; meio e origem mantidos', td2);
+  const dia = (await db.query(`select detalhe from public.diario where operacao_id = $1 and tipo = 'trilha_percorrida'`, [opR.id])).rows;
+  chk(dia.length === 1 && /drone/.test(dia[0].detalhe), 'diário registra o percurso do drone', dia);
+  const tm = await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ client_id: '21111111-2222-4333-8444-555555555555', nome: 'Antiga', estado: 'planejada', pontos: linha }) });
+  chk(tm.meio === 'equipe' && tm.origem === 'desenho' && tm.cor === null, 'sem informar: equipe, desenhada, cor padrão');
+  // trajeto para uma pessoa
+  const d1 = await rpc(resp1, 'definir_destino_trajeto', { p_participante: pa.participante_id, p_nome: 'Siga a margem', p_trajeto: JSON.stringify(linha), p_modo: 'trilha' });
+  chk(d1.lat === -23.442 && d1.lng === -51.247 && Array.isArray(d1.trajeto) && d1.trajeto.length === 4 && d1.modo === 'trilha', 'destino com trajeto: fim da linha é o destino', d1);
+  const meu = await rpc(uA, 'meu_destino', { p_participante: pa.participante_id });
+  chk(meu.id === d1.id && JSON.stringify(meu.trajeto) === JSON.stringify(linha), 'participante recebe o trajeto (meu_destino)', meu);
+  const mapa = await rpc(uA, 'mapa_do_participante', { p_participante: pa.participante_id });
+  chk(mapa.destino && mapa.destino.trajeto && mapa.destino.trajeto.length === 4, 'participante recebe o trajeto (mapa_do_participante)');
+  chk(/trajeto_invalido/.test(await erroDe(rpc(resp1, 'definir_destino_trajeto', { p_participante: pa.participante_id, p_nome: 'X', p_trajeto: JSON.stringify([[-23.44, -51.25]]) }))), 'trajeto com 1 ponto: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_destino_trajeto', { p_participante: pa.participante_id, p_nome: 'X', p_trajeto: JSON.stringify(linha) }))), 'responsável de outra operação não envia trajeto');
+  chk(/sem_permissao/.test(await erroDe(rpc(uB, 'definir_destino_trajeto', { p_participante: pa.participante_id, p_nome: 'X', p_trajeto: JSON.stringify(linha) }))), 'participante não envia trajeto');
+  const dSimples = await rpc(resp1, 'definir_destino', { p_participante: pa.participante_id, p_nome: 'Ponto', p_lat: -23.44, p_lng: -51.25 });
+  chk(dSimples.trajeto === null && (await rpc(uA, 'meu_destino', { p_participante: pa.participante_id })).trajeto === null, 'destino comum continua sem trajeto (substitui o anterior)');
+  // trajeto para um grupo
+  const rg = await rpc(resp1, 'enviar_trajeto_grupo', { p_grupo: gR.id, p_nome: 'Varredura margem', p_trajeto: JSON.stringify(linha), p_publico: 'todos', p_modo: 'a_pe' });
+  chk(rg.destinatarios === 2 && rg.missao.trajeto.length === 4 && rg.missao.lat === -23.442, 'grupo: missão com trajeto, os 2 membros recebem', rg);
+  const db2 = await rpc(uB, 'meu_destino', { p_participante: pb.participante_id });
+  chk(db2.trajeto && db2.trajeto.length === 4 && db2.missao && db2.missao.grupo === 'Equipe R', 'membro do grupo recebe o trajeto e a missão');
+  chk(/permission denied/.test(await erroDe(como(resp1, `update public.destinos set trajeto = null where id = $1`, [db2.id]))), 'gravação direta no destino: recusada');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opR.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'definir_destino_trajeto', { p_participante: pa.participante_id, p_nome: 'X', p_trajeto: JSON.stringify(linha) }))), 'operação encerrada: recusado');
+}
+
 console.log('Dados só saem ao excluir a operação (migração 027)');
 const contOp = async () => (await db.query(`select (select count(*) from public.vitimas where operacao_id=$1)::int v, (select count(*) from public.grupos where operacao_id=$1)::int g,
   (select count(*) from public.missoes where operacao_id=$1)::int m, (select count(*) from public.alertas where operacao_id=$1)::int a,
@@ -809,5 +853,5 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–029 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–030 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

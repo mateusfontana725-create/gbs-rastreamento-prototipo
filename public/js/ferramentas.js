@@ -334,31 +334,154 @@
   /* Importar                                                             */
   /* ------------------------------------------------------------------ */
   var COR_IMPORT = '#84cc16';
+  // Estilo de cada item: o que veio do arquivo (ou foi editado) e, na falta, a cor da camada / verde-limão.
+  function corDe(imp, it) { return it.cor || imp.cor || COR_IMPORT; }
   function desenharImportados() {
     if (!atual.camadaImport) return;
     atual.camadaImport.clearLayers();
     atual.importados.forEach(function (imp) {
       if (!imp.visivel) return;
       var d = imp.dados;
-      d.areas.forEach(function (a) { L.polygon(a.pts, { color: COR_IMPORT, weight: 2, fillOpacity: 0.08, dashArray: '4 4', className: 'importado' }).bindTooltip(C.esc(a.nome)).addTo(atual.camadaImport); });
-      d.linhas.forEach(function (l) { L.polyline(l.pts, { color: COR_IMPORT, weight: 3, opacity: 0.9, className: 'importado' }).bindTooltip(C.esc(l.nome)).addTo(atual.camadaImport); });
+      d.areas.forEach(function (a) {
+        if (a.oculto) return;
+        L.polygon(a.pts, { color: corDe(imp, a), weight: a.espessura || 2, opacity: a.opacidade != null ? a.opacidade : 1, fillColor: a.preenchimento || corDe(imp, a),
+          fillOpacity: 0.08, dashArray: '4 4', className: 'importado' })
+          .bindTooltip(C.esc(a.nome)).on('click', function (ev) { abrirItemImportado(ev, imp, 'areas', a); }).addTo(atual.camadaImport);
+      });
+      d.linhas.forEach(function (l) {
+        if (l.oculto) return;
+        L.polyline(l.pts, { color: corDe(imp, l), weight: l.espessura || 3, opacity: l.opacidade != null ? l.opacidade : 0.9, className: 'importado' })
+          .bindTooltip(C.esc(l.nome)).on('click', function (ev) { abrirItemImportado(ev, imp, 'linhas', l); }).addTo(atual.camadaImport);
+      });
       d.pontos.forEach(function (p) {
-        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'mk-import-wrap', html: '<div class="mk-import"></div><div class="mk-import-rotulo">' + C.esc(p.nome) + '</div>', iconSize: [0, 0] }), title: p.nome })
-          .bindPopup(function () { return infoImportado(p); }).addTo(atual.camadaImport);
+        if (p.oculto) return;
+        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'mk-import-wrap', html: '<div class="mk-import" style="background:' + C.esc(corDe(imp, p)) + '"></div><div class="mk-import-rotulo">' + C.esc(p.nome) + '</div>', iconSize: [0, 0] }), title: p.nome })
+          .bindPopup(function () { return infoImportado(p, imp); }).addTo(atual.camadaImport);
       });
     });
     var el = $('menu-importados-qtd');
     if (el) el.textContent = atual.importados.length ? atual.importados.length + ' camada(s)' : '';
   }
 
-  function infoImportado(p) {
+  function infoImportado(p, imp) {
     var ativa = P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em;
     return UI.el('div', { classe: 'info-ponto' }, [
       UI.el('strong', { texto: p.nome }), p.descricao ? UI.el('div', { classe: 'muted', texto: p.descricao }) : null,
       P.blocoCoordenadas(p.lat, p.lng),
       ativa ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⚑ Salvar como ponto de interesse', onclick: function () {
         P.mapa().closePopup(); P.marcarPonto(p.lat, p.lng, { titulo: p.nome.slice(0, 80), descricao: (p.descricao || '').slice(0, 1000), categoria: 'OUTRO' }); } }) : null,
+      imp ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { P.mapa().closePopup(); editarImportado(imp, p); } }) : null,
     ]);
+  }
+
+  var FORMATO_NOME = { gpx: 'GPX', kml: 'KML', kmz: 'KMZ', geojson: 'GeoJSON', csv: 'CSV' };
+  function dataHoraCurta(isoTxt) {
+    var t = Date.parse(isoTxt);
+    return isNaN(t) ? '' : new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+  function comprimento(pts) { var m = 0; for (var i = 1; i < pts.length; i++) m += G.distancia(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]); return m; }
+
+  // Tocar numa linha ou área importada: propriedades do arquivo e o que dá para fazer com ela.
+  function abrirItemImportado(ev, imp, tipo, it) {
+    if (P.emDesenho && P.emDesenho()) return;   // durante um desenho o toque é do mapa
+    L.DomEvent.stopPropagation(ev);
+    var ativa = P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em;
+    var linha = tipo === 'linhas';
+    var dados = [
+      it.descricao ? UI.el('div', { classe: 'muted', texto: it.descricao }) : null,
+      UI.el('small', { classe: 'muted', texto: [linha ? window.Rotas.formatarDistancia(comprimento(it.pts)) : null, it.pts.length + ' pontos',
+        it.tipo ? 'tipo: ' + it.tipo : null, it.inicio ? dataHoraCurta(it.inicio) + (it.fim ? ' – ' + dataHoraCurta(it.fim) : '') : null,
+        'de ' + imp.nome].filter(Boolean).join(' · ') }),
+    ];
+    var botoes = UI.el('div', { classe: 'acoes-linha' }, [
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { P.mapa().closePopup(); editarImportado(imp, it); } }),
+      ativa && linha ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '〰 Registrar como trilha', title: 'Vira uma trilha da operação (equipe, drone…), vista por todos',
+        onclick: function () { P.mapa().closePopup(); registrarComoTrilha(imp, it); } }) : null,
+      ativa && linha ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '➝ Enviar como trajeto', title: 'A equipe segue esta linha no celular',
+        onclick: function () { P.mapa().closePopup(); P.enviarTrajeto(window.Rotas.simplificar(it.pts, 1, 2000), it.nome); } }) : null,
+    ]);
+    L.popup({ maxWidth: 320 }).setLatLng(ev.latlng).setContent(UI.el('div', { classe: 'info-ponto' }, [UI.el('strong', { texto: it.nome })].concat(dados).concat([botoes]))).openOn(P.mapa());
+  }
+
+  // Linha importada → trilha da operação (no banco, para todos os responsáveis), com nome, cor e horário do arquivo.
+  function registrarComoTrilha(imp, it) {
+    var pts = window.Rotas.simplificar(it.pts, 1, 2000).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; });
+    var drone = /drone|dji|uav|vant|voo|flight/i.test((it.nome || '') + ' ' + (it.tipo || '') + ' ' + imp.nome);
+    P.registrarTrilha({ pontos: pts, nome: String(it.nome || 'Trilha importada').slice(0, 80), cor: it.cor || imp.cor || null,
+      meio: drone ? 'drone' : 'equipe', estado: it.fim ? 'percorrida' : null, percorrida_em: it.fim || null, arquivo: String(imp.nome || '').slice(0, 120) });
+  }
+
+  // Edição da camada importada (fica neste aparelho): nome e cor da camada e, item a item,
+  // nome, cor, espessura, opacidade, descrição e se aparece no mapa — conforme o que o formato tem.
+  function editarImportado(imp, foco) {
+    var d = imp.dados;
+    var campos = [];
+    var nomeCamada = UI.el('input', { classe: 'campo', id: 'imp-nome-camada', maxlength: '120', value: imp.nome });
+    var corCamada = UI.el('input', { type: 'color', classe: 'campo-cor', id: 'imp-cor-camada', value: imp.cor || COR_IMPORT, 'aria-label': 'Cor padrão da camada' });
+    function linhaItem(tipo, it, i) {
+      var c = { tipo: tipo, it: it };
+      c.nome = UI.el('input', { classe: 'campo campo-pequeno', maxlength: '120', value: it.nome || '', 'aria-label': 'Nome' });
+      c.ver = UI.el('input', { type: 'checkbox', checked: it.oculto ? null : true, 'aria-label': 'Mostrar no mapa' });
+      c.temCor = UI.el('input', { type: 'checkbox', checked: it.cor ? true : null, 'aria-label': 'Cor própria' });
+      c.cor = UI.el('input', { type: 'color', classe: 'campo-cor', value: it.cor || corCamada.value, 'aria-label': 'Cor' });
+      c.cor.addEventListener('input', function () { c.temCor.checked = true; });
+      c.desc = UI.el('input', { classe: 'campo campo-pequeno', maxlength: '500', value: it.descricao || '', placeholder: 'Descrição', 'aria-label': 'Descrição' });
+      var extras = [];
+      if (tipo !== 'pontos') {
+        c.esp = UI.el('input', { classe: 'campo campo-pequeno', type: 'number', min: '1', max: '12', step: '1', value: String(it.espessura || (tipo === 'linhas' ? 3 : 2)), 'aria-label': 'Espessura' });
+        c.op = UI.el('input', { type: 'range', min: '0.2', max: '1', step: '0.1', value: String(it.opacidade != null ? it.opacidade : 0.9), 'aria-label': 'Opacidade' });
+        extras.push(UI.el('label', { classe: 'imp-prop' }, ['Espessura ', c.esp]), UI.el('label', { classe: 'imp-prop' }, ['Opacidade ', c.op]));
+      }
+      var info = [it.tipo ? 'tipo: ' + it.tipo : null, it.inicio ? 'de ' + dataHoraCurta(it.inicio) + ' a ' + dataHoraCurta(it.fim) : null,
+        tipo === 'linhas' ? window.Rotas.formatarDistancia(comprimento(it.pts)) : null].filter(Boolean).join(' · ');
+      campos.push(c);
+      var li = UI.el('li', { classe: 'imp-item' + (it === foco ? ' imp-foco' : ''), 'data-imp-item': tipo + ':' + i }, [
+        UI.el('div', { classe: 'imp-linha1' }, [c.ver, UI.el('span', { classe: 'imp-tipo', texto: tipo === 'linhas' ? '〰' : tipo === 'areas' ? '⬠' : '•' }), c.nome]),
+        UI.el('div', { classe: 'imp-linha2' }, [UI.el('label', { classe: 'imp-prop' }, [c.temCor, ' cor ', c.cor])].concat(extras)),
+        c.desc,
+        info ? UI.el('small', { classe: 'muted', texto: info }) : null,
+      ]);
+      return li;
+    }
+    var lista = UI.el('ul', { classe: 'lista-imp-itens' }, []
+      .concat(d.linhas.map(function (it, i) { return linhaItem('linhas', it, i); }))
+      .concat(d.areas.map(function (it, i) { return linhaItem('areas', it, i); }))
+      .concat(d.pontos.slice(0, 300).map(function (it, i) { return linhaItem('pontos', it, i); })));
+    var form = UI.el('form', { classe: 'form-importado', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Editar camada importada' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Formato ' + (FORMATO_NOME[d.formato] || 'do arquivo') + '. As propriedades lidas do arquivo (cor, espessura, opacidade, descrição, tipo e horários) aparecem em cada item. ' +
+        'As mudanças ficam neste aparelho; para todos verem, use "Registrar como trilha" ou "Enviar como trajeto" tocando na linha.' }),
+      UI.el('div', { classe: 'grupo-duplo' }, [
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'imp-nome-camada', texto: 'Nome da camada' }), nomeCamada]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'imp-cor-camada', texto: 'Cor dos itens sem cor própria' }), corCamada]),
+      ]),
+      lista,
+      d.pontos.length > 300 ? UI.el('p', { classe: 'muted', texto: 'Mostrando os 300 primeiros pontos.' }) : null,
+      UI.el('div', { classe: 'modal-acoes' }, [
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'imp-salvar', texto: 'Salvar' }),
+      ]),
+    ]);
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      imp.nome = nomeCamada.value.trim() || imp.nome;
+      imp.cor = corCamada.value.toLowerCase() === COR_IMPORT ? null : corCamada.value.toLowerCase();
+      campos.forEach(function (c) {
+        var it = c.it;
+        it.nome = c.nome.value.replace(/\s+/g, ' ').trim() || it.nome;
+        it.oculto = !c.ver.checked || undefined;
+        it.cor = c.temCor.checked ? c.cor.value.toLowerCase() : undefined;
+        it.descricao = c.desc.value.trim() || undefined;
+        if (c.esp) { var e = Number(c.esp.value); it.espessura = e >= 1 && e <= 12 ? e : undefined; it.opacidade = Number(c.op.value); }
+      });
+      salvarImportados();
+      desenharImportados();
+      fechar();
+      UI.aviso('Camada "' + imp.nome + '" atualizada (neste aparelho).', 'ok');
+    });
+    var fechar = UI.abrirModal(form);
+    var alvo = form.querySelector('.imp-foco');
+    if (alvo) setTimeout(function () { alvo.scrollIntoView({ block: 'center' }); var n = alvo.querySelector('.campo'); if (n) n.focus(); }, 60);
   }
 
   function salvarImportados() {
@@ -382,6 +505,7 @@
           UI.el('small', { classe: 'muted', texto: resumo }),
           UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); enquadrar(imp); } }),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { fechar(); editarImportado(imp); } }),
             ativa && d.pontos.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Pontos → pontos de interesse', onclick: function () { fechar(); converterPontos(imp); } }) : null,
             ativa && d.areas.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Área → setor', onclick: function () {
               fechar(); var a = d.areas[0]; P.criarSetor(a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }), a.nome); } }) : null,
@@ -399,7 +523,7 @@
       erro.hidden = true;
       try {
         var d = await window.Arquivos.importar(f);
-        var imp = { id: C.uuid(), nome: f.name, dados: { pontos: d.pontos, linhas: d.linhas, areas: d.areas }, visivel: true, em: Date.now() };
+        var imp = { id: C.uuid(), nome: f.name, dados: { formato: d.formato, pontos: d.pontos, linhas: d.linhas, areas: d.areas }, visivel: true, em: Date.now() };
         atual.importados.push(imp);
         salvarImportados();
         desenharImportados();
@@ -415,7 +539,7 @@
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Importar arquivo de mapa' }),
       UI.el('p', { classe: 'ajuda', texto: 'GPX, KML, KMZ, GeoJSON ou CSV (com colunas latitude e longitude) — por exemplo, trilhas conhecidas, a última rota da vítima ou áreas de outro órgão. ' +
-        'A camada aparece em verde-limão e fica guardada só neste aparelho; para todos os responsáveis verem, converta em pontos de interesse ou setor.' }),
+        'A camada usa as cores do arquivo (ou verde-limão) e fica guardada só neste aparelho. Toque numa linha para editar, registrar como trilha da operação (equipe, drone…) ou enviar como trajeto.' }),
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'imp-arquivo', texto: 'Arquivo' }), entrada]),
       erro,
       UI.el('h3', { texto: 'Camadas importadas' }),

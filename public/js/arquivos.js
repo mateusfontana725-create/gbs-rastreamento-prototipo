@@ -173,8 +173,29 @@
   /* ------------------------------------------------------------------ */
   /* Importar                                                             */
   /* ------------------------------------------------------------------ */
-  // Devolve { pontos: [{nome, lat, lng, descricao}], linhas: [{nome, pts:[[lat,lng]]}], areas: [{nome, pts}], avisos: [] }
+  // Devolve { formato, pontos: [{nome, lat, lng, descricao, cor}], linhas: [{nome, pts:[[lat,lng]], descricao, cor,
+  //   espessura, opacidade, tipo, inicio, fim}], areas: [{nome, pts, descricao, cor, espessura, opacidade, preenchimento}], avisos }
+  // As propriedades vêm do que cada formato traz: KML (estilo da linha e da área), GeoJSON ("simplestyle":
+  // stroke, stroke-width, stroke-opacity, fill), GPX (descrição, tipo, horários e cor das extensões Garmin/OsmAnd).
   function vazio() { return { pontos: [], linhas: [], areas: [], avisos: [] }; }
+
+  // Cores: KML usa aabbggrr (alfa, azul, verde, vermelho); Garmin usa nomes.
+  function corKmlParaHex(t) {
+    var m = /^\s*([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})\s*$/i.exec(t || '');
+    return m ? { cor: ('#' + m[4] + m[3] + m[2]).toLowerCase(), opacidade: Math.round(parseInt(m[1], 16) / 2.55) / 100 } : null;
+  }
+  var CORES_GARMIN = { black: '#000000', darkred: '#8b0000', darkgreen: '#006400', darkyellow: '#b8860b', darkblue: '#00008b', darkmagenta: '#8b008b',
+    darkcyan: '#008b8b', lightgray: '#d3d3d3', darkgray: '#a9a9a9', red: '#ff0000', green: '#00ff00', yellow: '#ffff00', blue: '#0000ff',
+    magenta: '#ff00ff', cyan: '#00ffff', white: '#ffffff' };
+  function corHex(t) {
+    var v = String(t || '').trim().toLowerCase();
+    if (/^#?[0-9a-f]{6}$/.test(v)) return '#' + v.replace('#', '');
+    if (/^#[0-9a-f]{8}$/.test(v)) return '#' + v.slice(3);   // #aarrggbb (OsmAnd)
+    if (/^#[0-9a-f]{3}$/.test(v)) return '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+    return CORES_GARMIN[v] || null;
+  }
+  function numOuNulo(v) { var n = Number(v); return isFinite(n) && n > 0 ? n : null; }
+  function limpo(o) { Object.keys(o).forEach(function (k) { if (o[k] == null || o[k] === '') delete o[k]; }); return o; }
 
   function numOk(lat, lng) { return isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0); }
 
@@ -192,16 +213,34 @@
       var lat = Number(w.getAttribute('lat')), lng = Number(w.getAttribute('lon'));
       if (numOk(lat, lng)) r.pontos.push({ nome: textoDe(w, 'name') || 'Ponto ' + (i + 1), lat: lat, lng: lng, descricao: textoDe(w, 'desc') || textoDe(w, 'cmt') });
     });
+    // cor nas extensões: Garmin (gpxx:DisplayColor) ou OsmAnd/Locus (color)
+    function corGpx(el) {
+      var ext = filhos(el, 'extensions')[0];
+      if (!ext) return null;
+      var c = filhos(ext, 'DisplayColor')[0] || filhos(ext, 'color')[0] || filhos(ext, 'colour')[0];
+      return c ? corHex(c.textContent) : null;
+    }
     filhos(doc, 'trk').forEach(function (t, i) {
       var nome = textoDe(t, 'name') || 'Trilha ' + (i + 1);
+      var props = { descricao: textoDe(t, 'desc') || textoDe(t, 'cmt'), tipo: textoDe(t, 'type'), cor: corGpx(t) };
       filhos(t, 'trkseg').forEach(function (sg) {
-        var pts = filhos(sg, 'trkpt').map(function (p) { return [Number(p.getAttribute('lat')), Number(p.getAttribute('lon'))]; }).filter(function (q) { return numOk(q[0], q[1]); });
-        if (pts.length > 1) r.linhas.push({ nome: nome, pts: pts });
+        var pts = [], tempos = [];
+        filhos(sg, 'trkpt').forEach(function (p) {
+          var q = [Number(p.getAttribute('lat')), Number(p.getAttribute('lon'))];
+          if (!numOk(q[0], q[1])) return;
+          pts.push(q);
+          var tm = Date.parse(textoDe(p, 'time'));
+          if (!isNaN(tm)) tempos.push(tm);
+        });
+        if (pts.length > 1) r.linhas.push(limpo(Object.assign({ nome: nome, pts: pts, formato: 'gpx',
+          inicio: tempos.length ? new Date(Math.min.apply(null, tempos)).toISOString() : null,
+          fim: tempos.length ? new Date(Math.max.apply(null, tempos)).toISOString() : null }, props)));
       });
     });
     filhos(doc, 'rte').forEach(function (t, i) {
       var pts = filhos(t, 'rtept').map(function (p) { return [Number(p.getAttribute('lat')), Number(p.getAttribute('lon'))]; }).filter(function (q) { return numOk(q[0], q[1]); });
-      if (pts.length > 1) r.linhas.push({ nome: textoDe(t, 'name') || 'Rota ' + (i + 1), pts: pts });
+      if (pts.length > 1) r.linhas.push(limpo({ nome: textoDe(t, 'name') || 'Rota ' + (i + 1), pts: pts, formato: 'gpx', rota: true,
+        descricao: textoDe(t, 'desc') || textoDe(t, 'cmt'), tipo: textoDe(t, 'type'), cor: corGpx(t) }));
     });
     return r;
   }
@@ -219,38 +258,69 @@
     return false;
   }
 
+  // Estilos do KML: <Style id> e <StyleMap id> (usa o par "normal"), ou o <Style> dentro do Placemark.
+  function estiloDe(st) {
+    if (!st) return {};
+    var e = {};
+    var ls = filhos(st, 'LineStyle')[0], ps = filhos(st, 'PolyStyle')[0], is = filhos(st, 'IconStyle')[0];
+    var c = ls && corKmlParaHex(textoDe(ls, 'color'));
+    if (c) { e.cor = c.cor; e.opacidade = c.opacidade; }
+    if (ls) e.espessura = numOuNulo(textoDe(ls, 'width'));
+    var cp = ps && corKmlParaHex(textoDe(ps, 'color'));
+    if (cp) e.preenchimento = cp.cor;
+    var ci = is && corKmlParaHex(textoDe(is, 'color'));
+    if (ci) e.corPonto = ci.cor;
+    return e;
+  }
+  function estilosKml(doc) {
+    var mapa = {};
+    filhos(doc, 'Style').forEach(function (st) { var id = st.getAttribute('id'); if (id) mapa['#' + id] = estiloDe(st); });
+    filhos(doc, 'StyleMap').forEach(function (sm) {
+      var id = sm.getAttribute('id');
+      var par = filhos(sm, 'Pair').find(function (p) { return textoDe(p, 'key') === 'normal'; });
+      if (id && par) mapa['#' + id] = mapa[textoDe(par, 'styleUrl')] || estiloDe(filhos(par, 'Style')[0]);
+    });
+    return mapa;
+  }
+
   function lerKml(doc) {
     var r = vazio();
-    function addArea(nome, txt) {
+    var estilos = estilosKml(doc);
+    function addArea(nome, txt, props) {
       var pts = lerCoordsKml(txt);
       if (pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts.pop();
-      if (pts.length >= 3) r.areas.push({ nome: nome, pts: pts });
+      if (pts.length >= 3) r.areas.push(limpo(Object.assign({ nome: nome, pts: pts, formato: 'kml' }, props)));
     }
     filhos(doc, 'Placemark').forEach(function (pm, i) {
       var nome = textoDe(pm, 'name') || 'Item ' + (i + 1);
       var desc = textoDe(pm, 'description').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
+      var est = Object.assign({}, estilos[textoDe(pm, 'styleUrl')] || {}, estiloDe(Array.prototype.find.call(pm.children, function (c) { return c.localName === 'Style'; })));
+      var props = { descricao: desc, cor: est.cor, espessura: est.espessura, opacidade: est.opacidade };
       filhos(pm, 'Point').forEach(function (pt) {
         var c = lerCoordsKml(textoDe(pt, 'coordinates'))[0];
-        if (c) r.pontos.push({ nome: nome, lat: c[0], lng: c[1], descricao: desc });
+        if (c) r.pontos.push(limpo({ nome: nome, lat: c[0], lng: c[1], descricao: desc, cor: est.corPonto }));
       });
       filhos(pm, 'LineString').forEach(function (ls) {
         var pts = lerCoordsKml(textoDe(ls, 'coordinates'));
-        if (pts.length > 1) r.linhas.push({ nome: nome, pts: pts });
+        if (pts.length > 1) r.linhas.push(limpo(Object.assign({ nome: nome, pts: pts, formato: 'kml' }, props)));
       });
       filhos(pm, 'Polygon').forEach(function (pg) {
         var anel = filhos(pg, 'outerBoundaryIs')[0];
         var cs = anel ? filhos(anel, 'coordinates')[0] : null;
-        addArea(nome, cs ? cs.textContent : '');
+        addArea(nome, cs ? cs.textContent : '', Object.assign({ preenchimento: est.preenchimento }, props));
       });
       // AlpineQuest e alguns outros apps gravam a área como <LinearRing> solto (direto ou dentro de
       // <MultiGeometry>), sem <Polygon>. O anel de dentro de um Polygon já foi lido acima.
       filhos(pm, 'LinearRing').forEach(function (lr) {
-        if (!dentroDe(lr, pm, 'Polygon')) addArea(nome, textoDe(lr, 'coordinates'));
+        if (!dentroDe(lr, pm, 'Polygon')) addArea(nome, textoDe(lr, 'coordinates'), Object.assign({ preenchimento: est.preenchimento }, props));
       });
       filhos(pm, 'Track').forEach(function (tk) {   // gx:Track
         var pts = filhos(tk, 'coord').map(function (c) { var p = c.textContent.trim().split(/\s+/); return [Number(p[1]), Number(p[0])]; })
           .filter(function (q) { return numOk(q[0], q[1]); });
-        if (pts.length > 1) r.linhas.push({ nome: nome, pts: pts });
+        var tempos = filhos(tk, 'when').map(function (w) { return Date.parse(w.textContent.trim()); }).filter(function (t) { return !isNaN(t); });
+        if (pts.length > 1) r.linhas.push(limpo(Object.assign({ nome: nome, pts: pts, formato: 'kml',
+          inicio: tempos.length ? new Date(Math.min.apply(null, tempos)).toISOString() : null,
+          fim: tempos.length ? new Date(Math.max.apply(null, tempos)).toISOString() : null }, props)));
       });
     });
     return r;
@@ -265,10 +335,16 @@
       var nome = pr.name || pr.nome || pr.title || pr.titulo || 'Item ' + (i + 1);
       var ll = function (c) { return [Number(c[1]), Number(c[0])]; };
       var ok = function (q) { return numOk(q[0], q[1]); };
+      var desc = String(pr.description || pr.descricao || '').slice(0, 500);
+      var op = Number(pr['stroke-opacity']);
+      var props = { descricao: desc, cor: corHex(pr.stroke || pr.cor || pr.color), espessura: numOuNulo(pr['stroke-width']),
+        opacidade: isFinite(op) && pr['stroke-opacity'] != null ? op : null, tipo: pr.type || pr.tipo || null };
+      var tempos = (pr.coordTimes || pr.times || []).map(function (t) { return Date.parse(t); }).filter(function (t) { return !isNaN(t); });
       var add = function (tipo, coords) {
-        if (tipo === 'Point') { var p = ll(coords); if (ok(p)) r.pontos.push({ nome: nome, lat: p[0], lng: p[1], descricao: pr.description || pr.descricao || '' }); }
-        if (tipo === 'LineString') { var l = coords.map(ll).filter(ok); if (l.length > 1) r.linhas.push({ nome: nome, pts: l }); }
-        if (tipo === 'Polygon') { var a = (coords[0] || []).map(ll).filter(ok); if (a.length > 3) { a.pop(); r.areas.push({ nome: nome, pts: a }); } }
+        if (tipo === 'Point') { var p = ll(coords); if (ok(p)) r.pontos.push(limpo({ nome: nome, lat: p[0], lng: p[1], descricao: desc, cor: corHex(pr['marker-color']) })); }
+        if (tipo === 'LineString') { var l = coords.map(ll).filter(ok); if (l.length > 1) r.linhas.push(limpo(Object.assign({ nome: nome, pts: l, formato: 'geojson',
+          inicio: tempos.length ? new Date(Math.min.apply(null, tempos)).toISOString() : null, fim: tempos.length ? new Date(Math.max.apply(null, tempos)).toISOString() : null }, props))); }
+        if (tipo === 'Polygon') { var a = (coords[0] || []).map(ll).filter(ok); if (a.length > 3) { a.pop(); r.areas.push(limpo(Object.assign({ nome: nome, pts: a, formato: 'geojson', preenchimento: corHex(pr.fill) }, props))); } }
       };
       if (g.type === 'GeometryCollection') (g.geometries || []).forEach(function (gg) { add(gg.type, gg.coordinates); });
       else if (/^Multi/.test(g.type)) (g.coordinates || []).forEach(function (c) { add(g.type.replace('Multi', ''), c); });
@@ -339,6 +415,7 @@
     if (arquivo.size > LIMITE_BYTES) throw new Error('Arquivo grande demais (máximo de 8 MB).');
     var nome = String(arquivo.name || '').toLowerCase();
     var texto, r;
+    var formato = /\.kmz$/.test(nome) ? 'kmz' : null;
     if (/\.kmz$/.test(nome)) texto = await kmlDeKmz(await arquivo.arrayBuffer());
     else texto = await arquivo.text();
     var ini = texto.replace(/^﻿/, '').trim().slice(0, 300);
@@ -360,6 +437,7 @@
     if (vert > LIMITE_VERTICES) throw new Error('Arquivo com pontos demais (' + vert + '). O limite é ' + LIMITE_VERTICES + '.');
     if (!r.pontos.length && !r.linhas.length && !r.areas.length) throw new Error('Nenhum ponto, trilha ou área encontrado no arquivo.' + resumoTags(texto));
     r.vertices = vert;
+    r.formato = formato || (r.linhas[0] || r.areas[0] || {}).formato || (/\.(geo)?json$/.test(nome) ? 'geojson' : /\.csv$|\.txt$/.test(nome) ? 'csv' : /\.gpx$/.test(nome) ? 'gpx' : 'kml');
     return r;
   }
 

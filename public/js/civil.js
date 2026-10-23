@@ -1402,6 +1402,9 @@
       desenharRotaCivil();
       renderizarRotaInfo();
     }
+    // trajeto desenhado: o caminho já foi escolhido pelos bombeiros (sem trocar a pé/trilha/carro)
+    var modosNav = document.querySelector('.nav-modos');
+    if (modosNav) modosNav.hidden = window.Rotas.temTrajeto(d);
     $('navegacao').hidden = false;
     $('lg-destino').hidden = false;
     $('nav-nome').textContent = d.nome;
@@ -1412,11 +1415,11 @@
       ligarBussola();
       try { if (navigator.vibrate) navigator.vibrate([300, 120, 300]); } catch (e) { /* ignora */ }
       bipe();
-      UI.aviso('Os bombeiros enviaram um destino: ' + d.nome + '.', 'ok', 8000);
+      UI.aviso(window.Rotas.temTrajeto(d) ? 'Os bombeiros enviaram um trajeto para você seguir: ' + d.nome + '.' : 'Os bombeiros enviaram um destino: ' + d.nome + '.', 'ok', 8000);
       if (!$('painel-conversa').hidden) fecharConversa();
       try { $('navegacao').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* ignora */ }
       if (estado.mapa) {
-        var pts = [[d.lat, d.lng]];
+        var pts = [[d.lat, d.lng]].concat(window.Rotas.temTrajeto(d) ? d.trajeto : []);
         if (estado.ultimaLeitura) pts.push([estado.ultimaLeitura.lat, estado.ultimaLeitura.lng]);
         estado.mapa.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 17 });
         estado.seguindo = false;
@@ -1487,12 +1490,13 @@
   async function calcularRota(motivo) {
     var d = estado.destino, l = estado.ultimaLeitura;
     if (!d || estado.finalizado || estado.rotaCalculando) return;
-    if (!l) { estado.rotaErro = null; renderizarRotaInfo('Aguardando o GPS para calcular a rota…'); return; }
-    if (navigator.onLine === false) { estado.rotaErro = 'Sem internet: a rota será calculada quando o sinal voltar.'; renderizarRotaInfo(); return; }
+    var desenhado = window.Rotas.temTrajeto(d);   // trajeto desenhado pelos bombeiros: segue a linha, sem servidor
+    if (!l && !desenhado) { estado.rotaErro = null; renderizarRotaInfo('Aguardando o GPS para calcular a rota…'); return; }
+    if (navigator.onLine === false && !desenhado) { estado.rotaErro = 'Sem internet: a rota será calculada quando o sinal voltar.'; renderizarRotaInfo(); return; }
     var modo = estado.modoNav, destId = d.id;
     estado.rotaCalculando = true;
     renderizarRotaInfo(motivo === 'desvio' ? 'Você saiu da rota — recalculando…' : 'Calculando a rota…');
-    var r = await window.Rotas.calcular({ origem: [l.lat, l.lng], destino: [d.lat, d.lng], modo: modo, participante_id: estado.part && estado.part.participante_id });
+    var r = await window.Rotas.paraDestino(d, { origem: l ? [l.lat, l.lng] : null, modo: modo, participante_id: estado.part && estado.part.participante_id });
     estado.rotaCalculando = false;
     if (!estado.destino || estado.destino.id !== destId || estado.modoNav !== modo) {
       if (estado.destino) calcularRota('modo');   // mudou enquanto calculava
@@ -1519,7 +1523,8 @@
     if (estado.mapa && !estado.rotaEnquadrada) {
       estado.rotaEnquadrada = true;
       var pts = r.rota.geometria.map(function (c) { return [c[0], c[1]]; });
-      pts.push([d.lat, d.lng], [l.lat, l.lng]);
+      pts.push([d.lat, d.lng]);
+      if (l) pts.push([l.lat, l.lng]);
       estado.mapa.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 17 });
       estado.seguindo = false;
     }
@@ -1636,12 +1641,14 @@
     if (prog && !chegou) {
       // saiu da rota (3 leituras seguidas): recalcula, no máximo 1 vez a cada 30 s
       if (prog.distanciaDaRota > Math.max(50, 2 * (l.prec || 0))) estado.rotaForaCont++; else estado.rotaForaCont = 0;
-      if (estado.rotaForaCont >= 3 && Date.now() - estado.rotaCalcEm > 30000) calcularRota('desvio');
+      // trajeto desenhado não se recalcula: a pessoa volta para a linha
+      if (!rota.fixa && estado.rotaForaCont >= 3 && Date.now() - estado.rotaCalcEm > 30000) calcularRota('desvio');
       var px = $('nav-proxima');
       px.hidden = false;
       px.textContent = naRota
         ? (prog.proximo ? 'Em ' + formatarDistancia(prog.distManobra) + ': ' + prog.proximo.instrucao : 'Siga pela rota até o destino.')
-        : 'Você está a ' + formatarDistancia(prog.distanciaDaRota) + ' da rota azul. Volte para ela ou aguarde o recálculo.';
+        : rota.fixa ? 'Você está a ' + formatarDistancia(prog.distanciaDaRota) + ' do trajeto desenhado (linha azul). Volte para ele e siga a linha.'
+          : 'Você está a ' + formatarDistancia(prog.distanciaDaRota) + ' da rota azul. Volte para ela ou aguarde o recálculo.';
     } else if (!rota && !estado.rotaCalculando && Date.now() - estado.rotaErroEm > 60000 && navigator.onLine !== false) {
       calcularRota(estado.rotaErro ? 'tentar' : 'gps');
     }
@@ -1656,7 +1663,7 @@
       : (prog ? 'pela rota · em linha reta ' + formatarDistancia(dist) + ' para o ' + dir : 'em linha reta · para o ' + dir + ' (' + Math.round(rumoReta) + '°)') +
         (bussolaOk ? ' · siga a seta' : ' · a seta aponta em relação ao Norte (N)');
     aviso.textContent = (fraco ? 'Sinal de GPS fraco (' + C.precisao(l.prec) + '): distância e direção aproximadas. ' : '') +
-      (prog ? 'A rota segue caminhos mapeados; confira o terreno e siga as orientações dos bombeiros.'
+      (prog ? (rota.fixa ? 'Siga o trajeto desenhado pelos bombeiros, conferindo o terreno.' : 'A rota segue caminhos mapeados; confira o terreno e siga as orientações dos bombeiros.')
         : 'Linha reta não é caminho: confira o terreno, evite riscos e siga as orientações dos bombeiros.');
   }
 

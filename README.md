@@ -326,6 +326,33 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 - Banco: tabela `trilhas_manuais` (leitura só pelos responsáveis da operação; gravação só pelas funções
   `salvar_trilha_manual` e `excluir_trilha_manual`, que conferem a permissão). Operação encerrada: só leitura.
   Tempo real entre os responsáveis.
+- **Percursos de equipes e drones** (migração 030): cada trilha registra **quem fez o percurso** — 🚶 equipe a pé,
+  🛸 drone, 🚒 viatura, 🚤 embarcação, 🚁 aeronave, 🐕 cão de busca ou outro —, uma **cor própria** opcional
+  (sem ela: amarelo planejada / branco percorrida) e a **origem** (desenhada no mapa ou **importada de arquivo**,
+  com o nome do arquivo). O voo de um drone ou o GPS de outra equipe entra por **Importar arquivo** → tocar na
+  linha → **Registrar como trilha**: o formulário já vem com o nome, a cor e o horário do arquivo, e "drone"
+  quando o nome ou o tipo indicam voo. O diário registra o meio no percurso percorrido.
+
+### Trajeto desenhado enviado como destino
+
+- **Ferramentas → Desenhar trajeto e enviar** (ou **🧭 Destino** na ficha → **✎ Desenhar o trajeto**): desenhe à
+  mão o caminho que a equipe deve fazer (mesma ferramenta das trilhas: arrastar, emendar pelas pontas, Desfazer
+  traço, Mover mapa) e toque em **Enviar trajeto…**. Escolha **pessoas** ou um **grupo** (com o mesmo controle de
+  missão, base e prazo de retorno dos deslocamentos de grupo) e como vão percorrer (a pé, trilha, carro — só para
+  estimar o tempo). Fechar a janela sem enviar volta ao desenho.
+- Uma **linha importada** também pode ser enviada: tocar nela → **Enviar como trajeto**.
+- No celular do participante, a **linha azul** é o caminho a seguir, com o **início em verde**, distância pelo
+  trajeto, tempo estimado e **instruções geradas da forma da linha** ("Vire à direita", "Faça o retorno",
+  "Chegada"). Não troca a pé/trilha/carro e **não recalcula** por caminhos: se a pessoa se afasta, o aviso pede
+  para voltar ao trajeto. Funciona sem internet depois de recebido. O destino é o fim da linha.
+- No painel, a ficha mostra o trajeto como a rota da pessoa; com o filtro de grupo, a linha aparece na cor do grupo.
+- **Geração de rotas num lugar só** (`public/js/rotas.js`): rota por caminhos (openrouteservice) e rota desenhada
+  (`Rotas.deTracado`) têm o mesmo formato; `Rotas.paraDestino` escolhe sozinho (com trajeto segue o traçado, sem
+  trajeto calcula); `progresso`, `desenhar` e `resumo` servem para as duas; `simplificar` reduz linhas desenhadas
+  ou importadas (até 2000 pontos) sem perder a forma. O painel, o celular e as trilhas usam essas funções.
+- Banco (migração 030): `destinos.trajeto` e `missoes.trajeto`; funções `definir_destino_trajeto` (uma pessoa) e
+  `enviar_trajeto_grupo` (grupo), que usam as regras de `definir_destino` e `enviar_destino_grupo`; `meu_destino`
+  e `mapa_do_participante` devolvem o trajeto.
 
 ### Pontos de interesse
 
@@ -684,9 +711,15 @@ Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na 
   ficam como segmentos separados. Bom para relatórios e para levar a busca para outro aplicativo.
 - **Importar**: **GPX, KML, KMZ, GeoJSON ou CSV** (até 8 MB) — por exemplo, trilhas conhecidas da região,
   limites de parque ou pontos levantados por outra equipe. O conteúdo aparece como **camada de referência**
-  (verde-limão) apenas **neste aparelho** e fica lembrado nele. Cada item pode ser **transformado em ponto
-  de interesse** ou **setor de busca** da operação (aí sim, visível a todos); "Transformar pontos" converte
-  até 100 de uma vez. Nada é enviado ao servidor sem essa escolha.
+  apenas **neste aparelho** e fica lembrado nele, **com as propriedades do arquivo**: KML/KMZ (cor, espessura e
+  opacidade do estilo, inclusive `StyleMap`, descrição e horários de `gx:Track`), GeoJSON ("simplestyle":
+  `stroke`, `stroke-width`, `stroke-opacity`, `fill`, `description`, `coordTimes`), GPX (descrição, tipo, horários
+  e cor das extensões Garmin `DisplayColor` ou OsmAnd `color`); sem cor no arquivo, verde-limão.
+  **✎ Editar** (na lista de camadas ou tocando no item) muda o nome e a cor padrão da camada e, item a item,
+  **nome, cor, espessura, opacidade, descrição** e se aparece no mapa (os horários e o tipo do arquivo ficam à
+  vista). Cada item pode virar **ponto de interesse**, **setor de busca**, **trilha da operação** (equipe, drone…)
+  ou **trajeto enviado** (aí sim, visível a todos); "Transformar pontos" converte até 100 de uma vez. Nada é
+  enviado ao servidor sem essa escolha.
 - **Estatísticas da trilha** (ficha → Estatísticas): distância, período, **tempo em movimento**, velocidade
   média e máxima (sem contar picos isolados), **subida e descida acumuladas**, altitude mínima/máxima e o
   **perfil de altitude** — passar o dedo/mouse no gráfico mostra a distância, a altitude e o ponto no mapa.
@@ -937,7 +970,7 @@ rastreamento-sar/
 │       ├── interface.js        avisos e caixas de confirmação
 │       ├── fotos.js            fotos: leitura de EXIF, redução, prévia, envio ao Storage privado
 │       ├── gps.js              filtro das leituras do GPS, montagem das trilhas, permissão e diagnóstico
-│       ├── rotas.js            rota por caminhos: pede a /api/rota, desenha e acompanha o progresso
+│       ├── rotas.js            geração de rotas: por caminhos (/api/rota) e desenhada (trajeto), progresso e simplificação
 │       ├── coords.js           formatos de coordenadas (decimal, GMS, UTM, MGRS), rumo, nascer/pôr do sol
 │       ├── arquivos.js         exportar e importar GPX, KML/KMZ, GeoJSON e CSV
 │       ├── ferramentas.js      ferramentas de mapa do painel (medir, ir para coordenada, estatísticas…)
@@ -971,6 +1004,7 @@ rastreamento-sar/
 │       ├── 027_dados_so_saem_ao_excluir.sql   encerrar não apaga: dados só saem ao excluir a operação
 │       ├── 028_trilhas_manuais.sql            trilhas desenhadas à mão (planejadas/percorridas); operações no Realtime
 │       ├── 029_nomes_painel_cpf_opcional.sql  CPF opcional para civis; nome de exibição do participante no painel
+│       ├── 030_percursos_trajetos.sql         meio/cor/origem das trilhas; trajeto desenhado como destino
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1099,7 +1133,10 @@ rastreamento-sar/
      conferido; celular segue obrigatório para civis); coluna `participantes.nome_painel` e função
      `renomear_participante` (só responsáveis da operação; encerrada: só leitura; um novo ingresso da pessoa não
      apaga o nome dado no painel). Não apaga nada.
-   O `schema.sql` completo já inclui da 003 à 029.
+   - **030** (`030_percursos_trajetos.sql`): `trilhas_manuais` ganha `meio`, `cor`, `origem` e `arquivo`;
+     `destinos` e `missoes` ganham `trajeto`; funções `definir_destino_trajeto` e `enviar_trajeto_grupo`;
+     `meu_destino` e `mapa_do_participante` devolvem o trajeto. Exige a 028. Não apaga nada.
+   O `schema.sql` completo já inclui da 003 à 030.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -1441,6 +1478,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Trilhas de equipes e drones, arquivos e trajetos (versão 2026-10-23)**: `npm test` inclui as rotas desenhadas
+  (18: distância, tempo, curvas com tremor de mão ignorado, progresso, simplificação até 2000 pontos, escolha
+  traçado × cálculo). Banco — 365 verificações (migrações 007–030: meio/cor/origem, trajeto para pessoa e grupo,
+  o participante recebe o trajeto, permissões, encerrada). Navegador (banco simulado): desenhar e enviar trajeto a
+  pessoa e grupo, cancelar sem perder, ficha com o trajeto, KML com estilos, edição de nome e cor, registrar como
+  trilha de drone, linha importada como trajeto (40, computador e celular), e o celular seguindo o trajeto com
+  instruções e aviso ao sair da linha, mais GPX/GeoJSON (10).
 - **Menu, nomes no mapa, renomear, legenda e CPF opcional (versão 2026-10-22)**: banco — 347 verificações
   (migrações 007–029: civil sem CPF, CPF inválido recusado, celular continua obrigatório, nome de exibição,
   novo ingresso não apaga o nome, outro responsável/participante não renomeia, gravação direta recusada,

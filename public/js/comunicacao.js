@@ -93,6 +93,8 @@
     nome_repetido: 'Já existe uma trilha com esse nome nesta operação.',
     responsavel_trajeto_invalido: 'O responsável escolhido não participa desta operação.',
     grupo_invalido: 'O grupo escolhido não pertence a esta operação (pode ter sido excluído).',
+    // depois de responsavel_trajeto_invalido (a busca pelo código é por trecho do texto)
+    trajeto_invalido: 'Trajeto inválido: desenhe uma linha com pelo menos 2 pontos.',
   };
 
   function textoDoErro(err) {

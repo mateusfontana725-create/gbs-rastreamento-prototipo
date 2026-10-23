@@ -1919,3 +1919,4 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 }
 .aviso-fechar:hover, .aviso-fechar:focus-visible { opacity: 1; background: rgba(255, 255, 255, .08); outline: none; }
 @media (pointer: coarse) { .aviso-fechar { width: 44px; height: 44px; margin: -12px -12px -12px 0; } }
+.nav-modos[hidden] { display: none; }

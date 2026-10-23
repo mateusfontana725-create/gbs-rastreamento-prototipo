@@ -1376,3 +1376,16 @@ html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; backgroun
 .legenda-edicao-linha { display: grid; grid-template-columns: auto 30px minmax(0, 1fr); align-items: center; gap: 8px; }
 .legenda-edicao-ico { display: inline-grid; place-items: center; }
 .legenda-edicao-linha:has(input[type="checkbox"]:not(:checked)) .campo, .legenda-edicao-linha:has(input[type="checkbox"]:not(:checked)) .legenda-edicao-ico { opacity: .45; }
+
+/* Camada importada: edição item a item */
+.form-importado { display: grid; gap: 10px; }
+.lista-imp-itens { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.imp-item { border: 1px solid var(--borda); border-radius: var(--raio); padding: 6px 8px; display: grid; gap: 4px; }
+.imp-item.imp-foco { border-color: var(--acento); }
+.imp-linha1 { display: grid; grid-template-columns: auto 18px minmax(0, 1fr); align-items: center; gap: 6px; }
+.imp-linha2 { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: .78rem; color: var(--texto-2); }
+.imp-prop { display: inline-flex; align-items: center; gap: 4px; }
+.imp-prop .campo { width: 4.2em; min-height: 26px; }
+.imp-tipo { text-align: center; color: var(--texto-3); }
+.campo-cor { width: 34px; height: 26px; padding: 0; border: 1px solid var(--borda-forte); border-radius: 4px; background: none; cursor: pointer; }
+.campo-cor:disabled { opacity: .4; cursor: not-allowed; }

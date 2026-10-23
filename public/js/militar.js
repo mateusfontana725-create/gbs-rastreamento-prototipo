@@ -158,6 +158,9 @@
     destinos: new Map(),        // participante_id → destino ativo
     rotasFicha: new Map(),      // destino:modo → { rota, origem, em, calculando, erro }
     camadaRotaFicha: null,
+    camadaRotaApoio: null,      // rota até um participante (ir até a pessoa / mandar apoio)
+    rotaApoio: null,
+    timerRotaApoio: null,
     rotaFichaChave: null,
     camadaSetores: null,
     camadaPontosInt: null,
@@ -353,6 +356,9 @@
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
+    $('ficha-ir-ate').addEventListener('click', function () { if (est.selecionado) abrirRotaAte(est.selecionado); });
+    $('barra-apoio-parar').addEventListener('click', pararRotaApoio);
+    $('barra-apoio-ver').addEventListener('click', verRotaApoio);
     $('ficha-renomear').addEventListener('click', function () { var p = est.participantes.get(est.selecionado); if (p) renomearParticipante(p); });
     $('ficha-vitima').addEventListener('click', function () { if (est.selecionado) abrirRegistroVitima({ encontrou: est.selecionado, onde: 'quem' }); });
     $('menu-vitima').addEventListener('click', function () { fecharMenu(false); abrirRegistroVitima({}); });
@@ -1242,6 +1248,8 @@
     est.destinos = new Map();
     est.camadaSetores = est.camadaPontosInt = est.linhaDestino = est.marcaDestino = null;
     est.rotasFicha = new Map();
+    pararRotaApoio();
+    est.camadaRotaApoio = null;
     est.camadaRotaFicha = null;
     est.rotaFichaChave = null;
     est.centralVoltar = false;
@@ -3266,6 +3274,7 @@
       caixaDest.appendChild(UI.el('span', { classe: 'ficha-rota', id: 'ficha-rota', hidden: true }));
     }
     $('ficha-enviar-destino').hidden = tipoDe(d) === 'responsavel' || d.removido || est.op.status !== 'ativa';
+    $('ficha-ir-ate').hidden = ehEu(p) || d.removido || est.op.status !== 'ativa';
     $('ficha-vitima').hidden = tipoDe(d) === 'responsavel' || est.op.status !== 'ativa';
     desenharLinhaDestino();
     var ligar = $('ficha-ligar');
@@ -3320,6 +3329,7 @@
     bTri.setAttribute('aria-pressed', String(p.trilhaVisivel));
     bTri.textContent = p.trilhaVisivel ? 'Ocultar trilha' : 'Mostrar trilha';
     $('ficha-centralizar').disabled = !pos;
+    $('ficha-ir-ate').disabled = !pos;
 
     // Pedido de ajuda
     var ajuda = temAjuda(p);
@@ -5656,6 +5666,7 @@
     }
     selBase.addEventListener('change', ajustarRaioBase);
     ajustarRaioBase();
+    var prazosGrupo = camposPrazos(null);
     var blocoGrupo = UI.el('div', { classe: 'bloco-destino-grupo' }, grupos.length ? [
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-grupo', texto: 'Grupo' }), selGrupo]),
       UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Quem recebe' }), publico]),
@@ -5664,6 +5675,10 @@
       UI.el('div', { classe: 'grupo-duplo' }, [
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-raio-base', texto: 'Raio de chegada à base (m)' }), raioBase]),
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-prazo', texto: 'Prazo de retorno após a busca (min)' }), prazo]),
+      ]),
+      UI.el('details', { classe: 'grupo detalhes-prazos', id: 'destino-prazos' }, [
+        UI.el('summary', { texto: '⏱ Horários combinados e comunicação (opcional)' }),
+        prazosGrupo.el,
       ]),
       UI.el('p', { classe: 'ajuda', texto: 'Você recebe alertas automáticos no início do deslocamento, na chegada ao ' + (alvo.setor_id ? 'setor' : 'destino') +
         ', na finalização da busca e no retorno à base. Se o prazo de retorno passar sem todos na base, o painel avisa que a equipe pode estar perdida.' }),
@@ -5707,7 +5722,7 @@
       if (modoGrupo) {
         enviarDestinoAoGrupo({ form: form, btn: btn, erro: erro, fechar: function () { fechar(true); if (alvo.aoEnviar) alvo.aoEnviar(); }, alvo: alvo, nome: n, modo: modoSel,
           grupo: selGrupo.value, publico: (form.querySelector('input[name="destino-publico"]:checked') || {}).value || 'todos',
-          base: selBase.value || null, raio: Number(raioBase.value), prazo: Number(prazo.value) });
+          base: selBase.value || null, raio: Number(raioBase.value), prazo: Number(prazo.value), prazos: prazosGrupo });
         return;
       }
       if (!ids.length) { erro.textContent = 'Escolha pelo menos um participante.'; erro.hidden = false; return; }
@@ -5751,6 +5766,11 @@
     if (!o.grupo) { o.erro.textContent = 'Escolha o grupo.'; o.erro.hidden = false; return; }
     if (o.base && !(o.raio >= 10 && o.raio <= 5000)) { o.erro.textContent = 'Raio de chegada à base: de 10 m a 5.000 m.'; o.erro.hidden = false; return; }
     if (o.base && !(o.prazo >= 5 && o.prazo <= 720)) { o.erro.textContent = 'Prazo de retorno: de 5 a 720 minutos.'; o.erro.hidden = false; return; }
+    var dadosPrazos = null;
+    if (o.prazos) {
+      try { dadosPrazos = o.prazos.ler(); } catch (e0) { o.erro.textContent = e0.message; o.erro.hidden = false; return; }
+      if (o.prazos.vazio(dadosPrazos)) dadosPrazos = null;
+    }
     o.btn.disabled = true;
     try {
       var traj = window.Rotas.temTrajeto(o.alvo);
@@ -5768,6 +5788,18 @@
       var g = est.grupos.get(o.grupo);
       UI.aviso('Destino "' + o.nome + '" enviado ao grupo ' + (g ? g.nome : '') + ': ' + r.destinatarios + ' recebe(m) no celular, ' +
         r.acompanhados + ' acompanhado(s).' + (o.base ? ' Prazo de retorno: ' + o.prazo + ' min após finalizar a busca.' : ' Sem base: não há controle de retorno.'), 'ok', 10000);
+      // Prazos combinados: a missão já existe; uma falha aqui não desfaz o envio (nem o repete)
+      if (dadosPrazos && r.missao && r.missao.id) {
+        try {
+          var mp = await C.rpc('definir_prazos_missao', { p_missao: r.missao.id, p_dados: dadosPrazos });
+          if (mp && mp.id) est.missoes.set(mp.id, mp);
+          UI.aviso('Horários combinados registrados' + (dadosPrazos.inicio_combinado_em ? ': iniciar até ' + C.hora(dadosPrazos.inicio_combinado_em, false) : '') +
+            (dadosPrazos.retorno_combinado_em ? (dadosPrazos.inicio_combinado_em ? ', ' : ': ') + 'retornar até ' + C.hora(dadosPrazos.retorno_combinado_em, false) : '') + '.', 'ok', 8000);
+        } catch (e3) {
+          UI.aviso('O destino foi enviado, mas os horários combinados NÃO foram gravados: ' + erroPrazos(e3) +
+            ' Abra Deslocamentos de grupos → ⏱ Prazos para tentar de novo.', 'erro', 15000);
+        }
+      }
       agendarAreas();
       agendarMissoes();
     } catch (e) {
@@ -5890,6 +5922,165 @@
     est.rotaFichaChave = null;
     var el = $('ficha-rota');
     if (el) el.hidden = true;
+  }
+
+  /* ---------- Rota até um participante (ir até a pessoa ou mandar apoio) ---------- */
+  // Parte da minha localização (GPS deste aparelho), de uma base ou da posição de outro
+  // participante e vai até a última posição da pessoa. Enquanto estiver ligada, recalcula
+  // quando um dos dois anda mais de 60 m (no máximo a cada 30 s). Sem internet para a rota
+  // por caminhos, mostra a linha reta com a distância.
+  function abrirRotaAte(pid) {
+    var p = est.participantes.get(pid);
+    if (!p || !est.op) return;
+    var pos = posicaoAtual(p);
+    if (!pos) { UI.aviso('Ainda não há posição de ' + nomeExibido(p) + ' para traçar a rota.', 'erro'); return; }
+    var bases = Array.from(est.pontosInt.values()).map(function (x) { return x.d; }).filter(function (d) { return d.categoria === 'BASE'; });
+    var outros = Array.from(est.participantes.values()).filter(function (q) {
+      return q.id !== pid && !q.dados.removido && !ehEu(q) && posicaoAtual(q);
+    }).sort(function (a, b) { return nomeExibido(a).localeCompare(nomeExibido(b), 'pt-BR'); });
+    var anterior = est.rotaApoio && est.rotaApoio.alvo === pid ? est.rotaApoio : null;
+    var sel = UI.el('select', { classe: 'campo', id: 'rota-ate-origem' }, [UI.el('option', { value: 'gps', texto: 'Minha localização (GPS deste aparelho)' })]
+      .concat(bases.map(function (b) { return UI.el('option', { value: 'base:' + b.id, texto: 'Base: ' + b.titulo }); }))
+      .concat(outros.map(function (q) { return UI.el('option', { value: 'p:' + q.id, texto: nomeExibido(q) + ' (posição atual)' }); })));
+    if (anterior) sel.value = anterior.origem;
+    var modos = UI.el('div', { classe: 'opcoes-modo', role: 'radiogroup', 'aria-label': 'Como vai até lá' },
+      Object.keys(window.Rotas.MODOS).map(function (k, i) {
+        var m = window.Rotas.MODOS[k];
+        return UI.el('label', { classe: 'opcao-modo' }, [
+          UI.el('input', { type: 'radio', name: 'rota-ate-modo', value: k, checked: (anterior ? anterior.modo === k : i === 0) ? true : null }),
+          UI.el('span', null, [UI.el('strong', { texto: m.icone + ' ' + m.rotulo }), UI.el('small', { texto: m.descricao })]),
+        ]);
+      }));
+    var idade = Date.now() - pos.t;
+    var form = UI.el('form', { novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Rota até ' + nomeExibido(p) }),
+      UI.el('p', { classe: 'ajuda', texto: 'Última posição às ' + C.hora(p.dados.ultima_posicao_em, false) + ' (' + C.idade(p.dados.ultima_posicao_em) + ')' +
+        (idade > 5 * 60000 ? '. ATENÇÃO: posição antiga — a pessoa pode estar sem sinal; a rota vai até onde ela foi vista por último.' : '. A rota acompanha a pessoa enquanto ela anda.') }),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rota-ate-origem', texto: 'Saindo de' }), sel]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Como vai até lá' }), modos]),
+      UI.el('div', { classe: 'modal-acoes' }, [
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', id: 'rota-ate-enviar', texto: 'Mandar alguém até ela',
+          title: 'Envia a posição atual da pessoa como destino para outra pessoa ou grupo',
+          onclick: function () { fechar(); abrirEnviarDestino({ nome: 'Apoio a ' + nomeCurto(p), lat: pos.lat, lng: pos.lng }); } }) : null,
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'rota-ate-tracar', texto: 'Traçar rota' }),
+      ]),
+    ]);
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var modo = (form.querySelector('input[name="rota-ate-modo"]:checked') || {}).value || 'a_pe';
+      fechar();
+      iniciarRotaApoio(pid, sel.value, modo);
+    });
+    var fechar = UI.abrirModal(form);
+  }
+
+  function iniciarRotaApoio(pid, origem, modo) {
+    pararRotaApoio();
+    if (!$('ficha').hidden) fecharFicha();   // o mapa fica livre para a rota (a barra embaixo mostra o resumo)
+    est.rotaApoio = { alvo: pid, origem: origem, modo: modo, rota: null, erro: null, calculando: false, em: 0, ultO: null, ultA: null, primeira: true };
+    if (est.mapa && !est.camadaRotaApoio) est.camadaRotaApoio = L.layerGroup().addTo(est.mapa);
+    est.timerRotaApoio = setInterval(function () { atualizarRotaApoio(false); }, 15000);
+    atualizarRotaApoio(true);
+  }
+
+  function pararRotaApoio() {
+    clearInterval(est.timerRotaApoio);
+    est.timerRotaApoio = null;
+    est.rotaApoio = null;
+    if (est.camadaRotaApoio) est.camadaRotaApoio.clearLayers();
+    var b = $('barra-apoio');
+    if (b) b.hidden = true;
+  }
+
+  function origemRotaApoio(r) {
+    if (r.origem === 'gps') {
+      return obterMinhaPosicao().then(function (o) {
+        return o.ok ? { ok: true, lat: o.lat, lng: o.lng, rotulo: 'sua localização' } : { ok: false, motivo: 'sua localização: ' + o.motivo };
+      });
+    }
+    if (r.origem.indexOf('base:') === 0) {
+      var b = est.pontosInt.get(r.origem.slice(5));
+      return Promise.resolve(b ? { ok: true, lat: b.d.lat, lng: b.d.lng, rotulo: 'base ' + b.d.titulo } : { ok: false, motivo: 'a base foi removida' });
+    }
+    var q = est.participantes.get(r.origem.slice(2));
+    var qp = q && posicaoAtual(q);
+    return Promise.resolve(qp ? { ok: true, lat: qp.lat, lng: qp.lng, rotulo: nomeExibido(q) } : { ok: false, motivo: 'sem posição de quem sai' });
+  }
+
+  async function atualizarRotaApoio(forcar) {
+    var r = est.rotaApoio;
+    if (!r || r.calculando) return;
+    var p = est.participantes.get(r.alvo);
+    var a = p && !p.dados.removido ? posicaoAtual(p) : null;
+    if (!a) { pararRotaApoio(); UI.aviso('Rota encerrada: a pessoa saiu da operação ou está sem posição.', 'erro'); return; }
+    r.calculando = true;
+    var o = await origemRotaApoio(r);
+    if (est.rotaApoio !== r) return;
+    r.calculando = false;
+    if (!o.ok) { r.erro = 'Não foi possível obter a origem (' + o.motivo + ').'; renderizarBarraApoio(); return; }
+    r.origemRotulo = o.rotulo;
+    var dist = function (x, y) { return window.GPS.distancia(x[0], x[1], y[0], y[1]); };
+    var andou = !r.ultO || dist(r.ultO, [o.lat, o.lng]) > 60 || dist(r.ultA, [a.lat, a.lng]) > 60;
+    if (!forcar && (!andou || Date.now() - r.em < 30000)) { renderizarBarraApoio(); return; }
+    r.calculando = true;
+    renderizarBarraApoio();
+    var res = await window.Rotas.calcular({ origem: [o.lat, o.lng], destino: [a.lat, a.lng], modo: r.modo });
+    if (est.rotaApoio !== r) return;   // parada enquanto calculava
+    r.calculando = false;
+    r.em = Date.now();
+    r.ultO = [o.lat, o.lng];
+    r.ultA = [a.lat, a.lng];
+    r.reta = Math.round(dist(r.ultO, r.ultA));
+    if (res.ok) { r.rota = res.rota; r.erro = null; } else { r.rota = null; r.erro = res.mensagem; }
+    desenharRotaApoio(r);
+    if (r.primeira) { r.primeira = false; verRotaApoio(); }
+    renderizarBarraApoio();
+  }
+
+  function desenharRotaApoio(r) {
+    if (!est.mapa) return;
+    if (!est.camadaRotaApoio) est.camadaRotaApoio = L.layerGroup().addTo(est.mapa);
+    var g = est.camadaRotaApoio;
+    if (r.rota) window.Rotas.desenhar(g, r.rota, { peso: 5 });
+    else {
+      g.clearLayers();   // sem rota por caminhos: linha reta tracejada
+      L.polyline([r.ultO, r.ultA], { color: '#2563eb', weight: 3, dashArray: '6 8', opacity: 0.9, interactive: false, className: 'rota-apoio-reta' }).addTo(g);
+    }
+    L.circleMarker(r.ultO, { radius: 6, color: '#0b1220', weight: 2, fillColor: '#93c5fd', fillOpacity: 1, interactive: false, className: 'rota-apoio-origem' }).addTo(g);
+  }
+
+  function verRotaApoio() {
+    var r = est.rotaApoio;
+    if (!r || !est.mapa || !r.ultO) return;
+    var pts = r.rota ? r.rota.geometria.slice() : [];
+    pts.push(r.ultO, r.ultA);
+    est.mapa.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 17 });
+    if (!$('ficha').hidden) fecharFicha();
+    if (telaPequena()) fecharCentral();
+  }
+
+  function renderizarBarraApoio() {
+    var r = est.rotaApoio, barra = $('barra-apoio');
+    if (!barra) return;
+    if (!r) { barra.hidden = true; return; }
+    var p = est.participantes.get(r.alvo);
+    var vista = p ? C.paraMs(p.dados.ultima_posicao_em) : 0;
+    var velha = vista && Date.now() - vista > 5 * 60000;
+    var partes = [];
+    if (r.rota) partes.push(window.Rotas.resumo(r.rota));
+    else if (r.ultO) partes.push('Linha reta: ' + window.Rotas.formatarDistancia(r.reta) + (r.erro ? ' (rota por caminhos indisponível: ' + r.erro + ')' : ''));
+    else if (r.erro) partes.push(r.erro);
+    if (r.calculando) partes.push(r.ultO ? 'atualizando…' : 'calculando…');
+    if (p) partes.push((velha ? '⚠ posição dela de ' : 'posição dela às ') + C.hora(p.dados.ultima_posicao_em, false) + (velha ? ' (' + C.idade(p.dados.ultima_posicao_em) + ', pode estar sem sinal)' : ''));
+    var txt = $('barra-apoio-texto');
+    txt.innerHTML = '';
+    txt.appendChild(UI.el('strong', { texto: 'Rota até ' + (p ? nomeExibido(p) : '?') + (r.origemRotulo ? ' (de ' + r.origemRotulo + ')' : '') + ': ' }));
+    txt.appendChild(document.createTextNode(partes.join(' · ')));
+    barra.classList.toggle('desatualizada', Boolean(velha || r.erro));
+    var g = $('barra-apoio-google');
+    if (r.ultA) { g.href = window.Rotas.linkGoogle(r.ultA, r.modo); g.hidden = false; } else g.hidden = true;
+    barra.hidden = false;
   }
 
   /* ---------- Lista de setores e pontos ------------------------------ */
@@ -8382,8 +8573,12 @@
   // aberto pede ao servidor que verifique os prazos (a regra e o anti-duplicação são do banco).
   function verificarRetornosPainel() {
     if (!est.op || est.op.status !== 'ativa' || est.semMissoes) return;
-    var temRetorno = Array.from(est.missoes.values()).some(function (m) { return m.status === 'busca_finalizada' || m.status === 'retorno_atrasado'; });
-    if (!temRetorno) return;
+    // retorno após a busca, horários combinados e falta de comunicação (migração 032): só com deslocamento ativo
+    if (!missoesAtivas().length) return;
+    // com pg_cron o servidor já verifica a cada minuto: o painel ajuda a cada 60 s (30 s no retorno)
+    var retorno = missoesAtivas().some(function (m) { return m.status === 'busca_finalizada' || m.status === 'retorno_atrasado'; });
+    est.cicloRetornos = (est.cicloRetornos || 0) + 1;
+    if (!retorno && est.cicloRetornos % 2) return;
     C.rpc('verificar_retornos', { p_operacao: est.op.id }, 15000).then(function (n) { if (n) agendarMissoes(); }).catch(function () { /* tenta no próximo ciclo */ });
   }
 
@@ -8660,6 +8855,9 @@
       if (a.nivel === 'critico') {
         alarme();
         try { if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 800]); } catch (e) { /* ignora */ }
+      } else if (a.tipo === 'comunicacao_restabelecida') {
+        bipeCurto();
+        avisoClicavel('📶 ' + a.titulo + '. ' + a.texto, function () { verAlertaNoMapa(a); });
       } else if (a.tipo === 'permanencia_setor') {
         bipeCurto();
         avisoClicavel('⏱ ' + a.titulo + '. Avalie a troca da equipe. Toque para ver no mapa.', function () { verAlertaNoMapa(a); });
@@ -8757,6 +8955,173 @@
     });
   }
 
+  /* ---------- Controle de tempo dos deslocamentos (migração 032) ---------- */
+  // Horário combinado para o grupo iniciar e para voltar, com tolerância, e o tempo sem
+  // contato que conta como falha de comunicação. Os alertas são gerados pelo servidor.
+  var PRAZOS_PADRAO = { tolerancia_min: 10, sem_sinal_min: 10 };
+
+  function doisDigitos(n) { return (n < 10 ? '0' : '') + n; }
+  function isoParaHora(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return doisDigitos(d.getHours()) + ':' + doisDigitos(d.getMinutes());
+  }
+  // "HH:MM" digitado → data. Uma hora que já passou há mais de 6 h é de amanhã;
+  // depoisDe (ms): o retorno fica sempre depois do início.
+  function horaParaData(hhmm, depoisDe) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+    if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+    var d = new Date();
+    d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+    if (d.getTime() < Date.now() - 6 * 3600e3) d.setDate(d.getDate() + 1);
+    if (depoisDe != null && d.getTime() <= depoisDe) d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  // Campos dos prazos combinados. m: a missão (para editar) ou nada (novo deslocamento).
+  function camposPrazos(m) {
+    m = m || {};
+    var ini = UI.el('input', { classe: 'campo', id: 'prazo-inicio', type: 'time', value: isoParaHora(m.inicio_combinado_em) });
+    var ret = UI.el('input', { classe: 'campo', id: 'prazo-retorno', type: 'time', value: isoParaHora(m.retorno_combinado_em) });
+    var tol = UI.el('input', { classe: 'campo', id: 'prazo-tolerancia', type: 'number', min: '0', max: '240', step: '1', inputmode: 'numeric',
+      value: String(m.tolerancia_min != null ? m.tolerancia_min : PRAZOS_PADRAO.tolerancia_min) });
+    var sem = UI.el('input', { classe: 'campo', id: 'prazo-sem-sinal', type: 'number', min: '3', max: '240', step: '1', inputmode: 'numeric',
+      value: String(m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min) });
+    var comb = UI.el('textarea', { classe: 'campo', id: 'prazo-combinado', maxlength: '500', rows: '2',
+      placeholder: 'Ex.: contato por rádio a cada 30 min no canal 3; retorno pela estrada principal' });
+    comb.value = m.combinado_texto || '';
+    function atalho(campo, rotulo, min) {
+      return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: rotulo, onclick: function () { campo.value = isoParaHora(new Date(Date.now() + min * 60000).toISOString()); } });
+    }
+    var el = UI.el('div', { classe: 'campos-prazos' }, [
+      UI.el('div', { classe: 'grupo-duplo' }, [
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-inicio', texto: 'Iniciar até (horário combinado)' }), ini,
+          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ini, 'agora', 0), atalho(ini, '+15 min', 15), atalho(ini, '+30 min', 30)])]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-retorno', texto: 'Retornar até (horário combinado)' }), ret,
+          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ret, '+1 h', 60), atalho(ret, '+2 h', 120), atalho(ret, '+4 h', 240)])]),
+      ]),
+      UI.el('div', { classe: 'grupo-duplo' }, [
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-tolerancia', texto: 'Tolerância antes do alerta (min)' }), tol]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-sem-sinal', texto: 'Alerta de sem comunicação após (min)' }), sem]),
+      ]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-combinado', texto: 'O que foi combinado (opcional)' }), comb]),
+      UI.el('p', { classe: 'ajuda', texto: 'O servidor confere os horários a cada minuto, mesmo com os celulares sem internet: alerta se ninguém iniciar até o horário + tolerância, ' +
+        'se alguém não tiver voltado até o horário de retorno + tolerância e se um membro ficar sem nenhum contato pelo tempo definido. ' +
+        'Sem internet, o celular guarda as posições e envia quando o sinal volta — o painel avisa quando a comunicação for restabelecida.' }),
+    ]);
+    // Lê e confere. Devolve os dados para definir_prazos_missao ou lança Error com a mensagem.
+    function ler() {
+      var dIni = null, dRet = null;
+      if (ini.value) {
+        dIni = m.inicio_combinado_em && ini.value === isoParaHora(m.inicio_combinado_em) ? new Date(m.inicio_combinado_em) : horaParaData(ini.value);
+        if (!dIni) throw new Error('Horário de início inválido.');
+      }
+      if (ret.value) {
+        var manteve = m.retorno_combinado_em && ret.value === isoParaHora(m.retorno_combinado_em);
+        dRet = manteve ? new Date(m.retorno_combinado_em) : horaParaData(ret.value, dIni ? dIni.getTime() : null);
+        if (!dRet) throw new Error('Horário de retorno inválido.');
+        if (!manteve && dRet.getTime() < Date.now()) throw new Error('O horário de retorno já passou. Informe um horário futuro.');
+      }
+      if (dIni && dRet && dRet.getTime() <= dIni.getTime()) throw new Error('O retorno combinado precisa ser depois do início.');
+      var t = Number(tol.value), ss = Number(sem.value);
+      if (!(tol.value !== '' && Number.isInteger(t) && t >= 0 && t <= 240)) throw new Error('Tolerância: de 0 a 240 minutos.');
+      if (!(sem.value !== '' && Number.isInteger(ss) && ss >= 3 && ss <= 240)) throw new Error('Sem comunicação: de 3 a 240 minutos.');
+      return {
+        inicio_combinado_em: dIni ? dIni.toISOString() : '', retorno_combinado_em: dRet ? dRet.toISOString() : '',
+        tolerancia_min: t, sem_sinal_min: ss, combinado_texto: comb.value.replace(/\s+/g, ' ').trim(),
+      };
+    }
+    function vazio(x) {
+      return !x.inicio_combinado_em && !x.retorno_combinado_em && !x.combinado_texto &&
+        x.tolerancia_min === PRAZOS_PADRAO.tolerancia_min && x.sem_sinal_min === PRAZOS_PADRAO.sem_sinal_min;
+    }
+    return { el: el, ler: ler, vazio: vazio };
+  }
+
+  function erroPrazos(e) {
+    return e.codigo === 'funcao_ausente' ? 'O banco ainda não tem o controle de tempo (execute a migração 032 no Supabase).' : e.message;
+  }
+
+  // Situação de um horário combinado: { texto, classe } (classe: ok | alerta | atrasado)
+  function situacaoPrazo(alvoIso, tolMin, cumpridoIso) {
+    var alvo = C.paraMs(alvoIso), agora = Date.now();
+    if (cumpridoIso) {
+      var atraso = Math.round((C.paraMs(cumpridoIso) - alvo) / 60000);
+      return { texto: '✔ às ' + C.hora(cumpridoIso, false) + (atraso > tolMin ? ' (' + textoMin(atraso) + ' depois do combinado)' : ''), classe: atraso > tolMin ? 'alerta' : 'ok' };
+    }
+    var falta = Math.round((alvo - agora) / 60000);
+    if (falta >= 0) return { texto: 'faltam ' + textoMin(falta), classe: falta <= 10 ? 'alerta' : 'ok' };
+    if (-falta <= tolMin) return { texto: 'na tolerância (' + textoMin(-falta) + ' após o horário)', classe: 'alerta' };
+    return { texto: '⚠ ATRASADO há ' + textoMin(-falta - tolMin) + ' (além da tolerância)', classe: 'atrasado' };
+  }
+
+  // Bloco "Controle de tempo" de um deslocamento na lista
+  function blocoTempoMissao(m, membros) {
+    if (m.inicio_combinado_em === undefined) return null;   // banco sem a migração 032
+    var tol = m.tolerancia_min != null ? m.tolerancia_min : PRAZOS_PADRAO.tolerancia_min;
+    var linhas = [];
+    if (m.inicio_combinado_em) {
+      var inicios = membros.map(function (y) { return C.paraMs(y.x.iniciou_em); }).filter(Boolean);
+      var primeiro = inicios.length ? new Date(Math.min.apply(null, inicios)).toISOString() : (m.iniciada_em || null);
+      var si = situacaoPrazo(m.inicio_combinado_em, tol, primeiro);
+      linhas.push(UI.el('li', { classe: 'prazo-' + si.classe }, [UI.el('span', { texto: 'Iniciar até ' + C.hora(m.inicio_combinado_em, false) }), UI.el('small', { texto: si.texto })]));
+    }
+    if (m.retorno_combinado_em) {
+      var concluido = m.status === 'na_base' || m.status === 'encerrada' ? (m.chegou_base_em || m.encerrada_em) : null;
+      var sr = situacaoPrazo(m.retorno_combinado_em, tol, concluido);
+      linhas.push(UI.el('li', { classe: 'prazo-' + sr.classe }, [UI.el('span', { texto: 'Retornar até ' + C.hora(m.retorno_combinado_em, false) }), UI.el('small', { texto: sr.texto })]));
+    }
+    return UI.el('div', { classe: 'tempo-missao' }, [
+      linhas.length ? UI.el('ul', { classe: 'prazos-missao' }, linhas) : null,
+      UI.el('p', { classe: 'muted', texto: (linhas.length ? 'Tolerância ' + tol + ' min · ' : 'Sem horários combinados · ') +
+        'alerta de sem comunicação após ' + (m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min) + ' min' +
+        (m.prazos_definidos_por_nome ? ' · definido por ' + m.prazos_definidos_por_nome + ' às ' + C.hora(m.prazos_definidos_em, false) : '') }),
+      m.combinado_texto ? UI.el('p', { classe: 'combinado-missao', texto: 'Combinado: ' + m.combinado_texto }) : null,
+    ]);
+  }
+
+  // Último contato de um membro com o servidor (GPS ou sinal de vida), para a tabela do deslocamento
+  function contatoMembro(m, y) {
+    var d = y.p && y.p.dados;
+    if (!d || !d.ultimo_contato_em) return { texto: '—', classe: '' };
+    var min = Math.floor((Date.now() - C.paraMs(d.ultimo_contato_em)) / 60000);
+    var lim = m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min;
+    var ativa = m.status !== 'encerrada' && m.status !== 'na_base' && !y.x.chegou_base_em;
+    if (ativa && min >= lim) return { texto: '📵 há ' + textoMin(min), classe: 'atrasado', titulo: 'Sem contato desde ' + C.hora(d.ultimo_contato_em) + ': pode estar sem internet. O celular guarda as posições e envia quando o sinal voltar.' };
+    return { texto: min < 1 ? 'agora' : 'há ' + textoMin(min), classe: '', titulo: 'Último contato: ' + C.hora(d.ultimo_contato_em) };
+  }
+
+  function abrirPrazosMissao(m) {
+    var campos = camposPrazos(m);
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'prazos-salvar', texto: 'Salvar prazos' });
+    var form = UI.el('form', { novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Prazos — ' + m.grupo_nome + ' → ' + m.nome }),
+      campos.el, erro,
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var dados;
+      try { dados = campos.ler(); } catch (e) { erro.textContent = e.message; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var r = await C.rpc('definir_prazos_missao', { p_missao: m.id, p_dados: dados });
+        if (r && r.id) est.missoes.set(r.id, r);
+        fechar(true);
+        UI.aviso('Prazos de ' + m.grupo_nome + ' salvos e registrados no diário.', 'ok');
+        if (est.renderMissoesAberto) est.renderMissoesAberto();
+        agendarMissoes();
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + erroPrazos(e);
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { empilhar: true });
+  }
+
   function linhaTempoMissao(m) {
     var etapas = [
       ['Enviada', m.enviada_em],
@@ -8764,6 +9129,8 @@
       [m.setor_nome ? 'Chegada ao setor' : 'Chegada ao destino', m.chegou_setor_em],
       ['Busca finalizada' + (m.busca_finalizada_por_nome ? ' (' + m.busca_finalizada_por_nome + ')' : ''), m.busca_finalizada_em],
     ];
+    if (m.inicio_combinado_em) etapas.splice(1, 0, ['Início combinado', m.inicio_combinado_em, true]);
+    if (m.retorno_combinado_em) etapas.push(['Retorno combinado', m.retorno_combinado_em, true]);
     if (m.base_lat != null) {
       etapas.push(['Prazo de retorno', m.prazo_retorno_em, true]);
       etapas.push(['Todos na base', m.chegou_base_em]);
@@ -8800,7 +9167,7 @@
         var membros = (est.missaoMembros.get(m.id) || []).map(function (x) { return { x: x, p: est.participantes.get(x.participante_id) }; })
           .sort(function (a, b) { return (a.p ? a.p.dados.nome : '').localeCompare(b.p ? b.p.dados.nome : '', 'pt-BR'); });
         var tabela = UI.el('table', { classe: 'tabela-membros-missao' }, [
-          UI.el('thead', null, [UI.el('tr', null, ['Pessoa', 'Destino', 'Iniciou', m.setor_nome ? 'No setor' : 'Chegou', 'Na base'].map(function (t) { return UI.el('th', { texto: t }); }))]),
+          UI.el('thead', null, [UI.el('tr', null, ['Pessoa', 'Destino', 'Iniciou', m.setor_nome ? 'No setor' : 'Chegou', 'Na base', 'Contato'].map(function (t) { return UI.el('th', { texto: t }); }))]),
           UI.el('tbody', null, membros.map(function (y) {
             var fora = y.p && y.p.dados.removido;
             return UI.el('tr', { classe: fora ? 'fora' : '' }, [
@@ -8810,6 +9177,7 @@
               UI.el('td', { texto: y.x.chegou_setor_em ? C.hora(y.x.chegou_setor_em, false) : '—' }),
               UI.el('td', { classe: !y.x.chegou_base_em && m.status === 'retorno_atrasado' && !fora ? 'atrasado' : '',
                 texto: y.x.chegou_base_em ? C.hora(y.x.chegou_base_em, false) : (m.base_lat != null && m.busca_finalizada_em ? 'ainda não' : '—') }),
+              (function () { var c = contatoMembro(m, y); return UI.el('td', { classe: c.classe, title: c.titulo || null, texto: c.texto }); })(),
             ]);
           })),
         ]);
@@ -8820,12 +9188,15 @@
           ]),
           UI.el('p', { classe: 'muted', texto: (m.publico === 'responsavel' ? 'Só o responsável do grupo recebeu o destino' : 'Todos os membros receberam o destino') +
             ' · enviado por ' + m.enviado_por_nome + (m.base_nome ? ' · base: ' + m.base_nome + ' (raio ' + Math.round(m.raio_base_m) + ' m, prazo ' + m.prazo_retorno_min + ' min)' : ' · sem base (sem controle de retorno)') }),
+          blocoTempoMissao(m, membros),
           linhaTempoMissao(m),
           tabela,
           UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verMissaoNoMapa(m); } }),
             ativa && !m.busca_finalizada_em ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Finalizar busca', onclick: function () { finalizarBuscaPainel(m); } }) : null,
             ativa && m.busca_finalizada_em && m.base_lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Prorrogar +15 min', onclick: function () { prorrogarRetorno(m); } }) : null,
+            ativa && m.inicio_combinado_em !== undefined ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⏱ Prazos', title: 'Horário combinado de início e de retorno, tolerância e alerta de sem comunicação',
+              onclick: function () { abrirPrazosMissao(m); } }) : null,
             ativa ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Encerrar', onclick: function () { encerrarMissaoPainel(m); } }) : null,
           ]),
         ]));
@@ -8836,7 +9207,7 @@
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-missoes' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Deslocamentos de grupos' }),
       UI.el('p', { classe: 'ajuda', texto: 'Início, chegada e retorno são calculados pelo servidor a partir da trilha GPS de cada membro (hora do GPS). ' +
-        'O alerta de equipe possivelmente perdida é verificado por tempo, mesmo com os celulares sem sinal.' }),
+        'Os alertas de equipe possivelmente perdida, de horário combinado vencido e de membro sem comunicação são verificados por tempo, mesmo com os celulares sem sinal.' }),
       corpo,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (est.renderMissoesAberto === render) est.renderMissoesAberto = null; } });

@@ -460,6 +460,16 @@
         <span class="barra-desenho-botoes" id="barra-desenho-botoes"></span>
       </div>
 
+      <!-- Rota até um participante (ir até a pessoa / mandar apoio), atualizada enquanto ela anda -->
+      <div class="barra-apoio" id="barra-apoio" role="status" hidden>
+        <span class="barra-apoio-texto" id="barra-apoio-texto"></span>
+        <span class="barra-apoio-botoes">
+          <button class="btn btn-pequeno" type="button" id="barra-apoio-ver">Ver</button>
+          <a class="btn btn-pequeno" id="barra-apoio-google" href="#" target="_blank" rel="noopener">Google Maps</a>
+          <button class="btn btn-pequeno btn-perigo" type="button" id="barra-apoio-parar">Parar</button>
+        </span>
+      </div>
+
       <!-- Setores de busca e pontos de interesse -->
       <aside class="central painel-areas" id="painel-areas" hidden aria-labelledby="areas-titulo" role="dialog">
         <div class="ficha-cabeca central-cabeca">
@@ -581,6 +591,7 @@
             <div class="acoes-linha">
               <button class="btn" type="button" id="ficha-centralizar">Ver no mapa</button>
               <button class="btn" type="button" id="ficha-enviar-destino" title="Enviar um destino para este participante navegar até lá">🧭 Destino</button>
+              <button class="btn" type="button" id="ficha-ir-ate" title="Traçar a rota até onde esta pessoa está (para ir até ela ou mandar apoio)">📍 Rota até ela</button>
               <button class="btn btn-trilha" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
               <button class="btn btn-vitima" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
               <a class="btn btn-ok" id="ficha-ligar" href="#" hidden>Ligar</a>

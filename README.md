@@ -263,10 +263,48 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 - Tudo é calculado **no servidor, pela trilha GPS** (hora do GPS; pontos com precisão pior que 150 m não
   contam; pontos que chegam atrasados da fila offline contam com o horário real). O atraso é verificado
   **por tempo** pelo `pg_cron` do Supabase (a cada minuto), mesmo com os celulares sem sinal e sem painel
-  aberto; sem `pg_cron`, o painel aberto faz essa verificação a cada 30 s.
+  aberto; sem `pg_cron`, o painel aberto faz essa verificação (a cada 30 s na volta à base, 60 s nas demais fases).
 - Ao finalizar a busca, todos recebem o destino **"Volte para a base"** no celular. **Prorrogar +15 min** e
   **Encerrar** ficam em **Ferramentas → Deslocamentos de grupos**, com a linha do tempo e a situação de
   cada membro. Uma missão nova do mesmo grupo substitui a anterior.
+
+#### Controle de tempo e comunicação (migração 032)
+
+- **Horários combinados**: ao enviar destino a um grupo, **⏱ Horários combinados e comunicação** (opcional)
+  registra **iniciar até** e **retornar até** (com atalhos agora/+15/+30 min e +1/+2/+4 h; uma hora já passada há
+  mais de 6 h é de amanhã), a **tolerância** antes do alerta (padrão 10 min), o tempo **sem comunicação** que vira
+  alerta (padrão 10 min) e **o que foi combinado** (ex.: rádio a cada 30 min no canal 3). Depois, em
+  **Deslocamentos de grupos → ⏱ Prazos**, dá para ajustar (prorrogar o retorno, por exemplo). Cada alteração vai
+  ao **diário** com quem definiu. Se a gravação dos prazos falhar, o destino continua enviado (não é repetido) e o
+  painel avisa para tentar de novo em ⏱ Prazos.
+- **Na lista de deslocamentos**: cada horário combinado com a situação — ✔ cumprido (e quanto depois do
+  combinado), faltam X min, na tolerância ou **⚠ ATRASADO** —, a tolerância, quem definiu, o combinado, os horários
+  na linha do tempo e a coluna **Contato** de cada membro (há quanto tempo o servidor recebeu algo do celular;
+  **📵** em vermelho quando passa do limite).
+- **Alertas gerados pelo servidor** (`verificar_prazos`, chamada junto com `verificar_retornos` pelo `pg_cron` a
+  cada minuto ou pelo painel aberto — mesmo com os celulares sem internet):
+  - **INÍCIO ATRASADO** (crítico) — ninguém do grupo começou o deslocamento até o horário + tolerância;
+  - **RETORNO ATRASADO** (crítico) — passou o horário de retorno + tolerância e há quem não voltou (com base:
+    quem não chegou à base; sem base: o deslocamento ainda aberto), com o último contato de cada um;
+  - **SEM COMUNICAÇÃO** (crítico) — um membro de deslocamento ativo ficou sem nenhum contato com o servidor
+    (posição ou sinal de vida) além do limite: pode estar sem internet, sem bateria ou com o celular desligado.
+    Mostra o último contato e a **última posição conhecida** (Ver no mapa);
+  - **Comunicação restabelecida** (informativo) — quando o celular volta a falar com o servidor: quanto tempo
+    ficou sem contato e **quantas posições gravadas sem internet chegaram depois** (e de que horário a que
+    horário), pela diferença entre a hora do GPS e a hora de chegada ao servidor.
+  Cada alerta sai uma vez por horário combinado / episódio (não repete a cada verificação) e entra no diário.
+
+### Rota até um participante (ir até a pessoa ou mandar apoio)
+
+- Na ficha de um participante, **📍 Rota até ela**: escolha **de onde sai** — a **sua localização** (GPS do
+  aparelho do painel), uma **base** ou a **posição atual de outro participante** — e **como vai** (a pé, trilha,
+  carro). A rota por caminhos (mesmo serviço do celular) aparece no mapa até a última posição da pessoa, com a
+  barra embaixo: distância, tempo, desnível, hora da posição dela (⚠ se tiver mais de 5 min: pode estar sem
+  sinal), **Ver**, **Google Maps** e **Parar**.
+- Enquanto ligada, a rota **acompanha**: recalcula quando a pessoa ou a origem anda mais de 60 m (no máximo a
+  cada 30 s). Sem internet para calcular, mostra a **linha reta** tracejada com a distância.
+- **Mandar alguém até ela**: abre o envio de destino com a posição atual da pessoa ("Apoio a …"), para outra
+  pessoa ou um grupo seguirem pelo celular.
 
 ### Setores de busca (áreas)
 
@@ -1019,6 +1057,7 @@ rastreamento-sar/
 │       ├── 029_nomes_painel_cpf_opcional.sql  CPF opcional para civis; nome de exibição do participante no painel
 │       ├── 030_percursos_trajetos.sql         meio/cor/origem das trilhas; trajeto desenhado como destino
 │       ├── 031_vitima_encontrada_detalhes.sql ficha, estado, local e quem encontrou no registro da vítima
+│       ├── 032_controle_tempo_missoes.sql     horários combinados, alertas de atraso e de falta de comunicação
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1153,7 +1192,12 @@ rastreamento-sar/
    - **031** (`031_vitima_encontrada_detalhes.sql`): `vitima_localizacoes` ganha `vitima_id`, `encontrada_por_texto`,
      `local_descricao` e `observacoes`; função `registrar_vitima_encontrada` (formulário completo numa transação, cria
      a ficha só com o nome se preciso); o diário da vítima localizada leva esses detalhes. Não apaga nada.
-   O `schema.sql` completo já inclui da 003 à 031.
+   - **032** (`032_controle_tempo_missoes.sql`): `missoes` ganha `inicio_combinado_em`, `retorno_combinado_em`,
+     `tolerancia_min`, `sem_sinal_min`, `combinado_texto` e quem/quando definiu; alertas `inicio_atrasado`,
+     `prazo_atrasado`, `sem_comunicacao` e `comunicacao_restabelecida`; funções `definir_prazos_missao` e
+     `verificar_prazos`; `verificar_retornos` (o agendamento do `pg_cron` que já existe) passa a chamar a
+     `verificar_prazos`. Exige a 010. Não apaga nada.
+   O `schema.sql` completo já inclui da 003 à 032.
 3. Ative o ingresso dos participantes: **Authentication → Sign In / Providers** (ou **Providers**) →
    ligue **Allow anonymous sign-ins** → **Save**.
    *Cada celular recebe uma identidade anônima; ela só serve para ingressar com o token do link.*
@@ -1452,6 +1496,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 38 | No controle **Grupos** do mapa, tocar no 👁 de um grupo e depois de novo | só as pessoas, trilhas e destinos do grupo ficam visíveis, sem aviso no mapa, com o olho destacado e o título "· filtrado"; um pedido de ajuda de fora do grupo continua tocando; o segundo toque restaura tudo |
 | 39 | Marcar uma **Base**, enviar o centro de um setor ao grupo (só o responsável), andar até o setor, tocar **BUSCA NO SETOR CONCLUÍDA** no celular do responsável do grupo e voltar à base | alertas: início do deslocamento, chegada ao setor, busca finalizada e equipe na base, em tempo real; o celular passa a mostrar "Volte para a base" |
 | 40 | Repetir com prazo de retorno de 5 min e um membro que não volta (ou com o celular em modo avião) | ao vencer o prazo, faixa vermelha "EQUIPE PODE ESTAR PERDIDA" com o alarme repetindo até **Ciente**, mesmo com o painel fechado durante o prazo (com `pg_cron` ativo) |
+| 40a | Enviar destino a um grupo com **retornar até** daqui a 5 min, tolerância 0, e deixar um membro longe da base; noutro celular do grupo, ligar o modo avião por 12 min | no horário, faixa "RETORNO ATRASADO" com quem falta; após 10 min sem contato, "SEM COMUNICAÇÃO — nome" com a última posição; ao religar, aviso "Comunicação restabelecida" com as posições gravadas sem internet |
+| 40b | Na ficha de um participante, **📍 Rota até ela** saindo da base, e ele andar 100 m | a rota aparece com a barra embaixo e se refaz sozinha; **Parar** apaga |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
@@ -1495,6 +1541,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Rota até um participante e controle de tempo (versão 2026-10-23)**: banco — 415 verificações (migrações
+  007–032: prazos gravados só pelos responsáveis da operação, horários inválidos recusados, início atrasado uma vez
+  por horário combinado, retorno atrasado com quem falta, sem comunicação com a última posição, restabelecida com
+  as posições que chegaram atrasadas, sem repetição pelo `pg_cron`, nada depois da base ou do encerramento, diário).
+  Navegador (banco simulado, t26 — 31): rota da base, de outro participante e do GPS (sem GPS explica), linha reta
+  sem internet, Parar, Mandar alguém até ela, prazos no envio ao grupo (validação, sem duplicar o envio, banco sem a
+  032), lista com situação dos horários e coluna de contato, edição, faixa e aviso de comunicação.
 - **Vítima encontrada e encerramento com resultado (versão 2026-10-23)**: banco — 379 verificações (migrações
   007–031: ficha escolhida ou criada, estado, local, quem encontrou fora do sistema, alerta e diário com os detalhes,
   permissões, participante não lê, resultado + encerramento, encerrada recusa). Navegador (banco simulado): formulário

@@ -1363,6 +1363,15 @@ body.conversa-aberta { overflow: hidden; }
   background: rgba(18, 23, 28, .96); border: 2px solid #facc15; box-shadow: var(--sombra); color: #fff;
 }
 .barra-desenho-texto { flex: 1 1 220px; font-weight: 800; }
+.barra-apoio {
+  position: absolute; z-index: 1150; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(560px, calc(100% - 120px));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; border-radius: 10px;
+  background: rgba(18, 23, 28, .95); border: 2px solid #2563eb; box-shadow: var(--sombra); color: #fff; font-size: .85rem;
+}
+.barra-apoio-texto { flex: 1 1 220px; line-height: 1.3; }
+.barra-apoio-texto strong { color: #93c5fd; }
+.barra-apoio-botoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.barra-apoio.desatualizada { border-color: #f97316; }
 .barra-desenho-botoes { display: flex; gap: 6px; flex-wrap: wrap; }
 .barra-desenho .campo-raio { width: 110px; min-height: 38px; font-size: 1rem; padding: 4px 8px; }
 #mapa.modo-desenho, #mapa.modo-desenho .leaflet-interactive { cursor: crosshair; }
@@ -1440,6 +1449,7 @@ body.conversa-aberta { overflow: hidden; }
 .popup-3d .maplibregl-popup-close-button { color: var(--texto); font-size: 18px; padding: 0 6px; }
 @media (max-width: 599px) {
   .barra-desenho { left: 8px; right: 8px; transform: none; width: auto; top: 8px; }
+  .barra-apoio { left: 8px; right: 8px; transform: none; width: auto; bottom: 8px; }
   .barra-desenho-botoes { width: 100%; }
   .barra-desenho-botoes .btn { flex: 1 1 0; }
   .acoes-detalhe .btn { flex: 1 1 45%; }
@@ -1721,6 +1731,17 @@ body.conversa-aberta { overflow: hidden; }
 .linha-tempo { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .linha-tempo li { display: grid; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--borda); font-size: .8rem; min-width: 110px; }
 .linha-tempo li small { font-family: var(--mono); color: var(--texto-3); }
+.tempo-missao { display: grid; gap: 4px; }
+.prazos-missao { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.prazos-missao li { display: grid; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--borda); font-size: .8rem; min-width: 150px; }
+.prazos-missao li span { font-weight: 700; }
+.prazos-missao li.prazo-ok { border-color: var(--ok); }
+.prazos-missao li.prazo-alerta { border-color: var(--alerta); background: rgba(250, 204, 21, .08); }
+.prazos-missao li.prazo-atrasado { border-color: #ef4444; background: rgba(127, 29, 29, .35); }
+.combinado-missao { font-size: .85rem; padding: 4px 8px; border-left: 3px solid var(--borda); }
+.detalhes-prazos > summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+.campos-prazos { display: grid; gap: 4px; margin-top: 6px; }
+.atalhos-prazo { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .linha-tempo li.feita { border-color: var(--ok); background: var(--ok-claro); }
 .linha-tempo li.prazo { border-color: var(--alerta); background: var(--alerta-claro); }
 .linha-tempo li.pendente { opacity: .6; }

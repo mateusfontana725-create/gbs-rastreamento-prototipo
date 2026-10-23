@@ -69,6 +69,7 @@
     grupo_sem_responsavel: 'O grupo não tem responsável de campo ativo. Defina um responsável do grupo ou envie para todos os membros.',
     base_invalida: 'A base escolhida não existe mais. Marque um ponto de interesse do tipo "Base".',
     missao_encerrada: 'Este deslocamento já foi encerrado.',
+    horario_combinado_invalido: 'Horário combinado inválido: o retorno deve ser depois do início e os horários no máximo 2 dias à frente.',
     data_invalida: 'Data e hora inválidas: não podem estar no futuro nem muito antes do início da operação.',
     procedimento_invalido: 'Escolha um dos procedimentos de busca da lista.',
     tipo_invalido: 'Tipo de registro desconhecido. Atualize a página e tente de novo.',

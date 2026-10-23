@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -887,5 +887,104 @@ chk((await db.query(`select (select count(*) from public.diario where operacao_i
 const filaPdf = (await db.query(`select bucket, excluido_por from public.arquivos_pendentes where caminho = $1`, [pdfAtividade])).rows[0];
 chk(filaPdf && filaPdf.bucket === 'relatorios' && filaPdf.excluido_por === null, 'o PDF do relatório entra na fila de limpeza do Storage', filaPdf);
 
-console.log('\nMigrações 007–031 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Controle de tempo: horários combinados, atrasos e falhas de comunicação (migração 032)');
+{
+  const opK = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP PRAZOS', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  await db.query(`update public.operacoes set criada_em = now() - interval '3 hours' where id = $1`, [opK.id]);
+  const uK1 = await usuario(null, true), uK2 = await usuario(null, true);
+  const k1 = await rpc(uK1, 'ingressar', { p_token: opK.token_militar, p_nome: 'Cabo Kilo', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const k2 = await rpc(uK2, 'ingressar', { p_token: opK.token_civil, p_nome: 'Lima Civil', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const gK = await rpc(resp1, 'salvar_grupo', { p_operacao: opK.id, p_id: null, p_dados: JSON.stringify({ nome: 'Equipe K' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: gK.id, p_participante: k1.participante_id, p_papel: 'responsavel' });
+  await rpc(resp1, 'definir_membro', { p_grupo: gK.id, p_participante: k2.participante_id, p_papel: 'membro' });
+  const baseK = await rpc(resp1, 'salvar_ponto', { p_operacao: opK.id, p_id: null, p_dados: JSON.stringify({ categoria: 'BASE', titulo: 'Base K', lat: -23.3, lng: -51.1, raio_m: 100 }) });
+  let nk = 900;
+  const andarK = (u, pid, lat, lng, t) => rpc(u, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: JSON.stringify([pt(nk++, lat, lng, t)]) });
+  await andarK(uK1, k1.participante_id, -23.3, -51.1);
+  await andarK(uK2, k2.participante_id, -23.3001, -51.1);
+  const envK = await rpc(resp1, 'enviar_destino_grupo', { p_grupo: gK.id, p_nome: 'Setor Rio', p_lat: -23.35, p_lng: -51.1, p_publico: 'todos', p_modo: 'a_pe',
+    p_setor: null, p_ponto: null, p_base: baseK.id, p_raio_base_m: null, p_prazo_min: 15 });
+  const mk = envK.missao;
+  const col = (await db.query(`select tolerancia_min, sem_sinal_min, inicio_combinado_em from public.missoes where id = $1`, [mk.id])).rows[0];
+  chk(col.tolerancia_min === 10 && col.sem_sinal_min === 10 && col.inicio_combinado_em === null, 'missão nova: tolerância 10 min, sem comunicação após 10 min, sem horários', col);
+  const ini = new Date(Date.now() + 10 * 60e3).toISOString(), ret = new Date(Date.now() + 90 * 60e3).toISOString();
+  const dp = await rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: JSON.stringify({ inicio_combinado_em: ini, retorno_combinado_em: ret, tolerancia_min: 5, sem_sinal_min: 8, combinado_texto: '  Rádio canal 3 a cada 30 min ' }) });
+  chk(Date.parse(dp.inicio_combinado_em) === Date.parse(ini) && Date.parse(dp.retorno_combinado_em) === Date.parse(ret) && dp.tolerancia_min === 5 && dp.sem_sinal_min === 8
+    && dp.combinado_texto === 'Rádio canal 3 a cada 30 min' && dp.prazos_definidos_por_nome === 'Sgt Um', 'responsável registra horário combinado de início e de retorno, tolerância e o combinado', dp);
+  const dd = (await db.query(`select titulo, detalhe as texto from public.diario where operacao_id = $1 and tipo = 'prazos_definidos'`, [opK.id])).rows;
+  chk(dd.length === 1 && /Equipe K/.test(dd[0].titulo) && /iniciar até/.test(dd[0].texto) && /retornar até/.test(dd[0].texto), 'prazos registrados no diário', dd);
+  const so = await rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: JSON.stringify({ tolerancia_min: 7 }) });
+  chk(so.tolerancia_min === 7 && Date.parse(so.inicio_combinado_em) === Date.parse(ini) && so.combinado_texto === 'Rádio canal 3 a cada 30 min', 'só as chaves enviadas mudam');
+  chk(/horario_combinado_invalido/.test(await erroDe(rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: JSON.stringify({ retorno_combinado_em: new Date(Date.now() + 5 * 60e3).toISOString() }) }))), 'retorno antes do início: recusado');
+  chk(/horario_combinado_invalido/.test(await erroDe(rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: JSON.stringify({ inicio_combinado_em: 'ontem' }) }))), 'horário ilegível: recusado');
+  chk(/horario_combinado_invalido/.test(await erroDe(rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: JSON.stringify({ inicio_combinado_em: new Date(Date.now() + 5 * 86400e3).toISOString(), retorno_combinado_em: '' }) }))), 'horário a mais de 2 dias: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: JSON.stringify({ sem_sinal_min: 1 }) }))), 'sem comunicação < 3 min: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_prazos_missao', { p_missao: mk.id, p_dados: '{}' }))), 'responsável de outra operação não define prazos');
+  chk(/sem_permissao/.test(await erroDe(rpc(uK1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: '{}' }))), 'participante não define prazos');
+  chk(/permission denied/.test(await erroDe(como(resp1, `update public.missoes set tolerancia_min = 0 where id = $1`, [mk.id]))), 'gravação direta na missão: recusada');
+  chk(/permission denied/.test(await erroDe(como(null, `select public.definir_prazos_missao($1, '{}')`, [mk.id], 'anon'))), 'anon não chama a função');
+
+  const tipos = async () => (await db.query(`select tipo from public.alertas where operacao_id = $1 order by id`, [opK.id])).rows.map((r) => r.tipo);
+  chk((await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id })) === 0 && (await tipos()).length === 0, 'dentro dos horários e com contato recente: nenhum alerta');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'verificar_prazos', { p_operacao: opK.id }))), 'outra operação não verifica estes prazos');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp1, 'verificar_prazos', {}))), 'verificar_prazos sem operação: só o agendador');
+
+  // início combinado vencido (passou da tolerância) e ninguém saiu
+  await db.query(`update public.missoes set inicio_combinado_em = now() - interval '20 minutes' where id = $1`, [mk.id]);
+  chk((await rpc(resp1, 'verificar_retornos', { p_operacao: opK.id })) === 1, 'o agendador existente (verificar_retornos) também verifica os prazos combinados');
+  const aIni = (await db.query(`select nivel, titulo, texto from public.alertas where operacao_id = $1 and tipo = 'inicio_atrasado'`, [opK.id])).rows;
+  chk(aIni.length === 1 && aIni[0].nivel === 'critico' && /INÍCIO ATRASADO/.test(aIni[0].titulo) && /Rádio canal 3/.test(aIni[0].texto), 'alerta crítico de início atrasado, com o combinado', aIni);
+  chk((await db.query(`select verificar_retornos() n`)).rows[0].n === 0, 'pg_cron não repete o mesmo alerta');
+  await db.query(`update public.missoes set inicio_combinado_em = now() - interval '2 minutes' where id = $1`, [mk.id]);
+  await rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: JSON.stringify({ inicio_combinado_em: new Date(Date.now() - 30 * 60e3).toISOString() }) });
+  chk((await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id })) === 1, 'novo horário combinado vencido: novo alerta (um por horário)');
+
+  // o grupo sai: início detectado, não há mais atraso de início
+  await andarK(uK1, k1.participante_id, -23.31, -51.1);
+  await andarK(uK2, k2.participante_id, -23.31, -51.1);
+  const iniciou = (await db.query(`select count(*) filter (where iniciou_em is not null)::int n from public.missao_membros where missao_id = $1`, [mk.id])).rows[0].n;
+  chk(iniciou === 2, 'deslocamento iniciado pela trilha', iniciou);
+
+  // falha de comunicação: um membro some (sem internet)
+  await db.query(`update public.participantes set ultimo_contato_em = now() - interval '12 minutes', ultima_posicao_em = now() - interval '12 minutes' where id = $1`, [k2.participante_id]);
+  chk((await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id })) === 1, 'membro sem contato além do limite: alerta');
+  const aSem = (await db.query(`select nivel, titulo, texto, participante_id, lat from public.alertas where operacao_id = $1 and tipo = 'sem_comunicacao'`, [opK.id])).rows;
+  chk(aSem.length === 1 && aSem[0].nivel === 'critico' && /SEM COMUNICAÇÃO — Lima Civil/.test(aSem[0].titulo) && aSem[0].participante_id === k2.participante_id
+    && aSem[0].lat !== null && /sem internet/.test(aSem[0].texto) && /Última posição conhecida às/.test(aSem[0].texto), 'alerta crítico de falta de comunicação com a última posição conhecida', aSem);
+  chk((await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id })) === 0, 'mesmo episódio sem contato: não repete');
+  // volta o sinal: o celular envia as posições gravadas sem internet
+  const lot = await rpc(uK2, 'enviar_posicoes_lote', { p_participante: k2.participante_id, p_gps: 'ok', p_pontos: JSON.stringify([
+    pt(nk++, -23.32, -51.1, Date.now() - 9 * 60e3), pt(nk++, -23.33, -51.1, Date.now() - 5 * 60e3), pt(nk++, -23.34, -51.1)]) });
+  chk(lot.confirmados.length === 3, 'posições gravadas sem internet são aceitas depois', lot);
+  chk((await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id })) === 1, 'contato de volta: aviso de comunicação restabelecida');
+  const aOk = (await db.query(`select nivel, texto from public.alertas where operacao_id = $1 and tipo = 'comunicacao_restabelecida'`, [opK.id])).rows;
+  chk(aOk.length === 1 && aOk[0].nivel === 'info' && /cerca de 1[0-9] min sem contato/.test(aOk[0].texto) && /2 posição\(ões\) gravada\(s\) sem internet/.test(aOk[0].texto),
+    'informa o tempo sem contato e quantas posições chegaram atrasadas', aOk);
+  chk((await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id })) === 0, 'restabelecida: não repete');
+  const diaK = (await db.query(`select tipo, categoria from public.diario where operacao_id = $1 and tipo in ('alerta_sem_comunicacao', 'alerta_inicio_atrasado', 'alerta_comunicacao_restabelecida')`, [opK.id])).rows;
+  chk(diaK.some((d) => d.tipo === 'alerta_sem_comunicacao' && d.categoria === 'alerta') && diaK.some((d) => d.tipo === 'alerta_inicio_atrasado' && d.categoria === 'alerta'),
+    'atrasos e falhas de comunicação entram no diário como alerta', diaK);
+
+  // retorno combinado vencido com gente fora da base
+  await db.query(`update public.missoes set retorno_combinado_em = now() - interval '10 minutes' where id = $1`, [mk.id]);
+  chk((await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id })) === 1, 'retorno combinado vencido: alerta');
+  const aRet = (await db.query(`select nivel, texto from public.alertas where operacao_id = $1 and tipo = 'prazo_atrasado'`, [opK.id])).rows;
+  chk(aRet.length === 1 && aRet[0].nivel === 'critico' && /2 de 2 pessoa/.test(aRet[0].texto) && /Cabo Kilo \(último contato há/.test(aRet[0].texto), 'lista quem não voltou e há quanto tempo foi o último contato', aRet);
+  chk((await como(uK1, `select count(*)::int n from public.alertas`)).rows[0].n === 0, 'participante não lê os alertas');
+  chk((await como(resp2, `select count(*)::int n from public.alertas where operacao_id = $1`, [opK.id])).rows[0].n === 0, 'outra operação não lê os alertas');
+  // todos voltam à base: missão concluída, sem novos alertas
+  await rpc(uK1, 'finalizar_busca', { p_missao: mk.id });
+  await andarK(uK1, k1.participante_id, -23.3, -51.1); await andarK(uK1, k1.participante_id, -23.3001, -51.1);
+  await andarK(uK2, k2.participante_id, -23.3, -51.1); await andarK(uK2, k2.participante_id, -23.3001, -51.1);
+  const stK = (await db.query(`select status from public.missoes where id = $1`, [mk.id])).rows[0].status;
+  chk(/missao_encerrada/.test(await erroDe(rpc(resp1, 'definir_prazos_missao', { p_missao: mk.id, p_dados: '{}' })) || '') && stK === 'na_base', 'missão concluída: prazos não mudam mais', stK);
+  await db.query(`update public.participantes set ultimo_contato_em = now() - interval '1 hour' where id = $1`, [k1.participante_id]);
+  const antesN = (await tipos()).length;
+  await rpc(resp1, 'verificar_prazos', { p_operacao: opK.id });
+  chk((await tipos()).length === antesN, 'missão na base: não gera alertas de comunicação', stK);
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opK.id });
+  chk((await db.query(`select verificar_retornos() n`)).rows[0].n === 0, 'operação encerrada: o agendador ignora');
+}
+
+console.log('\nMigrações 007–032 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

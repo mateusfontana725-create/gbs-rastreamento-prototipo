@@ -945,7 +945,7 @@
   var LIMITES_PR = [[-26.72, -54.62], [-22.51, -48.02]];
   var STATUS_OP = {
     ativa: { rotulo: 'Ativa', cor: '#22c55e' },
-    encerrada: { rotulo: 'Encerrada', cor: '#94a3b8' },
+    encerrada: { rotulo: 'Encerrada', cor: '#ef4444' },
   };
   var LETRA_TIPO = { terrestre: 'T', aquatica: 'A', aerea: 'Ae', outras: 'O', sem_tipo: '?' };
   var ATUALIZAR_MAPA_MS = 60000;   // conferência periódica (o tempo real cobre o resto)
@@ -1039,8 +1039,9 @@
     var st = statusDe(o), tp = tipoDe(o);
     return L.divIcon({
       className: 'dash-mk-wrap',
-      html: '<span class="dash-mk dash-mk-' + st + '" style="--cor:' + STATUS_OP[st].cor + '"><b>' + LETRA_TIPO[tp] + '</b></span>',
-      iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14],
+      // só a cor diz a situação (verde ativa, vermelha encerrada); o tipo fica no popup e na dica
+      html: '<span class="dash-mk dash-mk-' + st + '" style="--cor:' + STATUS_OP[st].cor + '" title="' + C.esc(STATUS_OP[st].rotulo + ' · ' + TIPOS[tp]) + '"></span>',
+      iconSize: [20, 20], iconAnchor: [10, 10], popupAnchor: [0, -10],
     });
   }
 
@@ -1097,9 +1098,6 @@
     var itens = [];
     ['ativa', 'encerrada'].forEach(function (k) {
       if (st[k]) itens.push(el('li', null, [el('span', { classe: 'dash-mk dash-mk-' + k + ' dash-mk-leg', style: '--cor:' + STATUS_OP[k].cor }), STATUS_OP[k].rotulo + ' (' + st[k] + ')']));
-    });
-    Object.keys(LETRA_TIPO).forEach(function (k) {
-      if (tp[k]) itens.push(el('li', null, [el('span', { classe: 'dash-mk-letra', texto: LETRA_TIPO[k] }), TIPOS[k] + ' (' + tp[k] + ')']));
     });
     if (ops.length > 1) itens.push(el('li', null, [el('span', { classe: 'dash-cluster dash-cluster-leg', style: 'background:conic-gradient(' + STATUS_OP.ativa.cor + ' 0 180deg,' + STATUS_OP.encerrada.cor + ' 0)' }, [el('b', { texto: '2' })]), 'Operações próximas agrupadas']));
     return itens.length ? el('ul', { classe: 'dash-mapa-legenda' }, itens) : el('p', { classe: 'muted dash-mapa-legenda', texto: 'Nenhuma operação com local cadastrado.' });

@@ -903,8 +903,9 @@ dado de participante sai do banco nesses painéis.
 - **Mapa do Paraná** (logo abaixo dos cartões de números): limites do estado, das 10 mesorregiões (com nome)
   e, de perto (zoom 9+), dos 399 municípios (IBGE, simplificados, em `js/parana-geo.js`, baixado só quando o
   mapa abre). Cada operação aparece no **local cadastrado** (`local_lat`/`local_lng`) — nunca na posição de um
-  participante. Cor pela situação (**verde = ativa**, **cinza tracejado = encerrada**) e letra pelo tipo
-  (T, A, Ae, O); a legenda só mostra situações e tipos que existem. Operações próximas são agrupadas (o anel
+  participante. Bolinha só com a cor da situação (**verde = ativa**, **vermelha = encerrada**), sem letra
+  (o tipo aparece ao passar o cursor e no popup); a legenda só mostra as situações que existem. Os nomes das
+  mesorregiões ficam pequenos e translúcidos. Operações próximas são agrupadas (o anel
   mostra a proporção ativas/encerradas). Tocar num marcador mostra nome, tipo/natureza, município e
   mesorregião (calculados pelos limites; perto da divisa podem cair no vizinho), data e hora do acionamento,
   situação, responsável (pela função `listar_responsaveis`), número de participantes, resumo da descrição e

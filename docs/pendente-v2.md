@@ -20,6 +20,7 @@ e ainda não estiver no `v2` fica listado aqui, para levar quando for a hora. Ao
 | `a0ae264` | Trilhas de equipes e drones (meio, cor, origem), edição de nome/cor/propriedades de arquivos importados, trajeto desenhado enviado a pessoa ou grupo; `rotas.js` vira o gerador de rotas. **Migração 030**. | `supabase/migracoes/030_percursos_trajetos.sql` (nova), `supabase/schema.sql`, `public/js/rotas.js`, `public/js/civil.js`, `public/js/militar.js`, `public/js/ferramentas.js`, `public/js/arquivos.js`, `public/js/comunicacao.js`, `public/militar.html`, `public/css/militar.css`, `public/css/estilos.css`, `testes/rotas_desenhadas.test.js` (novo), `testes/banco_migracoes.test.mjs`, `package.json`, `README.md` | Banco compartilhado: a 030 roda uma vez só (depois da 028). No `v2`, o app Android precisa ler `trajeto` de `meu_destino` para seguir a linha (sem isso, cai no destino comum: o fim da linha). |
 | `b078abd` | Vítima encontrada com ficha, estado, local e quem encontrou; encerramento com o resultado da busca (mesmo formulário). **Migração 031**. | `supabase/migracoes/031_vitima_encontrada_detalhes.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/css/militar.css`, `testes/banco_migracoes.test.mjs`, `README.md` | Banco compartilhado: a 031 roda uma vez só. No `v2`, conferir `abrirRegistroVitima` e `encerrarOperacao` no `militar.js`. |
 | `df88093` | Rota até um participante (ficha: da minha localização, de uma base ou de outro participante; acompanha a pessoa) e controle de tempo dos deslocamentos (horários combinados de início/retorno, tolerância, alertas de atraso, sem comunicação e comunicação restabelecida). **Migração 032**. | `supabase/migracoes/032_controle_tempo_missoes.sql` (nova), `supabase/schema.sql`, `public/js/militar.js`, `public/js/comunicacao.js`, `public/militar.html`, `public/css/estilos.css`, `testes/banco_migracoes.test.mjs`, `README.md` | Banco compartilhado: a 032 roda uma vez só (depois da 010). No `v2`, conferir `abrirEnviarDestino`, `enviarDestinoAoGrupo`, `abrirMissoes` e `verificarRetornosPainel` no `militar.js`. O app Android já gera `ultimo_contato_em` pelo sinal de vida; nada muda nele. |
+| `8874daa` | Mapa mais limpo: sem nomes (balão ao clicar), ficha/detalhes com dois cliques ou clicar e segurar, símbolos translúcidos e menores pelo zoom, trilhas finas, fileiras de botões no menu "⋮ Mais". | `public/js/militar.js`, `public/js/mapa-rotulos.js`, `public/js/ferramentas.js`, `public/militar.html`, `public/css/militar.css`, `README.md` | Só interface (sem migração). No `v2`, conferir `atualizarMarcador`, os marcadores de relato/foto/ponto/setor e a ficha no `militar.html`. |
 
 ## Como levar
 
@@ -27,7 +28,7 @@ No branch `v2`, aplicar os commits da tabela, do mais antigo para o mais novo:
 
 ```
 git checkout v2
-git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab cef47d1 4510001 a0ae264 b078abd df88093
+git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab cef47d1 4510001 a0ae264 b078abd df88093 8874daa
 ```
 
 Se o `cherry-pick` parar por conflito no `README.md`, mantenha as duas partes do texto e continue com

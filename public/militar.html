@@ -389,7 +389,7 @@
               <button class="camada-item" type="button" id="opt-relatos" aria-pressed="true"><span class="camada-sinal sinal-relato" aria-hidden="true"></span><span>Relatos</span></button>
               <button class="camada-item" type="button" id="opt-fotos" aria-pressed="true"><span class="camada-sinal sinal-foto" aria-hidden="true"></span><span>Fotos</span></button>
               <button class="camada-item" type="button" id="opt-local" aria-pressed="true"><span class="camada-sinal sinal-local" aria-hidden="true"></span><span>Local da operação</span></button>
-              <button class="camada-item" type="button" id="opt-nomes" aria-pressed="true"><span class="camada-sinal sinal-nome" aria-hidden="true">Aa</span><span>Nomes no mapa</span></button>
+              <button class="camada-item" type="button" id="opt-nomes" aria-pressed="false"><span class="camada-sinal sinal-nome" aria-hidden="true">Aa</span><span>Nomes no mapa</span></button>
               <button class="camada-item" type="button" id="opt-agrupar" aria-pressed="true" title="De longe, quem está perto um do outro vira um círculo com o número de pessoas"><span class="camada-sinal sinal-agrupar" aria-hidden="true">3</span><span>Agrupar pessoas próximas</span></button>
               <button class="camada-item" type="button" id="opt-meteo" aria-pressed="false"><span class="camada-sinal sinal-meteo" aria-hidden="true">☂</span><span>Meteorologia</span></button>
             </div>
@@ -590,11 +590,16 @@
             <p class="ficha-destino" id="ficha-destino" hidden></p>
             <div class="acoes-linha">
               <button class="btn" type="button" id="ficha-centralizar">Ver no mapa</button>
-              <button class="btn" type="button" id="ficha-enviar-destino" title="Enviar um destino para este participante navegar até lá">🧭 Destino</button>
-              <button class="btn" type="button" id="ficha-ir-ate" title="Traçar a rota até onde esta pessoa está (para ir até ela ou mandar apoio)">📍 Rota até ela</button>
-              <button class="btn btn-trilha" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
-              <button class="btn btn-vitima" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
-              <a class="btn btn-ok" id="ficha-ligar" href="#" hidden>Ligar</a>
+              <div class="menu-linha-wrap menu-acoes" id="ficha-menu">
+                <button class="btn btn-mais-acoes" type="button" id="ficha-mais" aria-haspopup="menu" aria-expanded="false" title="Mais ações">⋮ Mais</button>
+                <div class="menu-linha" role="menu" hidden>
+                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-enviar-destino" title="Enviar um destino para este participante navegar até lá">🧭 Enviar destino</button>
+                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-ir-ate" title="Traçar a rota até onde esta pessoa está (para ir até ela ou mandar apoio)">📍 Rota até ela</button>
+                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
+                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
+                  <a class="menu-linha-item" role="menuitem" id="ficha-ligar" href="#" hidden>📞 Ligar</a>
+                </div>
+              </div>
             </div>
           </div>
           <!-- Mensagens: histórico, orientações rápidas e envio, num só lugar -->

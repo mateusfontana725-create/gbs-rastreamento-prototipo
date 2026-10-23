@@ -223,7 +223,19 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   com a cor e a quantidade de integrantes) e os símbolos do mapa. **✎ Editar legenda** troca o texto de cada
   item (ex.: "Militar" → "Bombeiro") ou tira o item da legenda; **Restaurar padrão** desfaz. Muda só os textos
   da legenda e fica guardado neste aparelho; os nomes dos grupos se mudam em **Grupos**.
-- **Nomes no mapa**: os participantes aparecem com o nome **abreviado** ("Lucas F.", "João S."; com posto ou
+- **Mapa limpo (padrão)**: o mapa **não mostra nomes** (pessoas, pontos, setores, local da operação, arquivos
+  importados). **Um clique** num item abre um **balão** pequeno preso a ele (nome e o essencial: tipo e grupo,
+  hora da posição, pedido de ajuda, destino; nos setores a situação; nos pontos e relatos o começo do texto) com o
+  botão **Detalhes ›**. A **ficha** ou os **detalhes** abrem com **dois cliques**, **clicar e segurar** (mouse ou dedo)
+  ou o botão do balão; arrastar o mapa a partir de um símbolo não abre nada. **Na lista lateral um clique abre direto.**
+  Os símbolos ficam **translúcidos** (quem pede ajuda, quer sair ou está selecionado fica opaco) e **diminuem ao
+  afastar o zoom** (até ~metade do tamanho, agrupamentos inclusive); trilhas finas (2,5 px de perto, ~1 px de longe;
+  com alguém selecionado, as outras ficam apagadas), setores e círculos de base/risco com traço e preenchimento
+  discretos. **Camadas → Nomes no mapa** volta a mostrar os nomes como abaixo.
+- **Fileiras de botões** viram **"⋮ Mais"**: na ficha ficam **Ver no mapa** e **⋮ Mais** (enviar destino, rota até a
+  pessoa, trilha, encontrou a vítima, ligar); nos detalhes de setor, ponto, trilha, relato e foto, nos grupos, nos
+  deslocamentos e nos arquivos importados fica a ação principal, o menu e **Fechar**.
+- **Nomes no mapa** (quando ligados em Camadas): os participantes aparecem com o nome **abreviado** ("Lucas F.", "João S."; com posto ou
   graduação, posto + nome de guerra: "Sgt. Oliveira"). Se dois nomes ficariam iguais, ganham o sobrenome
   ("João Pereira", "João Pinto"). O nome **completo** aparece ao passar o cursor no marcador, ao focar pelo
   teclado, no participante selecionado e na ficha. "Há X min" só aparece para quem está com a posição antiga,
@@ -1541,6 +1553,10 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Mapa limpo (versão 2026-10-23)**: navegador (banco simulado, t27 — 23): nenhum nome no mapa, balão no clique
+  (preso ao ponto) sem abrir a ficha, ficha por dois cliques (sem zoom), por clicar e segurar e pelo toque longo, arrastar
+  não abre, lista abre direto, ficha com "⋮ Mais", símbolos e agrupamentos menores de longe, translúcidos (quem pede
+  ajuda opaco), trilhas finas, setor com balão e detalhes compactados; regressão t9–t26 ajustada e passando.
 - **Rota até um participante e controle de tempo (versão 2026-10-23)**: banco — 415 verificações (migrações
   007–032: prazos gravados só pelos responsáveis da operação, horários inválidos recusados, início atrasado uma vez
   por horário combinado, retorno atrasado com quem falta, sem comunicação com a última posição, restabelecida com

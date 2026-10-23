@@ -1400,3 +1400,63 @@ html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; backgroun
 .opcao-resultado[data-resultado="localizada"]:has(input:checked) { border-color: #d946ef; }
 .enc-outra { margin-top: 6px; font-size: .84rem; }
 .form-vitima #vit-nome, .form-vitima #vit-quem-texto { margin-top: 6px; }
+
+/* =====================================================================
+ * Mapa mais limpo: símbolos menores e translúcidos de longe, sem nomes
+ * (o nome aparece no balão ao clicar), trilhas finas.
+ * --esc-mapa vem do zoom (mapa-rotulos.js): 1 de perto, ~0,5 de longe.
+ * ===================================================================== */
+.mapa-adaptativo { --esc-mapa: 1; }
+.mapa-adaptativo .mk .simbolo,
+.mapa-adaptativo .mk-foto, .mapa-adaptativo .mk-local,
+.mapa-adaptativo .cluster, .mapa-adaptativo .cluster-pessoas { scale: var(--esc-mapa); transition: scale .15s, opacity .15s; }
+.mapa-adaptativo .mk-relato { scale: var(--esc-mapa); transform-origin: 50% 50%; }
+.mapa-adaptativo .mk-poi-wrap .mk-poi { scale: var(--esc-mapa); transform-origin: 50% calc(100% + 7px); transition: scale .15s, opacity .15s; }
+/* translúcidos: o mapa por baixo continua legível; quem pede atenção e o item em foco ficam cheios */
+.mapa-adaptativo .mk .simbolo { opacity: .82; }
+.mapa-adaptativo .mk-poi, .mapa-adaptativo .mk-relato, .mapa-adaptativo .mk-foto,
+.mapa-adaptativo .cluster, .mapa-adaptativo .mk-local { opacity: .75; }
+.mapa-adaptativo .cluster-pessoas { opacity: .85; }
+.mapa-adaptativo .mk.antigo .simbolo { opacity: .45; }
+.mapa-adaptativo .leaflet-marker-icon:hover .simbolo, .mapa-adaptativo .leaflet-marker-icon:hover .mk-poi,
+.mapa-adaptativo .leaflet-marker-icon:hover .mk-relato, .mapa-adaptativo .leaflet-marker-icon:hover .mk-foto,
+.mapa-adaptativo .leaflet-marker-icon:hover .cluster, .mapa-adaptativo .leaflet-marker-icon:hover .mk-local,
+.mapa-adaptativo .mk.ajuda .simbolo, .mapa-adaptativo .mk.saida .simbolo, .mapa-adaptativo .mk.selecionado .simbolo,
+.mapa-adaptativo .mk.eu .simbolo, .mapa-adaptativo .mk-relato.cat-VITIMA, .mapa-adaptativo .mk-relato.cat-AJUDA,
+.mapa-adaptativo .mk-poi.poi-VITIMA_ENCONTRADA, .mapa-adaptativo .mk-poi.poi-RISCO { opacity: 1; }
+/* quem pede atenção não encolhe tanto */
+.mapa-adaptativo .mk.ajuda .simbolo, .mapa-adaptativo .mk.selecionado .simbolo { scale: max(var(--esc-mapa), .85); }
+/* sombras mais leves (de longe as sombras somadas sujam o mapa) */
+.mapa-adaptativo.zoom-longe .simbolo, .mapa-adaptativo.zoom-longe .mk-poi, .mapa-adaptativo.zoom-longe .mk-foto,
+.mapa-adaptativo.zoom-longe .mk-relato { box-shadow: 0 0 0 1px rgba(0, 0, 0, .7); border-width: 1.5px; }
+
+/* Balão do item clicado (nuvem presa ao ponto) */
+.balao-mapa .leaflet-popup-content-wrapper {
+  background: var(--superficie); color: var(--texto); border: 1px solid var(--borda-forte); border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .55); padding: 0;
+}
+.balao-mapa .leaflet-popup-content { margin: 8px 26px 8px 10px; font: 12.5px/1.35 var(--fonte); min-width: 0; }
+.balao-mapa .leaflet-popup-tip { background: var(--superficie); border: 1px solid var(--borda-forte); box-shadow: none; }
+.balao-mapa a.leaflet-popup-close-button { color: var(--texto-3); top: 3px; right: 3px; width: 20px; height: 20px; font-size: 16px; }
+.balao-corpo { display: grid; gap: 2px; }
+.balao-titulo { font-size: .95rem; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.balao-sub { color: var(--texto-3); font-size: .78rem; }
+.balao-texto { margin: 2px 0 0; font-size: .8rem; overflow-wrap: anywhere; }
+.balao-detalhes {
+  justify-self: start; margin-top: 4px; padding: 3px 8px; border: 1px solid var(--borda-forte); border-radius: 4px;
+  background: var(--superficie-2); color: var(--texto); font: 700 .78rem var(--fonte); cursor: pointer;
+}
+.balao-detalhes:hover, .balao-detalhes:focus-visible { background: var(--superficie-3); outline: none; }
+@media (pointer: coarse) { .balao-detalhes { min-height: 36px; padding: 6px 12px; } }
+
+/* Fileiras de botões compactadas no menu "⋮ Mais" */
+.menu-acoes .btn-mais-acoes { white-space: nowrap; }
+.modal-acoes .menu-acoes, .acoes-linha .menu-acoes { flex: 0 1 auto; }
+.modal-acoes .menu-acoes .btn-mais-acoes { width: 100%; }
+.modal-acoes .menu-linha { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; }
+.acoes-linha .menu-linha { left: 0; right: auto; }
+.menu-linha .menu-linha-item[hidden] { display: none; }
+a.menu-linha-item { text-decoration: none; }
+.esconder-rotulos .mk-import-rotulo { display: none; }
+.balao-mapa .info-ponto { display: grid; gap: 3px; }
+.balao-mapa .info-ponto .acoes-linha { margin-top: 4px; }

@@ -13,6 +13,12 @@
   var ZOOM_SEM_AGRUPAR = 16;   // a partir daqui ninguém fica agrupado
   var NIVEIS = ['zoom-longe', 'zoom-medio', 'zoom-perto'];
 
+  // Tamanho dos símbolos pelo zoom (1 = tamanho cheio, de perto): de longe tudo diminui
+  // para o mapa não ficar coberto de ícones. Vai na variável CSS --esc-mapa.
+  function escalaDoZoom(z) {
+    return z >= 18 ? 1 : z >= 17 ? 0.92 : z >= 16 ? 0.82 : z >= 15 ? 0.72 : z >= 14 ? 0.64 : z >= 13 ? 0.58 : 0.52;
+  }
+
   function nivelDoZoom(z) {
     return z >= ZOOM_PERTO ? 'zoom-perto' : z >= ZOOM_MEDIO ? 'zoom-medio' : 'zoom-longe';
   }
@@ -112,6 +118,7 @@
     function aplicarNivel() {
       var nivel = nivelDoZoom(mapa.getZoom());
       NIVEIS.forEach(function (n) { el.classList.toggle(n, n === nivel); });
+      el.style.setProperty('--esc-mapa', String(escalaDoZoom(mapa.getZoom())));
     }
     function agendar() {
       if (espera) clearTimeout(espera);
@@ -180,7 +187,7 @@
   }
 
   raiz.MapaRotulos = {
-    instalar: instalar, resolver: resolver, nivelDoZoom: nivelDoZoom, ehDestaque: ehDestaque,
+    instalar: instalar, resolver: resolver, nivelDoZoom: nivelDoZoom, escalaDoZoom: escalaDoZoom, ehDestaque: ehDestaque,
     criarGrupoPessoas: criarGrupoPessoas, fatiasDeCor: fatiasDeCor,
     ZOOM_MEDIO: ZOOM_MEDIO, ZOOM_PERTO: ZOOM_PERTO, ZOOM_SEM_AGRUPAR: ZOOM_SEM_AGRUPAR,
   };

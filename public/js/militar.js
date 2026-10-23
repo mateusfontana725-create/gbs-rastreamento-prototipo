@@ -149,7 +149,7 @@
     rotulos: { agendar: function () {} },   // mapa-rotulos.js, ligado ao criar o mapa
     filtroEstado: null,
     alertaAdiadas: new Set(),   // mensagens de outro responsável deixadas para responder depois (×)         // lista: só conectados / instáveis / sem atualização (tocar no resumo)
-    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomes: true, agrupar: true, pessoas: true, legenda: true, setores: true, pontos: true, local: true, tmPlanejadas: true, tmPercorridas: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
+    prefsMapa: Object.assign({ camada: 'osm', fotos: true, relatos: true, nomesMapa: false, agrupar: true, pessoas: true, legenda: true, setores: true, pontos: true, local: true, tmPlanejadas: true, tmPercorridas: true }, C.local.ler(CHAVE_PREFS_MAPA, {}) || {}),
     lateralOculta: Boolean(C.local.ler(CHAVE_LATERAL, false)),
     centralAba: 'msgs',
     // setores, pontos de interesse e destinos
@@ -287,6 +287,7 @@
     $('ficha-fechar').addEventListener('click', fecharFicha);
     $('ficha-centralizar').addEventListener('click', function () { centralizar(est.selecionado); });
     $('ficha-trilha').addEventListener('click', function () { alternarTrilha(est.selecionado); });
+    ligarMenuAcoes($('ficha-menu'));
     $('ficha-remover').addEventListener('click', removerParticipante);
     $('gps-alerta-tentar').addEventListener('click', garantirMinhaPosicao);
     $('gps-alerta-como').addEventListener('click', mostrarComoLiberarMinha);
@@ -368,7 +369,7 @@
     });
     $('opt-fotos').addEventListener('click', function () { definirPrefMapa('fotos', !est.prefsMapa.fotos); });
     $('opt-relatos').addEventListener('click', function () { definirPrefMapa('relatos', !est.prefsMapa.relatos); });
-    $('opt-nomes').addEventListener('click', function () { definirPrefMapa('nomes', !est.prefsMapa.nomes); });
+    $('opt-nomes').addEventListener('click', function () { definirPrefMapa('nomesMapa', !est.prefsMapa.nomesMapa); });
     $('opt-agrupar').addEventListener('click', function () { definirPrefMapa('agrupar', !est.prefsMapa.agrupar); });
     $('opt-pessoas').addEventListener('click', function () { definirPrefMapa('pessoas', !est.prefsMapa.pessoas); });
     document.querySelectorAll('[data-modo-mapa]').forEach(function (b) {
@@ -594,6 +595,126 @@
       if (abrir) menuLinhaAberto = fechar;
     });
     return UI.el('div', { classe: 'menu-linha-wrap' }, [gatilho, lista]);
+  }
+
+  // Fileira de botões → só os principais ficam à vista; o resto vai para o menu "⋮".
+  // Ficam: os `manter` primeiros e Fechar/Cancelar. Os botões só mudam de lugar
+  // (mesmos ids e ações); com 1 só sobrando, nada muda.
+  function compactarAcoes(caixa, manter) {
+    if (!caixa) return caixa;
+    manter = manter == null ? 1 : manter;
+    var botoes = Array.prototype.filter.call(caixa.children, function (b) { return b.tagName === 'BUTTON' || b.tagName === 'A'; });
+    var finais = botoes.filter(function (b) { return /^(Fechar|Cancelar)$/.test(b.textContent.trim()); });
+    var mover = botoes.filter(function (b, i) { return i >= manter && finais.indexOf(b) < 0; });
+    if (mover.length < 2) return caixa;
+    var gatilho = UI.el('button', { classe: 'btn btn-mais-acoes', type: 'button', texto: '⋮ Mais', title: 'Mais ações', 'aria-label': 'Mais ações', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+    var lista = UI.el('div', { classe: 'menu-linha', role: 'menu', hidden: true });
+    var wrap = UI.el('div', { classe: 'menu-linha-wrap menu-acoes' }, [gatilho, lista]);
+    caixa.insertBefore(wrap, finais[0] || null);
+    mover.forEach(function (b) {
+      b.classList.add('menu-linha-item');
+      if (b.classList.contains('btn-perigo')) b.classList.add('perigo');
+      ['btn', 'btn-pequeno', 'btn-escuro', 'btn-ok', 'btn-perigo', 'btn-link'].forEach(function (c) { b.classList.remove(c); });
+      b.setAttribute('role', 'menuitem');
+      lista.appendChild(b);
+    });
+    ligarMenuAcoes(wrap);
+    return caixa;
+  }
+
+  // Liga um menu "⋮" já montado (gatilho + .menu-linha): abre/fecha, um por vez, fecha ao escolher.
+  // O gatilho some quando todos os itens estão ocultos.
+  function ligarMenuAcoes(wrap) {
+    var gatilho = wrap.querySelector('button'), lista = wrap.querySelector('.menu-linha');
+    function fechar() {
+      lista.hidden = true;
+      gatilho.setAttribute('aria-expanded', 'false');
+      if (menuLinhaAberto === fechar) menuLinhaAberto = null;
+    }
+    gatilho.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var abrir = lista.hidden;
+      if (menuLinhaAberto) menuLinhaAberto();
+      lista.hidden = !abrir;
+      gatilho.setAttribute('aria-expanded', String(abrir));
+      if (abrir) menuLinhaAberto = fechar;
+    });
+    lista.addEventListener('click', function (ev) { if (ev.target.closest('.menu-linha-item')) fechar(); });
+    wrap.atualizarGatilho = function () {
+      gatilho.hidden = !Array.prototype.some.call(lista.children, function (b) { return !b.hidden; });
+    };
+    wrap.atualizarGatilho();
+    return wrap;
+  }
+
+  /* ---------- Itens do mapa: balão no clique, painel no duplo clique / segurar ---------- */
+  // Um clique num item do mapa abre um balão pequeno preso a ele (nome e o essencial).
+  // O painel lateral (ficha, detalhes) abre com dois cliques, clicar e segurar, ou pelo
+  // botão do balão. Na lista lateral um clique continua abrindo direto.
+  function abrirBalao(latlng, info, detalhes) {
+    if (!est.mapa) return;
+    var corpo = UI.el('div', { classe: 'balao-corpo' }, [
+      UI.el('strong', { classe: 'balao-titulo', texto: info.titulo }),
+      info.sub ? UI.el('small', { classe: 'balao-sub', texto: info.sub }) : null,
+      info.texto ? UI.el('p', { classe: 'balao-texto', texto: info.texto }) : null,
+      detalhes ? UI.el('button', { classe: 'balao-detalhes', type: 'button', id: 'balao-detalhes', texto: info.botao || 'Detalhes ›',
+        title: 'Dica: dois cliques ou clicar e segurar no mapa abrem direto',
+        onclick: function () { fecharBalao(); detalhes(); } }) : null,
+    ]);
+    if (!est.balao) {
+      est.balao = L.popup({ className: 'balao-mapa', closeButton: true, autoPan: true, autoPanPadding: [30, 30], maxWidth: 240, minWidth: 120, offset: [0, -8] });
+    }
+    est.balao.setLatLng(latlng).setContent(corpo);
+    est.balao.options.offset = L.point(0, info.deslocY || -8);
+    est.balao.openOn(est.mapa);
+  }
+
+  function fecharBalao() {
+    if (est.balao && est.mapa && est.mapa.hasLayer(est.balao)) est.mapa.closePopup(est.balao);
+  }
+
+  // o: { info: fn(ev) → {titulo, sub, texto, deslocY}, detalhes: fn(ev), noDesenho: fn(ev) (durante um desenho) }
+  var TEMPO_SEGURAR_MS = 550;
+  var segurar = { timer: null, inicio: null };
+  function cancelarSegurar() { clearTimeout(segurar.timer); segurar.timer = null; }
+  // ligado uma vez no mapa: arrastar ou dar zoom cancela o "segurar"
+  function ligarSegurarNoMapa(mapa) {
+    mapa.on('mousemove', function (ev) { if (segurar.timer && segurar.inicio && ev.containerPoint.distanceTo(segurar.inicio) > 8) cancelarSegurar(); });
+    mapa.on('movestart zoomstart mouseup', cancelarSegurar);
+  }
+
+  function ligarCliquesMapa(camada, o) {
+    var segurou = false;
+    function abrirDetalhes(ev) { cancelarSegurar(); fecharBalao(); o.detalhes(ev); }
+    function marcarSegurou() { segurou = true; setTimeout(function () { segurou = false; }, 1200); }
+    camada.on('click', function (ev) {
+      L.DomEvent.stopPropagation(ev);
+      if (est.desenho) { if (o.noDesenho) o.noDesenho(ev); return; }
+      if (segurou) { segurou = false; return; }   // o clique que termina o "segurar"
+      var info = o.info(ev);
+      abrirBalao(info.latlng || ev.latlng, info, function () { o.detalhes(ev); });
+    });
+    camada.on('dblclick', function (ev) {
+      L.DomEvent.stopPropagation(ev);   // não dá zoom no mapa
+      if (ev.originalEvent) L.DomEvent.preventDefault(ev.originalEvent);
+      if (est.desenho) return;
+      abrirDetalhes(ev);
+    });
+    camada.on('contextmenu', function (ev) {   // toque longo (celular) ou botão direito
+      L.DomEvent.stopPropagation(ev);
+      if (ev.originalEvent) L.DomEvent.preventDefault(ev.originalEvent);
+      if (est.desenho) return;
+      marcarSegurou();
+      abrirDetalhes(ev);
+    });
+    camada.on('mousedown', function (ev) {   // clicar e segurar com o mouse
+      if (est.desenho || (ev.originalEvent && ev.originalEvent.button !== 0)) return;
+      cancelarSegurar();
+      segurar.inicio = ev.containerPoint;
+      segurar.timer = setTimeout(function () { segurar.timer = null; marcarSegurou(); abrirDetalhes(ev); }, TEMPO_SEGURAR_MS);
+    });
+    camada.on('mouseup mouseout', cancelarSegurar);
+    return camada;
   }
 
   document.addEventListener('click', function (ev) {
@@ -1505,6 +1626,7 @@
     if (est.prefsMapa.setores) est.camadaSetores.addTo(mapa);
     if (est.prefsMapa.pontos) est.camadaPontosInt.addTo(mapa);
     mapa.on('click', aoClicarNoMapa);
+    ligarSegurarNoMapa(mapa);
     // toque longo / botão direito: coordenadas e altitude do ponto (como no AlpineQuest)
     mapa.on('contextmenu', function (e) { if (!est.desenho && window.Ferramentas) window.Ferramentas.infoPonto(e.latlng); });
 
@@ -1517,7 +1639,7 @@
     // Nomes pelo zoom e sem sobreposição (mapa-rotulos.js)
     est.rotulos = window.MapaRotulos ? window.MapaRotulos.instalar(mapa) : { agendar: function () {} };
     mapa.on('zoomend', estilizarTrilhas);
-    $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomes);
+    $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomesMapa);
     atualizarMenu();
     setTimeout(function () { mapa.invalidateSize(); }, 50);
   }
@@ -1708,7 +1830,7 @@
       if (chave === 'pontos' && est.camadaPontosInt) { if (valor) est.camadaPontosInt.addTo(est.mapa); else est.camadaPontosInt.remove(); }
       if (chave === 'local') desenharLocalOp();
       if (chave === 'tmPlanejadas' || chave === 'tmPercorridas') redesenharTrilhasManuais();
-      if (chave === 'nomes') $('mapa').classList.toggle('esconder-rotulos', !valor);
+      if (chave === 'nomesMapa') $('mapa').classList.toggle('esconder-rotulos', !valor);
       if (chave === 'agrupar') montarCamadaPessoas();
       if (chave === 'pessoas' && est.camadaPessoas) {
         $('mapa').classList.toggle('ocultar-pessoas', !valor);
@@ -1881,7 +2003,7 @@
     $('opt-pontos').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pontos)));
     $('opt-desenhadas-planejadas').setAttribute('aria-pressed', String(est.prefsMapa.tmPlanejadas !== false));
     $('opt-desenhadas-percorridas').setAttribute('aria-pressed', String(est.prefsMapa.tmPercorridas !== false));
-    $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomes)));
+    $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomesMapa)));
     $('opt-agrupar').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.agrupar)));
     $('opt-pessoas').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pessoas)));
     $('opt-coord').value = est.prefsMapa.coord || 'dec';
@@ -2552,6 +2674,26 @@
     return pos ? C.idade(pos.t) : '';
   }
 
+  function resumoTexto(t, n) {
+    t = String(t || '').replace(/\s+/g, ' ').trim();
+    if (!t) return null;
+    return t.length > n ? t.slice(0, n - 1) + '…' : t;
+  }
+
+  // Balão da pessoa: nome, tipo/grupo, idade da posição e o que pede atenção
+  function infoBalaoPessoa(p) {
+    var d = p.dados, pos = posicaoAtual(p), g = gruposDe(p.id)[0];
+    var sub = [TIPOS[tipoDe(d)].rotulo + (g ? ' · ' + (g.papel === 'responsavel' ? '★ ' : '') + g.nome : '')];
+    if (pos) sub.push('posição ' + C.idade(pos.t));
+    var alertas = [];
+    if (temAjuda(p)) alertas.push('PEDIU AJUDA');
+    if (saidaPendente(p)) alertas.push('pediu para encerrar');
+    if (naoLidasDe(p.id).length) alertas.push(naoLidasDe(p.id).length + ' mensagem(ns) nova(s)');
+    var dest = est.destinos.get(p.id);
+    if (dest) alertas.push('indo para: ' + dest.nome);
+    return { latlng: p.marcador ? p.marcador.getLatLng() : null, titulo: nomeExibido(p), sub: sub.join(' · '), texto: alertas.join(' · ') || null, botao: 'Abrir ficha ›', deslocY: -12 };
+  }
+
   function criarIcone(p) {
     var html = '<div class="' + classesMarcador(p) + '">' + htmlSimbolo(p) +
       '<div class="mk-rotulo"><span class="mk-nome">' + htmlNomeMapa(p) + '</span><small class="mk-idade">' + C.esc(textoRotulo(p)) + '</small></div>' +
@@ -2576,9 +2718,10 @@
         corAgrupado: corDoParticipante(p),
         zIndexOffset: tipoDe(p.dados) === 'responsavel' ? 200 : tipoDe(p.dados) === 'militar' ? 100 : 0,
       });
-      p.marcador.on('click', function () {
-        if (est.desenho) { aoClicarNoMapa({ latlng: p.marcador.getLatLng() }); return; }
-        selecionar(p.id);
+      ligarCliquesMapa(p.marcador, {
+        noDesenho: function () { aoClicarNoMapa({ latlng: p.marcador.getLatLng() }); },
+        info: function () { return infoBalaoPessoa(p); },
+        detalhes: function () { selecionar(p.id); },
       });
       // Ao sair de um agrupamento o ícone é recriado: reaplica a situação atual
       p.marcador.on('add', function () { atualizarAparenciaMarcador(p); });
@@ -2739,13 +2882,20 @@
   // em relação ao mapa e cobre tudo. De perto fica como antes; afastando, afina.
   function fatorZoomTrilha() {
     var z = est.mapa ? est.mapa.getZoom() : 17;
-    return z >= 17 ? 1 : z >= 16 ? 0.8 : z >= 15 ? 0.6 : z >= 14 ? 0.45 : 0.35;
+    return z >= 18 ? 1 : z >= 17 ? 0.85 : z >= 16 ? 0.7 : z >= 15 ? 0.55 : z >= 14 ? 0.45 : 0.38;
   }
+  // linha fina (2,5 px de perto; ~1 px de longe); a selecionada um pouco mais grossa
   function pesoTrilha(p) {
     var f = fatorZoomTrilha();
-    return Math.max(1.5, Math.round((est.selecionado === p.id ? 6 : 4) * f * 10) / 10);
+    return Math.max(1, Math.round((est.selecionado === p.id ? 4 : 2.5) * f * 10) / 10);
   }
-  function pesoHalo(p) { return pesoTrilha(p) + (fatorZoomTrilha() >= 0.8 ? 4 : 2); }
+  function pesoHalo(p) { return pesoTrilha(p) + (fatorZoomTrilha() >= 0.7 ? 2 : 1); }
+  // com alguém selecionado, as outras trilhas ficam apagadas (menos cor no mapa)
+  function opacidadeTrilha(p) {
+    if (est.selecionado && est.selecionado !== p.id) return 0.3;
+    return est.selecionado === p.id ? 0.95 : 0.7;
+  }
+  function opacidadeHalo(p) { return fatorZoomTrilha() >= 0.7 && (!est.selecionado || est.selecionado === p.id) ? 0.35 : 0; }
   // tracejado proporcional à espessura (de longe os traços ficam curtos e finos)
   function tracoTrilha(tipo) {
     var base = TIPOS[tipo].trilha;
@@ -2768,7 +2918,7 @@
     // Civis: contorno claro por baixo para a linha roxa aparecer sobre mata, satélite e topográfico.
     if (tipo === 'civil') {
       if (!p.halo) {
-        p.halo = L.polyline(segs, { color: '#ffffff', weight: pesoHalo(p), opacity: fatorZoomTrilha() >= 0.8 ? 0.55 : 0.4, interactive: false, lineJoin: 'round', className: 'trilha-halo' });
+        p.halo = L.polyline(segs, { color: '#ffffff', weight: pesoHalo(p), opacity: opacidadeHalo(p), interactive: false, lineJoin: 'round', className: 'trilha-halo' });
       } else {
         p.halo.setLatLngs(segs);
       }
@@ -2778,7 +2928,7 @@
       p.trilha = L.polyline(segs, {
         color: corDoParticipante(p),
         weight: pesoTrilha(p),
-        opacity: tipo === 'civil' ? 0.95 : 0.85,
+        opacity: opacidadeTrilha(p),
         dashArray: tracoTrilha(tipo),
         interactive: false,
         lineJoin: 'round',
@@ -2824,8 +2974,8 @@
   // Também refeita a cada zoom (espessura e tracejado acompanham o zoom).
   function estilizarTrilhas() {
     est.participantes.forEach(function (p) {
-      if (p.trilha) p.trilha.setStyle({ weight: pesoTrilha(p), dashArray: tracoTrilha(tipoDe(p.dados)) });
-      if (p.halo) p.halo.setStyle({ weight: pesoHalo(p), opacity: fatorZoomTrilha() >= 0.8 ? 0.55 : 0.4 });
+      if (p.trilha) p.trilha.setStyle({ weight: pesoTrilha(p), dashArray: tracoTrilha(tipoDe(p.dados)), opacity: opacidadeTrilha(p) });
+      if (p.halo) p.halo.setStyle({ weight: pesoHalo(p), opacity: opacidadeHalo(p) });
       if (p.lacunas) p.lacunas.eachLayer(function (l) {
         if (l instanceof L.CircleMarker) l.setRadius(raioFalha());
         else l.setStyle({ weight: pesoLacuna() });
@@ -3330,6 +3480,7 @@
     bTri.textContent = p.trilhaVisivel ? 'Ocultar trilha' : 'Mostrar trilha';
     $('ficha-centralizar').disabled = !pos;
     $('ficha-ir-ate').disabled = !pos;
+    if ($('ficha-menu').atualizarGatilho) $('ficha-menu').atualizarGatilho();
 
     // Pedido de ajuda
     var ajuda = temAjuda(p);
@@ -4007,7 +4158,13 @@
       critico: m.categoria === 'AJUDA',
       fixo: m.categoria === 'VITIMA',   // vítima localizada: nunca some dentro de um grupo
     });
-    mk.on('click', function () { abrirRelato(m.id); });
+    ligarCliquesMapa(mk, {
+      info: function () {
+        return { latlng: mk.getLatLng(), titulo: cat.rotulo, sub: nomeDoParticipante(m.participante_id, m.remetente_nome) + ' · ' + C.hora(m.criada_em, false),
+          texto: m.categoria === 'VITIMA' ? null : resumoTexto(m.texto, 90), deslocY: -10 };
+      },
+      detalhes: function () { abrirRelato(m.id); },
+    });
     est.relatosMarc.set(m.id, mk);
     mostrarPonto(mk, Boolean(est.prefsMapa.relatos));
   }
@@ -4057,12 +4214,12 @@
       m.categoria === 'VITIMA' ? seloCondicao(m) : null,
       UI.el('p', { classe: 'relato-texto', texto: m.texto }),
       dl,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      compactarAcoes(UI.el('div', { classe: 'modal-acoes' }, [
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
         p ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ]),
+      ])),
     ]));
   }
 
@@ -4301,7 +4458,13 @@
           pane: 'pontos',    // participantes ficam por cima
           tipoPonto: 'foto',
         });
-        mk.on('click', function () { abrirFoto(f.id); });
+        ligarCliquesMapa(mk, {
+          info: function () {
+            return { latlng: mk.getLatLng(), titulo: 'Foto', sub: nomeDoParticipante(f.participante_id, f.autor_nome) + ' · ' + dataHoraCurta(f.capturada_em || f.registrada_em),
+              texto: f.setor_nome ? 'Setor ' + f.setor_nome : null, botao: 'Ver a foto ›', deslocY: -10 };
+          },
+          detalhes: function () { abrirFoto(f.id); },
+        });
         est.fotosMarc.set(f.id, mk);
         mostrarPonto(mk, Boolean(est.prefsMapa.fotos));
       } else if (antiga && (antiga.lat !== f.lat || antiga.lng !== f.lng)) {
@@ -4470,7 +4633,7 @@
       caixa,
       nav,
       dl,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      compactarAcoes(UI.el('div', { classe: 'modal-acoes' }, [
         UI.el('button', { classe: 'btn', type: 'button', id: 'visor-ampliar', texto: 'Ampliar', onclick: function () { if (urlAtual) abrirLightbox(urlAtual, 'Foto de ' + autor); } }),
         f.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () {
           fechar();
@@ -4479,7 +4642,7 @@
         } }) : null,
         p ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ficha de ' + p.dados.nome, onclick: function () { fechar(); selecionar(p.id); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ]),
+      ])),
     ]), { aoFechar: fecharLightbox });
     carregar();
   }
@@ -4852,10 +5015,10 @@
     return {
       pane: 'setores',
       color: d.cor,
-      weight: 2.5,
-      opacity: 0.95,
+      weight: 1.5,
+      opacity: 0.75,
       fillColor: d.cor,
-      fillOpacity: d.status === 'concluido' ? 0.06 : d.status === 'andamento' ? 0.16 : 0.11,
+      fillOpacity: d.status === 'concluido' ? 0.04 : d.status === 'andamento' ? 0.1 : 0.06,
       dashArray: d.status === 'pendente' ? '8 6' : null,
       className: 'setor setor-' + d.status,
     };
@@ -4875,10 +5038,10 @@
       ? L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, estiloSetor(d)))
       : L.polygon(d.pontos, estiloSetor(d));
     camada.bindTooltip(htmlRotuloSetor(d), { permanent: true, direction: 'center', className: 'rotulo-setor', opacity: 1, pane: 'rotulosSetor' });
-    camada.on('click', function (ev) {
-      if (est.desenho) return;   // durante o desenho o clique é do mapa
-      L.DomEvent.stopPropagation(ev);
-      abrirSetor(d.id);
+    ligarCliquesMapa(camada, {
+      noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante o desenho o clique é do mapa
+      info: function () { return { titulo: 'Setor ' + d.nome, sub: STATUS_SETOR[d.status].rotulo }; },
+      detalhes: function () { abrirSetor(d.id); },
     });
     camada.addTo(est.camadaSetores);
     s.camada = camada;
@@ -4912,21 +5075,22 @@
     var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
     // Área de risco: círculo do alarme de proximidade (quem entra é avisado).
     if (d.categoria === 'RISCO') {
-      p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 2, dashArray: '6 6',
-        fillColor: '#ef4444', fillOpacity: 0.08, interactive: false, className: 'circulo-risco' }).addTo(est.camadaPontosInt);
+      p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 1.5, opacity: 0.7, dashArray: '6 6',
+        fillColor: '#ef4444', fillOpacity: 0.05, interactive: false, className: 'circulo-risco' }).addTo(est.camadaPontosInt);
     } else if (d.categoria === 'BASE') {
       // Base: círculo do raio de chegada (usado no controle de retorno dos grupos).
-      p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_BASE_PADRAO, color: '#0ea5e9', weight: 2, dashArray: '4 6',
-        fillColor: '#0ea5e9', fillOpacity: 0.06, interactive: false, className: 'circulo-base' }).addTo(est.camadaPontosInt);
+      p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_BASE_PADRAO, color: '#0ea5e9', weight: 1.5, opacity: 0.6, dashArray: '4 6',
+        fillColor: '#0ea5e9', fillOpacity: 0.04, interactive: false, className: 'circulo-base' }).addTo(est.camadaPontosInt);
     }
     // O marcador entra no agrupamento junto com relatos e fotos (o círculo de risco/base continua sempre à vista).
     var mk = L.marker([d.lat, d.lng], {
       icon: iconePontoInt(d), keyboard: true, riseOnHover: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo,
       pane: 'pontos', tipoPonto: 'poi', critico: d.categoria === 'RISCO', fixo: d.categoria === 'VITIMA_ENCONTRADA',
     });
-    mk.on('click', function () {
-      if (est.desenho) { aoClicarNoMapa({ latlng: mk.getLatLng() }); return; }
-      abrirPontoInt(d.id);
+    ligarCliquesMapa(mk, {
+      noDesenho: function () { aoClicarNoMapa({ latlng: mk.getLatLng() }); },
+      info: function () { return { latlng: mk.getLatLng(), titulo: d.titulo, sub: cat.rotulo, texto: resumoTexto(d.descricao, 90), deslocY: -30 }; },
+      detalhes: function () { abrirPontoInt(d.id); },
     });
     p.marcador = mk;
     mostrarPonto(mk, Boolean(est.prefsMapa.pontos));
@@ -5240,7 +5404,7 @@
       botoesStatus,
       caixaCob,
       dl,
-      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verSetorNoMapa(d); } }),
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormSetor(d); } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', id: 'setor-ajustar', texto: 'Ajustar limites', onclick: function () { fechar(); ajustarLimites(d.id); } }) : null,
@@ -5251,7 +5415,7 @@
         } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'setor-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirSetor(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ]),
+      ])),
     ]));
   }
 
@@ -5508,7 +5672,7 @@
           onclick: function () { fechar(); renomearPonto(d); } }) : null]),
       dl,
       blocoFoto,
-      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verPontoNoMapa(d); } }),
         ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormPontoInt(d); } }) : null,
@@ -5517,7 +5681,7 @@
           onclick: function () { fechar(); window.Ferramentas.alternarAneis({ id: d.id, lat: d.lat, lng: d.lng, nome: d.titulo }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'ponto-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirPontoInt(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ]),
+      ])),
     ]));
     altitudeEm(d.lat, d.lng).then(function (m) {
       alt.textContent = m == null ? 'indisponível (sem conexão com o modelo de terreno)' : '≈ ' + Math.round(m).toLocaleString('pt-BR') + ' m (modelo de terreno, aproximado)';
@@ -6199,17 +6363,16 @@
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
     var g = L.featureGroup();
     var opc = { pane: 'trilhasDesenhadas', lineJoin: 'round', lineCap: 'round' };
-    L.polyline(d.pontos, Object.assign({ color: '#0b1220', weight: 8, opacity: 0.72, className: 'trilha-desenhada-contorno' }, opc)).addTo(g);
+    L.polyline(d.pontos, Object.assign({ color: '#0b1220', weight: 5, opacity: 0.4, className: 'trilha-desenhada-contorno' }, opc)).addTo(g);
     var cor = d.cor || e.cor;   // cor própria da trilha (ex.: a do arquivo importado) ou a da situação
-    L.polyline(d.pontos, Object.assign({ color: cor, weight: 3.5, opacity: 1, dashArray: e.traco, className: 'trilha-desenhada trilha-desenhada-' + d.estado }, opc)).addTo(g);
+    L.polyline(d.pontos, Object.assign({ color: cor, weight: 2.5, opacity: 0.85, dashArray: e.traco, className: 'trilha-desenhada trilha-desenhada-' + d.estado }, opc)).addTo(g);
     var ini = d.pontos[0], fim = d.pontos[d.pontos.length - 1];
-    L.circleMarker(ini, Object.assign({ radius: 5, color: '#0b1220', weight: 2, fillColor: cor, fillOpacity: 1 }, opc)).addTo(g);
-    L.circleMarker(fim, Object.assign({ radius: 6, color: cor, weight: 2.5, fillColor: '#0b1220', fillOpacity: 1 }, opc)).addTo(g);
-    g.bindTooltip(C.esc(meioDe(d).ico + ' ' + d.nome) + ' · ' + e.rotulo.toLowerCase(), { sticky: true, className: 'rotulo-trilha-desenhada' });
-    g.on('click', function (ev) {
-      if (est.desenho) return;   // durante um desenho o toque é do mapa
-      L.DomEvent.stopPropagation(ev);
-      abrirTrilhaManual(d.id);
+    L.circleMarker(ini, Object.assign({ radius: 3.5, color: '#0b1220', weight: 1.5, fillColor: cor, fillOpacity: 0.9 }, opc)).addTo(g);
+    L.circleMarker(fim, Object.assign({ radius: 4, color: cor, weight: 2, fillColor: '#0b1220', fillOpacity: 0.9 }, opc)).addTo(g);
+    ligarCliquesMapa(g, {
+      noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante um desenho o toque é do mapa
+      info: function () { return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') }; },
+      detalhes: function () { abrirTrilhaManual(d.id); },
     });
     g.addTo(est.camadaTrilhasManuais);
     t.camada = g;
@@ -6707,7 +6870,7 @@
       UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'lg-trilha-desenhada lg-' + d.estado, 'aria-hidden': 'true' }), ' ' + d.nome]),
       UI.el('p', { classe: 'ajuda', texto: 'Uma linha indica o trajeto, não que toda a área em volta foi vasculhada. A situação dos setores não muda por causa das trilhas.' }),
       dl,
-      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verTrilhaNoMapa(d); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-ocultar', texto: oculta ? 'Mostrar no mapa' : 'Ocultar no mapa', onclick: function () { fechar(); alternarTrilhaOculta(d.id); } }),
         editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { fechar(); abrirFormTrilha(d, 'percorrida'); } }) : null,
@@ -6715,7 +6878,7 @@
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar-tracado', texto: 'Editar traçado', onclick: function () { fechar(); iniciarDesenhoTrilha(d.id); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'trilha-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirTrilhaManual(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ]),
+      ])),
     ]));
   }
 
@@ -7976,9 +8139,10 @@
       icon: L.divIcon({ className: 'mk-local-wrap', html: '<div class="mk-local">◎</div><div class="mk-local-rotulo">Local da operação</div>', iconSize: [0, 0] }),
       keyboard: true, title: 'Local da operação' + (op.local_endereco ? ': ' + op.local_endereco : ''), alt: 'Local da operação', zIndexOffset: -100,
     });
-    mk.on('click', function () {
-      if (est.desenho) { aoClicarNoMapa({ latlng: mk.getLatLng() }); return; }
-      abrirDadosOperacao();
+    ligarCliquesMapa(mk, {
+      noDesenho: function () { aoClicarNoMapa({ latlng: mk.getLatLng() }); },
+      info: function () { return { latlng: mk.getLatLng(), titulo: 'Local da operação', texto: op.local_endereco || null, botao: 'Dados da operação ›', deslocY: -12 }; },
+      detalhes: function () { abrirDadosOperacao(); },
     });
     mk.addTo(est.mapa);
     est.marcaLocal = mk;
@@ -8307,7 +8471,7 @@
             UI.el('small', { classe: 'muted', texto: mem.length + ' pessoa(s)' + (resp.length ? ' · ★ ' + resp.join(', ') : ' · sem responsável') +
               ' · link: ' + (g.permite_militar ? 'militares ou civis' : 'civis') }),
           ]),
-          UI.el('div', { classe: 'acoes-linha' }, [
+          compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando no mapa' : '👁 Mostrar no mapa',
               onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { fechar(); abrirMembrosGrupo(g.id); } }),
@@ -8315,7 +8479,7 @@
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: function () { fechar(); escolherDestino([], g.id); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormGrupo(g); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }) : null,
-          ]),
+          ])),
         ]);
       })));
     }
@@ -9191,14 +9355,14 @@
           blocoTempoMissao(m, membros),
           linhaTempoMissao(m),
           tabela,
-          UI.el('div', { classe: 'acoes-linha' }, [
+          compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verMissaoNoMapa(m); } }),
             ativa && !m.busca_finalizada_em ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Finalizar busca', onclick: function () { finalizarBuscaPainel(m); } }) : null,
             ativa && m.busca_finalizada_em && m.base_lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Prorrogar +15 min', onclick: function () { prorrogarRetorno(m); } }) : null,
             ativa && m.inicio_combinado_em !== undefined ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⏱ Prazos', title: 'Horário combinado de início e de retorno, tolerância e alerta de sem comunicação',
               onclick: function () { abrirPrazosMissao(m); } }) : null,
             ativa ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Encerrar', onclick: function () { encerrarMissaoPainel(m); } }) : null,
-          ]),
+          ])),
         ]));
       });
     }
@@ -9273,6 +9437,7 @@
   /* ------------------------------------------------------------------ */
   window.Painel = {
     mapa: function () { return est.mapa; },
+    compactarAcoes: compactarAcoes,
     op: function () { return est.op; },
     usuario: function () { return est.usuario; },
     trilhasManuais: function () { return Array.from(est.trilhasManuais.values()).map(function (t) { return t.d; }); },

@@ -400,7 +400,8 @@
       ativa && linha ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '➝ Enviar como trajeto', title: 'A equipe segue esta linha no celular',
         onclick: function () { P.mapa().closePopup(); P.enviarTrajeto(window.Rotas.simplificar(it.pts, 1, 2000), it.nome); } }) : null,
     ]);
-    L.popup({ maxWidth: 320 }).setLatLng(ev.latlng).setContent(UI.el('div', { classe: 'info-ponto' }, [UI.el('strong', { texto: it.nome })].concat(dados).concat([botoes]))).openOn(P.mapa());
+    if (P.compactarAcoes) P.compactarAcoes(botoes);
+    L.popup({ maxWidth: 320, className: 'balao-mapa' }).setLatLng(ev.latlng).setContent(UI.el('div', { classe: 'info-ponto' }, [UI.el('strong', { texto: it.nome })].concat(dados).concat([botoes]))).openOn(P.mapa());
   }
 
   // Linha importada → trilha da operação (no banco, para todos os responsáveis), com nome, cor e horário do arquivo.
@@ -503,7 +504,7 @@
           UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', checked: imp.visivel ? true : null, onchange: function () { imp.visivel = this.checked; salvarImportados(); desenharImportados(); } }),
             UI.el('strong', { texto: ' ' + imp.nome })]),
           UI.el('small', { classe: 'muted', texto: resumo }),
-          UI.el('div', { classe: 'acoes-linha' }, [
+          (P.compactarAcoes || function (x) { return x; })(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); enquadrar(imp); } }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { fechar(); editarImportado(imp); } }),
             ativa && d.pontos.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Pontos → pontos de interesse', onclick: function () { fechar(); converterPontos(imp); } }) : null,
@@ -512,7 +513,7 @@
             UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Remover', onclick: function () {
               UI.confirmar({ titulo: 'Remover "' + (imp.nome || 'arquivo') + '" do mapa?', texto: 'Os elementos importados saem do mapa. O arquivo original não é apagado.', ok: 'Remover', perigo: true })
                 .then(function (ok) { if (!ok) return; atual.importados = atual.importados.filter(function (x) { return x !== imp; }); salvarImportados(); desenharImportados(); render(); }); } }),
-          ]),
+          ])),
         ]));
       });
     }

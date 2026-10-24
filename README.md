@@ -112,9 +112,13 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   comuns não viram marcador (para não poluir o mapa), mas têm **Ver no mapa**.
 - O participante pode pedir ajuda respondendo **PRECISO DE AJUDA** ao comando CONFIRME (alarme,
   destaque na lista e no mapa, **Marcar como atendido** na ficha).
-- A **ficha** do participante é enxuta: no topo, tipo e situação; logo abaixo "Posição há X s · ±Y m",
-  **Ver no mapa**, **Trilha** e **📞 Ligar**; depois **Mensagens** e as fotos. CPF,
-  coordenadas, GPS, histórico de posições e "Remover participante" ficam em **Mais detalhes**.
+- A **ficha** do participante (menu lateral) é enxuta: no topo, em texto simples, **nome** (✎ renomeia), **tipo · grupo**,
+  a **situação** e "Posição há X · ±Y m", com **✕** para fechar. Abaixo, o que pede atenção (pedido de ajuda, pedido de
+  saída, destino em andamento), **Ver no mapa** e **⋮ Mais** (enviar destino, rota até a pessoa, trilha, encontrou a
+  vítima, ligar) e duas abas: **Conversa** (mensagens, orientações rápidas em botões neutros — só **Pare** em
+  vermelho — e o campo de mensagem) e **Dados** (celular, CPF, coordenadas com a precisão, última posição, último
+  contato, rastreamento/GPS, ingresso; grupos; fotos; histórico de posições recolhido; estatísticas e exportar a trilha;
+  "Remover participante"). A ficha abre sempre na **Conversa**.
 - Na **ficha**, a seção única **Mensagens** reúne tudo: o histórico completo nos dois sentidos (o que
   o participante escreveu e as orientações enviadas, com o estado de entrega/confirmação), as
   **orientações rápidas** (RETORNE, ATENÇÃO, MUDE A ROTA, PARE, CONFIRME — com confirmação antes do
@@ -320,10 +324,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 
 ### Setores de busca (áreas)
 
-- **Criar** (menu **Ferramentas → Setores de busca**):
-  - **Novo setor por raio**: toque no centro do setor no mapa, informe o raio em metros (5 m a 50 km);
+- **Criar**: botão **Setor** no topo da tela (ou **＋ Novo setor** na lista de setores), que pergunta como:
+  - **Por raio**: toque no centro do setor no mapa, informe o raio em metros (5 m a 50 km);
     o círculo aparece na hora e a área aproximada é calculada.
-  - **Novo setor desenhando a área**: toque nos cantos da área (mínimo 3; há **Desfazer**) e em
+  - **Desenhar a área**: toque nos cantos da área (mínimo 3; há **Desfazer**) e em
     **Concluir**; o contorno é fechado e preenchido com cor semitransparente.
 - Cada setor tem **nome/número/código**, **cor** (8 opções bem distintas entre si e das trilhas),
   **responsável** (um participante da operação) e/ou **equipe** (texto livre, ex.: "Equipe Alfa"),
@@ -532,7 +536,7 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
 
 ### Remover e reincluir participante
 
-- **Remover** (ficha → Mais detalhes → Remover) **não apaga nada**: o cadastro, a trilha, as mensagens e as
+- **Remover** (ficha → aba Dados → Remover) **não apaga nada**: o cadastro, a trilha, as mensagens e as
   fotos continuam. O participante sai da lista principal e vai para **Fora da operação** (no fim da lista),
   com "Removido às HH:MM por Fulano". O destino ativo dele é encerrado. O celular para o GPS e mostra
   "Participação encerrada".
@@ -645,7 +649,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - **Filtros nas listas** (muito dado, então dá para reduzir a tela): em **operações**, busca por nome, local ou descrição (sem acento), situação (ativas ou encerradas), criador (**criadas por mim** ou **por outros**; só aparece para administrador, que enxerga todas) e período do acionamento, com **Limpar**; em **responsáveis**, busca por nome ou e-mail, situação (com acesso ou desativados), papel (administradores ou responsáveis comuns) e **Limpar**. O contador mostra quantos itens aparecem.
 - **Painel Camadas** (botão sobre o mapa, canto superior direito, ao lado da lista): separa
   **Tipo de mapa** (Mapa · Topográfico · Satélite), **Visualização** (Plano 2D · Relevo 3D) e **Camadas
-  operacionais** (Trilhas, Setores, Pontos de interesse, Relatos, Fotos, Local da operação, Nomes no mapa, Agrupar pessoas próximas),
+  operacionais** (Trilhas, Setores, Pontos de interesse, Relatos, Fotos, Local da operação, Nomes no mapa),
   cada uma com sinal próprio e chave liga/desliga. O botão mostra o resumo (ex.: "Satélite · 2 ocultas").
   Escolher uma opção **não fecha** o painel. No celular e no tablet ele abre como folha compacta (camadas
   em duas colunas) e fecha ao tocar no mapa, em ✕ ou com Esc; no computador fica aberto enquanto se usa o
@@ -660,15 +664,14 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     marcador mostra o nome escondido. O nome do setor fica abaixo das pessoas e dos pontos, sem cobri-los.
   - **Pessoas próximas agrupadas** de longe (até o zoom 15): um círculo com o número de pessoas e um anel com as cores dos
     grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
-    nunca entra no agrupamento. Desliga em **Camadas → Agrupar pessoas próximas** (preferência lembrada no aparelho).
-- O menu **Ferramentas** começa pelas ações mais usadas em campo e segue em grupos recolhíveis (o aberto/fechado
-  fica lembrado no aparelho):
-  - **Atalhos no topo** (sempre à vista): Vítima encontrada, Marcar ponto, Registrar foto e Enviar destino;
-  - **Desenhar no mapa** (aberto): Setor desenhando a área, Setor por raio, Desenhar trilha e a lista Setores, trilhas e pontos;
-  - **Equipes** (aberto): Grupos e Deslocamentos de grupos;
-  - **Mapa e arquivos**: Ir para coordenada, Medir distância e área, Importar arquivo e Exportar (o **⤢** do mapa enquadra todos);
-  - **Operação**: Dados da operação, Diário, Dashboard, Relatório final (PDF), Equipe de responsáveis;
-  - **Configurações**: Formato das coordenadas, **Tema** (Escuro ou Claro; o padrão é o escuro e a escolha fica no aparelho), Diagnóstico do GPS;
+    nunca entra no agrupamento. Fica **sempre ligado** (não há opção para desligar).
+- **Topo do painel**: as ações mais usadas ficam à vista — **Marcar ponto**, **Foto**, **Setor** (pergunta: desenhar a
+  área ou por raio), **Trilha** (desenhar trilha/trajeto) e **Dashboard**. No notebook aparecem só os ícones (o nome
+  vem ao passar o mouse); no celular e no tablet em pé, numa faixa logo abaixo do título, dividindo a largura.
+- O menu **Ferramentas** é **uma lista só, sem subgrupos**: Vítima encontrada, Enviar destino, Setores, trilhas e
+  pontos, Grupos, Deslocamentos de grupos, Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis,
+  Ir para coordenada, Medir distância e área, Importar arquivo, Exportar, Diagnóstico do GPS, Formato das
+  coordenadas e **Tema**;
   - **Ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
     quem pode; confirmação reforçada: lista o que será apagado e exige **digitar o nome da operação**).
@@ -727,7 +730,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     acompanha o zoom — de perto como antes (4 px; 6 px a da pessoa selecionada) e, afastando, afina até 1,5 px,
     para não cobrir o mapa.
   - **Camadas → Mostrar no mapa**: **um botão por camada** (aceso = aparece; apagado = riscado), agrupados em
-    **Equipes** (Pessoas, Trilhas de GPS, Agrupar próximas, Nomes), **Planejamento da busca** (Setores, Trilhas
+    **Equipes** (Pessoas, Trilhas de GPS, Nomes), **Planejamento da busca** (Setores, Trilhas
     planejadas, Trilhas percorridas, Pontos de interesse, Local da operação) e **Registros do campo** (Relatos,
     Fotos), mais **Mostrar tudo**. Acima ficam **Tipo de mapa** e **Visualização (2D/3D)**. O botão **Camadas** mostra
     "personalizado" enquanto algo estiver escondido. A escolha fica lembrada no aparelho; esconder **Pessoas** não
@@ -1492,7 +1495,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 19 | No civil, **TIRAR FOTO** → conferir → **SALVAR FOTO** | a câmera aparece no mapa no ponto; tocar abre a foto com autor, horários e coordenadas; **Ampliar** mostra em tela cheia |
 | 20 | Repetir com o celular em modo avião | a foto fica "Na fila"; ao voltar a internet, é enviada sozinha |
 | 21 | **Ferramentas**: trocar camada, ocultar nomes, ocultar a lista | cada opção funciona e o menu fecha; com a lista oculta, o mapa ocupa a tela e **« Participantes** reabre |
-| 23 | **Ferramentas → Novo setor por raio**: tocar no centro, raio 300 m, atribuir a um civil; depois desenhar outro setor por cantos | os dois aparecem com nome e situação; o civil vê "Seu setor" no celular; recarregar a página não os perde |
+| 23 | **Setor** (topo) **→ Por raio**: tocar no centro, raio 300 m, atribuir a um civil; depois desenhar outro setor por cantos | os dois aparecem com nome e situação; o civil vê "Seu setor" no celular; recarregar a página não os perde |
 | 24 | Marcar um **Ponto de encontro** e **Enviar como destino** ao civil; ele anda em direção ao ponto | o celular mostra distância e direção que diminuem/atualizam; testar com o GPS desligado (aviso "Sem GPS") |
 | 25 | Trocar para **Topográfico** e abrir **Relevo em 3D** numa região com morros | curvas de nível visíveis com trilhas e setores por cima; o 3D mostra os morros e a altitude ao tocar |
 | 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** vermelhoo; outros civis não aparecem |
@@ -1558,6 +1561,11 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   área de risco, no painel e no celular), anéis de distância e "Onde estou" do participante.
 - **Setores, pontos, navegação, topográfico e 3D (42)**, **ponta a ponta (143)** — sem tempo real, com
   movimento realista e queda de internet — e **administração (20)**: todos passando.
+- **Topo, menu em lista e ficha (versão 2026-10-24)**: navegador (t29 — 16): 5 ações no topo (computador) e numa faixa
+  (celular, sem rolagem lateral), Dashboard pelo topo, Setor pergunta desenhar/raio e cada opção inicia o desenho certo,
+  Camadas sem "Agrupar" e o agrupamento ligado mesmo com a preferência antiga desligada, ficha sem selos e com ✕, abas
+  Conversa/Dados (abre na Conversa), pedido de ajuda e orientações sem cores fortes, Dados sem coordenadas repetidas;
+  t21 ajustado (menu em lista, sem subgrupos).
 - **Formulários e modais horizontais (versão 2026-10-23)**: no computador e no tablet deitado, modais com formulário
   ficam largos (até 940 px) com os campos em **duas colunas** (textos de ajuda, abas, listas de opções grandes e botões
   na linha toda; opções como "A pé / Trilha / Carro" lado a lado) e fichas de dados com dois pares por linha. Celular e

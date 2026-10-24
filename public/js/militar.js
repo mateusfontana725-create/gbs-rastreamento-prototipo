@@ -285,6 +285,9 @@
     $('btn-recolher').addEventListener('click', alternarLateral);
     iniciarGaveta();
     $('ficha-fechar').addEventListener('click', fecharFicha);
+    document.querySelectorAll('#ficha .ficha-aba').forEach(function (b) {
+      b.addEventListener('click', function () { mostrarAbaFicha(b.getAttribute('data-aba')); });
+    });
     $('ficha-centralizar').addEventListener('click', function () { centralizar(est.selecionado); });
     $('ficha-trilha').addEventListener('click', function () { alternarTrilha(est.selecionado); });
     ligarMenuAcoes($('ficha-menu'));
@@ -337,15 +340,13 @@
     iniciarModo3D();
     $('btn-registrar-foto').addEventListener('click', function () { abrirRegistrarFoto(); });
     // Áreas e pontos
-    $('menu-setor-raio').addEventListener('click', function () { iniciarDesenho('raio'); });
-    $('menu-setor-poligono').addEventListener('click', function () { iniciarDesenho('poligono'); });
+    $('menu-setor').addEventListener('click', escolherTipoSetor);
     $('menu-trilha').addEventListener('click', function () { iniciarDesenhoTrilha(); });
     $('menu-ponto').addEventListener('click', function () { iniciarDesenho('ponto'); });
     $('menu-destino').addEventListener('click', function () { escolherDestino([]); });
     $('menu-areas').addEventListener('click', abrirAreas);
     $('areas-fechar').addEventListener('click', fecharAreas);
-    $('areas-novo-raio').addEventListener('click', function () { iniciarDesenho('raio'); });
-    $('areas-novo-poligono').addEventListener('click', function () { iniciarDesenho('poligono'); });
+    $('areas-novo-setor').addEventListener('click', escolherTipoSetor);
     $('areas-novo-ponto').addEventListener('click', function () { iniciarDesenho('ponto'); });
     $('areas-nova-trilha').addEventListener('click', function () { iniciarDesenhoTrilha(); });
     $('opt-desenhadas-planejadas').addEventListener('click', function () { definirPrefMapa('tmPlanejadas', est.prefsMapa.tmPlanejadas === false); });
@@ -369,7 +370,6 @@
     $('opt-fotos').addEventListener('click', function () { definirPrefMapa('fotos', !est.prefsMapa.fotos); });
     $('opt-relatos').addEventListener('click', function () { definirPrefMapa('relatos', !est.prefsMapa.relatos); });
     $('opt-nomes').addEventListener('click', function () { definirPrefMapa('nomesMapa', !est.prefsMapa.nomesMapa); });
-    $('opt-agrupar').addEventListener('click', function () { definirPrefMapa('agrupar', !est.prefsMapa.agrupar); });
     $('opt-pessoas').addEventListener('click', function () { definirPrefMapa('pessoas', !est.prefsMapa.pessoas); });
     document.querySelectorAll('[data-modo-mapa]').forEach(function (b) {
       b.addEventListener('click', function () { aplicarModoMapa(b.getAttribute('data-modo-mapa')); });
@@ -1502,10 +1502,7 @@
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
-    ['menu-setor-raio', 'menu-setor-poligono', 'menu-trilha', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
-    // atalhos do topo do menu: some a faixa inteira quando nenhum se aplica (operação encerrada)
-    var rapido = document.querySelector('#menu-ferramentas .menu-rapido');
-    if (rapido) rapido.hidden = !Array.from(rapido.children).some(function (b) { return !b.hidden; });
+    ['menu-setor', 'menu-trilha', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
     // encerrada: painel só para consulta (botões de alteração somem; o servidor também recusa)
     $('tela-painel').classList.toggle('op-somente-leitura', op.status !== 'ativa');
     if (op.status !== 'ativa' && est.compartilhando) pararMinhaPosicao(true);
@@ -1897,6 +1894,25 @@
     });
   }
 
+  // Um botão "Setor": ao tocar, escolhe como criar — desenhando a área ou por raio.
+  function escolherTipoSetor() {
+    if (!podeAlterar()) return;
+    fecharMenu(false);
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'escolha-setor' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Novo setor de busca' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Como você quer marcar a área?' }),
+      UI.el('div', { classe: 'opcoes-setor' }, [
+        UI.el('button', { classe: 'opcao-setor', type: 'button', id: 'setor-tipo-poligono', onclick: function () { fechar(true); iniciarDesenho('poligono'); } }, [
+          UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '⬠' }),
+          UI.el('strong', { texto: 'Desenhar a área' }), UI.el('small', { texto: 'toque nos cantos do setor no mapa' })]),
+        UI.el('button', { classe: 'opcao-setor', type: 'button', id: 'setor-tipo-raio', onclick: function () { fechar(true); iniciarDesenho('raio'); } }, [
+          UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '◯' }),
+          UI.el('strong', { texto: 'Por raio' }), UI.el('small', { texto: 'toque no centro e informe o raio em metros' })]),
+      ]),
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+    ]));
+  }
+
   /* ---------- Painel "Camadas" sobre o mapa -------------------------- */
   function camadasCompacto() {
     return Boolean(window.matchMedia && window.matchMedia('(max-width: 860px), (pointer: coarse)').matches);
@@ -2017,7 +2033,6 @@
     $('opt-desenhadas-planejadas').setAttribute('aria-pressed', String(est.prefsMapa.tmPlanejadas !== false));
     $('opt-desenhadas-percorridas').setAttribute('aria-pressed', String(est.prefsMapa.tmPercorridas !== false));
     $('opt-nomes').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.nomesMapa)));
-    $('opt-agrupar').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.agrupar)));
     $('opt-pessoas').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.pessoas)));
     $('opt-coord').value = est.prefsMapa.coord || 'dec';
     var trilhasVisiveis = todasTrilhasVisiveis();
@@ -2748,7 +2763,8 @@
 
   /* ---------- Camada das pessoas (agrupamento de longe) -------------- */
   function criarCamadaPessoas() {
-    return est.prefsMapa.agrupar && window.MapaRotulos ? window.MapaRotulos.criarGrupoPessoas(L) : L.featureGroup();
+    // agrupar pessoas próximas de longe fica sempre ligado (não há mais opção para desligar)
+    return window.MapaRotulos ? window.MapaRotulos.criarGrupoPessoas(L) : L.featureGroup();
   }
 
   // (Re)cria a camada conforme a preferência "Agrupar pessoas próximas" e devolve as pessoas a ela.
@@ -3346,6 +3362,7 @@
   }
 
   function fecharFicha() {
+    mostrarAbaFicha('conversa');
     $('ficha').hidden = true;
     var p = est.participantes.get(est.selecionado);
     est.selecionado = null;
@@ -3358,6 +3375,13 @@
       est.centralVoltar = false;
       if (est.op) abrirCentral();
     }
+  }
+
+  // Abas da ficha: "Conversa" (padrão) e "Dados". A escolhida fica até fechar a ficha.
+  function mostrarAbaFicha(nome) {
+    est.abaFicha = nome === 'dados' ? 'dados' : 'conversa';
+    document.querySelectorAll('#ficha .ficha-aba').forEach(function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-aba') === est.abaFicha)); });
+    document.querySelectorAll('#ficha [data-aba-painel]').forEach(function (sec) { sec.hidden = sec.getAttribute('data-aba-painel') !== est.abaFicha; });
   }
 
   function montarComandos(p) {
@@ -3405,11 +3429,11 @@
     $('ficha-nome-original').textContent = orig ? 'Nome informado pela pessoa: ' + orig : '';
     $('ficha-simbolo').innerHTML = htmlSimbolo(p);
 
-    // Topo da ficha: tipo e situação numa linha só. O essencial fica à vista;
-    // CPF, coordenadas e histórico ficam em "Mais detalhes".
-    $('ficha-resumo').innerHTML = htmlSeloTipo(d) + gruposDe(p.id).map(function (g) {
-      return ' <span class="selo selo-grupo" style="--cor-grupo:' + C.esc(g.cor) + '">' + (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
-    }).join('') + ' <span class="ponto ponto-' + e.cod + '"></span> ' + C.esc(e.rot);
+    // Topo da ficha, em texto simples: tipo · grupo(s) · situação. CPF, coordenadas e
+    // histórico ficam na aba "Dados".
+    $('ficha-resumo').innerHTML = '<span>' + C.esc(TIPOS[tipoDe(d)].rotulo) + '</span>' + gruposDe(p.id).map(function (g) {
+      return '<span class="ficha-grupo"><i class="ficha-grupo-cor" style="background:' + C.esc(g.cor) + '"></i>' + (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
+    }).join('') + '<span class="ficha-estado"><span class="ponto ponto-' + e.cod + '"></span>' + C.esc(e.rot) + '</span>';
     var posTxt;
     if (!pos) posTxt = 'Ainda sem posição';
     else posTxt = 'Posição ' + C.idade(pos.t) + ' · ' + C.precisao(pos.prec) + (posicaoAntiga(p) ? ' · antiga' : '');
@@ -3449,18 +3473,15 @@
       ligar.setAttribute('aria-label', ligar.title);
     }
 
+    // Aba "Dados": só o que serve para agir (sem repetir latitude/longitude e precisão soltas)
     var linhas = [
+      ['Celular', d.telefone ? '<a class="tel" href="tel:+55' + C.esc(d.telefone) + '">' + formatarTelefone(d.telefone) + '</a>' : '—'],
       ['CPF', d.cpf ? '<span class="mono">' + formatarCpf(d.cpf, est.cpfVisivel.has(p.id)) + '</span> ' +
         '<button type="button" class="btn btn-pequeno btn-link" data-cpf="' + p.id + '">' + (est.cpfVisivel.has(p.id) ? 'ocultar' : 'mostrar') + '</button>' : '—'],
-      ['Celular', d.telefone ? '<a class="tel" href="tel:+55' + C.esc(d.telefone) + '">' + formatarTelefone(d.telefone) + '</a>' : '—'],
-      ['Rastreamento', ehResp ? (d.rastreando ? 'Compartilhando posição' : 'Posição não compartilhada') : (d.rastreando ? 'Ativo' : 'Interrompido')],
-      ['GPS', C.esc(textoGps(d.gps_estado))],
-      ['Coordenadas', pos ? '<span class="mono">' + C.esc(window.Coords.formatar(pos.lat, pos.lng, est.prefsMapa.coord || 'dec')) + '</span>' : '—'],
-      ['Latitude', '<span class="mono">' + C.coord(pos && pos.lat) + '</span>'],
-      ['Longitude', '<span class="mono">' + C.coord(pos && pos.lng) + '</span>'],
-      ['Precisão', C.esc(C.precisao(pos && pos.prec))],
-      ['Última posição', pos ? C.hora(pos.t) + ' <span class="muted">(' + C.idade(pos.t) + ')</span>' + (posicaoAntiga(p) ? ' <span class="selo selo-alerta">antiga</span>' : '') : '—'],
+      ['Coordenadas', pos ? '<span class="mono">' + C.esc(window.Coords.formatar(pos.lat, pos.lng, est.prefsMapa.coord || 'dec')) + '</span> <span class="muted">' + C.esc(C.precisao(pos.prec)) + '</span>' : '—'],
+      ['Última posição', pos ? C.hora(pos.t) + ' <span class="muted">(' + C.idade(pos.t) + ')</span>' : '—'],
       ['Último contato', d.ultimo_contato_em ? C.hora(d.ultimo_contato_em) + ' <span class="muted">(' + C.idade(d.ultimo_contato_em) + ')</span>' : '—'],
+      ['Rastreamento', (ehResp ? (d.rastreando ? 'Compartilhando posição' : 'Posição não compartilhada') : (d.rastreando ? 'Ativo' : 'Interrompido')) + ' · ' + C.esc(textoGps(d.gps_estado))],
       [ehResp ? 'Entrou no painel' : 'Ingressou', C.hora(d.criado_em)],
     ];
     if (ehResp) linhas = linhas.filter(function (l) { return l[0] !== 'CPF' && l[0] !== 'Celular'; });
@@ -3501,7 +3522,7 @@
     caixaAjuda.hidden = !ajuda;
     if (ajuda) {
       caixaAjuda.innerHTML = '';
-      caixaAjuda.appendChild(UI.el('div', { classe: 'nota', style: 'background:#fee2e2;border-color:#b91c1c;color:#7f1d1d' }, [
+      caixaAjuda.appendChild(UI.el('div', { classe: 'nota nota-ajuda' }, [
         UI.el('strong', { texto: 'PEDIU AJUDA às ' + C.hora(ajuda.direcao === 'entrada' ? ajuda.criada_em : ajuda.confirmada_em) + '. ' }),
         ajuda.direcao === 'entrada'
           ? 'Pelo botão "Preciso de ajuda"' + (ajuda.lat != null ? ', com a localização. ' : ' (sem localização). ')
@@ -3527,10 +3548,10 @@
     var aviso = $('ficha-cmd-aviso');
     aviso.hidden = !eu && podeEnviar && (e.cod === 'conectado' || e.cod === 'instavel' || e.cod === 'parado');
     aviso.textContent = eu
-      ? 'Esta é a sua ficha. Sua localização é compartilhada automaticamente com os outros responsáveis.'
-      : !podeEnviar ? 'Não é possível enviar mensagens: ' + (d.removido ? 'participante removido.' : 'operação encerrada.')
-      : ehResp ? 'Este responsável está com o painel fechado ou sem conexão. A mensagem será entregue quando ele abrir o painel da operação.'
-      : 'Atenção: o participante está sem conexão. A mensagem ficará aguardando e só será entregue quando o celular dele reconectar.';
+      ? 'Esta é a sua ficha: sua localização vai automaticamente para os outros responsáveis.'
+      : !podeEnviar ? 'Envio indisponível: ' + (d.removido ? 'participante removido.' : 'operação encerrada.')
+      : ehResp ? 'Painel dele fechado: a mensagem chega quando ele abrir a operação.'
+      : 'Sem conexão: a mensagem chega quando o celular reconectar.';
     $('ficha-msgs-titulo').textContent = eu ? 'Mensagens recebidas' : 'Mensagens';
     renderizarConversa(p);
     var formResp = $('form-resposta');
@@ -6286,7 +6307,7 @@
     $('qtd-trilhas').textContent = String(est.trilhasManuais.size);
     if ($('painel-areas').hidden) return;
     var editavel = podeAlterar();
-    ['areas-novo-raio', 'areas-novo-poligono', 'areas-novo-ponto'].forEach(function (i) { $(i).hidden = !editavel; });
+    ['areas-novo-setor', 'areas-novo-ponto'].forEach(function (i) { $(i).hidden = !editavel; });
     $('areas-nova-trilha').hidden = !editavel || est.semTrilhasManuais;
     renderizarListaTrilhas();
     ulS.innerHTML = '';

@@ -229,6 +229,14 @@
         <span id="op-sub"></span>
       </div>
       <span class="pilula-conexao" id="pilula" role="status"><span class="ponto ponto-aguardando"></span><span>Conectando…</span></span>
+      <!-- Ações mais usadas, sempre à vista no topo (no celular, numa faixa logo abaixo) -->
+      <div class="acoes-topo" id="acoes-topo" role="toolbar" aria-label="Ações rápidas">
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-ponto" title="Marcar um ponto de interesse no mapa"><span class="ico-acao" aria-hidden="true">▾</span><span class="rotulo-acao">Marcar ponto</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="btn-registrar-foto" title="Registrar uma foto com a localização"><span class="ico-camera" aria-hidden="true"></span><span class="rotulo-acao">Foto</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-setor" title="Novo setor de busca: desenhando a área ou por raio"><span class="ico-acao" aria-hidden="true">⬠</span><span class="rotulo-acao">Setor</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-trilha" title="Desenhe e depois escolha: trilha já feita, planejada ou enviar para alguém percorrer"><span class="ico-acao" aria-hidden="true">〰</span><span class="rotulo-acao">Trilha</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-dashboard" title="Dashboard da operação"><span class="ico-acao" aria-hidden="true">▦</span><span class="rotulo-acao">Dashboard</span></button>
+      </div>
       <div class="painel-acoes">
         <button class="btn btn-barra btn-pequeno btn-msgs" type="button" id="btn-mensagens" aria-label="Mensagens, relatos e fotos" aria-controls="central" aria-expanded="false" title="Mensagens, relatos e fotos dos participantes">
           <span class="ico-msg" aria-hidden="true"></span><span class="rotulo-longo">Mensagens</span>
@@ -253,45 +261,22 @@
                 <button class="btn btn-pequeno" type="button" id="gps-alerta-como">Como liberar</button>
               </div>
             </div>
-            <!-- Mais usadas em campo: sempre à vista, no topo -->
-            <section class="menu-rapido" aria-label="Ações rápidas">
-              <button class="menu-item menu-atalho menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
-              <button class="menu-item menu-atalho" type="button" id="menu-ponto"><span class="ico-item" aria-hidden="true">▾</span><span>Marcar ponto</span></button>
-              <button class="menu-item menu-atalho" type="button" id="btn-registrar-foto"><span class="ico-camera" aria-hidden="true"></span><span>Registrar foto</span></button>
-              <button class="menu-item menu-atalho" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
-            </section>
-            <!-- Grupos por função (recolhíveis; o estado fica lembrado no aparelho).
-                 As camadas do mapa e o modo 3D ficam no painel "Camadas", sobre o mapa. -->
-            <details class="menu-grupo" data-grupo="desenhar" open>
-              <summary><h3 id="mg-desenhar">Desenhar no mapa</h3></summary>
-              <button class="menu-item" type="button" id="menu-setor-poligono"><span class="ico-item" aria-hidden="true">⬠</span><span>Setor desenhando a área</span></button>
-              <button class="menu-item" type="button" id="menu-setor-raio"><span class="ico-item" aria-hidden="true">◯</span><span>Setor por raio</span></button>
-              <button class="menu-item" type="button" id="menu-trilha" title="Desenhe e depois escolha: trilha já feita, planejada ou enviar para alguém percorrer"><span class="ico-item" aria-hidden="true">〰</span><span>Desenhar trilha / trajeto</span></button>
+            <!-- Uma lista só, sem subgrupos. Marcar ponto, foto, setor, trilha e dashboard ficam no topo da tela. -->
+            <nav class="menu-lista" aria-label="Funções">
+              <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
+              <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
               <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
-            </details>
-            <details class="menu-grupo" data-grupo="equipes" open>
-              <summary><h3 id="mg-equipes">Equipes</h3></summary>
               <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
-            </details>
-            <details class="menu-grupo" data-grupo="mapa">
-              <summary><h3 id="mg-mapa">Mapa e arquivos</h3></summary>
+              <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
+              <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
+              <button class="menu-item" type="button" id="menu-relatorio"><span class="ico-item" aria-hidden="true">▤</span><span>Relatório final (PDF)</span></button>
+              <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
               <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
               <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
               <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar</span></button>
-              <p class="menu-sol" id="menu-sol" hidden></p>
-            </details>
-            <details class="menu-grupo" data-grupo="operacao">
-              <summary><h3 id="mg-op">Operação</h3></summary>
-              <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
-              <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
-              <button class="menu-item" type="button" id="menu-dashboard"><span class="ico-item" aria-hidden="true">▦</span><span>Dashboard</span></button>
-              <button class="menu-item" type="button" id="menu-relatorio"><span class="ico-item" aria-hidden="true">▤</span><span>Relatório final (PDF)</span></button>
-              <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
-            </details>
-            <details class="menu-grupo" data-grupo="config">
-              <summary><h3 id="mg-config">Configurações</h3></summary>
+              <button class="menu-item" type="button" id="menu-diag-gps"><span class="ico-item" aria-hidden="true">⌁</span><span>Diagnóstico do GPS</span></button>
               <label class="menu-item menu-select" for="opt-coord"><span class="ico-item" aria-hidden="true">#</span><span>Formato das coordenadas</span>
                 <select id="opt-coord" class="campo campo-pequeno" aria-label="Formato das coordenadas">
                   <option value="dec">Graus decimais</option><option value="gms">Graus, min, seg</option><option value="gmd">Graus e min decimais</option>
@@ -304,11 +289,10 @@
                   <button class="seg-opcao" type="button" data-tema="claro" aria-pressed="false">Claro</button>
                 </div>
               </div>
-              <button class="menu-item" type="button" id="menu-diag-gps"><span class="ico-item" aria-hidden="true">⌁</span><span>Diagnóstico do GPS</span></button>
-            </details>
+              <p class="menu-sol" id="menu-sol" hidden></p>
+            </nav>
             <!-- Ações que não podem ser desfeitas: sempre no fim, separadas, com confirmação -->
-            <section class="menu-grupo menu-zona-perigo" id="menu-zona-perigo" aria-labelledby="mg-perigo">
-              <h3 id="mg-perigo">Ações definitivas</h3>
+            <section class="menu-grupo menu-zona-perigo" id="menu-zona-perigo" aria-label="Ações definitivas">
               <button class="menu-item menu-perigo" type="button" id="btn-encerrar"><span class="ico-item" aria-hidden="true">■</span><span>Encerrar operação</span></button>
               <div class="menu-separador-perigo" aria-hidden="true"></div>
               <button class="menu-item menu-perigo menu-excluir" type="button" id="btn-excluir-op" hidden><span class="ico-item" aria-hidden="true">✕</span><span>Excluir operação</span></button>
@@ -377,7 +361,6 @@
               <div class="chips-camadas">
                 <button class="chip-camada" type="button" id="opt-pessoas" aria-pressed="true"><span class="camada-sinal sinal-pessoa" aria-hidden="true"></span><span class="chip-txt">Pessoas</span></button>
                 <button class="chip-camada" type="button" id="opt-trilhas" aria-pressed="true"><span class="camada-sinal sinal-trilha" aria-hidden="true"></span><span class="chip-txt">Trilhas de GPS</span></button>
-                <button class="chip-camada" type="button" id="opt-agrupar" aria-pressed="true" title="De longe, quem está perto um do outro vira um círculo com o número de pessoas"><span class="camada-sinal sinal-agrupar" aria-hidden="true">3</span><span class="chip-txt">Agrupar próximas</span></button>
                 <button class="chip-camada" type="button" id="opt-nomes" aria-pressed="false"><span class="camada-sinal sinal-nome" aria-hidden="true">Aa</span><span class="chip-txt">Nomes</span></button>
               </div>
             </div>
@@ -485,8 +468,7 @@
           <div class="ficha-bloco">
             <h3>Setores de busca (<span id="qtd-setores">0</span>)</h3>
             <div class="acoes-linha">
-              <button class="btn btn-pequeno" type="button" id="areas-novo-raio">＋ Por raio</button>
-              <button class="btn btn-pequeno" type="button" id="areas-novo-poligono">＋ Desenhar área</button>
+              <button class="btn btn-pequeno" type="button" id="areas-novo-setor">＋ Novo setor</button>
             </div>
             <ul class="lista-areas" id="lista-setores"></ul>
             <p class="muted" id="setores-vazio">Nenhum setor ainda.</p>
@@ -573,77 +555,86 @@
 
       <!-- Ficha do participante -->
       <aside class="ficha" id="ficha" hidden aria-labelledby="ficha-nome" role="dialog">
+        <!-- Cabeçalho: quem é, de que grupo e como está a posição (sem selos coloridos) -->
         <div class="ficha-cabeca">
           <span id="ficha-simbolo"></span>
           <div class="ficha-titulo">
             <div class="ficha-nome-linha">
               <h2 id="ficha-nome"></h2>
-              <button class="btn btn-pequeno btn-renomear" type="button" id="ficha-renomear" title="Mudar o nome mostrado no painel" aria-label="Renomear participante" hidden>✎</button>
+              <button class="btn-renomear" type="button" id="ficha-renomear" title="Mudar o nome mostrado no painel" aria-label="Renomear participante" hidden>✎</button>
             </div>
             <small class="ficha-nome-original muted" id="ficha-nome-original" hidden></small>
             <div class="ficha-resumo" id="ficha-resumo"></div>
+            <p class="ficha-pos" id="ficha-pos"></p>
           </div>
-          <button class="btn btn-pequeno" type="button" id="ficha-fechar" aria-label="Fechar ficha">Fechar</button>
+          <button class="ficha-x" type="button" id="ficha-fechar" aria-label="Fechar ficha" title="Fechar">✕</button>
         </div>
         <div class="ficha-corpo">
+          <!-- O que pede atenção agora -->
           <div class="ficha-bloco" id="ficha-alerta" hidden></div>
           <div class="ficha-bloco" id="ficha-saida" hidden></div>
           <div class="ficha-bloco ficha-situacao" id="ficha-situacao" hidden></div>
-          <div class="ficha-bloco ficha-rapido">
-            <p class="ficha-pos" id="ficha-pos"></p>
-            <p class="ficha-permanencia" id="ficha-permanencia" hidden></p>
-            <p class="ficha-destino" id="ficha-destino" hidden></p>
-            <div class="acoes-linha">
-              <button class="btn" type="button" id="ficha-centralizar">Ver no mapa</button>
-              <div class="menu-linha-wrap menu-acoes" id="ficha-menu">
-                <button class="btn btn-mais-acoes" type="button" id="ficha-mais" aria-haspopup="menu" aria-expanded="false" title="Mais ações">⋮ Mais</button>
-                <div class="menu-linha" role="menu" hidden>
-                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-enviar-destino" title="Enviar um destino para este participante navegar até lá">🧭 Enviar destino</button>
-                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-ir-ate" title="Traçar a rota até onde esta pessoa está (para ir até ela ou mandar apoio)">📍 Rota até ela</button>
-                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
-                  <button class="menu-linha-item" role="menuitem" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
-                  <a class="menu-linha-item" role="menuitem" id="ficha-ligar" href="#" hidden>📞 Ligar</a>
-                </div>
+          <p class="ficha-permanencia" id="ficha-permanencia" hidden></p>
+          <p class="ficha-destino" id="ficha-destino" hidden></p>
+          <div class="acoes-linha ficha-acoes">
+            <button class="btn" type="button" id="ficha-centralizar">Ver no mapa</button>
+            <div class="menu-linha-wrap menu-acoes" id="ficha-menu">
+              <button class="btn btn-mais-acoes" type="button" id="ficha-mais" aria-haspopup="menu" aria-expanded="false" title="Mais ações">⋮ Mais</button>
+              <div class="menu-linha" role="menu" hidden>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-enviar-destino" title="Enviar um destino para este participante navegar até lá">🧭 Enviar destino</button>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-ir-ate" title="Traçar a rota até onde esta pessoa está (para ir até ela ou mandar apoio)">📍 Rota até ela</button>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
+                <a class="menu-linha-item" role="menuitem" id="ficha-ligar" href="#" hidden>📞 Ligar</a>
               </div>
             </div>
           </div>
-          <!-- Mensagens: histórico, orientações rápidas e envio, num só lugar -->
-          <div class="ficha-bloco ficha-mensagens" id="ficha-conversa">
-            <h3 id="ficha-msgs-titulo">Mensagens</h3>
-            <ul class="msgs conversa" id="ficha-msgs" aria-live="polite"></ul>
-            <div class="cmd-rapidos" id="ficha-cmd-rapidos">
-              <span class="cmd-rapidos-rotulo" id="ficha-cmd-titulo">Orientação rápida</span>
-              <div class="comandos comandos-compactos" id="ficha-comandos" role="group" aria-labelledby="ficha-cmd-titulo"></div>
+          <!-- Duas abas: a conversa (uso constante) e os dados da pessoa -->
+          <div class="ficha-abas" role="tablist" aria-label="Ficha do participante">
+            <button class="ficha-aba" type="button" role="tab" id="ficha-aba-conversa" data-aba="conversa" aria-selected="true">Conversa</button>
+            <button class="ficha-aba" type="button" role="tab" id="ficha-aba-dados" data-aba="dados" aria-selected="false">Dados</button>
+          </div>
+          <section class="ficha-painel" data-aba-painel="conversa" role="tabpanel" aria-labelledby="ficha-aba-conversa">
+            <div class="ficha-mensagens" id="ficha-conversa">
+              <h3 class="sr-only" id="ficha-msgs-titulo">Mensagens</h3>
+              <ul class="msgs conversa" id="ficha-msgs" aria-live="polite"></ul>
+              <div class="cmd-rapidos" id="ficha-cmd-rapidos">
+                <span class="cmd-rapidos-rotulo" id="ficha-cmd-titulo">Orientação rápida</span>
+                <div class="comandos comandos-compactos" id="ficha-comandos" role="group" aria-labelledby="ficha-cmd-titulo"></div>
+              </div>
+              <form class="resposta-rapida" id="form-resposta" novalidate>
+                <label class="sr-only" for="resposta-texto">Mensagem</label>
+                <textarea class="campo" id="resposta-texto" rows="2" maxlength="500" placeholder="Escrever mensagem…"></textarea>
+                <button class="btn btn-escuro" type="submit" id="btn-responder">Enviar</button>
+              </form>
+              <p class="ficha-aviso" id="ficha-cmd-aviso" hidden></p>
             </div>
-            <form class="resposta-rapida" id="form-resposta" novalidate>
-              <label class="sr-only" for="resposta-texto">Mensagem</label>
-              <textarea class="campo" id="resposta-texto" rows="2" maxlength="500" placeholder="Escrever mensagem…"></textarea>
-              <button class="btn btn-escuro" type="submit" id="btn-responder">Enviar</button>
-            </form>
-            <p class="ajuda" id="ficha-cmd-aviso" hidden></p>
-          </div>
-          <div class="ficha-bloco" id="ficha-grupos-bloco" hidden>
-            <h3>Grupos</h3>
-            <div id="ficha-grupos"></div>
-          </div>
-          <div class="ficha-bloco" id="ficha-fotos-bloco" hidden>
-            <h3>Fotos (<span id="ficha-qtd-fotos">0</span>)</h3>
-            <ul class="galeria galeria-mini" id="ficha-fotos"></ul>
-          </div>
-          <details class="ficha-bloco ficha-mais" id="ficha-mais">
-            <summary>Mais detalhes <span class="muted">— CPF, coordenadas, histórico de posições</span></summary>
-            <dl class="dados" id="ficha-dados"></dl>
-            <h3>Histórico de posições (<span id="ficha-qtd-pontos">0</span> pontos)</h3>
-            <div class="hist-rolagem">
-              <table class="tabela-hist">
-                <thead><tr><th>Horário</th><th>Latitude</th><th>Longitude</th><th>Precisão</th><th title="Tempo entre a captura pelo GPS e a chegada ao servidor">Chegou</th></tr></thead>
-                <tbody id="ficha-hist"></tbody>
-              </table>
+          </section>
+          <section class="ficha-painel" data-aba-painel="dados" role="tabpanel" aria-labelledby="ficha-aba-dados" hidden>
+            <dl class="dados ficha-dados" id="ficha-dados"></dl>
+            <div class="ficha-sub" id="ficha-grupos-bloco" hidden>
+              <h3>Grupos</h3>
+              <div id="ficha-grupos"></div>
             </div>
-            <button class="btn btn-pequeno" type="button" id="ficha-estatisticas">📈 Estatísticas e perfil de altitude da trilha</button>
-            <button class="btn btn-pequeno" type="button" id="ficha-exportar">⤓ Exportar trilha (GPX/KML)</button>
-            <button class="btn btn-perigo btn-pequeno" type="button" id="ficha-remover">Remover participante da operação</button>
-          </details>
+            <div class="ficha-sub" id="ficha-fotos-bloco" hidden>
+              <h3>Fotos (<span id="ficha-qtd-fotos">0</span>)</h3>
+              <ul class="galeria galeria-mini" id="ficha-fotos"></ul>
+            </div>
+            <details class="ficha-sub ficha-hist-det">
+              <summary>Histórico de posições (<span id="ficha-qtd-pontos">0</span> pontos)</summary>
+              <div class="hist-rolagem">
+                <table class="tabela-hist">
+                  <thead><tr><th>Horário</th><th>Latitude</th><th>Longitude</th><th>Precisão</th><th title="Tempo entre a captura pelo GPS e a chegada ao servidor">Chegou</th></tr></thead>
+                  <tbody id="ficha-hist"></tbody>
+                </table>
+              </div>
+            </details>
+            <div class="ficha-sub ficha-trilha-acoes">
+              <button class="btn btn-pequeno" type="button" id="ficha-estatisticas">📈 Estatísticas da trilha</button>
+              <button class="btn btn-pequeno" type="button" id="ficha-exportar">⤓ Exportar trilha</button>
+            </div>
+            <button class="btn-link-perigo" type="button" id="ficha-remover">Remover participante da operação</button>
+          </section>
         </div>
       </aside>
     </div>

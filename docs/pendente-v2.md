@@ -24,6 +24,7 @@ e ainda não estiver no `v2` fica listado aqui, para levar quando for a hora. Ao
 | `46893eb` | Desenhar trilha e desenhar trajeto unificados: ao concluir, escolher trilha percorrida, planejada ou enviar para alguém percorrer (e guardar como planejada). | `public/js/militar.js`, `public/militar.html`, `public/css/militar.css`, `README.md` | Só interface. Depende dos commits anteriores da tabela. |
 | `9da2253` | Mapa do Paraná (dashboard): operações encerradas em vermelho, bolinha sem a letra do tipo, nomes das regiões menores e translúcidos. | `public/js/dashboard.js`, `public/css/militar.css`, `README.md` | Só interface. Depende do `2f305ab`. |
 | `eba61fb` | Modais e formulários horizontais (2 colunas no computador/tablet deitado), camadas em botões agrupados sem repetição, meteorologia como botão acima da legenda, natureza só aquática/terrestre/outro, dashboard por mês aquática × terrestre e por tipo com Outros, abrir o dashboard em outra janela. | `public/js/militar.js`, `public/js/dashboard.js`, `public/js/meteo.js`, `public/js/ipo.js`, `public/js/cadastro.js`, `public/militar.html`, `public/css/militar.css`, `README.md` | Só interface (sem migração). No `v2`, conferir o painel de camadas no `militar.html` e `atualizarMenu` no `militar.js`. |
+| `ded6d77` | Ações rápidas no topo (ponto, foto, setor, trilha, dashboard), menu Ferramentas em lista única, setor unificado (desenhar/raio), agrupamento de pessoas sempre ligado, ficha do participante com abas Conversa/Dados. | `public/militar.html`, `public/js/militar.js`, `public/css/militar.css`, `README.md` | Só interface. No `v2`, o `militar.html` (topo, menu e ficha) mudou bastante: conferir o cabeçalho do painel e a ficha. |
 
 ## Como levar
 
@@ -31,7 +32,7 @@ No branch `v2`, aplicar os commits da tabela, do mais antigo para o mais novo:
 
 ```
 git checkout v2
-git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab cef47d1 4510001 a0ae264 b078abd df88093 8874daa 46893eb 9da2253 eba61fb
+git cherry-pick 64d2822 53b3a7d da098ae 7bec4a8 dd59c4b ff3b1f9 4249acf 17bafde 706633c 2f305ab cef47d1 4510001 a0ae264 b078abd df88093 8874daa 46893eb 9da2253 eba61fb ded6d77
 ```
 
 Se o `cherry-pick` parar por conflito no `README.md`, mantenha as duas partes do texto e continue com

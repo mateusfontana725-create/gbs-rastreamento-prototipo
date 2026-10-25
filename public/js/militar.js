@@ -621,6 +621,21 @@
     return caixa;
   }
 
+  // A lista do menu "⋮" fica presa ao botão, mas sempre dentro da tela: alinha pela borda do
+  // botão, encosta na borda da tela se faltar espaço e abre para cima se faltar espaço embaixo.
+  function posicionarMenuLinha(lista) {
+    var g = lista.parentNode.querySelector('button').getBoundingClientRect();
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight, folga = 8;
+    var w = lista.offsetWidth, h = lista.offsetHeight;
+    var esq = Math.max(folga, Math.min(g.right - w, vw - w - folga));
+    var topo = g.bottom + 6;
+    if (topo + h > vh - folga) topo = g.top - h - 6;
+    lista.style.position = 'fixed';
+    lista.style.left = Math.round(esq) + 'px';
+    lista.style.top = Math.round(Math.max(folga, topo)) + 'px';
+    lista.style.right = lista.style.bottom = 'auto';
+  }
+
   // Liga um menu "⋮" já montado (gatilho + .menu-linha): abre/fecha, um por vez, fecha ao escolher.
   // O gatilho some quando todos os itens estão ocultos.
   function ligarMenuAcoes(wrap) {
@@ -636,7 +651,7 @@
       if (menuLinhaAberto) menuLinhaAberto();
       lista.hidden = !abrir;
       gatilho.setAttribute('aria-expanded', String(abrir));
-      if (abrir) menuLinhaAberto = fechar;
+      if (abrir) { menuLinhaAberto = fechar; posicionarMenuLinha(lista); }
     });
     lista.addEventListener('click', function (ev) { if (ev.target.closest('.menu-linha-item')) fechar(); });
     wrap.atualizarGatilho = function () {
@@ -8472,40 +8487,65 @@
   }
 
   // Ficha do participante: grupos dele, papel e inclusão em outro grupo.
+  // Grupos na ficha: só a lista (nome e papel) e um botão "Adicionar a um grupo", que abre a
+  // janela de escolha. Trocar o papel ou tirar do grupo fica em Ferramentas → Grupos → Membros.
   function renderizarGruposFicha(p) {
     var bloco = $('ficha-grupos-bloco'), caixa = $('ficha-grupos');
     if (est.semGrupos || !est.grupos.size) { bloco.hidden = true; caixa._assinatura = ''; return; }
     var meus = gruposDe(p.id);
     var editavel = podeAlterar();
-    var assinatura = p.id + '|' + JSON.stringify(meus) + '|' + Array.from(est.grupos.keys()).join(',') + '|' + editavel;
+    var outros = Array.from(est.grupos.values()).filter(function (g) { return !meus.some(function (x) { return x.id === g.id; }); });
+    var assinatura = p.id + '|' + JSON.stringify(meus) + '|' + outros.length + '|' + editavel + '|' + Boolean(p.dados.removido);
     bloco.hidden = false;
-    if (caixa._assinatura === assinatura) return;   // não refaz a cada 5 s (os campos perderiam o que está sendo escolhido)
+    if (caixa._assinatura === assinatura) return;
     caixa._assinatura = assinatura;
     caixa.innerHTML = '';
-    if (!meus.length) caixa.appendChild(UI.el('p', { classe: 'muted', texto: 'Não está em nenhum grupo.' }));
-    meus.forEach(function (g) {
-      var papel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel no grupo ' + g.nome, disabled: editavel ? null : true }, [
-        UI.el('option', { value: 'membro', selected: g.papel === 'membro' ? true : null, texto: 'Membro' }),
-        UI.el('option', { value: 'responsavel', selected: g.papel === 'responsavel' ? true : null, texto: '★ Responsável' }),
-      ]);
-      papel.addEventListener('change', function () { definirMembro(g.id, p.id, papel.value); });
-      caixa.appendChild(UI.el('div', { classe: 'linha-grupo' }, [
-        UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
-        UI.el('strong', { texto: g.nome }),
-        g.origem === 'link' ? UI.el('small', { classe: 'muted', texto: 'entrou pelo link' }) : null,
-        papel,
-        editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Tirar do grupo', onclick: function () { removerMembro(g.id, p.id); } }) : null,
-      ]));
-    });
-    var outros = Array.from(est.grupos.values()).filter(function (g) { return !meus.some(function (x) { return x.id === g.id; }); });
+    if (!meus.length) caixa.appendChild(UI.el('p', { classe: 'muted ficha-sem-grupo', texto: 'Não está em nenhum grupo.' }));
+    else caixa.appendChild(UI.el('ul', { classe: 'ficha-lista-grupos' }, meus.map(function (g) {
+      return UI.el('li', null, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), UI.el('strong', { texto: g.nome }),
+        UI.el('small', { classe: 'muted', texto: (g.papel === 'responsavel' ? '★ responsável' : 'membro') + (g.origem === 'link' ? ' · entrou pelo link' : '') })]);
+    })));
     if (editavel && outros.length && !p.dados.removido) {
-      var sel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Grupo' }, outros.map(function (g) { return UI.el('option', { value: g.id, texto: g.nome }); }));
-      var pap = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel' }, [
-        UI.el('option', { value: 'membro', texto: 'Membro' }), UI.el('option', { value: 'responsavel', texto: '★ Responsável' })]);
-      caixa.appendChild(UI.el('div', { classe: 'linha-grupo linha-grupo-novo' }, [
-        sel, pap, UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Adicionar ao grupo', onclick: function () { definirMembro(sel.value, p.id, pap.value); } }),
-      ]));
+      caixa.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ficha-add-grupo', texto: '＋ Adicionar a um grupo', onclick: function () { abrirAdicionarAoGrupo(p); } }));
     }
+  }
+
+  function abrirAdicionarAoGrupo(p) {
+    var meus = gruposDe(p.id);
+    var outros = Array.from(est.grupos.values()).filter(function (g) { return !meus.some(function (x) { return x.id === g.id; }); })
+      .sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    if (!outros.length) return;
+    var lista = UI.el('div', { classe: 'opcoes-modo', role: 'radiogroup', 'aria-label': 'Grupo' }, outros.map(function (g, i) {
+      var n = (est.membros.get(g.id) || new Map()).size;
+      return UI.el('label', { classe: 'opcao-modo' }, [
+        UI.el('input', { type: 'radio', name: 'add-grupo', value: g.id, checked: i === 0 ? true : null }),
+        UI.el('span', null, [UI.el('strong', null, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome]),
+          UI.el('small', { texto: n + ' pessoa(s)' })]),
+      ]);
+    }));
+    var papel = UI.el('div', { classe: 'opcoes-modo', role: 'radiogroup', 'aria-label': 'Papel no grupo' }, [
+      UI.el('label', { classe: 'opcao-modo' }, [UI.el('input', { type: 'radio', name: 'add-papel', value: 'membro', checked: true }),
+        UI.el('span', null, [UI.el('strong', { texto: 'Membro' }), UI.el('small', { texto: 'faz parte da equipe' })])]),
+      UI.el('label', { classe: 'opcao-modo' }, [UI.el('input', { type: 'radio', name: 'add-papel', value: 'responsavel' }),
+        UI.el('span', null, [UI.el('strong', { texto: '★ Responsável' }), UI.el('small', { texto: 'leva a equipe e finaliza a busca no celular' })])]),
+    ]);
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'add-grupo-salvar', texto: 'Adicionar' });
+    var form = UI.el('form', { novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Adicionar ' + nomeExibido(p) + ' a um grupo' }),
+      UI.el('div', { classe: 'grupo grupo-largo' }, [UI.el('span', { classe: 'rotulo', texto: 'Grupo' }), lista]),
+      UI.el('div', { classe: 'grupo grupo-largo' }, [UI.el('span', { classe: 'rotulo', texto: 'Papel' }), papel]),
+      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      var gid = (form.querySelector('input[name="add-grupo"]:checked') || {}).value;
+      var pap = (form.querySelector('input[name="add-papel"]:checked') || {}).value || 'membro';
+      if (!gid) return;
+      btn.disabled = true;
+      if (await definirMembro(gid, p.id, pap)) fechar(true);
+      else btn.disabled = false;
+    });
+    var fechar = UI.abrirModal(form);
   }
 
   async function definirMembro(gid, pid, papel) {

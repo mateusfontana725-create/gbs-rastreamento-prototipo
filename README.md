@@ -118,7 +118,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   vítima, ligar) e duas abas: **Conversa** (mensagens, orientações rápidas em botões neutros — só **Pare** em
   vermelho — e o campo de mensagem) e **Dados** (celular, CPF, coordenadas com a precisão, última posição, último
   contato, rastreamento/GPS, ingresso; grupos; fotos; histórico de posições recolhido; estatísticas e exportar a trilha;
-  "Remover participante"). A ficha abre sempre na **Conversa**.
+  "Remover participante"). A ficha abre sempre na **Conversa**. Em **Grupos** a ficha só mostra a lista e o botão
+  **＋ Adicionar a um grupo**, que abre a escolha do grupo e do papel (membro ou responsável); trocar o papel ou tirar
+  do grupo fica em Ferramentas → Grupos. O menu **⋮ Mais** da ficha sempre abre dentro da tela (com a lista lateral
+  oculta, inclusive).
 - Na **ficha**, a seção única **Mensagens** reúne tudo: o histórico completo nos dois sentidos (o que
   o participante escreveu e as orientações enviadas, com o estado de entrega/confirmação), as
   **orientações rápidas** (RETORNE, ATENÇÃO, MUDE A ROTA, PARE, CONFIRME — com confirmação antes do

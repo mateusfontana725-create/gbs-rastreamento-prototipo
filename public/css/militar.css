@@ -1667,3 +1667,9 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .btn-link-perigo:hover { color: #fecaca; }
 .ficha-resumo > .ficha-estado { flex-basis: 100%; }
 .ficha-resumo > .ficha-estado::before { content: none; }
+
+/* Grupos na ficha: só a lista e o botão de adicionar */
+.ficha-lista-grupos { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.ficha-lista-grupos li { display: flex; align-items: center; gap: 8px; font-size: .86rem; }
+.ficha-lista-grupos small { margin-left: auto; }
+.ficha-sem-grupo { margin: 0 0 8px; font-size: .84rem; }

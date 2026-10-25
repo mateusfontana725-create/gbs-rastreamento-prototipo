@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./node_modules/**)",
+      "Edit(./node_modules/**)",
+      "Read(./dist/**)",
+      "Edit(./dist/**)",
+      "Read(./build/**)",
+      "Edit(./build/**)",
+      "Read(./listas-meteo/**)",
+      "Edit(./listas-meteo/**)",
+      "Read(./**/*.png)",
+      "Read(./**/*.jpg)",
+      "Read(./**/*.jpeg)",
+      "Read(./**/*.gif)",
+      "Read(./**/*.webp)",
+      "Read(./**/*.svg)",
+      "Read(./**/*.ico)",
+      "Read(./**/*.mp4)",
+      "Read(./**/*.webm)",
+      "Read(./**/*.pdf)",
+      "Edit(./**/*.png)",
+      "Edit(./**/*.jpg)",
+      "Edit(./**/*.jpeg)",
+      "Edit(./**/*.gif)",
+      "Edit(./**/*.webp)",
+      "Edit(./**/*.svg)",
+      "Edit(./**/*.ico)",
+      "Edit(./**/*.mp4)",
+      "Edit(./**/*.webm)",
+      "Edit(./**/*.pdf)"
+    ],
+    "ask": [
+      "Read(./node_modules/**)",
+      "Read(./dist/**)",
+      "Read(./build/**)"
+    ]
+  }
+}

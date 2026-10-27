@@ -225,6 +225,12 @@
     return m ? m[1] : null;
   }
 
+  // ?vista=dashboard-op: janela aberta pelo botão "Abrir em outra janela" do Dashboard da operação
+  var dashOpAutoAberto = false;
+  function vistaDashboardOperacao() {
+    return /[?&]vista=dashboard-op\b/.test(location.search);
+  }
+
   function rotear() {
     if (!est.responsavel) return;
     if (location.hash === '#responsaveis') {
@@ -1127,10 +1133,17 @@
   function abrirDashboardOperacao() {
     if (!est.op || !window.Dashboard) return;
     var corpo = UI.el('div', { classe: 'estudo-operacao', id: 'estudo-operacao' });
+    // Como no Dashboard geral: numa janela própria (ou outro monitor), com as operações noutra janela.
+    var novaJanela = vistaDashboardOperacao() ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-nova-janela', texto: '↗ Abrir em outra janela',
+      title: 'Abre este dashboard numa janela própria, para deixar o mapa em outra',
+      onclick: function () { window.open(location.pathname + '?vista=dashboard-op' + location.hash, 'gbs-dashboard-op', 'noopener'); } });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao modal-dashboard' }, [
       UI.el('div', { classe: 'modal-dashboard-topo' }, [
         UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
-        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Fechar', texto: 'Fechar', onclick: function () { fechar(); } }),
+        UI.el('div', { classe: 'dash-acoes' }, [
+          novaJanela,
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Fechar', texto: 'Fechar', onclick: function () { fechar(); } }),
+        ]),
       ]),
       corpo,
     ]));
@@ -1330,6 +1343,8 @@
     avaliarGaveta();
     aplicarLateral(false);
     renderizarCabecalho();
+    // Aberto em janela própria pelo Dashboard da operação: já mostra o dashboard por cima do mapa
+    if (!dashOpAutoAberto && vistaDashboardOperacao()) { dashOpAutoAberto = true; abrirDashboardOperacao(); }
     criarMapa();
     desenharLocalOp();
     aplicarIntervaloGpsMeu();

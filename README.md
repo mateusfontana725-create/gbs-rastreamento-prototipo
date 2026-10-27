@@ -346,6 +346,23 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   vasculhado. Os detalhes mostram, separado, **"Percorrido (estimativa pelos rastros GPS)"**: a parte do
   setor que ficou a até 25 m de algum rastro (rastros com precisão pior que 100 m não contam). É só uma
   estimativa; o setor só fica **Concluído** quando um responsável marca.
+- **Probabilidades de busca (POD, POA e POS)**: aparecem no detalhe de cada setor, com o POS da operação
+  inteira. Cada deslocamento de grupo que chega ao setor conta como **uma busca** (da chegada ao fim da
+  busca, ou até agora, se ainda está em andamento); o esforço são as trilhas GPS dos membros nesse intervalo.
+  Não há botão de soma: tudo é recalculado pelas trilhas e pelos horários. Cálculo em `public/js/pod.js`:
+  - **POA inicial**: a probabilidade de a pessoa estar na área, distribuída pela área dos setores.
+  - **Cobertura de cada célula** (~30 m): `C = W × L ÷ c²`, com `L` = metros de trilha dentro da célula e
+    `W` = 20 m de largura de varredura (estimativa típica para pessoa em mata; não calibrada para o terreno).
+  - **POD** da célula: `POD = 1 − e^(−C)`. Trilhas que se cruzam somam `L` no expoente: a sobreposição
+    **não** soma POD, então nunca passa de 100%.
+  - **Depois de cada busca**, a probabilidade das células varridas é multiplicada por `(1 − POD)` e a
+    área toda é renormalizada (Bayes): a chance migra para o que ainda não foi visto. Assim, a **POA atual**
+    de um setor cai quando ele é varrido, e cresce nos setores vizinhos.
+  - **POS da busca** = Σ (probabilidade × POD) do setor pesquisado. **POD** do setor = POS ÷ POA inicial.
+  - **POS acumulado** = `1 − Π(1 − POS de cada busca)`, calculado célula a célula: a área comum a dois
+    setores ou a duas buscas conta uma vez.
+  - Referências: Koopman, *Search and Screening* (1980); manual IAMSAR, vol. II (busca e salvamento).
+  - Limite: o modelo estima, não prova. A área só fica vasculhada quando um responsável marca **Concluído**.
 - O participante atribuído vê o contorno do **seu** setor no mapa do celular ("Seu setor: A-1").
 - Ficam salvos no Supabase (tabela `setores`) e aparecem em tempo real para os outros responsáveis.
 

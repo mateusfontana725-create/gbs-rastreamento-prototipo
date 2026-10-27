@@ -1684,3 +1684,10 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .regua-cruz { stroke: #fde047; stroke-width: 1.4; }
 .regua-rot { fill: #fef9c3; font: 700 11px var(--mono); paint-order: stroke; stroke: rgba(10, 13, 16, .85); stroke-width: 3px; }
 .regua-rot-meio { font-weight: 600; opacity: .8; }
+
+/* Probabilidades de busca no detalhe do setor (POD, POA e POS; js/pod.js) */
+.pod-bloco { margin-top: 12px; }
+.pod-bloco h3 { margin: 0 0 6px; font-size: .95rem; }
+.pod-buscas { margin: 6px 0; padding-left: 18px; font-size: .85rem; }
+.pod-formulas { margin-top: 8px; font-size: .85rem; }
+.pod-formulas p { margin: 4px 0; }

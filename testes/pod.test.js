@@ -120,5 +120,35 @@ console.log('Denominador zero: inconsistência explícita, sem inventar posterio
   chk(r.registros[0].conta === false && r.registros[0].motivo === 'inconsistente' && perto(set(r, 'A').poaAtual, 1) && set(r, 'A').pod === null, 'POD 100% onde estava 100%: registro marcado inconsistente, cenário anterior mantido', r);
 }
 
+console.log('POD planejada, não estimada e busca em parte do setor (guia, cap. 2.1, 3, 5.4 e 18)');
+{
+  const setores = [{ setorId: 'A', nome: 'A', poa: 0.5, areaM2: 1e6 }, { setorId: 'B', nome: 'B', poa: 0.3, areaM2: 250000 }];
+  const base = P.calcular({ cenario: cenario(setores), registros: [], vitimaId: 'v' });
+  const plan = P.calcular({ cenario: cenario(setores), registros: [reg('p', 'A', 0.8, 5, { finalidade: 'planejada' })], vitimaId: 'v' });
+  chk(plan.registros[0].motivo === 'planejada' && perto(plan.registros[0].posPrevista, 0.5 * 0.8) && perto(set(plan, 'A').poaAtual, set(base, 'A').poaAtual) && plan.posTotal === 0, 'POD planejada só gera POS prevista; não altera POA atual nem POS', plan.registros[0]);
+  const sem = P.calcular({ cenario: cenario(setores), registros: [reg('n', 'A', null, 5)], vitimaId: 'v' });
+  chk(sem.registros[0].motivo === 'sem_estimativa' && set(sem, 'A').pod === null && set(sem, 'A').semEstimativa === 1 && perto(set(sem, 'A').poaAtual, 0.5) && sem.posTotal === 0, 'POD não estimada: a busca fica registrada, mas não reduz o POA e não vira POD zero', sem);
+  const zero = P.calcular({ cenario: cenario(setores), registros: [reg('z', 'A', 0, 5)], vitimaId: 'v' });
+  chk(zero.registros[0].conta === true && perto(set(zero, 'A').pod, 0), 'POD estimada em zero é diferente de não estimada (conta, com POD 0)');
+  const parc = P.calcular({ cenario: cenario(setores), registros: [reg('c', 'A', 0.8, 5, { coberturaFracao: 0.5 })], vitimaId: 'v' });
+  chk(perto(set(parc, 'A').pod, 0.4) && perto(parc.registros[0].podInformado, 0.8) && perto(set(parc, 'A').pos, 0.2), 'busca em metade do setor com POD 80% na parte coberta: POD do setor 40% (hipótese uniforme explícita)', parc.setores[0]);
+  chk(perto(set(base, 'A').pdenPorKm2, 50) && perto(set(base, 'B').pdenPorKm2, 120), 'densidade de probabilidade em % por km² (apoio, não ordem automática)', base.setores.map((s) => s.pdenPorKm2));
+}
+
+console.log('Setores sobrepostos (guia, cap. 1 e 8.3) — mesmos números do banco');
+{
+  const d = (m) => m / 111194.93;
+  const circ = (lat, r) => ({ forma: 'circulo', centroLat: lat, centroLng: -49.2, raioM: r });
+  const A = circ(-25.40, 300), f = (b) => P.sobreposicaoFracao(P.poligonoDoSetor(A), P.poligonoDoSetor(b));
+  chk(f(circ(-25.40 + d(2000), 300)) === 0 && f(circ(-25.40 + d(700), 300)) === 0, 'setores afastados ou com folga: sem sobreposição');
+  chk(perto(f(circ(-25.40 + d(400), 300)), 0.22033898305084745, 1e-9), 'dois círculos de 300 m com centros a 400 m: 22% do menor em comum');
+  chk(f(circ(-25.40, 100)) === 1 && f(circ(-25.40, 300)) === 1, 'setor dentro de outro e setores idênticos: 100%');
+  chk(f(circ(-25.40 + d(595), 300)) <= P.LIMITE_SOBREPOSICAO, 'encosto de poucos metros (divisa desenhada à mão) não conta como sobreposição');
+  const quad = { forma: 'poligono', pontos: [[-25.40179864315756, -49.199100678421225], [-25.40179864315756, -49.1955033921061], [-25.39820135684244, -49.1955033921061], [-25.39820135684244, -49.199100678421225]] };
+  chk(perto(f(quad), 0.5088888888888888, 1e-9), 'círculo e quadrado (polígono desenhado): 50,9%');
+  const pares = P.sobreposicoes([{ nome: 'A', poa: 0.4, ...A }, { nome: 'B', poa: 0.3, ...circ(-25.40 + d(400), 300) }, { nome: 'C', poa: 0, ...circ(-25.40, 300) }]);
+  chk(pares.length === 1 && pares[0].a === 'A' && pares[0].b === 'B', 'só pares com POA > 0 entram na conta (C tem POA zero)', pares);
+}
+
 console.log('\nPOA, POD e POS: ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

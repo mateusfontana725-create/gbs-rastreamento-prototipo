@@ -8,6 +8,7 @@
  *     da busca. Nunca do GPS: a trilha mostra por onde a equipe passou, não o que ela observou.
  *
  * O que o app calcula a partir deles (Koopman, "Search and Screening", 1980; IAMSAR, vol. II):
+ *   - POD planejada (previsão) e POD não estimada (nulo, nunca zero) NÃO alteram o POA. Planejada só gera uma "POS prevista".
  *   - Só contam os registros lançados DEPOIS da aprovação da versão (a versão já incorpora o que se sabia
  *     até então), que não foram anulados e que valem para a vítima (registro sem vítima vale para todas).
  *   - POD acumulado do setor = 1 − Π(1 − POD de cada registro). Supõe buscas independentes: repetir o
@@ -32,8 +33,9 @@
 
   /*
    * entrada:
-   *   cenario:   { id, numero, aprovadaEm (ms), setores: [{ setorId, nome, poa }] }   (versão APROVADA)
-   *   registros: [{ id, setorId, vitimaId (nulo = todas), pod (0–1), registradoEm (ms), anulado (bool) }]
+   *   cenario:   { id, numero, aprovadaEm (ms), setores: [{ setorId, nome, poa, areaM2 }] }   (versão APROVADA)
+   *   registros: [{ id, setorId, vitimaId (nulo = todas), finalidade ('pos_execucao'|'planejada'), pod (0–1 ou nulo = não estimada),
+ *               coberturaFracao (busca em parte do setor), registradoEm (ms), anulado (bool) }]
    *   vitimaId:  a vítima do cenário
    * Devolve null sem cenário; senão:
    *   { versao, setores: [{ setorId, nome, poa, pod, pos, poaAtual, registros }],
@@ -62,9 +64,15 @@
       if (r.anulado) motivo = 'anulado';
       else if (r.vitimaId && r.vitimaId !== vitimaId) motivo = 'outra_vitima';
       else if (!r.setorId || !indice[r.setorId]) motivo = 'setor_fora_do_cenario';
+      else if (r.finalidade === 'planejada') motivo = 'planejada';              // previsão: nunca altera o POA
       else if (cen.aprovadaEm != null && r.registradoEm < cen.aprovadaEm) motivo = 'anterior_a_versao';
-      return { id: r.id, setorId: r.setorId, conta: motivo === null, motivo: motivo, pod: limitar01(Number(r.pod) || 0),
-        pos: 0, poaAntes: null, poaDepois: null, _r: r };
+      else if (r.pod == null) motivo = 'sem_estimativa';                         // POD não estimada ≠ POD zero
+      // busca em parte do setor: POD do setor inteiro = POD da área coberta × fração coberta (a pessoa, se estiver
+      // no setor, é suposta uniformemente distribuída nele — hipótese que a tela mostra)
+      var fracao = r.coberturaFracao > 0 && r.coberturaFracao < 1 ? r.coberturaFracao : 1;
+      return { id: r.id, setorId: r.setorId, conta: motivo === null, motivo: motivo, finalidade: r.finalidade || 'pos_execucao',
+        pod: r.pod == null ? null : limitar01((Number(r.pod) || 0) * fracao), podInformado: r.pod == null ? null : limitar01(Number(r.pod) || 0),
+        pos: 0, posPrevista: null, poaAntes: null, poaDepois: null, _r: r };
     });
 
     // Bayes em sequência: q = probabilidade atual (já normalizada) de cada setor e de "fora"
@@ -89,13 +97,22 @@
       (podsDoSetor[x.setorId] = podsDoSetor[x.setorId] || []).push(x.pod);
     });
 
+    var semEstimativa = {};
+    resRegistros.forEach(function (x) {
+      if (x.motivo === 'sem_estimativa') semEstimativa[x.setorId] = (semEstimativa[x.setorId] || 0) + 1;
+      // POS prevista de uma busca planejada: POA atual do setor × POD planejada (só informação, não altera nada)
+      if (x.motivo === 'planejada' && x.pod != null) x.posPrevista = q[x.setorId] * x.pod;
+    });
     var posTotal = 0;
     var resSetores = ativos.map(function (s) {
       var podAcum = podsDoSetor[s.setorId] ? acumular(podsDoSetor[s.setorId]) : null;
       var pos = (Number(s.poa) || 0) * (podAcum || 0);
       posTotal += pos;
       return { setorId: s.setorId, nome: s.nome, poa: Number(s.poa) || 0, pod: podAcum, pos: pos, poaAtual: q[s.setorId],
-        registros: podsDoSetor[s.setorId] ? podsDoSetor[s.setorId].length : 0 };
+        registros: podsDoSetor[s.setorId] ? podsDoSetor[s.setorId].length : 0, semEstimativa: semEstimativa[s.setorId] || 0,
+        areaM2: s.areaM2 > 0 ? s.areaM2 : null,
+        // densidade de probabilidade: apoio ao planejamento (unidade: % por km²), nunca ordem automática
+        pdenPorKm2: s.areaM2 > 0 ? (q[s.setorId] * 100) / (s.areaM2 / 1e6) : null };
     });
     resRegistros.forEach(function (x) { delete x._r; });
 
@@ -109,6 +126,72 @@
       ordem: resSetores.slice().sort(function (a, b) { return (b.poaAtual - a.poaAtual) || a.nome.localeCompare(b.nome, 'pt-BR'); })
         .map(function (s) { return s.setorId; }),
     };
+  }
+
+  /* ---------- Geometria: sobreposição de setores ----------------------------------------------
+   * O mesmo cálculo existe no banco (busca_sobreposicao_fracao, migração 034), que é quem decide na aprovação.
+   * Fração do MENOR setor que também está dentro do outro, por amostragem (grade 30 × 30). Acima de 2% = sobrepostos.
+   */
+  var R_TERRA = 6371008.8, LIMITE_SOBREPOSICAO = 0.02, GRADE = 30;
+
+  // setor: { forma: 'circulo', centroLat, centroLng, raioM } ou { forma: 'poligono', pontos: [[lat, lng], …] } → [[lat, lng], …]
+  function poligonoDoSetor(s) {
+    if (s.forma === 'circulo') {
+      var v = [];
+      for (var i = 0; i < 48; i++) {
+        var a = 2 * Math.PI * i / 48;
+        v.push([s.centroLat + (s.raioM * Math.sin(a) / R_TERRA) * 180 / Math.PI,
+          s.centroLng + (s.raioM * Math.cos(a) / (R_TERRA * Math.cos(s.centroLat * Math.PI / 180))) * 180 / Math.PI]);
+      }
+      return v;
+    }
+    return s.pontos || [];
+  }
+
+  function noPoligono(x, y, xs, ys) {
+    var dentro = false;
+    for (var i = 0, j = xs.length - 1; i < xs.length; j = i++) {
+      if (((ys[i] > y) !== (ys[j] > y)) && (x < (xs[j] - xs[i]) * (y - ys[i]) / (ys[j] - ys[i]) + xs[i])) dentro = !dentro;
+    }
+    return dentro;
+  }
+
+  function sobreposicaoFracao(pa, pb) {
+    if (pa.length < 3 || pb.length < 3) return 0;
+    var la0 = pa[0][0], ln0 = pa[0][1], k = Math.cos(la0 * Math.PI / 180);
+    function proj(p) {
+      return { x: p.map(function (q) { return (q[1] - ln0) * Math.PI / 180 * R_TERRA * k; }), y: p.map(function (q) { return (q[0] - la0) * Math.PI / 180 * R_TERRA; }) };
+    }
+    function area(c) {
+      var s = 0;
+      for (var i = 0, j = c.x.length - 1; i < c.x.length; j = i++) s += (c.x[j] + c.x[i]) * (c.y[j] - c.y[i]);
+      return s;
+    }
+    var a = proj(pa), b = proj(pb);
+    var menor = Math.abs(area(a)) <= Math.abs(area(b)) ? a : b, maior = menor === a ? b : a;
+    var minx = Math.min.apply(null, menor.x), maxx = Math.max.apply(null, menor.x), miny = Math.min.apply(null, menor.y), maxy = Math.max.apply(null, menor.y);
+    var cs = 0, cb = 0;
+    for (var gi = 0; gi < GRADE; gi++) {
+      var px = minx + (gi + 0.5) * (maxx - minx) / GRADE;
+      for (var gj = 0; gj < GRADE; gj++) {
+        var py = miny + (gj + 0.5) * (maxy - miny) / GRADE;
+        if (noPoligono(px, py, menor.x, menor.y)) { cs++; if (noPoligono(px, py, maior.x, maior.y)) cb++; }
+      }
+    }
+    return cs ? cb / cs : 0;
+  }
+
+  // setores: [{ nome, poa, forma, centroLat, centroLng, raioM, pontos }]. Devolve os pares com POA > 0 que se sobrepõem.
+  function sobreposicoes(setores) {
+    var itens = (setores || []).filter(function (s) { return s.poa > 0 && s.forma; });
+    var pares = [];
+    for (var i = 0; i < itens.length; i++) {
+      for (var j = i + 1; j < itens.length; j++) {
+        var f = sobreposicaoFracao(poligonoDoSetor(itens[i]), poligonoDoSetor(itens[j]));
+        if (f > LIMITE_SOBREPOSICAO) pares.push({ a: itens[i].nome, b: itens[j].nome, fracao: f });
+      }
+    }
+    return pares;
   }
 
   // Ponto de partida para um cenário novo: o mesmo POA em cada metro quadrado (POA ∝ área), somando `total`
@@ -145,5 +228,6 @@
   alvo.POD = {
     calcular: calcular, acumular: acumular, distribuirPelaArea: distribuirPelaArea,
     sugerirProximaVersao: sugerirProximaVersao, somaPoa: somaPoa,
+    poligonoDoSetor: poligonoDoSetor, sobreposicaoFracao: sobreposicaoFracao, sobreposicoes: sobreposicoes, LIMITE_SOBREPOSICAO: LIMITE_SOBREPOSICAO,
   };
 })();

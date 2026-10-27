@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1204,5 +1204,121 @@ console.log('\nPOA e POD conforme o guia — migração 034');
   chk((await db.query(`select (select count(*) from public.busca_cenario_evidencias where operacao_id = $1) + (select count(*) from public.busca_cenarios where operacao_id = $1) as n`, [opG.id])).rows[0].n == 0, 'excluir a operação apaga tudo (cascata passa pela proteção)');
 }
 
-console.log('\nMigrações 007–034 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 035: pedidos de ajuda com fluxo completo ----------
+console.log('\nPedidos de ajuda: estados, prioridade, histórico e escalação — migração 035');
+{
+  const opH = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP AJUDA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uBeto = await usuario(null, true), uAna = await usuario(null, true);
+  const beto = await rpc(uBeto, 'ingressar', { p_token: opH.token_civil, p_nome: 'Beto', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const ana = await rpc(uAna, 'ingressar', { p_token: opH.token_militar, p_nome: 'Cb Ana', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const gH = await rpc(resp1, 'salvar_grupo', { p_operacao: opH.id, p_id: null, p_dados: JSON.stringify({ nome: 'Resgate' }) });
+  const opOutra = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP OUTRA AJUDA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const gOutra = await rpc(resp1, 'salvar_grupo', { p_operacao: opOutra.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo de outra operação' }) });
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+
+  console.log('  criação do pedido');
+  await rpc(uBeto, 'participante_enviar_mensagem', { p_participante: beto.participante_id, p_categoria: 'AJUDA', p_texto: 'Torci o pé', p_lat: -22.9, p_lng: -43.2 });
+  let ped = (await db.query(`select * from public.pedidos_ajuda where operacao_id = $1`, [opH.id])).rows;
+  chk(ped.length === 1 && ped[0].estado === 'recebido' && ped[0].origem === 'botao' && ped[0].prioridade === 'alta' && ped[0].participante_nome === 'Beto' && ped[0].lat === -22.9 && /Torci o pé/.test(ped[0].texto), 'botão "Preciso de ajuda" cria o pedido: recebido, prioridade alta, com localização', ped[0]);
+  const P1 = ped[0].id;
+  chk((await db.query(`select tipo from public.pedido_ajuda_eventos where pedido_id = $1`, [P1])).rows.map((r) => r.tipo).join() === 'recebido', 'o histórico começa com "recebido"');
+  // resposta "preciso de ajuda" a um comando
+  const cmd = await rpc(resp1, 'enviar_mensagem', { p_participante: ana.participante_id, p_tipo: 'CONFIRME', p_texto: 'Tudo bem?' });
+  await rpc(uAna, 'confirmar_mensagem', { p_mensagem: cmd.id, p_resposta: 'PRECISO_AJUDA' });
+  ped = (await db.query(`select * from public.pedidos_ajuda where operacao_id = $1 order by recebido_em`, [opH.id])).rows;
+  chk(ped.length === 2 && ped[1].origem === 'resposta' && ped[1].participante_nome === 'Cb Ana' && ped[1].estado === 'recebido', 'resposta "PRECISO DE AJUDA" a um comando também cria um pedido', ped[1]);
+  const P2 = ped[1].id;
+  await rpc(uAna, 'confirmar_mensagem', { p_mensagem: cmd.id, p_resposta: 'PRECISO_AJUDA' });
+  chk((await db.query(`select count(*)::int n from public.pedidos_ajuda where operacao_id = $1`, [opH.id])).rows[0].n === 2, 'repetir a resposta não duplica o pedido');
+
+  console.log('  permissões');
+  chk((await q(uBeto, `select count(*)::int n from public.pedidos_ajuda`))[0].n === 0, 'participante não lê pedidos nem histórico');
+  chk((await q(resp2, `select count(*)::int n from public.pedidos_ajuda where operacao_id = $1`, [opH.id]))[0].n === 0, 'responsável de outra operação não lê');
+  chk((await q(resp1, `select count(*)::int n from public.pedidos_ajuda where operacao_id = $1`, [opH.id]))[0].n === 2, 'responsável da operação lê os pedidos');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'pedido_ajuda_assumir', { p_pedido: P1 }))) && /sem_permissao/.test(await erroDe(rpc(uBeto, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'atendido', p_texto: 'forjado pelo próprio' }))), 'quem não é responsável da operação (outra operação ou participante) não altera o pedido');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `update public.pedidos_ajuda set estado = 'resolvido' where id = $1`, [P1]))), 'sem escrita direta: só pelas funções');
+  chk(/pedido_inexistente/.test(await erroDe(rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: '00000000-0000-0000-0000-000000000000' }))), 'pedido inexistente: recusado');
+
+  console.log('  "ciente" não resolve');
+  await db.query(`update public.mensagens set lida_em = now(), lida_por_nome = 'Sgt Um' where operacao_id = $1`, [opH.id]);
+  chk((await db.query(`select estado from public.pedidos_ajuda where id = $1`, [P1])).rows[0].estado === 'recebido', 'mensagem lida/ciente não muda o estado do pedido (continua "recebido")');
+
+  console.log('  fluxo: assumir, prioridade, equipe, atendimento, resolução');
+  const a1 = await rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P1 });
+  chk(a1.estado === 'assumido' && a1.assumido_por_nome === 'Sgt Um' && a1.assumido_em, 'assumir: estado "assumido" por quem assumiu', a1);
+  const a2 = await rpc(resp2, 'pedido_ajuda_assumir', { p_pedido: P1 }).catch((e) => e.message);
+  chk(/sem_permissao/.test(String(a2)), 'outro responsável de fora não assume');
+  chk(/pedido_prioridade_invalida/.test(await erroDe(rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'urgentissima' }))), 'prioridade inválida: recusada');
+  const pr1 = await rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'critica' });
+  chk(pr1.prioridade === 'critica', 'subir a prioridade não exige justificativa');
+  chk(/pedido_justificativa_obrigatoria/.test(await erroDe(rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'baixa' }))), 'baixar a prioridade exige justificativa');
+  const pr2 = await rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'media', p_justificativa: 'Só torceu o pé, caminha com apoio' });
+  chk(pr2.prioridade === 'media', 'baixar com justificativa funciona');
+  chk(/pedido_equipe_invalida/.test(await erroDe(rpc(resp1, 'pedido_ajuda_enviar_equipe', { p_pedido: P1, p_grupo: gOutra.id }))), 'equipe de outra operação: recusada');
+  const eq = await rpc(resp1, 'pedido_ajuda_enviar_equipe', { p_pedido: P1, p_grupo: gH.id, p_nota: 'Saindo da base' });
+  chk(eq.estado === 'equipe_enviada' && eq.equipe_nome === 'Resgate' && eq.equipe_enviada_em, 'enviar equipe: estado "equipe_enviada" com a equipe e a hora', eq);
+  const at = await rpc(resp1, 'pedido_ajuda_iniciar_atendimento', { p_pedido: P1, p_nota: 'Equipe chegou' });
+  chk(at.estado === 'em_atendimento' && at.atendimento_iniciado_em, 'iniciar atendimento: "em_atendimento"');
+  await rpc(resp1, 'pedido_ajuda_nota', { p_pedido: P1, p_texto: 'Imobilizado; aguardando maca' });
+  chk(/pedido_resolucao_invalida/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'resolvido', p_texto: 'texto qualquer' }))), 'tipo de resolução inválido: recusado');
+  chk(/pedido_resolucao_sem_texto/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'atendido', p_texto: 'ok' }))), 'resolver exige justificativa (mín. 5 caracteres)');
+  chk((await db.query(`select estado from public.pedidos_ajuda where id = $1`, [P1])).rows[0].estado === 'em_atendimento', 'resolução recusada não muda o estado');
+  const rs = await rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'atendido', p_texto: 'Levado à base e entregue ao SAMU' });
+  chk(rs.estado === 'resolvido' && rs.resolucao === 'atendido' && rs.resolvido_por_nome === 'Sgt Um' && rs.resolvido_em, 'resolvido: guarda tipo, justificativa, quem e quando', rs);
+  chk(/pedido_ja_resolvido/.test(await erroDe(rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P1 }))) && /pedido_ja_resolvido/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'outro', p_texto: 'de novo, de novo' }))), 'pedido resolvido não é alterado nem resolvido de novo');
+  chk(/pedido_nao_resolvido/.test(await erroDe(rpc(resp1, 'pedido_ajuda_reabrir', { p_pedido: P2, p_motivo: 'não está resolvido' }))), 'só se reabre pedido resolvido');
+  const reab = await rpc(resp1, 'pedido_ajuda_reabrir', { p_pedido: P1, p_motivo: 'Dor voltou, precisa de novo atendimento' });
+  chk(reab.estado === 'assumido' && reab.resolvido_em === null && reab.resolucao === null, 'reabrir volta para "assumido" e limpa a resolução atual');
+  const hist = (await db.query(`select tipo, por_nome, detalhe, dados from public.pedido_ajuda_eventos where pedido_id = $1 order by id`, [P1])).rows;
+  chk(hist.map((h) => h.tipo).join() === 'recebido,assumido,prioridade,prioridade,equipe_enviada,em_atendimento,nota,resolvido,reaberto', 'histórico completo, na ordem, sem apagar nada', hist.map((h) => h.tipo));
+  chk(hist.find((h) => h.tipo === 'reaberto').dados.resolucao_anterior.resolucao === 'atendido' && /SAMU/.test(hist.find((h) => h.tipo === 'reaberto').dados.resolucao_anterior.texto), 'reabrir preserva a resolução anterior no histórico');
+  chk(hist.find((h) => h.tipo === 'prioridade' && /baixa|media/.test(h.detalhe)).dados.justificativa === 'Só torceu o pé, caminha com apoio', 'a justificativa de baixar a prioridade fica no histórico');
+  chk(/pedido_historico_imutavel/.test(await erroDe(db.query(`update public.pedido_ajuda_eventos set detalhe = 'forjado' where pedido_id = $1`, [P1]))) && /pedido_historico_imutavel/.test(await erroDe(db.query(`delete from public.pedido_ajuda_eventos where pedido_id = $1`, [P1]))), 'gatilho: o histórico não é editado nem apagado');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo like 'pedido_ajuda_%'`, [opH.id])).rows[0].n >= 9, 'cada passo entra no diário');
+
+  console.log('  escalação e tempo sem atendimento');
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '10 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 1, 'pedido recebido há 10 min (prioridade alta: prazo de 3 min) sem ninguém assumir: escala');
+  const alE = (await db.query(`select tipo, nivel, titulo, texto, participante_id from public.alertas where operacao_id = $1 and tipo = 'ajuda_sem_atendimento'`, [opH.id])).rows;
+  chk(alE.length === 1 && alE[0].nivel === 'critico' && /SEM ATENDIMENTO — Cb Ana/.test(alE[0].titulo) && /Ninguém assumiu/.test(alE[0].texto) && alE[0].participante_id === ana.participante_id, 'alerta crítico com o tempo sem atendimento e o nome', alE);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'o mesmo prazo não repete o alerta');
+  chk((await db.query(`select escalonamentos from public.pedidos_ajuda where id = $1`, [P2])).rows[0].escalonamentos === 1, 'o pedido conta as escalações');
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '20 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 1, 'passou outro prazo: escala de novo (nunca "esquece")');
+  chk((await db.query(`select count(*)::int n from public.pedido_ajuda_eventos where pedido_id = $1 and tipo = 'escalado'`, [P2])).rows[0].n === 2, 'cada escalação fica no histórico');
+  await rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P2 });
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '5 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'assumido há 5 min (prazo de 9 min sem equipe): ainda não escala');
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '10 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 1 && /PARADO — Cb Ana/.test((await db.query(`select titulo from public.alertas where chave like $1 || '%' order by id desc limit 1`, ['ajuda:' + P2])).rows[0].titulo), 'assumido mas sem equipe enviada além do prazo: escala como "parado"');
+  await rpc(resp1, 'pedido_ajuda_iniciar_atendimento', { p_pedido: P2 });
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '2 hours' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'em atendimento não escala');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'verificar_pedidos_ajuda', { p_operacao: opH.id }))), 'só responsável da operação (ou o agendador) verifica');
+  chk((await db.query(`select public.verificar_pedidos_ajuda() n`)).rows[0].n === 0, 'o agendador (sem usuário) também pode verificar');
+
+  console.log('  o participante vê só o estado do próprio pedido');
+  const mp = await rpc(uBeto, 'meu_pedido_ajuda', { p_participante: beto.participante_id });
+  chk(mp.estado === 'assumido' && mp.assumido === true && !('assumido_por_nome' in mp) && !('resolucao_texto' in mp), 'participante vê o estado, sem nomes de quem atende nem anotações', mp);
+  chk(/participante_invalido/.test(await erroDe(rpc(uBeto, 'meu_pedido_ajuda', { p_participante: ana.participante_id }))), 'participante não consulta o pedido de outro');
+
+  console.log('  pedidos anteriores ao fluxo (carga inicial) e reexecução');
+  const msgVelha = await db.query(`insert into public.mensagens (operacao_id, participante_id, remetente_id, remetente_nome, tipo, texto, direcao, categoria, criada_em)
+    values ($1, $2, $3, 'Beto', 'PARTICIPANTE', 'socorro antigo', 'entrada', 'AJUDA', now() - interval '3 days') returning id`, [opH.id, beto.participante_id, uBeto]);
+  await db.query(`delete from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id]);
+  await db.exec(ler('supabase/migracoes/035_pedidos_ajuda.sql'));
+  const legado = (await db.query(`select estado, resolucao, resolucao_texto from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows;
+  chk(legado.length === 1 && legado[0].estado === 'resolvido' && /anterior ao fluxo/.test(legado[0].resolucao_texto), 'pedido antigo (mais de 24 h) entra resolvido, marcado como registro anterior ao fluxo', legado);
+  chk((await db.query(`select count(*)::int n from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows[0].n === 1, 'reexecutar a migração não duplica');
+
+  console.log('  operação encerrada: somente leitura');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opH.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P2 }))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P2, p_resolucao: 'outro', p_texto: 'depois de encerrar' }))), 'encerrada: pedidos não mudam');
+  chk((await q(resp1, `select count(*)::int n from public.pedido_ajuda_eventos where operacao_id = $1`, [opH.id]))[0].n > 10, 'encerrada: o histórico continua legível');
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'encerrada: não escala');
+  const pubA = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(pubA.includes('pedidos_ajuda') && pubA.includes('pedido_ajuda_eventos'), 'pedidos e histórico publicados no Realtime');
+}
+
+console.log('\nMigrações 007–035 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

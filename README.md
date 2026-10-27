@@ -316,6 +316,57 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
     horário), pela diferença entre a hora do GPS e a hora de chegada ao servidor.
   Cada alerta sai uma vez por horário combinado / episódio (não repete a cada verificação) e entra no diário.
 
+### Pedidos de ajuda (migração 035)
+
+O pedido de ajuda (botão **Preciso de ajuda** do participante ou resposta **PRECISO DE AJUDA** a um comando) vira um
+**pedido com estados**, controlado pelo servidor (`pedidos_ajuda`). Ler a mensagem ou dar ciente **não resolve**:
+só **Resolver**, com a justificativa.
+
+- **Estados**: recebido → assumido (por um responsável) → equipe enviada → em atendimento → resolvido. Cada passo
+  grava **quem fez e quando** no histórico (`pedido_ajuda_eventos`), que é só de acréscimo: não se edita nem se apaga.
+- **Tempo sem atendimento**: enquanto ninguém assume, o cartão mostra **SEM ATENDIMENTO há X** e a pílula **🆘** do
+  topo (vermelha e pulsante) conta quantos pedidos estão abertos e há quanto tempo o mais antigo espera.
+- **Escalonamento**: se ninguém assume, o servidor (`verificar_pedidos_ajuda`, pelo `pg_cron` a cada minuto e pelo
+  painel aberto) gera o alerta crítico **ajuda sem atendimento**, que toca o alarme e se repete em níveis (prazo base
+  por prioridade: crítica 2 min, alta 3, média 8, baixa 15; o prazo cresce depois que alguém assume ou envia equipe).
+- **Prioridade** (crítica, alta, média, baixa; padrão alta). **Baixar** a prioridade exige justificativa.
+- **Encerrar** exige **como terminou** (atendido, sem necessidade, falso alarme, encaminhado, outro) e a
+  **justificativa** (mín. 5 caracteres). **Reabrir** exige motivo e guarda a resolução anterior no histórico.
+- **Participante**: `meu_pedido_ajuda` devolve só o estado do pedido dele (nunca os dados de outros).
+- Telas: **Ferramentas → Pedidos de ajuda**, a pílula do topo e o bloco da **ficha** do participante (que antes tinha
+  "Marcar como atendido", só local). Sem a migração 035, o painel continua com o aviso antigo.
+
+### Recursos e segurança das equipes (migração 036)
+
+Cada equipe (grupo) tem **disponibilidade** (disponível, em descanso, indisponível, com observação e hora de volta;
+**em missão** aparece sozinho quando há deslocamento ativo), **capacidades** (texto livre, ex.: mergulho, APH) e
+**recursos**: embarcação, viatura, drone, cão de busca, equipamento de comunicação, primeiros socorros e outro
+(identificação, quantidade, situação operacional/limitada/indisponível). Em **Ferramentas → Grupos**, cada equipe
+mostra os chips e o botão **Recursos**.
+
+- **Aviso de segurança**: equipe com recursos informados mas **sem comunicação** ou **sem primeiros socorros**.
+  Sem nada informado, não se acusa falta.
+- **Enviar destino** a uma equipe em descanso, indisponível ou já em missão pede confirmação (a decisão é do comando).
+- Alterações vão ao **diário** (`equipe_recursos`) e entram no briefing. Gravação só por `salvar_recursos_grupo`.
+
+### Briefing e passagem de comando (migração 037)
+
+**Ferramentas → Briefing e passagem de comando** abre uma página curta montada pelo servidor
+(`briefing_operacao_dados`) com o que **já está cadastrado**, sem redigitar: objetivo, vítimas e **último local
+visto**, hipóteses (último cenário POA aprovado de cada vítima), riscos (pontos de risco, pedidos de ajuda abertos,
+alertas críticos sem ciente), equipes (disponibilidade, recursos, avisos), tarefas (deslocamentos e setores
+pendentes), comunicações e **decisões pendentes** (as anotadas e as que o sistema vê esperando alguém).
+Só objetivo, riscos, comunicações, observações e decisões são digitados aqui. **Copiar texto** gera um resumo para rádio ou mensagem.
+
+- **Quem comanda** aparece no topo (chip ★). **Passar o comando**: o comandante (ou administrador) escolhe outro
+  responsável da operação; o servidor guarda uma **foto do briefing** naquele momento. O comando **só muda quando a
+  outra pessoa aceita** (com o horário do aceite); ela pode **recusar com motivo**. Quem passou pode cancelar.
+- **Assumir o comando** sem aceite (comandante sem resposta): exige motivo (mín. 10 caracteres) e entra no diário em destaque.
+- O histórico de passagens é **imutável** (aceite, recusa, cancelamento, assunção) e a foto de cada uma pode ser revista.
+
+**Migrações 035, 036 e 037**: rode no Supabase em ordem (035 → 036 → 037). Cada módulo do painel avisa se a sua migração
+ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cada função estão nos próprios arquivos `.sql`.
+
 ### Rota até um participante (ir até a pessoa ou mandar apoio)
 
 - Na ficha de um participante, **📍 Rota até ela**: escolha **de onde sai** — a **sua localização** (GPS do
@@ -1133,6 +1184,9 @@ rastreamento-sar/
 │       ├── cadastro.js         cadastro da operação, escolha de ponto no mapa e fichas das vítimas
 │       ├── relatorio.js        diário da operação, resultado, mapas em canvas e geração do relatório final
 │       ├── relatorio-pdf.js    monta o documento do relatório final (pdfmake), sem rede nem tela
+│       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
+│       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
+│       ├── briefing.js         briefing da operação e passagem de comando com aceite
 │       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
 │       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 │   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
@@ -1162,6 +1216,10 @@ rastreamento-sar/
 │       ├── 030_percursos_trajetos.sql         meio/cor/origem das trilhas; trajeto desenhado como destino
 │       ├── 031_vitima_encontrada_detalhes.sql ficha, estado, local e quem encontrou no registro da vítima
 │       ├── 032_controle_tempo_missoes.sql     horários combinados, alertas de atraso e de falta de comunicação
+│       ├── 033_cenario_busca_pod_poa.sql / 034_poa_pod_guia.sql   POA/POD: cenários, versões, registros de busca
+│       ├── 035_pedidos_ajuda.sql              pedidos de ajuda com estados, prioridade, escalonamento e histórico
+│       ├── 036_recursos_equipes.sql           disponibilidade, capacidades e recursos das equipes
+│       └── 037_briefing_comando.sql           briefing, decisões pendentes e passagem de comando
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1606,6 +1664,14 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 
 ### Testes já realizados no desenvolvimento
 
+- **Pedidos de ajuda, recursos e briefing (migrações 035–037)**: banco — 638 verificações (migrações 007–037: pedido
+  criado pela mensagem de ajuda, máquina de estados no servidor, ciente não resolve, baixar prioridade e encerrar exigem
+  justificativa, reabrir, histórico imutável, escalonamento sem repetir, participante só vê o próprio pedido, recursos e
+  disponibilidade só por RPC, briefing com os dados existentes, passagem só do comandante, aceite muda o comando,
+  recusa com motivo, assunção com motivo, passagem imutável, encerrada só leitura). Navegador (banco simulado — 38):
+  pílula e tempo sem atendimento, fluxo completo do pedido, justificativas, recursos e avisos, confirmação de envio a
+  equipe em descanso, briefing, decisões, texto copiável, passagem, aceite e assunção. **Não testado**: Supabase real
+  com 035–037 aplicadas e celulares físicos.
 - **Cadastro, vítimas, grupos, trilha offline e deslocamentos (versão 2026-10-13)**: `npm test` passa —
   filtro de GPS com o intervalo de 15 s e a falha por tempo (39 verificações), coordenadas (45) e a
   **fila offline** (20: pendentes em ordem do GPS, campos de cada ponto, sem conexão, recarregar, confirmação

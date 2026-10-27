@@ -358,6 +358,11 @@
     $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
     $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
     $('btn-regua').addEventListener('click', alternarRegua);
+    $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
+    $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
+    $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
+    $('comando-chip').addEventListener('click', function () { if (window.Briefing) window.Briefing.abrir(); });
+    if (window.AjudaPedidos) window.AjudaPedidos.aoMudar(function () { if (est.op) { atualizarEstados(); if (est.selecionado) atualizarFicha(); } });
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
@@ -1343,6 +1348,9 @@
     assinarTempoRealExtras();
     assinarTrilhasManuais();
     if (window.BuscaCenario) window.BuscaCenario.iniciar();
+    if (window.AjudaPedidos) window.AjudaPedidos.iniciar();
+    if (window.RecursosEquipe) window.RecursosEquipe.iniciar();
+    if (window.Briefing) window.Briefing.iniciar();
     est.timerStatus = setInterval(atualizarEstados, 5000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
@@ -1441,6 +1449,9 @@
     }
     encerrarTrilhasManuais();
     if (window.BuscaCenario) window.BuscaCenario.parar();
+    if (window.AjudaPedidos) window.AjudaPedidos.parar();
+    if (window.RecursosEquipe) window.RecursosEquipe.parar();
+    if (window.Briefing) window.Briefing.parar();
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -2666,6 +2677,11 @@
   // Pedido de ajuda ainda não atendido: resposta "PRECISO DE AJUDA" a um CONFIRME
   // ou o botão "Preciso de ajuda" da página do participante.
   function temAjuda(p) {
+    // Com o fluxo de pedidos (migração 035) só o estado "resolvido" tira o aviso: ler ou dar ciente não resolve.
+    if (window.AjudaPedidos && window.AjudaPedidos.disponivel()) {
+      var ped = window.AjudaPedidos.abertoDoParticipante(p.id);
+      return ped ? { id: ped.id, pedido: ped, direcao: 'pedido', criada_em: ped.recebido_em, lat: ped.lat, lng: ped.lng } : null;
+    }
     var ultima = null, sos = null;
     est.mensagens.forEach(function (m) {
       if (m.participante_id !== p.id) return;
@@ -3569,7 +3585,17 @@
     var ajuda = temAjuda(p);
     var caixaAjuda = $('ficha-alerta');
     caixaAjuda.hidden = !ajuda;
-    if (ajuda) {
+    if (ajuda && ajuda.pedido) {
+      caixaAjuda.innerHTML = '';
+      var AP = window.AjudaPedidos, pd = ajuda.pedido;
+      caixaAjuda.appendChild(UI.el('div', { classe: 'nota nota-ajuda' }, [
+        UI.el('strong', { texto: 'PEDIU AJUDA às ' + C.hora(pd.recebido_em) + ' · ' + ((AP.ESTADOS[pd.estado] || {}).rotulo || pd.estado) + '. ' }),
+        pd.estado === 'recebido' ? 'Ninguém assumiu há ' + AP.duracao(C.agora() - C.paraMs(pd.recebido_em)) + '. ' : (pd.assumido_por_nome ? 'Responsável: ' + pd.assumido_por_nome + '. ' : ''),
+        pd.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { est.mapa.setView([pd.lat, pd.lng], Math.max(est.mapa.getZoom(), 17)); } }) : null,
+        ' ',
+        UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: pd.estado === 'recebido' ? 'Assumir / tratar' : 'Abrir atendimento', onclick: function () { AP.abrir(pd.id); } }),
+      ]));
+    } else if (ajuda) {
       caixaAjuda.innerHTML = '';
       caixaAjuda.appendChild(UI.el('div', { classe: 'nota nota-ajuda' }, [
         UI.el('strong', { texto: 'PEDIU AJUDA às ' + C.hora(ajuda.direcao === 'entrada' ? ajuda.criada_em : ajuda.confirmada_em) + '. ' }),
@@ -8751,12 +8777,17 @@
             UI.el('small', { classe: 'muted', texto: mem.length + ' pessoa(s)' + (resp.length ? ' · ★ ' + resp.join(', ') : ' · sem responsável') +
               ' · link: ' + (g.permite_militar ? 'militares ou civis' : 'civis') }),
           ]),
+          window.RecursosEquipe ? window.RecursosEquipe.resumo(g) : null,
           compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando no mapa' : '👁 Mostrar no mapa',
               onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { fechar(); abrirMembrosGrupo(g.id); } }),
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { fechar(); abrirLinkGrupo(g.id); } }) : null,
-            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: function () { fechar(); escolherDestino([], g.id); } }) : null,
+            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: async function () {
+              if (window.RecursosEquipe && !(await window.RecursosEquipe.confirmarEnvio(g))) return;
+              fechar(); escolherDestino([], g.id);
+            } }) : null,
+            window.RecursosEquipe ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Recursos', onclick: function () { window.RecursosEquipe.abrir(g.id); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormGrupo(g); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }) : null,
           ])),
@@ -9804,6 +9835,9 @@
     blocoCoordenadas: blocoCoordenadas,
     copiar: copiarTexto,
     fecharMenu: function () { fecharMenu(false); },
+    irPara: function (lat, lng) { if (est.mapa && lat != null && lng != null) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 17)); },
+    recarregarGrupos: function () { return carregarGrupos().then(function () { if (est.renderGruposAberto) est.renderGruposAberto(); }); },
+    abrirCentral: function (aba) { abrirCentral(aba); },
   };
 
   iniciar();

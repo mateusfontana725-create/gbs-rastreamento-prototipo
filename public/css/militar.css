@@ -1817,3 +1817,62 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
   .detalhe-fatos { grid-template-columns: 1fr 1fr; }
   .detalhe-titulo { font-size: 1.05rem; }
 }
+
+/* ---------- Pedidos de ajuda (js/ajuda-pedidos.js) ---------- */
+.btn-ajuda { border-color: var(--perigo) !important; color: var(--perigo-texto) !important; }
+.btn-ajuda.ajuda-sem-atendimento { background: var(--perigo) !important; color: #fff !important; animation: ajuda-pulso 1.4s ease-in-out infinite; }
+@keyframes ajuda-pulso { 50% { box-shadow: 0 0 0 5px var(--perigo-claro); } }
+@media (prefers-reduced-motion: reduce) { .btn-ajuda.ajuda-sem-atendimento { animation: none; } }
+.modal:has(.ajuda-corpo, .briefing-modal, .passagem-recebimento, .form-recursos) { width: min(720px, 100%); }
+.ajuda-abas { display: flex; gap: 6px; margin: 8px 0; }
+.ajuda-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ajuda-cartao { border: 1px solid var(--borda); border-left-width: 5px; border-radius: 8px; padding: 10px 12px; background: var(--superficie-2, transparent); }
+.ajuda-estado-recebido { border-left-color: var(--perigo); }
+.ajuda-estado-assumido, .ajuda-estado-equipe_enviada { border-left-color: var(--alerta); }
+.ajuda-estado-em_atendimento { border-left-color: var(--info, #38bdf8); }
+.ajuda-estado-resolvido { border-left-color: var(--ok); opacity: .9; }
+.ajuda-topo, .ajuda-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ajuda-nome { font-size: 1rem; }
+.ajuda-linhas p { margin: 4px 0; }
+.ajuda-tempo { font-weight: 700; }
+.ajuda-tempo-alerta { color: var(--perigo-texto); }
+.ajuda-prio-critica { color: #fff; background: var(--perigo); }
+.ajuda-prio-alta { color: var(--perigo-texto); background: var(--perigo-claro); }
+.ajuda-prio-media { color: var(--alerta-texto); background: var(--alerta-claro); }
+.ajuda-prio-baixa { color: var(--texto-2); background: var(--neutro-claro); }
+.ajuda-texto { font-style: italic; }
+.ajuda-acoes { margin-top: 8px; }
+.ajuda-historico { margin-top: 8px; font-size: .85rem; }
+.ajuda-resolucao { border-top: 1px dashed var(--borda); margin-top: 8px; padding-top: 6px; }
+
+/* ---------- Recursos das equipes (js/recursos-equipe.js) ---------- */
+.rec-linha, .recurso-resumo { margin: 4px 0 6px; }
+.recurso-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.recurso-chip { text-transform: none; letter-spacing: 0; }
+.recurso-limitado { color: var(--alerta-texto); background: var(--alerta-claro); }
+.recurso-indisponivel { color: var(--perigo-texto); background: var(--perigo-claro); text-decoration: line-through; }
+.recurso-disp-disponivel { color: var(--ok-texto); background: var(--ok-claro); }
+.recurso-disp-em_missao { color: var(--responsavel-texto); background: var(--neutro-claro); }
+.recurso-disp-em_descanso { color: var(--alerta-texto); background: var(--alerta-claro); }
+.recurso-disp-indisponivel { color: var(--perigo-texto); background: var(--perigo-claro); }
+.recurso-cap { margin: 2px 0 0; font-size: .82rem; }
+.rec-lista { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* ---------- Briefing e passagem de comando (js/briefing.js) ---------- */
+.comando-chip { display: block; margin-top: 2px; padding: 1px 8px; border: 1px solid var(--borda); border-radius: 999px; background: transparent; color: var(--responsavel-texto); font-size: .72rem; font-weight: 700; cursor: pointer; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.comando-chip.comando-pendente { border-color: var(--alerta); color: var(--alerta-texto); background: var(--alerta-claro); animation: ajuda-pulso 1.6s ease-in-out infinite; }
+.briefing-modal, .passagem-recebimento { overflow-wrap: anywhere; }
+.briefing-barra { margin: 6px 0 10px; flex-wrap: wrap; }
+.briefing-cab { margin: 0 0 8px; }
+.briefing-sec { border-top: 1px solid var(--borda); padding: 8px 0; }
+.briefing-sec h3 { margin: 0 0 4px; font-size: .95rem; }
+.briefing-lista { margin: 4px 0; padding-left: 18px; }
+.briefing-lista li { margin: 3px 0; }
+.briefing-alerta { color: var(--alerta-texto); font-weight: 600; margin: 4px 0; }
+.briefing-obs { font-style: italic; }
+.briefing-pendente { border-left: 4px solid var(--alerta); }
+.briefing-historico { margin-top: 10px; font-size: .88rem; }
+.passagem-nota { background: var(--neutro-claro); border-radius: 6px; padding: 8px 10px; }
+.rec-lista .rec-linha { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+.rec-lista .rec-linha .campo { flex: 1 1 140px; min-width: 0; }
+.rec-lista .rec-linha .campo-poa { flex: 0 0 70px; }

@@ -660,6 +660,11 @@
     <header class="visao-3d-cabeca">
       <button class="btn btn-pequeno" type="button" id="visao-3d-fechar">◀ Voltar ao mapa</button>
       <h2 id="visao-3d-titulo">Relevo em 3D</h2>
+      <div class="seg seg-3d" role="radiogroup" aria-label="Tipo de mapa no 3D">
+        <button class="seg-opcao" type="button" role="radio" data-camada="osm" aria-checked="true">Mapa</button>
+        <button class="seg-opcao" type="button" role="radio" data-camada="topo" aria-checked="false">Topográfico</button>
+        <button class="seg-opcao" type="button" role="radio" data-camada="satelite" aria-checked="false">Satélite</button>
+      </div>
       <button class="btn btn-pequeno" type="button" id="visao-3d-atualizar">Atualizar posições</button>
     </header>
     <div class="visao-3d-mapa" id="visao-3d-mapa"></div>

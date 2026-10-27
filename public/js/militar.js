@@ -1541,8 +1541,10 @@
   /* ------------------------------------------------------------------ */
   function criarMapa() {
     var mapa = L.map('mapa', { zoomControl: true, preferCanvas: false, worldCopyJump: true }).setView([-15.79, -47.88], 4);
+    // Acima do zoom que o servidor tem (maxNativeZoom) os ladrilhos são ampliados, em vez de sumirem.
     var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxNativeZoom: 19,
+      maxZoom: 22,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     });
     var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
@@ -1552,7 +1554,8 @@
       attribution: '&copy; OpenStreetMap, SRTM | Estilo: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
     });
     var satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
+      maxNativeZoom: 18,   // bug: sem isto o mapa sumia perto de 20 m de escala; agora o ladrilho do zoom 18 é ampliado
+      maxZoom: 22,
       attribution: 'Imagens &copy; Esri, Maxar, Earthstar Geographics',
     });
     // As camadas de fundo são escolhidas no painel "Camadas", sobre o mapa.
@@ -1834,6 +1837,23 @@
       est.camadaAtual = nome;
     }
     definirPrefMapa('camada', nome);
+    aplicarBase3D(nome);   // se o 3D estiver aberto, troca o fundo dele também
+  }
+
+  // Troca o fundo do relevo 3D sem fechar a visão 3D (câmera e marcadores continuam).
+  function aplicarBase3D(nome) {
+    var v = est.visao3d;
+    if (!v || !v.mapa || !BASES_3D[nome]) return;
+    var base = BASES_3D[nome];
+    try {
+      if (v.mapa.getLayer('base')) v.mapa.removeLayer('base');
+      if (v.mapa.getSource('base')) v.mapa.removeSource('base');
+      v.mapa.addSource('base', { type: 'raster', tiles: base.tiles, tileSize: 256, maxzoom: base.maxzoom, attribution: base.attribution });
+      v.mapa.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'sombreamento');
+    } catch (e) {
+      UI.aviso('Não foi possível trocar o fundo do 3D: ' + e.message, 'erro', 6000);
+    }
+    atualizarMenu();
   }
 
   function definirPrefMapa(chave, valor) {

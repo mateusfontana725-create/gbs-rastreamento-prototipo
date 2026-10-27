@@ -1534,8 +1534,8 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
   .modal .modal-acoes { justify-content: flex-end; }
   .modal .modal-acoes .btn { flex: 0 1 200px; }
   .modal :is(form, div):has(> .grupo ~ .grupo) > .detalhes-prazos { grid-column: 1 / -1; }
-  .modal .campos-prazos { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; }
-  .modal .campos-prazos > .ajuda { grid-column: 1 / -1; }
+  .modal .prazos-form { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; }
+  .modal .prazos-form > .detalhes-prazos { grid-column: 1 / -1; }
   /* fichas de dados (dt/dd): dois pares por linha */
   .modal:has(dl.dados) { width: min(940px, calc(100vw - 48px)); }
   .modal dl.dados { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr) minmax(120px, max-content) minmax(0, 1fr); gap: 6px 14px; align-items: baseline; }
@@ -1674,16 +1674,22 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .ficha-lista-grupos small { margin-left: auto; }
 .ficha-sem-grupo { margin: 0 0 8px; font-size: .84rem; }
 
-/* Régua circular (js/regua.js): anel no centro da tela, sem bloquear o toque no mapa */
+/* Régua circular (js/regua.js): régua graduada no centro da tela, sem bloquear o toque no mapa */
 .regua-circular {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 450; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .regua-circular svg { display: block; overflow: visible; }
-.regua-anel { fill: rgba(250, 204, 21, .06); stroke: #fde047; stroke-width: 1.6; stroke-dasharray: 5 4; }
-.regua-anel-ext { stroke-width: 2.2; stroke-dasharray: none; stroke: #facc15; }
-.regua-cruz { stroke: #fde047; stroke-width: 1.4; }
-.regua-rot { fill: #fef9c3; font: 700 11px var(--mono); paint-order: stroke; stroke: rgba(10, 13, 16, .85); stroke-width: 3px; }
-.regua-rot-meio { font-weight: 600; opacity: .8; }
+.regua-anel { fill: rgba(250, 204, 21, .05); stroke: #facc15; stroke-width: 1.8; }
+.regua-anel-meio { fill: none; stroke-width: 1.3; stroke-dasharray: 6 4; }
+.regua-eixo, .regua-marca { stroke: #fde047; stroke-width: 1.4; }
+.regua-centro { fill: #fde047; stroke: rgba(10, 13, 16, .85); stroke-width: 1; }
+.regua-rot { fill: #fef9c3; font: 700 12px ui-monospace, monospace; paint-order: stroke; stroke: rgba(10, 13, 16, .9); stroke-width: 3px; }
+.regua-legenda {
+  background: rgba(10, 13, 16, .82); color: #fef9c3; font: 600 11px/1.3 system-ui, sans-serif;
+  padding: 3px 9px; border-radius: 6px; white-space: nowrap;
+}
+.regua-legenda b { color: #fff; }
 
 /* Probabilidades de busca no detalhe do setor (POD, POA e POS; js/pod.js) */
 .pod-bloco { margin-top: 12px; }
@@ -1691,3 +1697,83 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .pod-buscas { margin: 6px 0; padding-left: 18px; font-size: .85rem; }
 .pod-formulas { margin-top: 8px; font-size: .85rem; }
 .pod-formulas p { margin: 4px 0; }
+
+/* Dashboard em janela própria (dashboard.html): só o dashboard, sem o mapa nem o painel */
+body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); color: var(--texto); }
+.janela-dash-topo {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 12px 20px; background: var(--barra); color: var(--barra-texto); border-bottom: 1px solid var(--borda);
+}
+.janela-dash-corpo { max-width: 1280px; margin: 0 auto; padding: 16px 20px 40px; }
+
+/* Deslocamentos de grupos: um cartão por deslocamento (militar.js → abrirMissoes) */
+.modal:has(.modal-missoes) { width: min(880px, calc(100vw - 24px)); }
+.cartao-missao { border: 1px solid var(--borda); border-left: 5px solid var(--neutro); border-radius: var(--raio); background: var(--superficie-2); padding: 12px 14px; display: grid; gap: 12px; margin: 0 0 12px; }
+.cartao-missao.status-em_deslocamento, .cartao-missao.status-busca_finalizada { border-left-color: var(--alerta); }
+.cartao-missao.status-no_setor { border-left-color: var(--responsavel); }
+.cartao-missao.status-retorno_atrasado { border-left-color: var(--perigo); background: rgba(127, 29, 29, .25); }
+.cartao-missao.status-na_base { border-left-color: var(--ok); }
+.cartao-missao-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.cartao-missao-titulo { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.cartao-missao-titulo strong { font-size: 1rem; }
+.cartao-missao-titulo small { font-size: .8rem; }
+.etapas-missao { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.etapas-missao li { display: grid; gap: 1px; padding-top: 6px; border-top: 3px solid var(--borda); font-size: .78rem; }
+.etapas-missao li span { font-weight: 700; }
+.etapas-missao li small { font-family: var(--mono); color: var(--texto-3); }
+.etapas-missao li.feita { border-top-color: var(--ok); }
+.etapas-missao li.atual { border-top-color: var(--acento); }
+.etapas-missao li.atual small { color: var(--alerta-texto); font-weight: 700; }
+.etapas-missao li.pendente { opacity: .55; }
+.painel-prazos { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--raio); background: var(--superficie); border: 1px solid var(--borda); }
+.painel-prazos-titulo { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-3); }
+.regra-prazos { font-size: .8rem; margin: 0; }
+.painel-prazos .prazos-missao { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.painel-prazos .prazos-missao li { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--borda); font-size: .85rem; }
+.painel-prazos .prazos-missao li span { font-weight: 700; }
+.painel-prazos .prazos-missao li small { color: var(--texto-2); }
+.painel-prazos .prazos-missao li.prazo-ok { border-color: var(--ok); }
+.painel-prazos .prazos-missao li.prazo-alerta { border-color: var(--alerta); background: var(--alerta-claro); }
+.painel-prazos .prazos-missao li.prazo-atrasado { border-color: var(--perigo); background: var(--perigo-claro); }
+.combinado-missao { margin: 0; font-size: .85rem; }
+.membros-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.membros-lista li { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; padding: 6px 8px; border-radius: 6px; background: var(--superficie); }
+.membro-nome { flex: 1 1 140px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.membros-lista small { font-size: .76rem; }
+.pilula-estado { font-size: .74rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--superficie-3); color: var(--texto-2); white-space: nowrap; }
+.pilula-estado.ok { background: var(--ok-claro); color: var(--ok-texto); }
+.pilula-estado.alerta { background: var(--alerta-claro); color: var(--alerta-texto); }
+.pilula-estado.atrasado { background: var(--perigo-claro); color: var(--perigo-texto); }
+.acoes-missao { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.acoes-missao .empurrar { margin-left: auto; }
+/* Formulário dos horários (envio ao grupo e ⏱ Horários) */
+.bloco-form { border: 1px solid var(--borda); border-radius: var(--raio); padding: 10px 12px 12px; margin: 0; display: grid; gap: 10px; min-width: 0; }
+.bloco-form > legend { font-weight: 700; padding: 0 6px; font-size: .9rem; }
+.prazos-form { display: grid; gap: 10px; }
+
+/* Detalhes de setor, ponto de interesse e trilha: cabeçalho com a cor, fatos em caixinhas e seções */
+.modal:has(.detalhe-cabeca) { width: min(680px, calc(100vw - 24px)); }
+.detalhe-cabeca {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+  padding: 10px 14px; border-radius: var(--raio); background: var(--superficie-2); border-left: 5px solid var(--cor, #64748b);
+}
+.detalhe-cabeca-texto { display: grid; gap: 2px; min-width: 0; flex: 1 1 180px; }
+.detalhe-tipo { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-3); }
+.detalhe-titulo { margin: 0; font-size: 1.15rem; line-height: 1.25; overflow-wrap: anywhere; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.detalhe-cabeca .mk-poi { flex: none; }
+.detalhe-fatos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 0 14px; }
+.detalhe-fato { margin: 0; padding: 8px 10px; min-width: 0; border-radius: var(--raio); border: 1px solid var(--borda); background: var(--superficie-2); }
+.detalhe-fato.largo { grid-column: 1 / -1; }
+.detalhe-fato dt { font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--texto-3); }
+.detalhe-fato dd { margin: 2px 0 0; font-size: .92rem; font-weight: 600; overflow-wrap: anywhere; }
+.detalhe-secao { display: grid; gap: 8px; margin: 0 0 14px; min-width: 0; }
+.detalhe-secao > h3 { margin: 0; padding-bottom: 4px; border-bottom: 1px solid var(--borda); font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-3); }
+.detalhe-texto { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.detalhe-busca { display: grid; gap: 10px; }
+.detalhe-busca .nota-cobertura { margin: 0; }
+.detalhe-rodape { border-top: 1px solid var(--borda); padding-top: 12px; }
+.detalhe-setor .status-setor { margin: 0; }
+@media (max-width: 600px) {
+  .detalhe-fatos { grid-template-columns: 1fr 1fr; }
+  .detalhe-titulo { font-size: 1.05rem; }
+}

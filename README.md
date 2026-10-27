@@ -289,17 +289,20 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 
 #### Controle de tempo e comunicação (migração 032)
 
-- **Horários combinados**: ao enviar destino a um grupo, **⏱ Horários combinados e comunicação** (opcional)
-  registra **iniciar até** e **retornar até** (com atalhos agora/+15/+30 min e +1/+2/+4 h; uma hora já passada há
-  mais de 6 h é de amanhã), a **tolerância** antes do alerta (padrão 10 min), o tempo **sem comunicação** que vira
-  alerta (padrão 10 min) e **o que foi combinado** (ex.: rádio a cada 30 min no canal 3). Depois, em
-  **Deslocamentos de grupos → ⏱ Prazos**, dá para ajustar (prorrogar o retorno, por exemplo). Cada alteração vai
-  ao **diário** com quem definiu. Se a gravação dos prazos falhar, o destino continua enviado (não é repetido) e o
-  painel avisa para tentar de novo em ⏱ Prazos.
-- **Na lista de deslocamentos**: cada horário combinado com a situação — ✔ cumprido (e quanto depois do
-  combinado), faltam X min, na tolerância ou **⚠ ATRASADO** —, a tolerância, quem definiu, o combinado, os horários
-  na linha do tempo e a coluna **Contato** de cada membro (há quanto tempo o servidor recebeu algo do celular;
-  **📵** em vermelho quando passa do limite).
+- **Horários combinados**: no envio ao grupo, o bloco **Horários combinados (opcional)** tem **Sair até** e
+  **Estar de volta até** (atalhos agora / +15 / +30 min e +1 / +2 / +4 h; uma hora já passada há mais de 6 h é
+  de amanhã). Em **Alertas e combinados** (fechado por padrão, 10 min e 10 min) ficam o **atraso** que dispara o
+  aviso (depois do horário), a **falta de contato** (tempo sem nenhuma notícia do celular) e o que foi combinado
+  (ex.: rádio a cada 30 min no canal 3).
+- **Retorno à base** (no mesmo formulário): a base, o raio em que a chegada conta ("Na base quando estiver a até")
+  e **Voltar em até (min) depois da busca**, que começa a contar ao clicar em **Finalizar busca**. O horário de volta
+  e esse tempo são verificados os dois; o alerta de retorno atrasado vale para quem ultrapassar qualquer um.
+- **Ferramentas → Deslocamentos de grupos**: um cartão por deslocamento, com as etapas (enviado, saiu, no setor,
+  busca encerrada, todos na base), o quadro **Horários combinados** (quanto falta ou o que já aconteceu, em
+  vermelho quando atrasou), a situação de cada membro e a última notícia dele (**📵** em vermelho quando passa do
+  limite). Ações: **Finalizar busca**, **Mais 15 min para voltar**, **⏱ Horários** (muda os horários, a
+  tolerância e os alertas; cada alteração vai ao **diário** com quem definiu), **Ver no mapa** e **Encerrar**.
+  Se a gravação dos horários falhar, o destino continua enviado (não é repetido) e o painel avisa para tentar de novo.
 - **Alertas gerados pelo servidor** (`verificar_prazos`, chamada junto com `verificar_retornos` pelo `pg_cron` a
   cada minuto ou pelo painel aberto — mesmo com os celulares sem internet):
   - **INÍCIO ATRASADO** (crítico) — ninguém do grupo começou o deslocamento até o horário + tolerância;
@@ -764,6 +767,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 Recursos de aplicativos de navegação em campo, adaptados à operação. Ficam no menu **Ferramentas →
 Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na ficha do participante.
 
+- **Régua circular**: botão **◎ Régua** no topo (ou Ferramentas → Régua circular). Uma régua graduada no centro da
+  tela: os números nos dois lados são a **distância até o centro (o raio)**; a legenda mostra o diâmetro (2 × raio).
+  Acompanha o zoom e não grava nada.
 - **Formato das coordenadas**: decimal, graus-minutos-segundos (GMS), graus e minutos decimais, **UTM**
   (WGS 84) ou **MGRS**. A escolha vale para a ficha, os popups e o medidor e fica lembrada no aparelho.
   Para passar por rádio, use UTM ou MGRS (mesmo sistema das cartas militares e da maioria dos GPS).
@@ -1592,7 +1598,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   tablet em pé continuam em uma coluna. Navegador (t28 — 23): camadas agrupadas sem repetição, Mostrar tudo, meteorologia
   acima da legenda (liga/desliga, painel sem cobrir o botão), modais em 2 colunas sem rolagem no computador e em 1
   coluna no celular/tablet em pé, natureza com 3 opções, gráfico por mês com aquática × terrestre, por tipo com Outros,
-  **↗ Abrir em outra janela** no Dashboard (a janela nova abre direto no Dashboard).
+  **↗ Abrir em outra janela** no Dashboard (geral ou da operação): abre `dashboard.html`, uma janela só com o
+  dashboard, sem o mapa nem o painel. Abrir de novo reaproveita a mesma janela.
 - **Mapa limpo (versão 2026-10-23)**: navegador (banco simulado, t27 — 23): nenhum nome no mapa, balão no clique
   (preso ao ponto) sem abrir a ficha, ficha por dois cliques (sem zoom), por clicar e segurar e pelo toque longo, arrastar
   não abre, lista abre direto, ficha com "⋮ Mais", símbolos e agrupamentos menores de longe, translúcidos (quem pede

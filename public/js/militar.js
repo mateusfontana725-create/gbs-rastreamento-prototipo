@@ -225,11 +225,6 @@
     return m ? m[1] : null;
   }
 
-  // ?vista=dashboard-op: janela aberta pelo botão "Abrir em outra janela" do Dashboard da operação
-  var dashOpAutoAberto = false;
-  function vistaDashboardOperacao() {
-    return /[?&]vista=dashboard-op\b/.test(location.search);
-  }
 
   function rotear() {
     if (!est.responsavel) return;
@@ -360,13 +355,8 @@
     $('opt-setores').addEventListener('click', function () { definirPrefMapa('setores', !est.prefsMapa.setores); });
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
-    $('menu-regua').addEventListener('click', function () {
-      if (!est.mapa || !window.Regua) return;
-      fecharMenu(false);
-      var ligada = window.Regua.alternar(est.mapa);
-      $('menu-regua').setAttribute('aria-pressed', String(ligada));
-      UI.aviso(ligada ? 'Régua circular ligada no centro da tela: as distâncias acompanham o zoom.' : 'Régua circular desligada.', 'ok', 4000);
-    });
+    $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
+    $('btn-regua').addEventListener('click', alternarRegua);
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
@@ -762,7 +752,6 @@
 
   // Vista da tela inicial: "dashboard" (painel de estatísticas) ou "lista" (operações). Fica salva neste navegador.
   function vistaAtual() {
-    if (/[?&]vista=dashboard\b/.test(location.search)) return 'dashboard';   // aberto em outra janela pelo próprio Dashboard
     try { return localStorage.getItem('gbs.vista') === 'lista' ? 'lista' : 'dashboard'; } catch (e) { return 'dashboard'; }
   }
 
@@ -1134,9 +1123,9 @@
     if (!est.op || !window.Dashboard) return;
     var corpo = UI.el('div', { classe: 'estudo-operacao', id: 'estudo-operacao' });
     // Como no Dashboard geral: numa janela própria (ou outro monitor), com as operações noutra janela.
-    var novaJanela = vistaDashboardOperacao() ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-nova-janela', texto: '↗ Abrir em outra janela',
-      title: 'Abre este dashboard numa janela própria, para deixar o mapa em outra',
-      onclick: function () { window.open(location.pathname + '?vista=dashboard-op' + location.hash, 'gbs-dashboard-op', 'noopener'); } });
+    var novaJanela = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-nova-janela', texto: '↗ Abrir em outra janela',
+      title: 'Abre só o dashboard desta operação numa janela própria, para deixar o mapa em outra',
+      onclick: function () { window.Dashboard.abrirJanela(est.op.id); } });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao modal-dashboard' }, [
       UI.el('div', { classe: 'modal-dashboard-topo' }, [
         UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
@@ -1343,8 +1332,6 @@
     avaliarGaveta();
     aplicarLateral(false);
     renderizarCabecalho();
-    // Aberto em janela própria pelo Dashboard da operação: já mostra o dashboard por cima do mapa
-    if (!dashOpAutoAberto && vistaDashboardOperacao()) { dashOpAutoAberto = true; abrirDashboardOperacao(); }
     criarMapa();
     desenharLocalOp();
     aplicarIntervaloGpsMeu();
@@ -5517,18 +5504,39 @@
     ]);
   }
 
+  /* ---------- Detalhes de setor, ponto de interesse e trilha (mesmo padrão visual) ---------- */
+  // Cabeçalho com a cor do item, o tipo, o nome e uma etiqueta de situação
+  function cabecaDetalhe(o) {
+    return UI.el('header', { classe: 'detalhe-cabeca', style: '--cor:' + (o.cor || '#64748b') }, [
+      o.marca || null,
+      UI.el('div', { classe: 'detalhe-cabeca-texto' }, [
+        UI.el('small', { classe: 'detalhe-tipo', texto: o.tipo }),
+        UI.el('h2', { id: 'modal-titulo', classe: 'detalhe-titulo' }, [o.titulo].concat(o.extra || [])),
+      ]),
+      o.etiqueta ? UI.el('span', { classe: 'selo ' + o.etiqueta.classe, texto: o.etiqueta.texto }) : null,
+    ]);
+  }
+
+  // Fatos em caixinhas: [rotulo, valor, ocupa a largura toda?]. Entradas nulas são ignoradas.
+  function fatosDetalhe(lista) {
+    return UI.el('dl', { classe: 'detalhe-fatos' }, lista.filter(Boolean).map(function (f) {
+      return UI.el('div', { classe: 'detalhe-fato' + (f[2] ? ' largo' : '') }, [UI.el('dt', { texto: f[0] }), UI.el('dd', null, [f[1]])]);
+    }));
+  }
+
+  function secaoDetalhe(titulo, conteudo) {
+    return UI.el('section', { classe: 'detalhe-secao' }, [UI.el('h3', { texto: titulo }), conteudo]);
+  }
+
+  // Ações no rodapé do detalhe (em telas estreitas, as menos usadas vão para "Mais")
+  function rodapeDetalhe(botoes) {
+    return compactarAcoes(UI.el('div', { classe: 'detalhe-rodape modal-acoes acoes-detalhe' }, botoes));
+  }
+
   function abrirSetor(id) {
     var s = est.setores.get(id);
     if (!s) return;
     var d = s.d;
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
-    linha('Forma', d.forma === 'circulo' ? 'Círculo — raio de ' + Math.round(d.raio_m).toLocaleString('pt-BR') + ' m' : 'Área desenhada — ' + d.pontos.length + ' cantos');
-    linha('Área aproximada', formatarArea(areaSetorM2(d)));
-    linha('Responsável', nomeResponsavelSetor(d));
-    linha('Criado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
-    if (d.atualizado_por_nome && d.atualizado_em !== d.criado_em) linha('Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome);
-    if (d.observacoes) linha('Observações', d.observacoes);
     var cob = coberturaSetor(d);
     var caixaCob = UI.el('div', { classe: 'nota nota-cobertura' }, [
       UI.el('strong', { texto: 'Percorrido (estimativa pelos rastros GPS): ' + cob.pct + '%' }),
@@ -5552,13 +5560,24 @@
         },
       });
     }));
+    var classeSituacao = { pendente: 'selo-neutro', andamento: 'selo-alerta', concluido: 'selo-ok' }[d.status] || 'selo-neutro';
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-setor' }, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }), ' ' + d.nome]),
-      botoesStatus,
-      caixaCob,
-      blocoProbabilidades(d),
-      dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      cabecaDetalhe({
+        cor: d.cor, tipo: 'Setor de busca · ' + (d.forma === 'circulo' ? 'círculo' : 'área desenhada'), titulo: d.nome,
+        etiqueta: { texto: STATUS_SETOR[d.status].rotulo, classe: classeSituacao },
+      }),
+      secaoDetalhe('Situação', botoesStatus),
+      fatosDetalhe([
+        ['Área aproximada', formatarArea(areaSetorM2(d))],
+        d.forma === 'circulo' ? ['Raio', Math.round(d.raio_m).toLocaleString('pt-BR') + ' m'] : ['Cantos', String(d.pontos.length)],
+        ['Responsável', nomeResponsavelSetor(d)],
+        ['Equipe', d.equipe || 'não informada'],
+        ['Criado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome, true],
+        d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome, true] : null,
+      ]),
+      d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
+      secaoDetalhe('Busca', UI.el('div', { classe: 'detalhe-busca' }, [caixaCob, blocoProbabilidades(d)])),
+      rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verSetorNoMapa(d); } }),
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormSetor(d); } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', id: 'setor-ajustar', texto: 'Ajustar limites', onclick: function () { fechar(); ajustarLimites(d.id); } }) : null,
@@ -5569,11 +5588,11 @@
         } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'setor-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirSetor(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ])),
+      ]),
     ]));
   }
 
-  async function excluirSetor(d) {
+ async function excluirSetor(d) {
     var r = await UI.confirmar({
       titulo: 'Excluir o setor "' + d.nome + '"?',
       texto: 'O setor some do mapa de todos os responsáveis (e do celular de quem estava atribuído). As trilhas GPS não são afetadas.',
@@ -5805,28 +5824,29 @@
     if (!p) return;
     var d = p.d;
     var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); var dd = UI.el('dd', null, [valor]); dl.appendChild(dd); return dd; }
-    linha('Categoria', cat.rotulo);
-    if (d.descricao) linha('Descrição', d.descricao);
-    linha('Coordenadas', blocoCoordenadas(d.lat, d.lng));
-    if (d.categoria === 'RISCO') linha('Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m');
-    if (d.categoria === 'BASE') linha('Chegada à base', 'raio de ' + Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m');
-    var alt = linha('Altitude', UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' }));
-    linha('Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
-    if (d.relatado_por_nome) linha('Relatado por', d.relatado_por_nome + ' (participante)');
-    if (d.atualizado_por_nome && d.atualizado_em !== d.criado_em) linha('Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome);
+    var alt = UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' });
     var foto = d.foto_id && est.fotos.get(d.foto_id);
-    var blocoFoto = foto ? UI.el('div', { classe: 'ponto-foto' }, [miniatura(foto, [foto.id])]) : null;
     var ativa = est.op.status === 'ativa';
     var editavel = podeAlterar();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-ponto' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-acao' }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]), ' ' + d.titulo,
-        editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-renomear', type: 'button', id: 'ponto-renomear', title: 'Renomear o ponto', 'aria-label': 'Renomear o ponto', texto: '✎',
-          onclick: function () { fechar(); renomearPonto(d); } }) : null]),
-      dl,
-      blocoFoto,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      cabecaDetalhe({
+        marca: UI.el('span', { classe: 'mk-poi poi-' + d.categoria, 'aria-hidden': 'true' }, [UI.el('span', { texto: cat.letra })]),
+        tipo: 'Ponto de interesse · ' + cat.rotulo, titulo: d.titulo,
+        extra: [editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-renomear', type: 'button', id: 'ponto-renomear', title: 'Renomear o ponto', 'aria-label': 'Renomear o ponto', texto: '✎',
+          onclick: function () { fechar(); renomearPonto(d); } }) : null],
+      }),
+      fatosDetalhe([
+        ['Coordenadas', blocoCoordenadas(d.lat, d.lng), true],
+        ['Altitude', alt],
+        d.categoria === 'RISCO' ? ['Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m'] : null,
+        d.categoria === 'BASE' ? ['Chegada à base', 'raio de ' + Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m'] : null,
+        ['Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
+        d.relatado_por_nome ? ['Relatado por', d.relatado_por_nome + ' (participante)'] : null,
+        d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
+      ]),
+      d.descricao ? secaoDetalhe('Descrição', UI.el('p', { classe: 'detalhe-texto', texto: d.descricao })) : null,
+      foto ? secaoDetalhe('Foto', UI.el('div', { classe: 'ponto-foto' }, [miniatura(foto, [foto.id])])) : null,
+      rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verPontoNoMapa(d); } }),
         ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormPontoInt(d); } }) : null,
@@ -5835,14 +5855,14 @@
           onclick: function () { fechar(); window.Ferramentas.alternarAneis({ id: d.id, lat: d.lat, lng: d.lng, nome: d.titulo }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'ponto-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirPontoInt(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ])),
+      ]),
     ]));
     altitudeEm(d.lat, d.lng).then(function (m) {
       alt.textContent = m == null ? 'indisponível (sem conexão com o modelo de terreno)' : '≈ ' + Math.round(m).toLocaleString('pt-BR') + ' m (modelo de terreno, aproximado)';
     });
   }
 
-  function renomearPonto(d) {
+ function renomearPonto(d) {
     var campo = UI.el('input', { classe: 'campo', id: 'ponto-novo-nome', maxlength: '80', value: d.titulo, autofocus: true });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nome' });
@@ -5987,19 +6007,23 @@
     var prazosGrupo = camposPrazos(null);
     var blocoGrupo = UI.el('div', { classe: 'bloco-destino-grupo' }, grupos.length ? [
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-grupo', texto: 'Grupo' }), selGrupo]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Quem recebe' }), publico]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-base', texto: 'Base para o retorno' }), selBase,
-        bases.length ? null : UI.el('small', { classe: 'muted', texto: 'Nenhuma base marcada: use Ferramentas → Marcar ponto de interesse → "Base da operação".' })]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-raio-base', texto: 'Raio de chegada à base (m)' }), raioBase]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-prazo', texto: 'Prazo de retorno após a busca (min)' }), prazo]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Quem recebe o destino' }), publico]),
+      UI.el('fieldset', { classe: 'bloco-form' }, [
+        UI.el('legend', { texto: 'Retorno à base' }),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-base', texto: 'Base' }), selBase,
+          bases.length ? null : UI.el('small', { classe: 'muted', texto: 'Nenhuma base marcada: use Ferramentas → Marcar ponto de interesse → "Base da operação".' })]),
+        UI.el('div', { classe: 'grupo-duplo' }, [
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-raio-base', texto: 'Na base quando estiver a até (m)' }), raioBase]),
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-prazo', texto: 'Voltar em até (min) depois da busca' }), prazo]),
+        ]),
+        UI.el('p', { classe: 'ajuda', texto: 'Sem base, não há controle de retorno. O tempo acima começa a contar quando você clicar em "Finalizar busca".' }),
       ]),
-      UI.el('details', { classe: 'grupo detalhes-prazos', id: 'destino-prazos' }, [
-        UI.el('summary', { texto: '⏱ Horários combinados e comunicação (opcional)' }),
+      UI.el('fieldset', { classe: 'bloco-form' }, [
+        UI.el('legend', { texto: 'Horários combinados (opcional)' }),
         prazosGrupo.el,
       ]),
-      UI.el('p', { classe: 'ajuda', texto: 'Você recebe alertas automáticos no início do deslocamento, na chegada ao ' + (alvo.setor_id ? 'setor' : 'destino') +
-        ', na finalização da busca e no retorno à base. Se o prazo de retorno passar sem todos na base, o painel avisa que a equipe pode estar perdida.' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Alertas automáticos: no início do deslocamento, na chegada ao ' + (alvo.setor_id ? 'setor' : 'destino') +
+        ', no fim da busca e na volta à base.' }),
     ] : [UI.el('p', { classe: 'muted', texto: 'Nenhum grupo nesta operação. Crie em Ferramentas → Grupos.' })]);
     function mostrarModo() {
       abaPessoas.className = 'btn' + (!modoGrupo ? ' btn-ativo' : '');
@@ -6083,7 +6107,7 @@
     o.erro.hidden = true;
     if (!o.grupo) { o.erro.textContent = 'Escolha o grupo.'; o.erro.hidden = false; return; }
     if (o.base && !(o.raio >= 10 && o.raio <= 5000)) { o.erro.textContent = 'Raio de chegada à base: de 10 m a 5.000 m.'; o.erro.hidden = false; return; }
-    if (o.base && !(o.prazo >= 5 && o.prazo <= 720)) { o.erro.textContent = 'Prazo de retorno: de 5 a 720 minutos.'; o.erro.hidden = false; return; }
+    if (o.base && !(o.prazo >= 5 && o.prazo <= 720)) { o.erro.textContent = 'Tempo para voltar: de 5 a 720 minutos.'; o.erro.hidden = false; return; }
     var dadosPrazos = null;
     if (o.prazos) {
       try { dadosPrazos = o.prazos.ler(); } catch (e0) { o.erro.textContent = e0.message; o.erro.hidden = false; return; }
@@ -6105,7 +6129,7 @@
       o.fechar();
       var g = est.grupos.get(o.grupo);
       UI.aviso('Destino "' + o.nome + '" enviado ao grupo ' + (g ? g.nome : '') + ': ' + r.destinatarios + ' recebe(m) no celular, ' +
-        r.acompanhados + ' acompanhado(s).' + (o.base ? ' Prazo de retorno: ' + o.prazo + ' min após finalizar a busca.' : ' Sem base: não há controle de retorno.'), 'ok', 10000);
+        r.acompanhados + ' acompanhado(s).' + (o.base ? ' Voltar em até ' + o.prazo + ' min depois de finalizar a busca.' : ' Sem base: não há controle de retorno.'), 'ok', 10000);
       // Prazos combinados: a missão já existe; uma falha aqui não desfaz o envio (nem o repete)
       if (dadosPrazos && r.missao && r.missao.id) {
         try {
@@ -7064,24 +7088,23 @@
     if (!t) return;
     var d = t.d;
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
-    linha('Situação', e.rotulo + ' — ' + e.dica);
-    if (d.estado === 'percorrida' && d.percorrida_em) linha('Percorrida em', C.hora(d.percorrida_em) + (d.percorrida_por_nome ? ' (informado por ' + d.percorrida_por_nome + ')' : ''));
-    linha('Comprimento', formatarComprimento(d.comprimento_m != null ? d.comprimento_m : comprimentoLinhaM(d.pontos)) + ' · ' + d.pontos.length + ' pontos');
-    linha('Equipe', equipeDaTrilha(d) || 'Não informada');
-    linha('Percurso feito por', meioDe(d).ico + ' ' + meioDe(d).rotulo);
-    linha('Origem', d.origem === 'importada' ? 'Importada de arquivo' + (d.arquivo ? ' (' + d.arquivo + ')' : '') + ' (não é rastro de GPS do app)' : 'Desenhada à mão no mapa (não é rastro de GPS)');
-    linha('Criada', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
-    if (d.atualizado_por_nome && d.atualizado_em !== d.criado_em) linha('Alterada', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome);
-    if (d.observacoes) linha('Observações', d.observacoes);
     var editavel = podeAlterar();
     var oculta = trilhasOcultas().has(d.id);
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-trilha' }, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'lg-trilha-desenhada lg-' + d.estado, 'aria-hidden': 'true' }), ' ' + d.nome]),
+      cabecaDetalhe({ cor: e.cor, tipo: 'Trilha · ' + e.rotulo, titulo: d.nome, etiqueta: { texto: e.rotulo, classe: e.selo } }),
+      fatosDetalhe([
+        ['Situação', e.dica, true],
+        d.estado === 'percorrida' && d.percorrida_em ? ['Percorrida em', C.hora(d.percorrida_em) + (d.percorrida_por_nome ? ' (informado por ' + d.percorrida_por_nome + ')' : '')] : null,
+        ['Comprimento', formatarComprimento(d.comprimento_m != null ? d.comprimento_m : comprimentoLinhaM(d.pontos)) + ' · ' + d.pontos.length + ' pontos'],
+        ['Equipe', equipeDaTrilha(d) || 'não informada'],
+        ['Percurso feito por', meioDe(d).ico + ' ' + meioDe(d).rotulo],
+        ['Origem', d.origem === 'importada' ? 'Importada de arquivo' + (d.arquivo ? ' (' + d.arquivo + ')' : '') + ' · não é rastro de GPS do app' : 'Desenhada à mão no mapa · não é rastro de GPS', true],
+        ['Criada', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
+        d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterada', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
+      ]),
+      d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
       UI.el('p', { classe: 'ajuda', texto: 'Uma linha indica o trajeto, não que toda a área em volta foi vasculhada. A situação dos setores não muda por causa das trilhas.' }),
-      dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verTrilhaNoMapa(d); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-ocultar', texto: oculta ? 'Mostrar no mapa' : 'Ocultar no mapa', onclick: function () { fechar(); alternarTrilhaOculta(d.id); } }),
         editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { fechar(); abrirFormTrilha(d, 'percorrida'); } }) : null,
@@ -7089,11 +7112,11 @@
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar-tracado', texto: 'Editar traçado', onclick: function () { fechar(); iniciarDesenhoTrilha(d.id); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'trilha-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirTrilhaManual(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ])),
+      ]),
     ]));
   }
 
-  async function excluirTrilhaManual(d) {
+ async function excluirTrilhaManual(d) {
     var r = await UI.confirmar({
       titulo: 'Excluir a trilha "' + d.nome + '"?',
       texto: 'A linha desenhada some do mapa de todos os responsáveis. Setores, participantes e rastros de GPS não são afetados.',
@@ -7222,6 +7245,16 @@
     topo: { tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], maxzoom: 17, attribution: '© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)' },
     satelite: { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], maxzoom: 19, attribution: 'Imagens © Esri, Maxar, Earthstar Geographics' },
   };
+
+  // Régua circular (js/regua.js): o botão do topo e o item de Ferramentas fazem a mesma coisa.
+  function alternarRegua() {
+    if (!est.mapa || !window.Regua) return;
+    var ligada = window.Regua.alternar(est.mapa);
+    $('btn-regua').setAttribute('aria-pressed', String(ligada));
+    $('btn-regua').classList.toggle('btn-ativo', ligada);
+    $('menu-regua').setAttribute('aria-pressed', String(ligada));
+    UI.aviso(ligada ? 'Régua circular ligada: os números são o raio, medido a partir do centro da tela.' : 'Régua circular desligada.', 'ok', 4000);
+  }
 
   async function abrirRelevo3D() {
     if (!est.mapa) return;
@@ -9378,7 +9411,8 @@
     return d;
   }
 
-  // Campos dos prazos combinados. m: a missão (para editar) ou nada (novo deslocamento).
+  // Horários combinados de um deslocamento: sair até, estar de volta até, e os alertas.
+  // m: a missão (para editar) ou nada (novo deslocamento). Usado no envio ao grupo e em ⏱ Horários.
   function camposPrazos(m) {
     m = m || {};
     var ini = UI.el('input', { classe: 'campo', id: 'prazo-inicio', type: 'time', value: isoParaHora(m.inicio_combinado_em) });
@@ -9388,44 +9422,52 @@
     var sem = UI.el('input', { classe: 'campo', id: 'prazo-sem-sinal', type: 'number', min: '3', max: '240', step: '1', inputmode: 'numeric',
       value: String(m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min) });
     var comb = UI.el('textarea', { classe: 'campo', id: 'prazo-combinado', maxlength: '500', rows: '2',
-      placeholder: 'Ex.: contato por rádio a cada 30 min no canal 3; retorno pela estrada principal' });
+      placeholder: 'Ex.: rádio a cada 30 min no canal 3; voltar pela estrada principal' });
     comb.value = m.combinado_texto || '';
     function atalho(campo, rotulo, min) {
       return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: rotulo, onclick: function () { campo.value = isoParaHora(new Date(Date.now() + min * 60000).toISOString()); } });
     }
-    var el = UI.el('div', { classe: 'campos-prazos' }, [
+    var personalizado = (m.tolerancia_min != null && m.tolerancia_min !== PRAZOS_PADRAO.tolerancia_min) ||
+      (m.sem_sinal_min != null && m.sem_sinal_min !== PRAZOS_PADRAO.sem_sinal_min) || Boolean(m.combinado_texto);
+    var el = UI.el('div', { classe: 'prazos-form' }, [
       UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-inicio', texto: 'Iniciar até (horário combinado)' }), ini,
-          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ini, 'agora', 0), atalho(ini, '+15 min', 15), atalho(ini, '+30 min', 30)])]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-retorno', texto: 'Retornar até (horário combinado)' }), ret,
-          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ret, '+1 h', 60), atalho(ret, '+2 h', 120), atalho(ret, '+4 h', 240)])]),
+        UI.el('div', { classe: 'grupo' }, [
+          UI.el('label', { classe: 'rotulo', for: 'prazo-inicio', texto: 'Sair até' }), ini,
+          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ini, 'agora', 0), atalho(ini, '+15 min', 15), atalho(ini, '+30 min', 30)]),
+        ]),
+        UI.el('div', { classe: 'grupo' }, [
+          UI.el('label', { classe: 'rotulo', for: 'prazo-retorno', texto: 'Estar de volta até' }), ret,
+          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ret, '+1 h', 60), atalho(ret, '+2 h', 120), atalho(ret, '+4 h', 240)]),
+        ]),
       ]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-tolerancia', texto: 'Tolerância antes do alerta (min)' }), tol]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-sem-sinal', texto: 'Alerta de sem comunicação após (min)' }), sem]),
+      UI.el('details', { classe: 'grupo detalhes-prazos', open: personalizado ? true : null }, [
+        UI.el('summary', { texto: 'Alertas e combinados (padrão: 10 min e 10 min)' }),
+        UI.el('div', { classe: 'grupo-duplo' }, [
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-tolerancia', texto: 'Avisar atraso depois de (min)' }), tol]),
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-sem-sinal', texto: 'Avisar falta de contato depois de (min sem sinal)' }), sem]),
+        ]),
+        UI.el('p', { classe: 'ajuda', texto: 'Atraso: o horário passou e a condição não foi cumprida, além da tolerância. Falta de contato: alguém ficou sem nenhuma notícia por esse tempo. ' +
+          'Sem internet, o celular guarda as posições e envia quando o sinal volta.' }),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-combinado', texto: 'O que foi combinado com o grupo (opcional)' }), comb]),
       ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-combinado', texto: 'O que foi combinado (opcional)' }), comb]),
-      UI.el('p', { classe: 'ajuda', texto: 'O servidor confere os horários a cada minuto, mesmo com os celulares sem internet: alerta se ninguém iniciar até o horário + tolerância, ' +
-        'se alguém não tiver voltado até o horário de retorno + tolerância e se um membro ficar sem nenhum contato pelo tempo definido. ' +
-        'Sem internet, o celular guarda as posições e envia quando o sinal volta — o painel avisa quando a comunicação for restabelecida.' }),
     ]);
     // Lê e confere. Devolve os dados para definir_prazos_missao ou lança Error com a mensagem.
     function ler() {
       var dIni = null, dRet = null;
       if (ini.value) {
         dIni = m.inicio_combinado_em && ini.value === isoParaHora(m.inicio_combinado_em) ? new Date(m.inicio_combinado_em) : horaParaData(ini.value);
-        if (!dIni) throw new Error('Horário de início inválido.');
+        if (!dIni) throw new Error('Horário de saída inválido.');
       }
       if (ret.value) {
         var manteve = m.retorno_combinado_em && ret.value === isoParaHora(m.retorno_combinado_em);
         dRet = manteve ? new Date(m.retorno_combinado_em) : horaParaData(ret.value, dIni ? dIni.getTime() : null);
-        if (!dRet) throw new Error('Horário de retorno inválido.');
-        if (!manteve && dRet.getTime() < Date.now()) throw new Error('O horário de retorno já passou. Informe um horário futuro.');
+        if (!dRet) throw new Error('Horário de volta inválido.');
+        if (!manteve && dRet.getTime() < Date.now()) throw new Error('O horário de volta já passou. Informe um horário futuro.');
       }
-      if (dIni && dRet && dRet.getTime() <= dIni.getTime()) throw new Error('O retorno combinado precisa ser depois do início.');
+      if (dIni && dRet && dRet.getTime() <= dIni.getTime()) throw new Error('A volta precisa ser depois da saída.');
       var t = Number(tol.value), ss = Number(sem.value);
-      if (!(tol.value !== '' && Number.isInteger(t) && t >= 0 && t <= 240)) throw new Error('Tolerância: de 0 a 240 minutos.');
-      if (!(sem.value !== '' && Number.isInteger(ss) && ss >= 3 && ss <= 240)) throw new Error('Sem comunicação: de 3 a 240 minutos.');
+      if (!(tol.value !== '' && Number.isInteger(t) && t >= 0 && t <= 240)) throw new Error('Atraso: informe de 0 a 240 minutos.');
+      if (!(sem.value !== '' && Number.isInteger(ss) && ss >= 3 && ss <= 240)) throw new Error('Falta de contato: informe de 3 a 240 minutos.');
       return {
         inicio_combinado_em: dIni ? dIni.toISOString() : '', retorno_combinado_em: dRet ? dRet.toISOString() : '',
         tolerancia_min: t, sem_sinal_min: ss, combinado_texto: comb.value.replace(/\s+/g, ' ').trim(),
@@ -9455,26 +9497,28 @@
     return { texto: '⚠ ATRASADO há ' + textoMin(-falta - tolMin) + ' (além da tolerância)', classe: 'atrasado' };
   }
 
-  // Bloco "Controle de tempo" de um deslocamento na lista
+  // Quadro dos horários combinados do deslocamento: sair até, voltar até e o que já aconteceu
   function blocoTempoMissao(m, membros) {
     if (m.inicio_combinado_em === undefined) return null;   // banco sem a migração 032
     var tol = m.tolerancia_min != null ? m.tolerancia_min : PRAZOS_PADRAO.tolerancia_min;
+    var sem = m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min;
     var linhas = [];
     if (m.inicio_combinado_em) {
       var inicios = membros.map(function (y) { return C.paraMs(y.x.iniciou_em); }).filter(Boolean);
       var primeiro = inicios.length ? new Date(Math.min.apply(null, inicios)).toISOString() : (m.iniciada_em || null);
       var si = situacaoPrazo(m.inicio_combinado_em, tol, primeiro);
-      linhas.push(UI.el('li', { classe: 'prazo-' + si.classe }, [UI.el('span', { texto: 'Iniciar até ' + C.hora(m.inicio_combinado_em, false) }), UI.el('small', { texto: si.texto })]));
+      linhas.push(UI.el('li', { classe: 'prazo-' + si.classe }, [UI.el('span', { texto: 'Sair até ' + C.hora(m.inicio_combinado_em, false) }), UI.el('small', { texto: si.texto })]));
     }
     if (m.retorno_combinado_em) {
       var concluido = m.status === 'na_base' || m.status === 'encerrada' ? (m.chegou_base_em || m.encerrada_em) : null;
       var sr = situacaoPrazo(m.retorno_combinado_em, tol, concluido);
-      linhas.push(UI.el('li', { classe: 'prazo-' + sr.classe }, [UI.el('span', { texto: 'Retornar até ' + C.hora(m.retorno_combinado_em, false) }), UI.el('small', { texto: sr.texto })]));
+      linhas.push(UI.el('li', { classe: 'prazo-' + sr.classe }, [UI.el('span', { texto: 'Estar de volta até ' + C.hora(m.retorno_combinado_em, false) }), UI.el('small', { texto: sr.texto })]));
     }
-    return UI.el('div', { classe: 'tempo-missao' }, [
-      linhas.length ? UI.el('ul', { classe: 'prazos-missao' }, linhas) : null,
-      UI.el('p', { classe: 'muted', texto: (linhas.length ? 'Tolerância ' + tol + ' min · ' : 'Sem horários combinados · ') +
-        'alerta de sem comunicação após ' + (m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min) + ' min' +
+    return UI.el('div', { classe: 'painel-prazos' }, [
+      UI.el('div', { classe: 'painel-prazos-titulo', texto: 'Horários combinados' }),
+      linhas.length ? UI.el('ul', { classe: 'prazos-missao' }, linhas)
+        : UI.el('p', { classe: 'muted', texto: 'Nenhum horário combinado. Sem horário, o painel não avisa atraso de saída nem de volta.' }),
+      UI.el('p', { classe: 'muted regra-prazos', texto: 'Avisa atraso depois de ' + tol + ' min do horário · falta de contato depois de ' + sem + ' min sem sinal' +
         (m.prazos_definidos_por_nome ? ' · definido por ' + m.prazos_definidos_por_nome + ' às ' + C.hora(m.prazos_definidos_em, false) : '') }),
       m.combinado_texto ? UI.el('p', { classe: 'combinado-missao', texto: 'Combinado: ' + m.combinado_texto }) : null,
     ]);
@@ -9494,9 +9538,10 @@
   function abrirPrazosMissao(m) {
     var campos = camposPrazos(m);
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'prazos-salvar', texto: 'Salvar prazos' });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'prazos-salvar', texto: 'Salvar horários' });
     var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Prazos — ' + m.grupo_nome + ' → ' + m.nome }),
+      UI.el('h2', { id: 'modal-titulo', texto: 'Horários do deslocamento' }),
+      UI.el('p', { classe: 'ajuda', texto: m.grupo_nome + ' → ' + m.nome + (m.base_nome ? ' · base: ' + m.base_nome : ' · sem base') }),
       campos.el, erro,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
@@ -9510,7 +9555,7 @@
         var r = await C.rpc('definir_prazos_missao', { p_missao: m.id, p_dados: dados });
         if (r && r.id) est.missoes.set(r.id, r);
         fechar(true);
-        UI.aviso('Prazos de ' + m.grupo_nome + ' salvos e registrados no diário.', 'ok');
+        UI.aviso('Horários de ' + m.grupo_nome + ' salvos e registrados no diário.', 'ok');
         if (est.renderMissoesAberto) est.renderMissoesAberto();
         agendarMissoes();
       } catch (e) {
@@ -9522,28 +9567,68 @@
     var fechar = UI.abrirModal(form, { empilhar: true });
   }
 
+  // Quem envia e como foi: uma linha abaixo do título do deslocamento
+  function resumoEnvio(m) {
+    var quem = m.publico === 'responsavel' ? 'só o responsável recebeu' : 'todos receberam';
+    var base = m.base_nome ? 'base ' + m.base_nome + ' (chegada a até ' + Math.round(m.raio_base_m) + ' m)' : 'sem base (sem controle de retorno)';
+    return 'Enviado por ' + m.enviado_por_nome + ' às ' + C.hora(m.enviada_em, false) + ' · ' + quem + ' · ' + base;
+  }
+
+  // Etapas do deslocamento, em ordem. A primeira sem horário é a que está acontecendo agora.
   function linhaTempoMissao(m) {
     var etapas = [
-      ['Enviada', m.enviada_em],
-      ['Início do deslocamento', m.iniciada_em],
-      [m.setor_nome ? 'Chegada ao setor' : 'Chegada ao destino', m.chegou_setor_em],
-      ['Busca finalizada' + (m.busca_finalizada_por_nome ? ' (' + m.busca_finalizada_por_nome + ')' : ''), m.busca_finalizada_em],
+      ['Enviado', m.enviada_em],
+      ['Saiu', m.iniciada_em],
+      [m.setor_nome ? 'No setor' : 'No destino', m.chegou_setor_em],
+      ['Busca encerrada', m.busca_finalizada_em],
     ];
-    if (m.inicio_combinado_em) etapas.splice(1, 0, ['Início combinado', m.inicio_combinado_em, true]);
-    if (m.retorno_combinado_em) etapas.push(['Retorno combinado', m.retorno_combinado_em, true]);
-    if (m.base_lat != null) {
-      etapas.push(['Prazo de retorno', m.prazo_retorno_em, true]);
-      etapas.push(['Todos na base', m.chegou_base_em]);
-    }
-    if (m.encerrada_em) etapas.push(['Encerrada' + (m.encerrada_por_nome ? ' (' + m.encerrada_por_nome + ')' : ''), m.encerrada_em]);
-    return UI.el('ol', { classe: 'linha-tempo' }, etapas.map(function (e) {
-      return UI.el('li', { classe: e[1] ? (e[2] ? 'prazo' : 'feita') : 'pendente' }, [
-        UI.el('span', { texto: e[0] }), UI.el('small', { texto: e[1] ? C.hora(e[1]) : '—' }),
+    if (m.base_lat != null) etapas.push(['Todos na base', m.chegou_base_em]);
+    if (m.encerrada_em) etapas.push(['Encerrado', m.encerrada_em]);
+    var atual = etapas.findIndex(function (e) { return !e[1]; });
+    return UI.el('ol', { classe: 'etapas-missao', 'aria-label': 'Etapas do deslocamento' }, etapas.map(function (e, i) {
+      var classe = e[1] ? 'feita' : (i === atual ? 'atual' : 'pendente');
+      return UI.el('li', { classe: classe }, [UI.el('span', { texto: e[0] }), UI.el('small', { texto: e[1] ? C.hora(e[1], false) : (i === atual ? 'agora' : '—') })]);
+    }));
+  }
+
+  // Situação de um membro no deslocamento (uma pílula na lista)
+  function situacaoMembro(m, y) {
+    if (y.p && y.p.dados.removido) return { texto: 'fora da operação', classe: '' };
+    if (y.x.chegou_base_em) return { texto: '✔ na base às ' + C.hora(y.x.chegou_base_em, false), classe: 'ok' };
+    if (m.status === 'retorno_atrasado') return { texto: 'ainda não chegou à base', classe: 'atrasado' };
+    if (y.x.chegou_setor_em) return { texto: (m.setor_nome ? 'no setor' : 'no destino') + ' às ' + C.hora(y.x.chegou_setor_em, false), classe: 'ok' };
+    if (y.x.iniciou_em) return { texto: 'em deslocamento desde ' + C.hora(y.x.iniciou_em, false), classe: '' };
+    return { texto: 'ainda não saiu', classe: m.status === 'enviada' ? '' : 'alerta' };
+  }
+
+  // Lista de membros: quem está onde e a última notícia de cada um
+  function listaMembrosMissao(m, membros) {
+    if (!membros.length) return UI.el('p', { classe: 'muted', texto: 'Nenhum membro neste deslocamento.' });
+    return UI.el('ul', { classe: 'membros-lista', 'aria-label': 'Membros do deslocamento' }, membros.map(function (y) {
+      var st = situacaoMembro(m, y);
+      var c = contatoMembro(m, y);
+      return UI.el('li', null, [
+        UI.el('span', { classe: 'membro-nome', texto: y.p ? nomeExibido(y.p) : 'participante' }),
+        UI.el('small', { classe: 'muted', texto: y.x.recebe_destino ? 'recebe o destino' : 'só acompanhado' }),
+        UI.el('span', { classe: 'pilula-estado ' + st.classe, texto: st.texto }),
+        c.texto === '—' ? null : UI.el('span', { classe: 'pilula-estado ' + c.classe, title: c.titulo || null, texto: 'contato: ' + c.texto }),
       ]);
     }));
   }
 
-  // Ferramentas → Deslocamentos de grupos
+  // Ações do cartão: a principal primeiro; encerrar fica separado, à direita
+  function acoesMissao(m, ativa, fecharModal) {
+    var botoes = [];
+    if (ativa && !m.busca_finalizada_em) botoes.push(UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Finalizar busca',
+      title: 'O grupo terminou a busca no setor: começa a contar o tempo para voltar à base', onclick: function () { finalizarBuscaPainel(m); } }));
+    if (ativa && m.busca_finalizada_em && m.base_lat != null) botoes.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Mais 15 min para voltar', onclick: function () { prorrogarRetorno(m); } }));
+    if (ativa && m.inicio_combinado_em !== undefined) botoes.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⏱ Horários', title: 'Hora de sair, hora de voltar e alertas', onclick: function () { abrirPrazosMissao(m); } }));
+    botoes.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fecharModal(); verMissaoNoMapa(m); } }));
+    if (ativa) botoes.push(UI.el('button', { classe: 'btn btn-pequeno btn-perigo empurrar', type: 'button', texto: 'Encerrar', onclick: function () { encerrarMissaoPainel(m); } }));
+    return UI.el('div', { classe: 'acoes-missao' }, botoes);
+  }
+
+  // Ferramentas → Deslocamentos de grupos: um cartão por deslocamento
   function abrirMissoes() {
     if (!est.op) return;
     var corpo = UI.el('div', { classe: 'corpo-missoes' });
@@ -9566,39 +9651,18 @@
         var ativa = m.status !== 'encerrada' && m.status !== 'na_base' && est.op.status === 'ativa';
         var membros = (est.missaoMembros.get(m.id) || []).map(function (x) { return { x: x, p: est.participantes.get(x.participante_id) }; })
           .sort(function (a, b) { return (a.p ? a.p.dados.nome : '').localeCompare(b.p ? b.p.dados.nome : '', 'pt-BR'); });
-        var tabela = UI.el('table', { classe: 'tabela-membros-missao' }, [
-          UI.el('thead', null, [UI.el('tr', null, ['Pessoa', 'Destino', 'Iniciou', m.setor_nome ? 'No setor' : 'Chegou', 'Na base', 'Contato'].map(function (t) { return UI.el('th', { texto: t }); }))]),
-          UI.el('tbody', null, membros.map(function (y) {
-            var fora = y.p && y.p.dados.removido;
-            return UI.el('tr', { classe: fora ? 'fora' : '' }, [
-              UI.el('td', { texto: (y.p ? nomeExibido(y.p) : 'participante') + (fora ? ' (fora da operação)' : '') }),
-              UI.el('td', { texto: y.x.recebe_destino ? 'recebeu' : '—' }),
-              UI.el('td', { texto: y.x.iniciou_em ? C.hora(y.x.iniciou_em, false) : '—' }),
-              UI.el('td', { texto: y.x.chegou_setor_em ? C.hora(y.x.chegou_setor_em, false) : '—' }),
-              UI.el('td', { classe: !y.x.chegou_base_em && m.status === 'retorno_atrasado' && !fora ? 'atrasado' : '',
-                texto: y.x.chegou_base_em ? C.hora(y.x.chegou_base_em, false) : (m.base_lat != null && m.busca_finalizada_em ? 'ainda não' : '—') }),
-              (function () { var c = contatoMembro(m, y); return UI.el('td', { classe: c.classe, title: c.titulo || null, texto: c.texto }); })(),
-            ]);
-          })),
-        ]);
-        corpo.appendChild(UI.el('section', { classe: 'item-missao status-' + m.status }, [
-          UI.el('div', { classe: 'item-missao-cabeca' }, [
-            UI.el('strong', { texto: m.grupo_nome + ' → ' + m.nome }),
+        corpo.appendChild(UI.el('article', { classe: 'cartao-missao status-' + m.status }, [
+          UI.el('header', { classe: 'cartao-missao-topo' }, [
+            UI.el('div', { classe: 'cartao-missao-titulo' }, [
+              UI.el('strong', { texto: m.grupo_nome + ' → ' + m.nome }),
+              UI.el('small', { classe: 'muted', texto: resumoEnvio(m) }),
+            ]),
             UI.el('span', { classe: 'selo ' + st.selo, texto: st.rotulo }),
           ]),
-          UI.el('p', { classe: 'muted', texto: (m.publico === 'responsavel' ? 'Só o responsável do grupo recebeu o destino' : 'Todos os membros receberam o destino') +
-            ' · enviado por ' + m.enviado_por_nome + (m.base_nome ? ' · base: ' + m.base_nome + ' (raio ' + Math.round(m.raio_base_m) + ' m, prazo ' + m.prazo_retorno_min + ' min)' : ' · sem base (sem controle de retorno)') }),
-          blocoTempoMissao(m, membros),
           linhaTempoMissao(m),
-          tabela,
-          compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verMissaoNoMapa(m); } }),
-            ativa && !m.busca_finalizada_em ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Finalizar busca', onclick: function () { finalizarBuscaPainel(m); } }) : null,
-            ativa && m.busca_finalizada_em && m.base_lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Prorrogar +15 min', onclick: function () { prorrogarRetorno(m); } }) : null,
-            ativa && m.inicio_combinado_em !== undefined ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⏱ Prazos', title: 'Horário combinado de início e de retorno, tolerância e alerta de sem comunicação',
-              onclick: function () { abrirPrazosMissao(m); } }) : null,
-            ativa ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Encerrar', onclick: function () { encerrarMissaoPainel(m); } }) : null,
-          ])),
+          blocoTempoMissao(m, membros),
+          listaMembrosMissao(m, membros),
+          acoesMissao(m, ativa, function () { fechar(); }),
         ]));
       });
     }
@@ -9606,8 +9670,8 @@
     est.renderMissoesAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-missoes' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Deslocamentos de grupos' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Início, chegada e retorno são calculados pelo servidor a partir da trilha GPS de cada membro (hora do GPS). ' +
-        'Os alertas de equipe possivelmente perdida, de horário combinado vencido e de membro sem comunicação são verificados por tempo, mesmo com os celulares sem sinal.' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Cada cartão é um deslocamento: horários combinados, onde está cada pessoa e o que falta. ' +
+        'Os alertas de atraso e de falta de contato são verificados pelo servidor, mesmo sem internet.' }),
       corpo,
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (est.renderMissoesAberto === render) est.renderMissoesAberto = null; } });

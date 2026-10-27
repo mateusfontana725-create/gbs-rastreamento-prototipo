@@ -1721,17 +1721,6 @@ body.conversa-aberta { overflow: hidden; }
 
 /* Deslocamentos de grupos */
 .bloco-destino-grupo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; margin-bottom: 10px; }
-.item-missao { border: 1px solid var(--borda); border-left: 5px solid var(--neutro); border-radius: var(--raio); padding: 10px; margin-top: 10px; background: var(--superficie-2); display: grid; gap: 8px; }
-.item-missao p { margin: 0; }
-.item-missao.status-em_deslocamento, .item-missao.status-busca_finalizada { border-left-color: var(--alerta); }
-.item-missao.status-no_setor { border-left-color: var(--responsavel); }
-.item-missao.status-retorno_atrasado { border-left-color: #ef4444; background: rgba(127, 29, 29, .3); }
-.item-missao.status-na_base { border-left-color: var(--ok); }
-.item-missao-cabeca { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.linha-tempo { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.linha-tempo li { display: grid; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--borda); font-size: .8rem; min-width: 110px; }
-.linha-tempo li small { font-family: var(--mono); color: var(--texto-3); }
-.tempo-missao { display: grid; gap: 4px; }
 .prazos-missao { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .prazos-missao li { display: grid; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--borda); font-size: .8rem; min-width: 150px; }
 .prazos-missao li span { font-weight: 700; }
@@ -1740,15 +1729,7 @@ body.conversa-aberta { overflow: hidden; }
 .prazos-missao li.prazo-atrasado { border-color: #ef4444; background: rgba(127, 29, 29, .35); }
 .combinado-missao { font-size: .85rem; padding: 4px 8px; border-left: 3px solid var(--borda); }
 .detalhes-prazos > summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
-.campos-prazos { display: grid; gap: 4px; margin-top: 6px; }
 .atalhos-prazo { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.linha-tempo li.feita { border-color: var(--ok); background: var(--ok-claro); }
-.linha-tempo li.prazo { border-color: var(--alerta); background: var(--alerta-claro); }
-.linha-tempo li.pendente { opacity: .6; }
-.tabela-membros-missao { width: 100%; border-collapse: collapse; font-size: .85rem; }
-.tabela-membros-missao th, .tabela-membros-missao td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--borda); }
-.tabela-membros-missao td.atrasado { color: #fca5a5; font-weight: 800; }
-.tabela-membros-missao tr.fora { opacity: .55; }
 
 /* Celular: missão no cartão de destino */
 .nav-missao { margin: -4px 0 8px; font-weight: 800; color: var(--acento); }

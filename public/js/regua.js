@@ -1,6 +1,7 @@
 /* =====================================================================
- * Régua circular: uma régua graduada em volta do centro da tela. Os números
- * são a distância até o centro (o raio); o diâmetro aparece na legenda.
+ * Régua circular: uma régua graduada (eixos com marcas e vários números) em
+ * volta do centro da tela. Os números são a distância até o centro; o raio
+ * aparece na ponta da régua e o diâmetro na legenda.
  * Recalculada a cada zoom. Só visual: não grava nada.
  * Escala de Web Mercator (tiles de 256 px): m/px = 156543,03 · cos(lat) / 2^zoom.
  * ===================================================================== */
@@ -9,7 +10,7 @@
 
   var RAIO_MIN_PX = 80, RAIO_MAX_PX = 150;   // o anel externo (raio) fica entre estes tamanhos na tela
   var PASSOS_M = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000];
-  var MARCAS = 5;                            // marcas por raio (uma a cada 1/5 do raio externo)
+  var MARCAS = 5;                            // divisões numeradas por raio (uma a cada 1/5); entre elas há uma marca pequena
   var MARGEM_LATERAL = 64;                   // espaço para os números à esquerda e à direita
 
   var est = { mapa: null, div: null, aoMover: null };
@@ -33,11 +34,24 @@
     return m + ' m';
   }
 
+  // Número de uma marca da escala (sem unidade; a unidade vai na legenda): metros, ou km quando o raio passa de 1 km.
+  function numero(m, emKm) {
+    return emKm ? (m / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : String(Math.round(m));
+  }
+
+  function linha(x1, y1, x2, y2, classe) {
+    return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" class="' + classe + '"/>';
+  }
+
+  function texto(x, y, ancora, classe, conteudo) {
+    return '<text x="' + x + '" y="' + y + '" text-anchor="' + ancora + '" class="' + classe + '">' + conteudo + '</text>';
+  }
+
   function desenhar() {
     if (!est.div || !est.mapa) return;
     var raioM = raioAdequado(metrosPorPixel(est.mapa));
     var R = raioM / metrosPorPixel(est.mapa);
-    var meio = R / 2, marca = R / MARCAS;
+    var emKm = raioM >= 1000;
     var W = Math.ceil(2 * R + 2 * MARGEM_LATERAL), H = Math.ceil(2 * R + 28);
     var cx = W / 2, cy = H / 2;
     var svg = est.div.querySelector('svg');
@@ -46,25 +60,41 @@
 
     var s = '';
     s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" class="regua-anel"/>';
-    s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + meio + '" class="regua-anel regua-anel-meio"/>';
-    // eixos da régua (horizontal e vertical) com marcas a cada 1/5 do raio
-    s += '<line x1="' + (cx - R) + '" y1="' + cy + '" x2="' + (cx + R) + '" y2="' + cy + '" class="regua-eixo"/>';
-    s += '<line x1="' + cx + '" y1="' + (cy - R) + '" x2="' + cx + '" y2="' + (cy + R) + '" class="regua-eixo"/>';
-    for (var k = -MARCAS; k <= MARCAS; k++) {
-      if (k === 0) continue;
-      var d = k * marca, maior = Math.abs(k) === MARCAS ? 7 : 4;   // marca maior na borda do anel externo
-      s += '<line x1="' + (cx + d) + '" y1="' + (cy - maior) + '" x2="' + (cx + d) + '" y2="' + (cy + maior) + '" class="regua-marca"/>';
-      s += '<line x1="' + (cx - maior) + '" y1="' + (cy + d) + '" x2="' + (cx + maior) + '" y2="' + (cy + d) + '" class="regua-marca"/>';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (R / 2) + '" class="regua-anel regua-anel-meio"/>';
+    // eixos (horizontal e vertical) em forma de régua
+    s += linha(cx - R, cy, cx + R, cy, 'regua-eixo');
+    s += linha(cx, cy - R, cx, cy + R, 'regua-eixo');
+
+    // Marcas: uma a cada 1/10 do raio (pequena), a cada 1/5 (média, com número) e a do raio (grande).
+    // Números apertados são pulados, sempre mantendo o do raio.
+    var passoPx = R / MARCAS;
+    var larguraNum = numero(raioM, emKm).length * 6.2 + 3;
+    var salto = Math.max(1, Math.ceil(larguraNum / passoPx));
+    var comNumero = {};
+    for (var j = MARCAS; j >= 1; j -= salto) comNumero[j] = true;
+
+    for (var k = 1; k <= MARCAS * 2; k++) {
+      var d = k * R / (MARCAS * 2), quinto = k % 2 === 0, q = k / 2;
+      var len = k === MARCAS * 2 ? 10 : (quinto ? 7 : 4);
+      [1, -1].forEach(function (sinal) {
+        s += linha(cx + sinal * d, cy - len, cx + sinal * d, cy + len, k === MARCAS * 2 ? 'regua-marca regua-marca-raio' : 'regua-marca');
+        s += linha(cx - len, cy + sinal * d, cx + len, cy + sinal * d, k === MARCAS * 2 ? 'regua-marca regua-marca-raio' : 'regua-marca');
+      });
+      if (!quinto || !comNumero[q] || q === MARCAS) continue;
+      var num = numero(raioM * q / MARCAS, emKm);
+      // horizontal: abaixo do eixo, dos dois lados; vertical: ao lado do eixo, em cima e embaixo
+      s += texto(cx + d, cy + 22, 'middle', 'regua-num', num);
+      s += texto(cx - d, cy + 22, 'middle', 'regua-num', num);
+      s += texto(cx + 13, cy - d + 4, 'start', 'regua-num', num);
+      if (d >= 32) s += texto(cx + 13, cy + d + 4, 'start', 'regua-num', num);   // perto do centro bateria nos números horizontais
     }
     s += '<circle cx="' + cx + '" cy="' + cy + '" r="2.5" class="regua-centro"/>';
-    // números nos dois lados: a distância de cada anel até o centro (o raio)
-    [[meio, raioM / 2], [R, raioM]].forEach(function (par) {
-      var r = par[0], m = par[1];
-      s += '<text x="' + (cx + r + 4) + '" y="' + (cy - 5) + '" text-anchor="start" class="regua-rot">' + rotulo(m) + '</text>';
-      s += '<text x="' + (cx - r - 4) + '" y="' + (cy - 5) + '" text-anchor="end" class="regua-rot">' + rotulo(m) + '</text>';
-    });
+    // o número do raio, com unidade, na ponta de cada lado da régua
+    var rot = rotulo(raioM);
+    s += texto(cx + R + 6, cy - 6, 'start', 'regua-rot', rot);
+    s += texto(cx - R - 6, cy - 6, 'end', 'regua-rot', rot);
     svg.innerHTML = s;
-    est.legenda.innerHTML = 'Números = <b>raio</b> (distância do centro). Diâmetro = 2 × raio = <b>' + rotulo(raioM * 2) + '</b>';
+    est.legenda.innerHTML = 'Escala em <b>' + (emKm ? 'km' : 'm') + '</b>, a partir do centro · Raio <b>' + rotulo(raioM) + '</b> · Diâmetro <b>' + rotulo(raioM * 2) + '</b>';
   }
 
   function ligar(mapa) {

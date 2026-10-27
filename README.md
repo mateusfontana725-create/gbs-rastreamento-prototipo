@@ -768,8 +768,8 @@ Recursos de aplicativos de navegação em campo, adaptados à operação. Ficam 
 Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na ficha do participante.
 
 - **Régua circular**: botão **◎ Régua** no topo (ou Ferramentas → Régua circular). Uma régua graduada no centro da
-  tela: os números nos dois lados são a **distância até o centro (o raio)**; a legenda mostra o diâmetro (2 × raio).
-  Acompanha o zoom e não grava nada.
+  tela: eixos com marcas e **vários números** (distância até o centro, em m ou km); o **raio** aparece na ponta de
+  cada lado e a legenda mostra o diâmetro (2 × raio). Acompanha o zoom e não grava nada.
 - **Formato das coordenadas**: decimal, graus-minutos-segundos (GMS), graus e minutos decimais, **UTM**
   (WGS 84) ou **MGRS**. A escolha vale para a ficha, os popups e o medidor e fica lembrada no aparelho.
   Para passar por rádio, use UTM ou MGRS (mesmo sistema das cartas militares e da maioria dos GPS).
@@ -1599,7 +1599,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   acima da legenda (liga/desliga, painel sem cobrir o botão), modais em 2 colunas sem rolagem no computador e em 1
   coluna no celular/tablet em pé, natureza com 3 opções, gráfico por mês com aquática × terrestre, por tipo com Outros,
   **↗ Abrir em outra janela** no Dashboard (geral ou da operação): abre `dashboard.html`, uma janela só com o
-  dashboard, sem o mapa nem o painel. Abrir de novo reaproveita a mesma janela.
+  dashboard, sem o mapa nem o painel. Abrir de novo reaproveita a mesma janela. A janela usa a mesma sessão do
+  painel (`data-pagina="militar"` no `dashboard.html`: a sessão é guardada por página); quem já entrou não entra de novo.
 - **Mapa limpo (versão 2026-10-23)**: navegador (banco simulado, t27 — 23): nenhum nome no mapa, balão no clique
   (preso ao ponto) sem abrir a ficha, ficha por dois cliques (sem zoom), por clicar e segurar e pelo toque longo, arrastar
   não abre, lista abre direto, ficha com "⋮ Mais", símbolos e agrupamentos menores de longe, translúcidos (quem pede

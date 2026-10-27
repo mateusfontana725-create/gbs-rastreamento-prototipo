@@ -5445,6 +5445,41 @@
     est.mapa.fitBounds(L.latLngBounds(verticesSetor(d)), { padding: [40, 40], maxZoom: 17 });
   }
 
+  /* ---------- Camada de POA no mapa (js/busca-cenario.js) ---------- */
+  // Setores pintados pela probabilidade atual. Escala própria (violeta), que não se confunde com as cores de
+  // emergência nem de risco, e camada separada da passagem GPS e das missões. valores: { setorId: fração } ou nulo (remove).
+  function escalaProb(t) {
+    var a = [237, 233, 254], b = [91, 33, 182];
+    return 'rgb(' + [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); }).join(',') + ')';
+  }
+  function camadaProbabilidade(valores, titulo) {
+    if (est.camadaProb) { est.camadaProb.remove(); est.camadaProb = null; }
+    if (est.legendaProb) { est.legendaProb.remove(); est.legendaProb = null; }
+    if (!valores || !est.mapa) return;
+    var max = 0;
+    Object.keys(valores).forEach(function (k) { max = Math.max(max, valores[k]); });
+    if (!(max > 0)) return;
+    var grupo = L.layerGroup();
+    est.setores.forEach(function (s, id) {
+      if (valores[id] == null) return;
+      L.polygon(verticesSetor(s.d), { color: '#4c1d95', weight: 1, fillColor: escalaProb(valores[id] / max), fillOpacity: 0.55, interactive: false }).addTo(grupo);
+    });
+    grupo.addTo(est.mapa);
+    est.camadaProb = grupo;
+    var Legenda = L.Control.extend({
+      options: { position: 'bottomleft' },
+      onAdd: function () {
+        var div = L.DomUtil.create('div', 'legenda-prob');
+        div.innerHTML = '<strong></strong><span class="legenda-prob-barra"></span><span class="legenda-prob-eixo"><small>0%</small><small></small></span>';
+        div.querySelector('strong').textContent = titulo || 'POA atual (prévia)';
+        div.querySelectorAll('small')[1].textContent = (max * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '% (maior setor)';
+        return div;
+      },
+    });
+    est.legendaProb = new Legenda();
+    est.legendaProb.addTo(est.mapa);
+  }
+
   /* ---------- Detalhes de setor, ponto de interesse e trilha (mesmo padrão visual) ---------- */
   // Cabeçalho com a cor do item, o tipo, o nome e uma etiqueta de situação
   function cabecaDetalhe(o) {
@@ -9708,6 +9743,8 @@
     areaSetorM2: areaSetorM2,
     grupos: function () { return Array.from(est.grupos.values()); },
     podeAlterar: podeAlterar,
+    missoes: function () { return Array.from(est.missoes.values()); },
+    camadaProbabilidade: camadaProbabilidade,
     categorias: CAT_PONTO,
     raioAlertaPadrao: RAIO_ALERTA_PADRAO,
     formatoCoord: function () { return est.prefsMapa.coord || 'dec'; },

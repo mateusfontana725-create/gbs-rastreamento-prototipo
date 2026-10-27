@@ -413,9 +413,63 @@
     return out;
   }
 
-  function secaoResultado(d) {
+  /* ---------- Probabilidades de busca (POA, POD e POS) ------------------- */
+  var ORIGEM_PROB = { julgamento_comando: 'julgamento documentado do comando', consenso_documentado: 'consenso documentado da equipe', modelo_validado: 'modelo validado' };
+  function porc(v, casas) { return v == null ? '—' : (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: casas == null ? 1 : casas }) + '%'; }
+
+  function secaoBusca(d, numero) {
+    var b = d.busca;
+    if (!b) return [];
+    var out = [secao(numero, 'Probabilidades de busca (POA, POD e POS)', true)];
+    out.push(nota('POA: probabilidade de a pessoa estar no setor, decidida pelo comando e aprovada em versões (uma versão aprovada nunca é alterada). POD: probabilidade de a busca achá-la se ela estiver no setor, vinda do registro manual da equipe, nunca do GPS. POS = POA × POD: probabilidade de a busca localizar a pessoa (não é probabilidade de sobrevivência nem de resgate com vida). Os valores de "situação atual" são calculados a partir dos dados abaixo.'));
+    (b.vitimas || []).forEach(function (v) {
+      if (!v.versoes.length) return;
+      out.push(subtitulo('Cenário de ' + v.nome + (v.localizada ? ' — vítima localizada em ' + dataHora(v.localizada.em) + ' (cenário encerrado)' : '')));
+      v.versoes.forEach(function (c) {
+        out.push({ text: 'Versão ' + c.numero + ' · aprovada por ' + txt(c.aprovada_por_nome) + ' em ' + dataHora(c.aprovada_em), style: 'dia', headlineLevel: 2 });
+        out.push(ficha([
+          ['Horário de referência', dataHora(c.horario_referencia)],
+          ['Origem do POA', ORIGEM_PROB[c.origem_poa] || c.origem_poa],
+          c.confianca ? ['Sustentação dos dados', c.confianca + ' (julgamento do comando, não intervalo estatístico)'] : null,
+          c.ponto_confiavel ? ['Último ponto confiável', c.ponto_confiavel.titulo + ' · ' + coord(c.ponto_confiavel.lat, c.ponto_confiavel.lng)] : null,
+          ['Justificativa', c.justificativa],
+          vazio(c.hipoteses) ? null : ['Hipóteses', c.hipoteses],
+          vazio(c.limitacoes) ? null : ['Limitações', c.limitacoes],
+        ]));
+        var soma = c.setores.reduce(function (a, s) { return a + (s.poa || 0); }, 0);
+        out.push(tabela(['Setor', 'POA', 'Área', 'Justificativa do setor'], c.setores.map(function (s) {
+          return [{ text: s.nome, style: 'td', bold: true }, porc(s.poa), s.area_m2 ? textoArea(s.area_m2) : '—', txt(s.justificativa, '')];
+        }).concat([[{ text: 'Fora dos setores desenhados', style: 'td', italics: true }, porc(Math.max(0, 1 - soma)), '—', '']]), [130, 50, 70, '*']));
+        if ((c.evidencias || []).length) {
+          out.push({ text: 'Evidências consideradas', style: 'rotulo' });
+          out.push({ ul: c.evidencias.map(function (e) { return e.descricao + ' — ' + (e.confirmada ? 'confirmada' : 'não confirmada'); }), style: 'td', margin: [0, 2, 0, 8] });
+        }
+      });
+      if (v.atual) {
+        out.push({ text: 'Situação atual (versão ' + v.atual.versao + ' e buscas registradas depois dela) · POS total ' + porc(v.atual.posTotal), style: 'dia', headlineLevel: 2 });
+        out.push(tabela(['Setor', 'POA aprovado', 'POD acumulado', 'POS', 'POA atual'], v.atual.setores.map(function (s) {
+          return [{ text: s.nome, style: 'td', bold: true }, porc(s.poa), s.pod != null ? porc(s.pod) : (s.semEstimativa ? 'não estimada' : '—'), porc(s.pos), porc(s.poaAtual)];
+        }).concat([[{ text: 'Fora dos setores desenhados', style: 'td', italics: true }, porc(v.atual.poaFora), '—', '—', porc(v.atual.poaForaAtual)]]), [150, 70, 80, 60, '*']));
+      }
+    });
+    if ((b.registros || []).length) {
+      out.push(subtitulo('Buscas registradas (origem do POD)'));
+      out.push(tabela(['Quando', 'Setor e equipe', 'Tipo', 'POD', 'Base da estimativa', 'Situação'], b.registros.map(function (r) {
+        return [{ text: dataHoraCurta(r.registrado_em), style: 'tdMono' },
+          { stack: [{ text: r.setor, style: 'td', bold: true }, { text: [txt(r.equipe, 'equipe não informada'), r.metodo].filter(Boolean).join(' · ') + (r.vitima ? ' · só ' + r.vitima : ''), style: 'tdSuave' }] },
+          r.finalidade === 'planejada' ? 'planejada' : 'executada',
+          r.pod == null ? 'não estimada' : porc(r.pod) + (r.cobertura_fracao ? ' em ' + porc(r.cobertura_fracao, 0) + ' do setor' : ''),
+          { text: r.base_estimativa + ' [' + (ORIGEM_PROB[r.origem_pod] || r.origem_pod) + ']', style: 'tdSuave' },
+          r.anulado ? 'Anulado: ' + r.anulado.motivo + ' (' + txt(r.anulado.por) + ')' : 'Válido'];
+      }), [52, '*', 46, 60, '*', 70]));
+      out.push(nota('Registro de busca não se edita: erros são anulados (com motivo) e ficam no histórico.'));
+    }
+    return out;
+  }
+
+  function secaoResultado(d, numero) {
     var op = d.operacao;
-    var out = [secao(5, 'Resultado', true), caixaResultado(op)];
+    var out = [secao(numero || 5, 'Resultado', true), caixaResultado(op)];
     var anteriores = d.relatorios_anteriores || [];
     out.push(ficha([
       ['Relatório gerado', dataHora(d.gerado_em) + ' por ' + txt(d.gerado_por_nome)],
@@ -530,7 +584,8 @@
       .concat(secaoSetores(d, recursos))
       .concat(secaoPontos(d))
       .concat(secaoDiario(d))
-      .concat(secaoResultado(d));
+      .concat(secaoBusca(d, 5))
+      .concat(secaoResultado(d, d.busca ? 6 : 5));
 
     return {
       pageSize: 'A4',

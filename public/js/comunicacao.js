@@ -107,6 +107,11 @@
     busca_registro_inexistente: 'Este registro de busca não existe mais.',
     busca_registro_ja_anulado: 'Este registro de busca já foi anulado.',
     busca_anulacao_sem_motivo: 'Escreva o motivo da anulação.',
+    cenario_setores_sobrepostos: 'Há setores com POA que se sobrepõem: a mesma área seria contada duas vezes. Ajuste os setores ou deixe o POA de um deles em zero.',
+    cenario_vitima_localizada: 'Esta vítima já foi localizada: o cenário dela está encerrado.',
+    busca_planejada_sem_pod: 'Busca planejada precisa do POD previsto.',
+    busca_cobertura_invalida: 'Informe quanto do setor foi coberto (entre 1% e 99%) só quando a busca foi em parte do setor.',
+    busca_chave_reutilizada: 'Este envio já foi feito com outro conteúdo. Feche o formulário e preencha de novo.',
     busca_registro_imutavel: 'Registro de busca não pode ser editado nem apagado; anule e lance outro.',
   };
 

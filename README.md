@@ -350,32 +350,56 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   setor que ficou a até 25 m de algum rastro (rastros com precisão pior que 100 m não contam). É só uma
   estimativa; o setor só fica **Concluído** quando um responsável marca.
 - **Probabilidades de busca (POA, POD e POS)** — menu ☰ → **Probabilidades de busca (POA/POD)** e no detalhe de cada
-  setor (migração **033**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`):
-  - **POA** = probabilidade de a pessoa estar em cada setor. É **decisão do responsável**, por vítima, num
-    **cenário** com justificativa (geral e por setor). A soma pode ficar abaixo de 100%: o resto é "fora dos
-    setores desenhados" (sem busca). O app nunca inventa o POA; **Distribuir pela área** é só um ponto de partida.
-  - **Versões do cenário**: cada versão nasce como **rascunho** (um por vítima, editável) e vira **aprovada**
-    depois de justificada (mín. 10 caracteres). **Versão aprovada não muda nem se apaga** (o servidor garante, não
-    só a tela). Para rever, "Rever o cenário (nova versão)": parte da aprovada, e o histórico completo fica
-    visível. Aprovação entra no diário com o POA de cada setor e a justificativa. Cada vítima tem o seu cenário.
-  - **POD** = probabilidade de a busca achar a pessoa, **se ela estiver no setor**. Vem do **registro manual da
-    busca** ("Registrar busca (POD)"): setor, equipe, POD estimado pela equipe (de 0 a 100), **em que a estimativa se
-    baseia** (obrigatório), condições, horários e se vale para todas as vítimas ou só uma. **Nunca vem do GPS**: a
-    trilha mostra por onde a equipe passou, não o que ela observou (por isso o cálculo antigo por trilhas saiu).
-    Registro não se edita nem se apaga: se errou, **Anular** (com motivo; fica no histórico) e lance outro.
-  - **O que o app calcula** (só com versão aprovada). Contam os registros não anulados, válidos para a vítima e
-    **lançados depois da aprovação** da versão (a versão já incorpora o que se sabia até ali; para levar as buscas
-    em conta, aprove uma nova versão — "Usar o POA atual" preenche com o resultado abaixo):
-    - **POD acumulado** do setor = `1 − Π(1 − POD de cada registro)` (supõe buscas independentes: repetir o mesmo
-      método no mesmo lugar tende a render menos, então é uma estimativa generosa).
-    - **POS** do setor = `POA × POD acumulado`. **POS total** = soma dos setores.
-    - **POA atual** (regra de Bayes) = `POA × (1 − POD acumulado)` ÷ o total que sobra: a probabilidade migra para o
-      que ainda não foi visto, inclusive para "fora dos setores".
-  - Referências: Koopman, *Search and Screening* (1980); manual IAMSAR, vol. II. O modelo estima, não prova: o setor só
-    fica **Concluído** quando um responsável marca.
-  - Banco: `busca_cenarios`, `busca_cenario_setores` e `busca_registros` (só leitura pelos responsáveis da operação, escrita
-    só pelas funções `cenario_salvar_rascunho`, `cenario_aprovar`, `cenario_descartar_rascunho`, `busca_registrar` e
-    `busca_anular`). Operação encerrada: somente leitura. **Antes de usar, rode `033_cenario_busca_pod_poa.sql` no Supabase.**
+  setor (migrações **033** e **034**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`). Segue o guia
+  "POA e POD no GBS": o app organiza decisões documentadas do comando e nunca inventa percentuais.
+  - **POA** = probabilidade de a pessoa estar em cada setor. É **decisão do responsável**, por vítima, num **cenário**:
+    POA por setor (soma até 100%; o resto é **"fora dos setores desenhados"**, sem busca), justificativa geral e por setor,
+    **horário de referência**, **hipóteses**, **limitações**, **sustentação dos dados** (baixa/média/alta, julgamento e não
+    intervalo estatístico), **origem do POA**, **último ponto confiável** (referência a um ponto de interesse, com cópia dos
+    dados) e **evidências** (pontos do mapa e anotações livres, cada uma "confirmada" ou "não confirmada"). O editor começa
+    vazio; "Preencher proporcional à área" é só uma hipótese uniforme opcional, que você ajusta e justifica.
+  - **Setores do cenário não se sobrepõem**: a mesma área seria contada duas vezes. A tela avisa na hora e **o servidor
+    recusa aprovar** (mais de 2% do menor setor em comum; rascunho pode). A geometria e a área de cada setor ficam
+    **copiadas na versão**: editar ou excluir o setor depois não altera a versão aprovada. A tela mostra a **densidade**
+    (% por km²) só como apoio ao planejamento, nunca como ordem automática.
+  - **Versões**: cada versão nasce como **rascunho** (um por vítima, editável) e vira **aprovada** depois de justificada
+    (mín. 10 caracteres, ao menos um setor com POA). **Versão aprovada não muda nem se apaga** (o servidor garante). Rever
+    cria a próxima versão, e o histórico fica visível. A aprovação confere a **revisão esperada** (outro responsável mexeu
+    no rascunho: recusa) e usa uma **chave de idempotência** (reenviar não duplica). Entra no diário.
+  - **Vítima localizada**: o cenário dela fica **encerrado** (só consulta); os das demais vítimas seguem.
+  - **POD** = probabilidade de a busca achar a pessoa, **se ela estiver no setor**. Vem do **registro manual da busca**,
+    **nunca do GPS** (a trilha mostra por onde a equipe passou, não o que observou). O registro tem: setor, **tipo**
+    (**pós-execução** ou **planejada** = previsão, que nunca altera o POA), equipe, método, observadores efetivos,
+    **deslocamento relacionado**, se cobriu o setor inteiro ou **parte dele** (a conta usa POD da área × fração coberta,
+    supondo distribuição uniforme no setor), POD estimado (0 a 100), **em que se baseia**, origem da estimativa (julgamento
+    do comando ou consenso documentado; não há catálogo de modelos validados), condições, impedimentos, áreas não
+    observadas, horários e se vale para todas as vítimas ou só uma. **"POD não estimada"** registra a busca sem reduzir o
+    POA e **nunca vira zero**. O registro não se edita nem se apaga: se errou, **Anular** (com motivo). Reenviar o mesmo
+    registro (mesma chave) não duplica.
+  - **O que o app calcula** (só com versão aprovada). Contam os registros de busca executada, com POD estimada, não
+    anulados, válidos para a vítima e **lançados depois da aprovação** da versão (a versão já incorpora o que se sabia):
+    - **POD acumulado** do setor = `1 − Π(1 − POD de cada registro)` (supõe buscas independentes; repetir o mesmo método no
+      mesmo lugar rende menos, então é uma estimativa generosa).
+    - **POS** do setor = `POA × POD acumulado`. **POS total** = soma dos setores (probabilidade de a busca localizar a pessoa;
+      **não** é probabilidade de sobrevivência nem de resgate com vida).
+    - **POA atual** (regra de Bayes) = `POA × (1 − POD acumulado)` ÷ o total que sobra: a probabilidade migra para o que não foi
+      visto, inclusive para "fora dos setores". Se a busca negativa seria impossível (POD 100% onde estava toda a probabilidade),
+      o registro é marcado **inconsistente** e não é aplicado. Vale para alvo parado; se a pessoa pode estar se deslocando,
+      faça um novo cenário. "Usar o POA atual" preenche a próxima versão com esse resultado, para você revisar e justificar.
+    - O exemplo do capítulo 13 do guia (A 45%, B 25%, C 20%, externo 10%; M1 em A com POD 60%, M2 em B com POD 50%) é teste
+      automático: dá 24,66% / 34,25% / 27,40% / 13,70% e depois 29,75% / 20,66% / 33,06% / 16,53%, cumulativo 39,5%.
+  - **Mapa**: "Mostrar POA atual no mapa" pinta os setores do cenário numa escala própria (violeta, que não se confunde com
+    as cores de emergência), com legenda (vítima, versão, horário de referência e "prévia"), separada da passagem GPS.
+  - **Relatório final**: seção "Probabilidades de busca" com as versões aprovadas (hipóteses, limitações, evidências), a
+    situação atual e as buscas registradas (inclusive as anuladas, marcadas).
+  - Referências: Koopman, *Search and Screening* (1980); manual IAMSAR, vol. II; Guarda Costeira dos EUA, *The Theory of
+    Search*. O modelo estima, não prova: o setor só fica **Concluído** quando um responsável marca.
+  - Banco: `busca_cenarios`, `busca_cenario_setores`, `busca_cenario_evidencias` e `busca_registros` (só leitura pelos
+    responsáveis da operação; escrita só pelas funções `cenario_salvar_rascunho`, `cenario_aprovar`,
+    `cenario_descartar_rascunho`, `busca_registrar` e `busca_anular`). Operação encerrada: somente leitura. **Antes de usar,
+    rode `033_cenario_busca_pod_poa.sql` e depois `034_poa_pod_guia.sql` no Supabase** (não rode a 033 sozinha depois da 034).
+  - Ainda fora do escopo: líder de campo registrando pelo celular, catálogo de modelos de detecção validados, deriva de alvo
+    móvel (aquático) e propagação automática do POA.
 - O participante atribuído vê o contorno do **seu** setor no mapa do celular ("Seu setor: A-1").
 - Ficam salvos no Supabase (tabela `setores`) e aparecem em tempo real para os outros responsáveis.
 

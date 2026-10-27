@@ -790,6 +790,8 @@
         var pdfMake = await carregarPdfMake();
         passo('Buscando os dados da operação…');
         var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+        // probabilidades de busca (cenários aprovados, buscas registradas): se falhar, o relatório sai sem a seção
+        try { dados.busca = window.BuscaCenario ? await window.BuscaCenario.dadosRelatorio() : null; } catch (e) { dados.busca = null; }
         var doc = await prepararDocumento(dados, { fotos: selFotos.value, fundo: chkFundo.checked }, passo);
         passo('Gerando o PDF…');
         var r = await gerarBlob(pdfMake, doc);

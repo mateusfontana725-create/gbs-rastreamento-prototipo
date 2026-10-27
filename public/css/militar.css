@@ -1724,6 +1724,17 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .campo-poa { max-width: 110px; }
 .registro-anulado { opacity: .6; text-decoration: line-through; }
 .registro-anulado td:last-child, .registro-anulado td:nth-child(6) { text-decoration: none; }
+.cenario-ref { margin: 4px 0 10px; font-size: .86rem; }
+.cenario-evid { margin: 4px 0 8px; padding-left: 18px; font-size: .86rem; }
+.cenario-evid-lista { display: grid; gap: 4px; margin: 6px 0; }
+.cenario-evid-linha { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; font-size: .86rem; }
+.cenario-evid-linha label { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+.cenario-nao-est { display: flex; gap: 6px; align-items: center; margin-top: 6px; font-size: .86rem; }
+.nota-ok { border-left-color: var(--ok); }
+/* Camada de POA no mapa: legenda com a escala violeta (própria, sem as cores de emergência) */
+.legenda-prob { background: rgba(10, 13, 16, .86); color: #f5f3ff; padding: 6px 10px; border-radius: 6px; font-size: .74rem; max-width: 260px; display: grid; gap: 4px; }
+.legenda-prob-barra { display: block; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgb(237, 233, 254), rgb(91, 33, 182)); }
+.legenda-prob-eixo { display: flex; justify-content: space-between; gap: 8px; }
 .grupo-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 560px) { .grupo-2col { grid-template-columns: 1fr; } }
 

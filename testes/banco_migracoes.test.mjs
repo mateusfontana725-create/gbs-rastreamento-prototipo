@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–014) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–033) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -986,5 +986,118 @@ console.log('Controle de tempo: horários combinados, atrasos e falhas de comuni
   chk((await db.query(`select verificar_retornos() n`)).rows[0].n === 0, 'operação encerrada: o agendador ignora');
 }
 
-console.log('\nMigrações 007–032 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 033: cenário por vítima (POA, versões imutáveis) e registro manual de busca (POD) ----------
+console.log('\nCenário de busca (POA) e registro manual da busca (POD) — migração 033');
+{
+  const pubB = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['busca_cenarios', 'busca_cenario_setores', 'busca_registros'].every((x) => pubB.includes(x)), 'cenários e registros de busca publicados no Realtime', pubB);
+
+  const opB = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CENARIO', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const vAna = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Ana' }) });
+  const vBeto = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Beto' }) });
+  const mkSetor = (nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 300 }) });
+  const sN = await mkSetor('Norte', -25.40), sS = await mkSetor('Sul', -25.42), sL = await mkSetor('Leste', -25.44);
+  const dados = (itens, just, extra) => JSON.stringify(Object.assign({ justificativa: just == null ? '' : just, setores: itens }, extra || {}));
+  const it = (s, poa, j) => ({ setor_id: s.id, poa, justificativa: j || '' });
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+
+  // --- cenário: rascunho ---
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.5)]) }))), 'responsável de outra operação não cria cenário');
+  chk(/vitima_nao_encontrada/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: '00000000-0000-0000-0000-000000000000', p_dados: dados([]) }))), 'vítima inexistente: recusada');
+  chk(/cenario_poa_acima_de_100/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.7), it(sS, 0.4)]) }))), 'soma dos POA acima de 100%: recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 1.2)]) }))), 'POA fora de 0 a 1: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.3), it(sN, 0.2)]) }))), 'mesmo setor duas vezes: recusado');
+  chk(/setor_nao_encontrado/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(setor, 0.3)]) }))), 'setor de outra operação: recusado');
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vAna.id])).rows[0].n === 0, 'pedido recusado não deixa rascunho pela metade');
+
+  const r1 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.5, 'última vez vista ao norte'), it(sS, 0.3)], 'Trilha do norte é a mais provável') });
+  chk(r1.cenario.numero === 1 && r1.cenario.estado === 'rascunho' && r1.setores.length === 2 && r1.cenario.base_numero === null, 'rascunho vira a versão 1 com os POA por setor', r1);
+  chk(Math.abs(r1.setores.reduce((a, s) => a + Number(s.poa), 0) - 0.8) < 1e-9 && r1.setores.find((s) => s.setor_nome === 'Norte').justificativa === 'última vez vista ao norte', 'guarda POA e justificativa por setor (os 20% restantes ficam fora dos setores)');
+  const r1b = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.4), it(sS, 0.3), it(sL, 0.2)], 'Revisado', { atualizado_em: r1.cenario.atualizado_em }) });
+  chk(r1b.cenario.id === r1.cenario.id && r1b.cenario.numero === 1 && r1b.setores.length === 3, 'salvar de novo edita o mesmo rascunho (continua a versão 1)', r1b);
+  chk(/cenario_versao_desatualizada/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.1)], 'x', { atualizado_em: r1.cenario.atualizado_em }) }))), 'rascunho mudou por outro responsável: recusa gravar por cima');
+  chk((await q(anA, `select count(*)::int n from public.busca_cenarios`))[0].n === 0 && (await q(anA, `select count(*)::int n from public.busca_registros`))[0].n === 0, 'participante não lê cenários nem registros');
+  chk((await q(resp2, `select count(*)::int n from public.busca_cenarios`))[0].n === 0, 'responsável de outra operação não lê os cenários');
+  chk((await q(resp1, `select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vAna.id]))[0].n === 1, 'responsável da operação lê o cenário');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `update public.busca_cenarios set justificativa = 'x' where id = $1`, [r1.cenario.id]))), 'sem escrita direta nas tabelas (só pelas funções)');
+
+  // --- aprovar ---
+  chk(/cenario_sem_justificativa/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: (await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.4), it(sS, 0.3), it(sL, 0.2)], 'curta') })).cenario.id }))), 'aprovar sem justificativa de verdade (mín. 10 caracteres): recusado');
+  const rasc = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.4, 'trilha'), it(sS, 0.3), it(sL, 0.2)], 'Última posição ao norte; cão de trilha indicou o norte') });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'cenario_aprovar', { p_cenario: rasc.cenario.id }))), 'outro responsável não aprova');
+  const ap1 = await rpc(resp1, 'cenario_aprovar', { p_cenario: rasc.cenario.id });
+  chk(ap1.cenario.estado === 'aprovada' && ap1.cenario.aprovada_por_nome === 'Sgt Um' && ap1.cenario.aprovada_em, 'versão aprovada: guarda quem e quando', ap1.cenario);
+  const dia1 = (await db.query(`select titulo, detalhe, categoria from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado'`, [opB.id])).rows;
+  chk(dia1.length === 1 && /Ana \(versão 1\)/.test(dia1[0].titulo) && /Norte: 40%/.test(dia1[0].detalhe) && /cão de trilha/.test(dia1[0].detalhe), 'aprovação entra no diário com POA e justificativa', dia1);
+
+  // --- versão aprovada não muda ---
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: ap1.cenario.id }))), 'aprovar de novo a mesma versão: recusado');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(rpc(resp1, 'cenario_descartar_rascunho', { p_cenario: ap1.cenario.id }))), 'versão aprovada não pode ser descartada');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set justificativa = 'adulterada' where id = $1`, [ap1.cenario.id]))), 'gatilho: nem o banco altera a versão aprovada');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set estado = 'rascunho', aprovada_em = null where id = $1`, [ap1.cenario.id]))), 'gatilho: aprovada não volta a rascunho');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`delete from public.busca_cenarios where id = $1`, [ap1.cenario.id]))), 'gatilho: versão aprovada não é apagada');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenario_setores set poa = 0.9 where cenario_id = $1`, [ap1.cenario.id]))), 'gatilho: POA da versão aprovada não muda');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`delete from public.busca_cenario_setores where cenario_id = $1`, [ap1.cenario.id]))), 'gatilho: setores da versão aprovada não somem');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`insert into public.busca_cenario_setores (cenario_id, operacao_id, setor_id, setor_nome, poa) values ($1, $2, $3, 'X', 0.1)`, [ap1.cenario.id, opB.id, sL.id]))), 'gatilho: não entra setor novo na versão aprovada');
+
+  // --- nova versão: o histórico fica ---
+  const r2 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.1), it(sS, 0.6)], 'Buscas no norte sem vestígios; deslocando a probabilidade para o sul') });
+  chk(r2.cenario.numero === 2 && r2.cenario.base_numero === 1 && r2.cenario.estado === 'rascunho', 'depois de aprovada, salvar cria a versão 2 (parte da 1)', r2.cenario);
+  const ap2 = await rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id });
+  const hist = (await q(resp1, `select numero, estado, justificativa from public.busca_cenarios where vitima_id = $1 order by numero`, [vAna.id]));
+  chk(hist.length === 2 && hist.every((h) => h.estado === 'aprovada') && /cão de trilha/.test(hist[0].justificativa) && /sul/.test(hist[1].justificativa), 'histórico guarda as duas versões aprovadas, a primeira intacta', hist);
+  const p1 = (await q(resp1, `select s.setor_nome, s.poa from public.busca_cenario_setores s join public.busca_cenarios c on c.id = s.cenario_id where c.id = $1 order by 1`, [ap1.cenario.id]));
+  chk(p1.length === 3 && Number(p1.find((x) => x.setor_nome === 'Norte').poa) === 0.4, 'POA da versão 1 continua os mesmos depois da versão 2', p1);
+  const rb = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vBeto.id, p_dados: dados([it(sL, 0.7)], 'Beto saiu pelo leste') });
+  chk(rb.cenario.numero === 1, 'cada vítima tem o seu próprio cenário (Beto começa na versão 1)', rb.cenario);
+  const rbDesc = await rpc(resp1, 'cenario_descartar_rascunho', { p_cenario: rb.cenario.id });
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vBeto.id])).rows[0].n === 0, 'rascunho pode ser descartado');
+  const rb2 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vBeto.id, p_dados: dados([it(sL, 0.7)], 'Beto saiu pelo leste (rascunho aberto ao encerrar)') });
+
+  // --- registro manual da busca (POD) ---
+  const reg = (extra) => rpc(resp1, 'busca_registrar', { p_operacao: opB.id, p_dados: JSON.stringify(Object.assign({ setor_id: sN.id, pod: 0.6, base_estimativa: 'Varredura em linha, 5 m entre buscadores, mata média', equipe: 'Equipe Alfa' }, extra || {})) });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'busca_registrar', { p_operacao: opB.id, p_dados: JSON.stringify({ setor_id: sN.id, pod: 0.5, base_estimativa: 'qualquer coisa' }) }))), 'outro responsável não registra busca');
+  chk(/busca_pod_invalido/.test(await erroDe(reg({ pod: 1.5 }))) && /busca_pod_invalido/.test(await erroDe(reg({ pod: -0.1 }))), 'POD fora de 0 a 100%: recusado');
+  chk(/busca_sem_base_estimativa/.test(await erroDe(reg({ base_estimativa: '' }))), 'sem dizer em que o POD se baseia: recusado');
+  chk(/setor_nao_encontrado/.test(await erroDe(reg({ setor_id: setor.id }))), 'setor de outra operação: recusado');
+  chk(/vitima_nao_encontrada/.test(await erroDe(reg({ vitima_id: v.id }))), 'vítima de outra operação: recusada');
+  chk(/dados_invalidos/.test(await erroDe(reg({ inicio: '2026-01-02T10:00:00Z', fim: '2026-01-02T09:00:00Z' }))), 'fim antes do início: recusado');
+  const b1 = await reg({ inicio: '2026-01-02T08:00:00Z', fim: '2026-01-02T10:00:00Z', condicoes: 'Chuva fraca, visibilidade média' });
+  chk(Number(b1.pod) === 0.6 && b1.setor_nome === 'Norte' && b1.equipe === 'Equipe Alfa' && b1.vitima_id === null && b1.registrado_por_nome === 'Sgt Um' && !b1.anulado_em, 'registro guarda POD, setor, equipe, base e quem registrou (vale para todas as vítimas)', b1);
+  const b2 = await reg({ pod: 0.35, vitima_id: vAna.id, equipe: '' });
+  chk(b2.vitima_id === vAna.id, 'registro pode valer só para uma vítima', b2);
+  chk(/busca_registrada/.test((await db.query(`select string_agg(tipo, ',') t from public.diario where operacao_id = $1`, [opB.id])).rows[0].t), 'registro entra no diário');
+  chk(/busca_registro_imutavel/.test(await erroDe(db.query(`update public.busca_registros set pod = 0.99 where id = $1`, [b1.id]))), 'gatilho: o POD registrado não é editado');
+  chk(/busca_registro_imutavel/.test(await erroDe(db.query(`delete from public.busca_registros where id = $1`, [b1.id]))), 'gatilho: registro não é apagado');
+  chk(/busca_anulacao_sem_motivo/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: b1.id, p_motivo: ' ' }))), 'anular exige motivo');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'busca_anular', { p_registro: b1.id, p_motivo: 'teste de permissão' }))), 'outro responsável não anula');
+  const an = await rpc(resp1, 'busca_anular', { p_registro: b1.id, p_motivo: 'Setor errado no lançamento' });
+  chk(an.anulado_em && an.anulado_motivo === 'Setor errado no lançamento' && an.anulado_por_nome === 'Sgt Um' && Number(an.pod) === 0.6, 'anulado: fica no histórico com motivo e quem anulou', an);
+  chk(/busca_registro_ja_anulado/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: b1.id, p_motivo: 'de novo' }))), 'anular duas vezes: recusado');
+  chk(/busca_registro_imutavel/.test(await erroDe(db.query(`update public.busca_registros set anulado_em = null, anulado_motivo = null where id = $1`, [b1.id]))), 'gatilho: anulação não se desfaz');
+  chk(/busca_registro_inexistente/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: '00000000-0000-0000-0000-000000000000', p_motivo: 'não existe' }))), 'registro inexistente: recusado');
+  chk(/busca_anulada/.test((await db.query(`select string_agg(tipo, ',') t from public.diario where operacao_id = $1`, [opB.id])).rows[0].t), 'anulação entra no diário');
+
+  // --- exclusões em cascata não esbarram na proteção ---
+  await rpc(resp1, 'excluir_setor', { p_id: sL.id });
+  const orf = (await db.query(`select setor_id, setor_nome, poa from public.busca_cenario_setores s join public.busca_cenarios c on c.id = s.cenario_id where c.id = $1 and s.setor_nome = 'Leste'`, [ap1.cenario.id])).rows;
+  chk(orf.length === 1 && orf[0].setor_id === null && Number(orf[0].poa) === 0.2, 'setor excluído: a versão aprovada guarda o nome e o POA (sem o vínculo)', orf);
+
+  // --- operação encerrada: somente leitura ---
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opB.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: rb2.cenario.id }))), 'operação encerrada: não aprova cenário');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.2)], 'depois de encerrar') }))), 'operação encerrada: não cria versão');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'cenario_descartar_rascunho', { p_cenario: rb2.cenario.id }))), 'operação encerrada: não descarta rascunho');
+  chk(/operacao_encerrada/.test(await erroDe(reg())), 'operação encerrada: não registra busca');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: b2.id, p_motivo: 'depois de encerrar' }))), 'operação encerrada: não anula registro');
+  chk((await q(resp1, `select count(*)::int n from public.busca_cenarios where operacao_id = $1`, [opB.id]))[0].n === 3 && (await q(resp1, `select count(*)::int n from public.busca_registros where operacao_id = $1`, [opB.id]))[0].n === 2, 'operação encerrada: continua aberta para consulta');
+
+  // excluir a operação leva tudo junto (inclusive versões aprovadas)
+  await db.query(`select set_config('gbs.excluindo_operacao', $1, false)`, [opB.id]);
+  await db.query(`delete from public.operacoes where id = $1`, [opB.id]);
+  await db.query(`select set_config('gbs.excluindo_operacao', '', false)`);
+  chk((await db.query(`select (select count(*) from public.busca_cenarios where operacao_id = $1) + (select count(*) from public.busca_cenario_setores where operacao_id = $1) + (select count(*) from public.busca_registros where operacao_id = $1) as n`, [opB.id])).rows[0].n == 0, 'excluir a operação apaga cenários e registros (cascata passa pela proteção)');
+}
+
+console.log('\nMigrações 007–033 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

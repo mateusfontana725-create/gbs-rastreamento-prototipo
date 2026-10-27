@@ -373,6 +373,7 @@
       corpo.appendChild(el('div', { classe: 'poa-cab' }, linhaTopo));
       if (loc) corpo.appendChild(aviso('Vítima localizada (' + (loc.condicao === 'obito' ? 'óbito' : 'com vida') + ') às ' + C.hora(loc.registrado_em, false) + ': cenário só para consulta.', 'nota nota-ok'));
 
+      if (rasc && ap && rasc.base_numero !== ap.numero) corpo.appendChild(aviso('A versão vigente (v' + ap.numero + ') é mais nova que a base deste rascunho. Revise os valores e salve o rascunho de novo antes de publicar.'));
       var abas = el('div', { classe: 'poa-abas', role: 'tablist' }, ABAS.map(function (a) {
         return el('button', { classe: 'poa-aba', type: 'button', role: 'tab', id: 'poa-aba-' + a[0], 'aria-selected': String(est.aba === a[0]), texto: a[1],
           onclick: function () { if (est.aba === a[0]) return; est.aba = a[0]; est.editorSujo = false; desenhar(); } });
@@ -409,8 +410,10 @@
       return { s: s, poa: poa, just: just };
     });
     var somaInicial = origem ? origem.setores.reduce(function (a, i) { return a + (i.setor_id ? Number(i.poa) : 0); }, 0) : null;
-    var fora = el('input', { classe: 'campo campo-poa', id: 'poa-fora', type: 'number', min: '0', max: '100', step: '0.1', inputmode: 'decimal', 'aria-label': 'POA fora da área (%)',
-      value: somaInicial == null ? '' : String(Math.max(0, Math.round((1 - somaInicial) * 1000) / 10)) });
+    // "Fora da área" guardado na versão (038). Versão publicada antes disso: é o que sobra. Rascunho sem o valor: fica vazio, para você confirmar.
+    var foraInicial = !origem ? '' : origem.poa_fora != null ? String(Math.round(Number(origem.poa_fora) * 1000) / 10)
+      : (origem.estado === 'aprovada' ? String(Math.max(0, Math.round((1 - somaInicial) * 1000) / 10)) : '');
+    var fora = el('input', { classe: 'campo campo-poa', id: 'poa-fora', type: 'number', min: '0', max: '100', step: '0.1', inputmode: 'decimal', 'aria-label': 'POA fora da área (%)', value: foraInicial });
 
     var geral = el('textarea', { classe: 'campo', id: 'cenario-just', rows: '2', maxlength: '2000', placeholder: 'Por que esta distribuição?' });
     geral.value = origem && rasc ? rasc.justificativa : '';

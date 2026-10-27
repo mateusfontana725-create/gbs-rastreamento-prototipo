@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -71,6 +71,14 @@ async function como(uid, sql, params, role) {
   finally { await db.exec('reset role'); await db.query(`select set_config('request.jwt.claim.sub', '', false)`); }
 }
 async function rpc(uid, fn, args) {
+  // Desde a 038 o rascunho guarda "Fora da área". Os testes antigos (033/034) montam só os setores: aqui o "fora" é completado
+  // com o que sobra, como a tela faz. Os testes da 038 usam "__sem_fora" para enviar sem esse campo.
+  if (fn === 'cenario_salvar_rascunho' && typeof args.p_dados === 'string') {
+    const d = JSON.parse(args.p_dados);
+    if (d.__sem_fora) delete d.__sem_fora;
+    else if (d.poa_fora === undefined) d.poa_fora = Math.max(0, Math.round((1 - (d.setores || []).reduce((a, x) => a + Number(x.poa), 0)) * 1e6) / 1e6);
+    args = Object.assign({}, args, { p_dados: JSON.stringify(d) });
+  }
   const nomes = Object.keys(args || {});
   const sql = `select public.${fn}(${nomes.map((k, i) => k + ' => $' + (i + 1)).join(', ')}) as r`;
   const r = await como(uid, sql, nomes.map((k) => args[k]));
@@ -1501,5 +1509,64 @@ console.log('\nBriefing e passagem de comando — migração 037');
   chk(['briefing_operacao', 'decisoes_pendentes', 'passagens_comando'].every((x) => pubB.includes(x)), 'briefing, decisões e passagens publicados no Realtime');
 }
 
-console.log('\nMigrações 007–037 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 038: "Fora da área" guardado, soma exata de 100%, origem de cada valor ----------
+console.log('\nPOA: Fora da área e origem dos valores — migração 038');
+{
+  const opF = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP FORA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const vE = await rpc(resp1, 'salvar_vitima', { p_operacao: opF.id, p_id: null, p_dados: JSON.stringify({ nome: 'Eva' }) });
+  const d = (m) => m / 111194.93;
+  const circ = (nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: opF.id, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 200 }) });
+  const sA = await circ('Alfa', -25.40), sB = await circ('Bravo', -25.40 + d(2000)), sC = await circ('Charlie', -25.40 + d(4000));
+  const it = (s, poa, extra) => Object.assign({ setor_id: s.id, poa, justificativa: '' }, extra || {});
+  const dados = (itens, extra) => JSON.stringify(Object.assign({ justificativa: 'Seguiu a trilha do rio ao norte', setores: itens }, extra || {}));
+  const salvar = (itens, extra, uid) => rpc(uid || resp1, 'cenario_salvar_rascunho', { p_vitima: vE.id, p_dados: dados(itens, extra) });
+
+  console.log('  soma exata de 100% com "Fora da área"');
+  const r0 = await salvar([it(sA, 0.5), it(sB, 0.3)], { __sem_fora: true });
+  chk(r0.cenario.poa_fora === null, 'rascunho sem "Fora da área": o campo fica nulo (não é completado pelo servidor)', r0.cenario.poa_fora);
+  chk(/cenario_fora_obrigatorio/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r0.cenario.id }))), 'publicar sem informar "Fora da área": recusado no servidor');
+  const r1 = await salvar([it(sA, 0.5), it(sB, 0.2)], { poa_fora: 0.2 });
+  chk(Number(r1.cenario.poa_fora) === 0.2, 'o servidor guarda "Fora da área" (0,2)');
+  chk(/cenario_soma_diferente_de_100/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r1.cenario.id }))), '50 + 20 + 20 = 90%: publicar recusado (soma diferente de 100%)');
+  chk(/cenario_poa_acima_de_100/.test(await erroDe(salvar([it(sA, 0.5), it(sB, 0.4)], { poa_fora: 0.2 }))), 'setores + fora acima de 100%: nem rascunho');
+  chk(/dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: 1.5 }))) && /dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: -0.1 }))), '"Fora da área" fora de 0 a 1: recusado');
+  const r2 = await salvar([it(sA, 0.5), it(sB, 0.3)], { poa_fora: 0.2 });
+  chk(/sem_permissao/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: 0.5 }, resp2))), 'outro responsável não grava');
+  const ap = await rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id });
+  chk(ap.cenario.estado === 'aprovada' && Number(ap.cenario.poa_fora) === 0.2, '50 + 30 + 20 = 100%: publicada, com "Fora da área" guardado');
+  const diario = (await db.query(`select detalhe from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado'`, [opF.id])).rows;
+  chk(diario.length === 1 && /fora dos setores: 20%/.test(diario[0].detalhe), 'o diário usa o "fora" guardado (20%)', diario);
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set poa_fora = 0.1 where id = $1`, [ap.cenario.id]))), 'versão publicada: "Fora da área" não muda');
+
+  console.log('  tolerância só do arredondamento de uma casa');
+  const t1 = await salvar([it(sA, 0.3333), it(sB, 0.3333)], { poa_fora: 0.3334 });
+  const apT = await rpc(resp1, 'cenario_aprovar', { p_cenario: t1.cenario.id });
+  chk(apT.cenario.numero === 2, '33,33 + 33,33 + 33,34 = 100%: publica (versão 2)');
+  const t2 = await salvar([it(sA, 0.333), it(sB, 0.333)], { poa_fora: 0.333 });
+  chk(/cenario_soma_diferente_de_100/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: t2.cenario.id }))), '33,3 × 3 = 99,9%: recusado (a tolerância não cobre 0,1 ponto)');
+
+  console.log('  origem de cada valor');
+  chk(/dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5, { origem: 'chute' })], { poa_fora: 0.5 }))) && /dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: 0.5, poa_fora_origem: 'x' }))), 'origem desconhecida: recusada');
+  chk(/dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5, { origem: 'calculo' })], { poa_fora: 0.5 }))), 'o cliente não pode declarar origem "calculo" (só o cálculo pós-busca)');
+  const o1 = await salvar([it(sA, 0.6, { origem: 'ia' }), it(sB, 0.1), it(sC, 0.1, { origem: 'ia' })], { poa_fora: 0.2, poa_fora_origem: 'ia', ia_modelo: 'modelo-x' });
+  const itens = (await db.query(`select setor_nome, origem, ia_revisado_por_nome from public.busca_cenario_setores where cenario_id = $1 order by setor_nome`, [o1.cenario.id])).rows;
+  chk(itens.find((x) => x.setor_nome === 'Alfa').origem === 'ia' && itens.find((x) => x.setor_nome === 'Alfa').ia_revisado_por_nome === 'Sgt Um' && itens.find((x) => x.setor_nome === 'Bravo').origem === 'manual' && itens.find((x) => x.setor_nome === 'Bravo').ia_revisado_por_nome === null,
+    'valor de IA guarda quem o revisou; valor manual não', itens);
+  await rpc(resp1, 'cenario_aprovar', { p_cenario: o1.cenario.id });
+  const dIa = (await db.query(`select detalhe from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado' order by id desc limit 1`, [opF.id])).rows[0].detalhe;
+  chk(/sugeridos por IA \(modelo-x\) e revisados por Sgt Um/.test(dIa), 'o diário registra "sugerido por IA, revisado por <nome>"', dIa);
+
+  console.log('  a ordem das versões e a proteção');
+  const vigente = (await db.query(`select max(numero) n from public.busca_cenarios where vitima_id = $1 and estado = 'aprovada'`, [vE.id])).rows[0].n;
+  chk(vigente === 3, 'três versões publicadas (1, 2, 3)', vigente);
+  const rr = await salvar([it(sA, 0.4)], { poa_fora: 0.6 });
+  chk(/dados_invalidos/.test(await erroDe(db.query(`update public.busca_cenarios set numero = 9 where id = $1`, [rr.cenario.id]))), 'o número da versão não muda por fora da função de publicação');
+  chk(rr.cenario.base_numero === 3, 'o rascunho guarda a versão vigente de que partiu (3)', rr.cenario.base_numero);
+  const aprFim = await rpc(resp1, 'cenario_aprovar', { p_cenario: rr.cenario.id });
+  chk(aprFim.cenario.numero === 4, 'publicar o rascunho mantém a numeração em ordem (4)');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opF.id });
+  chk(/operacao_encerrada/.test(await erroDe(salvar([it(sA, 0.4)], { poa_fora: 0.6 }))), 'encerrada: sem novo rascunho');
+}
+
+console.log('\nMigrações 007–038 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

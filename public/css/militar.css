@@ -1706,7 +1706,7 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .pod-formulas p { margin: 4px 0; }
 
 /* Cenário de busca por vítima, registro de busca e versões (js/busca-cenario.js) */
-.modal:has(.cenario-busca), .modal:has(.editor-cenario) { width: min(1040px, 100%); }
+.modal:has(.poa-painel) { width: min(760px, 100%); }
 .modal:has(.form-busca) { width: min(640px, 100%); }
 .cenario-sec { margin: 14px 0; }
 .cenario-sec h3 { margin: 0 0 6px; font-size: 1rem; }
@@ -1876,3 +1876,61 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
 .rec-lista .rec-linha { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
 .rec-lista .rec-linha .campo { flex: 1 1 140px; min-width: 0; }
 .rec-lista .rec-linha .campo-poa { flex: 0 0 70px; }
+
+/* ---------- Painel POA/POD (js/busca-cenario.js): cor própria de probabilidade (violeta), fora das cores de emergência e risco ---------- */
+:root { --prob: #8b5cf6; --prob-forte: #6d28d9; --prob-claro: rgba(139, 92, 246, .16); --prob-texto: #c4b5fd; }
+.poa-painel { min-width: 0; }
+.poa-painel > * { min-width: 0; }
+.poa-titulo { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.dica-caixa { display: inline; }
+.dica { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 6px; padding: 0; border: 1px solid var(--prob); border-radius: 50%; background: transparent; color: var(--prob-texto); font: italic 700 .72rem/1 Georgia, serif; text-transform: none; cursor: help; vertical-align: middle; }
+.dica:hover, .dica:focus-visible { background: var(--prob-claro); }
+.dica-texto { display: block; margin-top: 4px; font-size: .8rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--texto-2); }
+.poa-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 12px; }
+.poa-cab select { flex: 1 1 180px; min-width: 0; }
+.selo-prob { color: var(--prob-texto); background: var(--prob-claro); }
+.selo-prob-rasc { color: var(--prob-texto); background: transparent; border: 1px dashed var(--prob); }
+.poa-abas { display: flex; gap: 4px; border-bottom: 1px solid var(--borda); margin-bottom: 16px; }
+.poa-aba { flex: 1 1 0; padding: 10px 8px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--texto-2); font-weight: 700; cursor: pointer; }
+.poa-aba[aria-selected="true"] { color: var(--prob-texto); border-bottom-color: var(--prob); }
+.poa-editor-cab { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+.poa-ref { display: grid; gap: 4px; }
+.poa-atalhos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.poa-lista { display: grid; gap: 8px; }
+.poa-linha { display: grid; grid-template-columns: minmax(0, 1.1fr) 108px minmax(0, 2fr); gap: 8px 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.poa-linha-fora { grid-template-columns: minmax(0, 1.1fr) 108px; border-style: dashed; border-color: var(--prob); }
+.poa-nome { font-weight: 600; overflow-wrap: anywhere; }
+.poa-campo { display: flex; align-items: center; gap: 4px; }
+.poa-campo .campo { width: 100%; min-width: 0; text-align: right; }
+.poa-pct { color: var(--texto-3); font-weight: 700; }
+.poa-soma { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 12px 0; padding: 12px 14px; border-radius: var(--raio); border: 2px solid var(--prob); background: var(--prob-claro); }
+.poa-soma-pend { border-style: dashed; }
+.poa-soma-rotulo { font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+.poa-soma-valor { font-size: 1.7rem; line-height: 1; color: var(--prob-texto); }
+.poa-soma-info { font-size: .86rem; color: var(--texto-2); }
+.poa-soma-ok { background: var(--prob); border-color: var(--prob); }
+.poa-soma-ok .poa-soma-valor, .poa-soma-ok .poa-soma-info, .poa-soma-ok .poa-soma-rotulo { color: #fff; }
+.poa-mais { margin: 12px 0; border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 12px; }
+.poa-mais summary { cursor: pointer; font-weight: 600; }
+.poa-mais .grupo { margin-top: 12px; }
+.poa-acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 16px; }
+.poa-acoes .btn-perigo { margin-right: auto; }
+.btn-prob { background: var(--prob-forte); border-color: var(--prob-forte); color: #fff; }
+.btn-prob:hover:not(:disabled) { background: var(--prob); }
+.btn-prob:disabled { opacity: .45; cursor: not-allowed; }
+.poa-lista-leitura { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.poa-lista-leitura li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio); }
+.poa-lista-leitura li span { flex: 1 1 120px; font-weight: 600; }
+.poa-lista-leitura li strong { color: var(--prob-texto); }
+.poa-fora { border-style: dashed !important; border-color: var(--prob) !important; }
+.poa-acoes-topo { margin-bottom: 10px; }
+.poa-sec h3 { margin: 12px 0 6px; font-size: 1rem; }
+.poa-painel .tabela-pod-rolagem { max-width: 100%; overflow-x: auto; }
+@media (max-width: 600px) {
+  .poa-linha { grid-template-columns: minmax(0, 1fr) 108px; }
+  .poa-linha > .campo { grid-column: 1 / -1; }
+  .poa-acoes .btn { flex: 1 1 140px; }
+  .poa-acoes .btn-perigo { margin-right: 0; flex-basis: 100%; }
+  .cenario-evid-linha { grid-template-columns: 1fr 1fr; }
+  .cenario-evid-linha > span, .cenario-evid-linha > input { grid-column: 1 / -1; }
+}

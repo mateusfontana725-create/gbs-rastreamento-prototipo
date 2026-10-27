@@ -18,7 +18,7 @@
   var est = {
     opId: null, vitimas: [], cenarios: [], itens: [], evidencias: [], registros: [], localizacoes: [],
     ausente: false, erro: null, canal: null, timer: null, timerCanal: null,
-    vitimaSel: null, renderAtual: null, camadaVitima: null,
+    vitimaSel: null, renderAtual: null, camadaVitima: null, aba: 'poa', editorSujo: false,
   };
 
   var MOTIVOS = {
@@ -161,7 +161,7 @@
     if (est.canal) { try { C.cliente.removeChannel(est.canal); } catch (e) { /* ignora */ } }
     est.canal = null;
     est.opId = null; est.vitimas = []; est.cenarios = []; est.itens = []; est.evidencias = []; est.registros = []; est.localizacoes = [];
-    est.ausente = false; est.erro = null; est.vitimaSel = null; est.renderAtual = null;
+    est.ausente = false; est.erro = null; est.vitimaSel = null; est.renderAtual = null; est.aba = 'poa'; est.editorSujo = false;
     est.camadaVitima = null;
     if (P.camadaProbabilidade) P.camadaProbabilidade(null);
   }
@@ -240,170 +240,183 @@
     ]));
     return tabela(['Setor', 'POA aprovado', 'Área', 'Densidade (% por km²)', 'POD acumulado', 'POS', 'POA atual', 'Justificativa do setor'], linhas);
   }
+  /* ---------- Peças: dica (i) ------------------------------------------- */
+  // Explicação curta atrás de um (i): passa o mouse (title) ou toca para abrir embaixo do rótulo.
+  function dica(texto) {
+    var tip = el('span', { classe: 'dica-texto', role: 'note', hidden: true, texto: texto });
+    var b = el('button', { classe: 'dica', type: 'button', 'aria-label': 'Explicação', title: texto, texto: 'i' });
+    b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); tip.hidden = !tip.hidden; });
+    return el('span', { classe: 'dica-caixa' }, [b, tip]);
+  }
+  function rotuloComDica(texto, para, textoDica) {
+    return el('label', { classe: 'rotulo', for: para || null }, [texto, textoDica ? dica(textoDica) : null]);
+  }
+  var DICA_GERAL = 'POA: chance de a pessoa estar em cada setor. POD: chance de a busca achá-la se ela estiver ali; vem do registro da equipe, nunca do GPS. POS = POA × POD: chance de localizar nesta busca (não é chance de sobrevivência).';
 
-  /* ---------- Tela principal: cenário da vítima ------------------------- */
+  /* ---------- Tela principal: painel POA/POD (botão do topo) ------------- */
+  var ABAS = [['poa', 'POA'], ['buscas', 'Buscas'], ['versoes', 'Versões']];
+
   function abrir(vitimaId) {
     if (vitimaId) est.vitimaSel = vitimaId;
-    var corpo = el('div', { classe: 'cenario-busca' });
+    var corpo = el('div', { classe: 'poa-painel' });
     var fechar;
-    function fechando() { est.renderAtual = null; }
+    est.editorSujo = false;
+    function fechando() { est.renderAtual = null; est.editorSujo = false; }
+
+    function rodape() {
+      return el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]);
+    }
+
+    function abaPoa(vid, ap, rasc, res, editavel) {
+      if (editavel) return montarEditor(vid, function () { est.editorSujo = false; carregar().then(function () { desenhar(); }); });
+      var caixa = el('div', { classe: 'poa-leitura' });
+      if (!ap) { caixa.appendChild(aviso('Sem versão publicada.')); return caixa; }
+      var soma = M.somaPoa(ap.setores.map(function (i) { return i.setor_id ? Number(i.poa) : 0; }));
+      caixa.appendChild(el('ul', { classe: 'poa-lista-leitura' }, ap.setores.slice().sort(function (a, b) { return Number(b.poa) - Number(a.poa); }).map(function (i) {
+        return el('li', null, [el('span', { texto: i.setor_nome }), el('strong', { texto: pct(Number(i.poa)) }), i.justificativa ? el('small', { classe: 'muted', texto: i.justificativa }) : null]);
+      }).concat([el('li', { classe: 'poa-fora' }, [el('span', { texto: 'Fora da área' }), el('strong', { texto: pct(Math.max(0, 1 - soma)) })])])));
+      return caixa;
+    }
+
+    function abaBuscas(vid, res) {
+      var mapaReg = {};
+      if (res) res.registros.forEach(function (x) { mapaReg[x.id] = x; });
+      var visiveis = est.registros.filter(function (r) { return !r.vitima_id || r.vitima_id === vid; }).slice().reverse();
+      var sec = el('div', { classe: 'poa-sec' });
+      if (podeAlterar()) sec.appendChild(el('div', { classe: 'poa-acoes-topo' }, [el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-registrar', texto: 'Registrar busca', onclick: function () { abrirRegistro({}); } })]));
+      if (!visiveis.length) { sec.appendChild(aviso('Nenhuma busca registrada.')); return sec; }
+      sec.appendChild(tabela(['Quando', 'Setor', 'Equipe e método', 'POD', 'Situação', ''], visiveis.map(function (r) {
+        var x = mapaReg[r.id];
+        var situacao = r.anulado_em ? 'Anulado: ' + r.anulado_motivo + ' (' + (r.anulado_por_nome || '—') + ')'
+          : !res ? 'Aguardando versão publicada'
+            : x && x.conta ? 'Conta no cálculo'
+              : x && x.motivo === 'planejada' ? 'Planejada' + (x.posPrevista != null ? ' · POS prevista ' + pct(x.posPrevista) : '')
+                : 'Não conta: ' + (MOTIVOS[x && x.motivo] || '—');
+        var podTxt = r.pod == null ? 'não estimada' : pct(Number(r.pod)) + (r.alcance === 'parcial' ? ' em ' + pct(Number(r.cobertura_fracao), 0) + ' do setor' : '');
+        return el('tr', { classe: r.anulado_em ? 'registro-anulado' : null }, [
+          el('td', { texto: C.hora(r.registrado_em, false) }),
+          el('td', { texto: r.setor_nome }),
+          el('td', { texto: [(r.equipe || '—') + (r.vitima_id ? ' · só ' + nomeVitima(r.vitima_id) : ''), r.metodo].filter(Boolean).join(' · ') }),
+          el('td', { texto: podTxt, title: r.base_estimativa || '' }),
+          el('td', null, [el('small', { classe: 'muted', texto: situacao })]),
+          el('td', null, [podeAlterar() && !r.anulado_em ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Anular', onclick: function () { abrirAnulacao(r); } }) : null]),
+        ]);
+      })));
+      return sec;
+    }
+
+    function abaVersoes(vid, ap, res) {
+      var sec = el('div', { classe: 'poa-sec' });
+      if (ap) {
+        sec.appendChild(el('h3', { texto: textoAprovacao(ap) }));
+        sec.appendChild(tabelaCenario(ap, res));
+        sec.appendChild(el('p', { classe: 'muted', texto: 'POS total desde esta versão: ' + pct(res.posTotal) }));
+        if (res.registros.some(function (x) { return x.motivo === 'inconsistente'; })) sec.appendChild(aviso('Há busca inconsistente com o cenário; ela não foi aplicada. Revise o POD informado.'));
+        sec.appendChild(el('details', { classe: 'cenario-versao' }, [el('summary', { texto: 'Referência e hipóteses' }), el('p', { classe: 'cenario-just' }, [el('strong', { texto: 'Justificativa: ' }), ap.justificativa]), blocoReferencia(ap)]));
+      } else sec.appendChild(aviso('Sem versão publicada.'));
+      var vers = versoesDa(vid).slice().reverse();
+      if (vers.length) {
+        sec.appendChild(el('h3', { texto: 'Histórico' }));
+        vers.forEach(function (c) {
+          sec.appendChild(el('details', { classe: 'cenario-versao' }, [
+            el('summary', { texto: c.estado === 'aprovada' ? textoAprovacao(c) : 'Rascunho da versão ' + c.numero }),
+            el('p', { classe: 'cenario-just' }, [el('strong', { texto: 'Justificativa: ' }), c.justificativa || '—']),
+            blocoReferencia(c),
+            tabela(['Setor', 'POA', 'Justificativa do setor'], c.setores.slice().sort(function (a, b) { return Number(b.poa) - Number(a.poa); }).map(function (i) {
+              return celulas([i.setor_nome + (i.setor_id ? '' : ' (excluído)'), pct(Number(i.poa)), i.justificativa || '']);
+            })),
+          ]));
+        });
+      }
+      sec.appendChild(el('details', { classe: 'pod-formulas' }, [
+        el('summary', { texto: 'Como é calculado' }),
+        el('p', { texto: 'POD acumulado do setor = 1 − (1 − POD₁) × (1 − POD₂) × …, só com busca executada, com POD estimada, não anulada, lançada depois da versão. POD não estimada nunca vira zero e não reduz o POA.' }),
+        el('p', { texto: 'POS do setor = POA × POD. POA atual = POA × (1 − POD), dividido pelo total que sobra (Bayes). O GPS não entra: a trilha mostra por onde a equipe passou, não o que ela observou.' }),
+      ]));
+      return sec;
+    }
 
     function desenhar() {
       corpo.innerHTML = '';
-      corpo.appendChild(el('h2', { id: 'modal-titulo', texto: 'Probabilidades de busca (POA, POD e POS)' }));
-      corpo.appendChild(el('p', { classe: 'ajuda', texto: 'POA: onde a pessoa pode estar (decisão do responsável, com justificativa). POD: chance de a busca achá-la se ela estiver no setor — vem do registro manual da equipe, nunca do GPS. POS: POA × POD, a probabilidade de a busca localizar a pessoa (não é probabilidade de sobrevivência nem de resgate com vida).' }));
+      corpo.appendChild(el('h2', { id: 'modal-titulo', classe: 'poa-titulo' }, ['POA/POD', dica(DICA_GERAL)]));
       if (est.ausente) {
-        corpo.appendChild(aviso('Este banco ainda não tem as migrações 033 e 034. Peça ao administrador para rodar supabase/migracoes/033_cenario_busca_pod_poa.sql e 034_poa_pod_guia.sql no Supabase.'));
+        corpo.appendChild(aviso('Faltam as migrações 033 e 034 no banco.'));
         corpo.appendChild(rodape());
         return;
       }
       if (est.erro) corpo.appendChild(aviso('Não foi possível atualizar: ' + est.erro));
       if (!est.vitimas.length) {
-        corpo.appendChild(aviso('Esta operação ainda não tem vítima cadastrada. O cenário é feito por vítima: cadastre a ficha em "Dados da operação" e volte aqui.'));
+        corpo.appendChild(aviso('Cadastre a vítima em "Dados da operação": o cenário é feito por vítima.'));
         corpo.appendChild(rodape());
         return;
       }
       if (!est.vitimaSel || !est.vitimas.some(function (v) { return v.id === est.vitimaSel; })) est.vitimaSel = est.vitimas[0].id;
       var vid = est.vitimaSel;
+      var ap = aprovadaDa(vid), rasc = rascunhoDa(vid), res = resultadoDa(vid), loc = localizacaoDa(vid);
+      var editavel = podeAlterar() && !loc;
 
+      var linhaTopo = [];
       if (est.vitimas.length > 1) {
         var sel = el('select', { classe: 'campo', id: 'cenario-vitima', 'aria-label': 'Vítima' }, est.vitimas.map(function (v) {
           return el('option', { value: v.id, selected: v.id === vid ? true : null, texto: v.nome + (localizacaoDa(v.id) ? ' (localizada)' : '') });
         }));
-        sel.addEventListener('change', function () { est.vitimaSel = sel.value; desenhar(); });
-        corpo.appendChild(el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'cenario-vitima', texto: 'Cenário da vítima' }), sel]));
-      } else {
-        corpo.appendChild(el('h3', { texto: 'Cenário: ' + nomeVitima(vid) }));
-      }
-
-      var ap = aprovadaDa(vid), rasc = rascunhoDa(vid), res = resultadoDa(vid), loc = localizacaoDa(vid);
-      var editavel = podeAlterar() && !loc;
-
-      if (loc) corpo.appendChild(aviso('Vítima localizada (' + (loc.condicao === 'obito' ? 'óbito' : 'com vida') + ') às ' + C.hora(loc.registrado_em, false) + ': o cenário dela está encerrado e fica só para consulta. Os cenários das demais vítimas continuam.', 'nota nota-ok'));
-
-      // versão aprovada
-      var secAp = el('section', { classe: 'cenario-sec', 'aria-label': 'Versão aprovada' });
-      if (ap) {
-        secAp.appendChild(el('h3', { texto: textoAprovacao(ap) }));
-        secAp.appendChild(el('p', { classe: 'cenario-just' }, [el('strong', { texto: 'Justificativa: ' }), ap.justificativa]));
-        secAp.appendChild(blocoReferencia(ap));
-        secAp.appendChild(tabelaCenario(ap, res));
-        if (res.registros.some(function (x) { return x.motivo === 'inconsistente'; })) secAp.appendChild(aviso('Atenção: há registro de busca inconsistente com o cenário (a busca negativa seria impossível). Ele não foi aplicado; revise o POD informado ou o cenário.'));
-        secAp.appendChild(el('p', { classe: 'ajuda', texto: 'Cálculo (prévia do navegador; o aprovado é o que está guardado no servidor). POS total desde esta versão: ' + pct(res.posTotal) + '. O POA atual é o POA aprovado atualizado pelas buscas lançadas depois da aprovação (regra de Bayes); a probabilidade migra para o que ainda não foi visto. A densidade é só apoio ao planejamento: onde atuar também depende de risco, urgência, acesso e recursos.' }));
-      } else {
-        secAp.appendChild(el('h3', { texto: 'Nenhuma versão aprovada' }));
-        secAp.appendChild(aviso('Sem um cenário aprovado o app não calcula POS nem POA atual: ele não inventa a probabilidade de a pessoa estar em cada setor. Se ainda não há base para percentuais, trate as prioridades como qualitativas: não existe distribuição probabilística publicada.'));
-      }
-      if (rasc) secAp.appendChild(aviso('RASCUNHO da versão ' + rasc.numero + ' (por ' + rasc.criado_por_nome + ', salvo às ' + C.hora(rasc.atualizado_em, false) + '). Ainda não vale: só a versão aprovada entra nos cálculos.'));
-      var acoes = [];
-      if (editavel) {
-        acoes.push(el('button', { classe: 'btn btn-escuro', type: 'button', id: 'cenario-editar', texto: rasc ? 'Continuar rascunho (versão ' + rasc.numero + ')' : (ap ? 'Rever o cenário (nova versão)' : 'Montar cenário'),
-          onclick: function () { abrirEditor(vid, function () { carregar(); }); } }));
-      }
-      if (podeAlterar()) acoes.push(el('button', { classe: 'btn', type: 'button', id: 'cenario-registrar', texto: 'Registrar busca (POD)', onclick: function () { abrirRegistro({}); } }));
+        sel.addEventListener('change', function () { est.vitimaSel = sel.value; est.editorSujo = false; desenhar(); });
+        linhaTopo.push(sel);
+      } else linhaTopo.push(el('strong', { texto: nomeVitima(vid) }));
+      linhaTopo.push(el('span', { classe: 'selo selo-prob', texto: ap ? 'Vigente: v' + ap.numero + ' · ref. ' + C.hora(ap.horario_referencia || ap.aprovada_em, false) : 'Sem versão publicada' }));
+      if (rasc) linhaTopo.push(el('span', { classe: 'selo selo-prob-rasc', texto: 'Rascunho v' + rasc.numero }));
       if (ap && P.camadaProbabilidade) {
         var ligada = est.camadaVitima === vid;
-        acoes.push(el('button', { classe: 'btn', type: 'button', id: 'cenario-camada', 'aria-pressed': String(ligada), texto: ligada ? 'Ocultar POA no mapa' : 'Mostrar POA atual no mapa',
+        linhaTopo.push(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-camada', 'aria-pressed': String(ligada), texto: ligada ? 'Ocultar no mapa' : 'Ver no mapa',
           onclick: function () { est.camadaVitima = ligada ? null : vid; atualizarCamada(); desenhar(); } }));
       }
-      secAp.appendChild(el('div', { classe: 'modal-acoes cenario-acoes' }, acoes));
-      corpo.appendChild(secAp);
+      corpo.appendChild(el('div', { classe: 'poa-cab' }, linhaTopo));
+      if (loc) corpo.appendChild(aviso('Vítima localizada (' + (loc.condicao === 'obito' ? 'óbito' : 'com vida') + ') às ' + C.hora(loc.registrado_em, false) + ': cenário só para consulta.', 'nota nota-ok'));
 
-      // buscas registradas
-      var mapaReg = {};
-      if (res) res.registros.forEach(function (x) { mapaReg[x.id] = x; });
-      var visiveis = est.registros.filter(function (r) { return !r.vitima_id || r.vitima_id === vid; }).slice().reverse();
-      var secReg = el('section', { classe: 'cenario-sec', 'aria-label': 'Buscas registradas' }, [el('h3', { texto: 'Buscas registradas (origem do POD)' })]);
-      if (!visiveis.length) {
-        secReg.appendChild(aviso('Nenhuma busca registrada ainda. Quando uma equipe terminar um setor, registre o POD que ela estimou e em que se baseou. Se não houver base para estimar, registre a busca como "POD não estimada": ela não reduz o POA.'));
-      } else {
-        secReg.appendChild(tabela(['Quando', 'Setor', 'Equipe e método', 'Tipo', 'POD', 'Base da estimativa', 'Situação', ''], visiveis.map(function (r) {
-          var x = mapaReg[r.id];
-          var situacao = r.anulado_em ? 'Anulado: ' + r.anulado_motivo + ' (' + (r.anulado_por_nome || '—') + ')'
-            : !res ? 'Aguardando cenário aprovado'
-              : x && x.conta ? 'Conta no cálculo'
-                : x && x.motivo === 'planejada' ? 'Planejada: não altera o POA' + (x.posPrevista != null ? ' · POS prevista ' + pct(x.posPrevista) : '')
-                  : 'Não conta: ' + (MOTIVOS[x && x.motivo] || '—');
-          var podTxt = r.pod == null ? 'não estimada' : pct(Number(r.pod)) + (r.alcance === 'parcial' ? ' em ' + pct(Number(r.cobertura_fracao), 0) + ' do setor' : '');
-          var extra = [r.observadores ? r.observadores + ' observador(es)' : '', r.impedimentos ? 'Impedimentos: ' + r.impedimentos : '', r.areas_nao_observadas ? 'Não observado: ' + r.areas_nao_observadas : '', r.condicoes].filter(Boolean).join(' · ');
-          return el('tr', { classe: r.anulado_em ? 'registro-anulado' : null }, [
-            el('td', { texto: C.hora(r.registrado_em, false) }),
-            el('td', { texto: r.setor_nome }),
-            el('td', { texto: [(r.equipe || '—') + (r.vitima_id ? ' · só ' + nomeVitima(r.vitima_id) : ''), r.metodo].filter(Boolean).join(' · ') }),
-            el('td', { texto: r.finalidade === 'planejada' ? 'planejada' : 'executada' }),
-            el('td', { texto: podTxt }),
-            el('td', null, [el('small', { texto: r.base_estimativa + (extra ? ' — ' + extra : '') + ' [' + (ORIGENS[r.origem_pod] || r.origem_pod) + ']' })]),
-            el('td', null, [el('small', { classe: 'muted', texto: situacao })]),
-            el('td', null, [podeAlterar() && !r.anulado_em ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Anular', onclick: function () { abrirAnulacao(r); } }) : null]),
-          ]);
-        })));
-        secReg.appendChild(el('p', { classe: 'ajuda', texto: 'Registro não se edita: se errou, anule (fica no histórico) e lance outro. Só entra no cálculo o registro de busca executada, com POD estimada, não anulado, válido para a vítima e lançado depois da aprovação da versão. Um trecho que chegar atrasado (ex.: trilha) não muda sozinho uma versão aprovada: registre e aprove uma nova versão.' }));
-      }
-      corpo.appendChild(secReg);
-
-      // histórico de versões
-      var vers = versoesDa(vid).slice().reverse();
-      if (vers.length) {
-        var secHist = el('section', { classe: 'cenario-sec', 'aria-label': 'Histórico de versões' }, [el('h3', { texto: 'Histórico de versões' })]);
-        vers.forEach(function (c) {
-          secHist.appendChild(el('details', { classe: 'cenario-versao' }, [
-            el('summary', { texto: c.estado === 'aprovada' ? textoAprovacao(c) : 'RASCUNHO da versão ' + c.numero + ' (ainda não aprovado)' }),
-            el('p', { classe: 'cenario-just' }, [el('strong', { texto: 'Justificativa: ' }), c.justificativa || '—']),
-            blocoReferencia(c),
-            tabela(['Setor', 'POA', 'Área', 'Justificativa do setor'], c.setores.slice().sort(function (a, b) { return Number(b.poa) - Number(a.poa); }).map(function (i) {
-              return celulas([i.setor_nome + (i.setor_id ? '' : ' (excluído)'), pct(Number(i.poa)), i.area_m2 ? (i.area_m2 / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + ' km²' : '—', i.justificativa || '']);
-            })),
-            el('p', { classe: 'ajuda', texto: c.estado === 'aprovada' ? 'Versão aprovada: não pode mais ser alterada nem apagada. A geometria dos setores é a de quando foi aprovada.' : 'Criado por ' + c.criado_por_nome + ' em ' + C.hora(c.criado_em, false) + (c.base_numero ? ' a partir da versão ' + c.base_numero : '') + '.' }),
-          ]));
-        });
-        corpo.appendChild(secHist);
-      }
-
-      corpo.appendChild(el('details', { classe: 'pod-formulas' }, [
-        el('summary', { texto: 'Como é calculado' }),
-        el('p', { texto: 'POA: a distribuição que o responsável aprovou (soma até 100%; o que sobra é "fora dos setores desenhados", sem busca). Os setores com POA não podem se sobrepor: a mesma área seria contada duas vezes.' }),
-        el('p', { texto: 'POD acumulado do setor = 1 − (1 − POD₁) × (1 − POD₂) × …, só com registros de busca executada, com POD estimada, não anulados, lançados depois da aprovação e válidos para a vítima. Supõe buscas independentes: repetir o mesmo método no mesmo lugar tende a render menos, então é uma estimativa generosa. POD não estimada nunca vira zero e não reduz o POA. Busca em parte do setor entra como POD da área coberta × fração coberta, supondo a pessoa distribuída de forma uniforme no setor.' }),
-        el('p', { texto: 'POS do setor = POA × POD acumulado. POS total = soma dos POS (é a base da versão aprovada; não some POS de buscas sucessivas sem esse contexto).' }),
-        el('p', { texto: 'POA atual = POA × (1 − POD acumulado), dividido pelo total que sobra (Bayes). A probabilidade migra para os setores menos vistos e para "fora dos setores". Vale para alvo parado; se a pessoa pode estar se deslocando, faça um novo cenário com hipóteses revistas.' }),
-        el('p', { texto: 'POS é a probabilidade de a busca localizar a pessoa. Não é probabilidade de sobrevivência, de resgate com vida nem de conclusão segura da operação.' }),
-        el('p', { classe: 'muted', texto: 'O GPS não entra: a trilha mostra por onde a equipe passou, não o que ela observou. Referência: Koopman, Search and Screening (1980); manual IAMSAR, vol. II; Guarda Costeira dos EUA, The Theory of Search.' }),
-      ]));
+      var abas = el('div', { classe: 'poa-abas', role: 'tablist' }, ABAS.map(function (a) {
+        return el('button', { classe: 'poa-aba', type: 'button', role: 'tab', id: 'poa-aba-' + a[0], 'aria-selected': String(est.aba === a[0]), texto: a[1],
+          onclick: function () { if (est.aba === a[0]) return; est.aba = a[0]; est.editorSujo = false; desenhar(); } });
+      }));
+      corpo.appendChild(abas);
+      corpo.appendChild(est.aba === 'buscas' ? abaBuscas(vid, res) : est.aba === 'versoes' ? abaVersoes(vid, ap, res) : abaPoa(vid, ap, rasc, res, editavel));
       corpo.appendChild(rodape());
     }
 
-    function rodape() {
-      return el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]);
-    }
-
-    est.renderAtual = desenhar;
+    if (!est.aba) est.aba = 'poa';
+    // Atualização em tempo real não apaga o que está sendo digitado no editor
+    est.renderAtual = function () { if (est.aba === 'poa' && est.editorSujo) return; desenhar(); };
     desenhar();
-    fechar = UI.abrirModal(corpo, { aoFechar: fechando });
+    fechar = UI.abrirModal(corpo, { aoFechar: fechando, fecharNoFundo: false });
   }
 
-  /* ---------- Editor de versão (rascunho → aprovação) -------------------- */
-  function abrirEditor(vitimaId, aoConcluir) {
+  /* ---------- Editor de POA (lista de setores → rascunho → publicação) -- */
+  function montarEditor(vitimaId, aoConcluir) {
     var setores = (P.setores() || []).slice().sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-    if (!setores.length) { UI.aviso('Desenhe pelo menos um setor de busca antes de montar o cenário.', 'erro', 7000); return; }
-    if (localizacaoDa(vitimaId)) { UI.aviso('Esta vítima já foi localizada: o cenário dela está encerrado.', 'erro', 7000); return; }
+    if (!setores.length) return aviso('Desenhe um setor de busca para definir o POA.');
     var ap = aprovadaDa(vitimaId);
     var rasc = rascunhoDa(vitimaId);
-    var origem = rasc || ap;   // o rascunho, ou a versão aprovada de que a nova parte
+    var origem = rasc || ap;   // o rascunho, ou a versão publicada de que a nova parte
     var inicial = {};
     if (origem) origem.setores.forEach(function (i) { if (i.setor_id) inicial[i.setor_id] = i; });
     var pontos = (P.pontosInteresse ? P.pontosInteresse() : []) || [];
+    function marcarSujo() { est.editorSujo = true; erro.hidden = true; }
 
     var campos = setores.map(function (s) {
       var i = inicial[s.id];
       var poa = el('input', { classe: 'campo campo-poa', type: 'number', min: '0', max: '100', step: '0.1', inputmode: 'decimal', 'aria-label': 'POA do setor ' + s.nome + ' (%)',
         value: i ? String(Math.round(Number(i.poa) * 1000) / 10) : '' });
-      var just = el('input', { classe: 'campo', maxlength: '500', placeholder: 'Por que este valor? (opcional)', 'aria-label': 'Justificativa do setor ' + s.nome, value: i ? i.justificativa : '' });
+      var just = el('input', { classe: 'campo', maxlength: '500', placeholder: 'Justificativa', 'aria-label': 'Justificativa do setor ' + s.nome, value: i ? i.justificativa : '' });
       return { s: s, poa: poa, just: just };
     });
-    var geral = el('textarea', { classe: 'campo', id: 'cenario-just', rows: '3', maxlength: '2000', placeholder: 'Por que esta distribuição? Ex.: última posição conhecida, relato da família, perfil da vítima, resultado das buscas anteriores…' });
+    var somaInicial = origem ? origem.setores.reduce(function (a, i) { return a + (i.setor_id ? Number(i.poa) : 0); }, 0) : null;
+    var fora = el('input', { classe: 'campo campo-poa', id: 'poa-fora', type: 'number', min: '0', max: '100', step: '0.1', inputmode: 'decimal', 'aria-label': 'POA fora da área (%)',
+      value: somaInicial == null ? '' : String(Math.max(0, Math.round((1 - somaInicial) * 1000) / 10)) });
+
+    var geral = el('textarea', { classe: 'campo', id: 'cenario-just', rows: '2', maxlength: '2000', placeholder: 'Por que esta distribuição?' });
     geral.value = origem && rasc ? rasc.justificativa : '';
-    var hip = el('textarea', { classe: 'campo', id: 'cenario-hip', rows: '2', maxlength: '2000', placeholder: 'Hipóteses de deslocamento ou permanência que sustentam o cenário' });
+    var hip = el('textarea', { classe: 'campo', id: 'cenario-hip', rows: '2', maxlength: '2000', placeholder: 'Deslocamento ou permanência provável' });
     hip.value = origem ? origem.hipoteses : '';
-    var lim = el('textarea', { classe: 'campo', id: 'cenario-lim', rows: '2', maxlength: '1000', placeholder: 'O que não se sabe ou pode invalidar este cenário' });
+    var lim = el('textarea', { classe: 'campo', id: 'cenario-lim', rows: '2', maxlength: '1000', placeholder: 'O que não se sabe' });
     lim.value = origem ? origem.limitacoes : '';
     var conf = el('select', { classe: 'campo', id: 'cenario-conf' }, [el('option', { value: '', texto: 'não informada' })].concat(Object.keys(CONFIANCA).map(function (k) {
       return el('option', { value: k, selected: origem && origem.confianca === k ? true : null, texto: CONFIANCA[k] });
@@ -425,7 +438,7 @@
       var texto = e.livre ? el('input', { classe: 'campo', maxlength: '300', value: e.texto, 'aria-label': 'Evidência', placeholder: 'Ex.: relato do vizinho' }) : el('span', { texto: e.texto });
       var item = { e: e, marcar: marcar, conf: confirm, texto: texto, linha: null };
       var rem = e.livre ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Remover', onclick: function () { evCampos = evCampos.filter(function (x) { return x !== item; }); item.linha.remove(); } }) : null;
-      item.linha = el('div', { classe: 'cenario-evid-linha' }, [el('label', null, [marcar, ' considerar']), texto, el('label', null, [confirm, ' confirmada']), rem]);
+      item.linha = el('div', { classe: 'cenario-evid-linha' }, [el('label', null, [marcar, ' usar']), texto, el('label', null, [confirm, ' confirmada']), rem]);
       return item;
     }
     function addEvidencia(e) { var it = linhaEvidencia(e); evCampos.push(it); listaEv.appendChild(it.linha); }
@@ -434,57 +447,74 @@
     pontos.forEach(function (p) { var u = jaUsadas[p.id]; addEvidencia({ pontoId: p.id, texto: rotuloPonto(p), marcada: Boolean(u), confirmada: u ? u.confirmada : false }); });
     if (origem) origem.evidencias.filter(function (ev) { return !ev.ponto_id; }).forEach(function (ev) { addEvidencia({ livre: true, texto: ev.descricao, marcada: true, confirmada: ev.confirmada }); });
 
-    var total = el('p', { classe: 'cenario-total', role: 'status' });
-    var sobrep = el('p', { classe: 'nota', role: 'status', hidden: true });
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var soma = el('div', { classe: 'poa-soma', role: 'status', 'aria-live': 'polite' });
+    var sobrep = el('p', { classe: 'nota', role: 'status', hidden: true });
 
-    function valorPct(c) { var t = c.poa.value.trim().replace(',', '.'); return t === '' ? 0 : Number(t); }
-    function somaPct() { return campos.reduce(function (a, c) { var v = valorPct(c); return a + (v >= 0 ? v : 0); }, 0); }
-    function atualizarTotal() {
-      var soma = somaPct();
-      var invalido = campos.some(function (c) { var v = valorPct(c); return !(v >= 0 && v <= 100); });
-      total.textContent = 'Soma dos setores: ' + (Math.round(soma * 10) / 10).toLocaleString('pt-BR') + '% · fora dos setores desenhados: ' + (Math.round((100 - soma) * 10) / 10).toLocaleString('pt-BR') + '%' +
-        (soma > 100.0001 ? ' — passou de 100%' : '') + (invalido ? ' — há valor fora de 0 a 100' : '');
-      total.classList.toggle('cenario-total-erro', soma > 100.0001 || invalido);
-      var pares = M.sobreposicoes(campos.map(function (c) { return geometriaDoSetor(c.s, invalido ? 0 : valorPct(c)); }));
-      sobrep.hidden = !pares.length;
-      sobrep.textContent = pares.length ? 'Sobreposição: ' + pares.map(function (p) { return p.a + ' e ' + p.b + ' (' + Math.round(p.fracao * 100) + '% do menor)'; }).join('; ') +
-        '. A mesma área seria contada duas vezes: a aprovação é recusada. Ajuste os setores ou deixe o POA de um deles em zero. Pode salvar como rascunho.' : '';
+    // valores em décimos de ponto percentual (inteiros): a soma precisa dar exatamente 1000 (100,0%), sem erro de ponto flutuante
+    function decimos(input) {
+      var t = input.value.trim().replace(',', '.');
+      if (t === '') return 0;
+      var v = Number(t);
+      return isFinite(v) && v >= 0 && v <= 100 ? Math.round(v * 10) : NaN;
     }
-    [geral, hip, lim].concat(campos.map(function (c) { return c.just; })).forEach(function (x) { x.addEventListener('input', function () { erro.hidden = true; }); });
-    campos.forEach(function (c) { c.poa.addEventListener('input', function () { erro.hidden = true; atualizarTotal(); }); });
+    function totalDecimos() { return campos.concat([{ poa: fora }]).reduce(function (a, c) { return a + decimos(c.poa); }, 0); }
+    function fmt(d) { return (d / 10).toLocaleString('pt-BR', { maximumFractionDigits: 1 }); }
+    var btnSalvar = el('button', { classe: 'btn', type: 'button', id: 'cenario-salvar', texto: 'Salvar rascunho' });
+    var btnAprovar = el('button', { classe: 'btn btn-prob', type: 'button', id: 'cenario-aprovar', texto: 'Publicar versão' });
+    var btnDescartar = rasc ? el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', id: 'cenario-descartar', texto: 'Descartar rascunho' }) : null;
+    var ocupadoAgora = false;
 
-    var tabelaCampos = tabela(['Setor', 'POA (%)', 'Justificativa do setor'], campos.map(function (c) {
-      return el('tr', null, [el('td', { texto: c.s.nome }), el('td', null, [c.poa]), el('td', null, [c.just])]);
-    }), 'tabela-editor');
+    function atualizarTotal() {
+      var t = totalDecimos();
+      var invalido = isNaN(t);
+      var ok = !invalido && t === 1000;
+      soma.className = 'poa-soma ' + (ok ? 'poa-soma-ok' : 'poa-soma-pend');
+      soma.innerHTML = '';
+      soma.appendChild(el('span', { classe: 'poa-soma-rotulo', texto: 'Soma' }));
+      soma.appendChild(el('strong', { classe: 'poa-soma-valor', id: 'poa-soma-valor', texto: invalido ? '—' : fmt(t) + '%' }));
+      soma.appendChild(el('span', { classe: 'poa-soma-info', texto: invalido ? 'valor fora de 0 a 100' : ok ? '✓ pronto para publicar' : t < 1000 ? 'faltam ' + fmt(1000 - t) + '%' : 'passou ' + fmt(t - 1000) + '%' }));
+      btnAprovar.disabled = ocupadoAgora || !ok;
+      btnAprovar.title = ok ? '' : 'A soma, com "Fora da área", precisa dar exatamente 100%';
+      var pares = M.sobreposicoes(campos.map(function (c) { var d = decimos(c.poa); return geometriaDoSetor(c.s, isNaN(d) ? 0 : d / 1000); }));
+      sobrep.hidden = !pares.length;
+      sobrep.textContent = pares.length ? 'Sobreposição: ' + pares.map(function (p) { return p.a + ' e ' + p.b + ' (' + Math.round(p.fracao * 100) + '%)'; }).join('; ') + '. Zere o POA de um deles para publicar.' : '';
+    }
+    [geral, hip, lim, hr, conf, origemPoa, selPonto].concat(campos.map(function (c) { return c.just; })).forEach(function (x) { x.addEventListener('input', marcarSujo); });
+    campos.concat([{ poa: fora }]).forEach(function (c) { c.poa.addEventListener('input', function () { marcarSujo(); atualizarTotal(); }); });
 
-    var recursos = [
-      el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-distribuir', texto: 'Preencher proporcional à área', title: 'Hipótese de distribuição uniforme (POA proporcional à área). Não é conclusão sobre o caso: ajuste e justifique.',
+    var linhas = campos.map(function (c) {
+      return el('div', { classe: 'poa-linha' }, [el('span', { classe: 'poa-nome', texto: c.s.nome }), el('div', { classe: 'poa-campo' }, [c.poa, el('span', { classe: 'poa-pct', texto: '%' })]), c.just]);
+    });
+    linhas.push(el('div', { classe: 'poa-linha poa-linha-fora' }, [
+      el('span', { classe: 'poa-nome' }, ['Fora da área', dica('Probabilidade de a pessoa estar fora de todos os setores desenhados. Entra na soma de 100%.')]),
+      el('div', { classe: 'poa-campo' }, [fora, el('span', { classe: 'poa-pct', texto: '%' })]),
+    ]));
+
+    var atalhos = [
+      el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-distribuir', texto: 'Dividir pela área',
+        title: 'Distribuição uniforme proporcional à área. É só um ponto de partida: ajuste e justifique.',
         onclick: function () {
           var d = M.distribuirPelaArea(setores.map(function (s) { return { id: s.id, areaM2: P.areaSetorM2(s) }; }));
           campos.forEach(function (c) { c.poa.value = String(Math.round(d[c.s.id] * 1000) / 10); });
-          atualizarTotal();
+          fora.value = '0'; marcarSujo(); atualizarTotal();
         } }),
     ];
     var resAtual = ap ? resultadoDa(vitimaId) : null;
     if (resAtual && resAtual.registros.some(function (x) { return x.conta; })) {
-      recursos.push(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-usar-atual', texto: 'Usar o POA atual (depois das buscas)',
-        title: 'Proposta de atualização: preenche com o POA atualizado pelas buscas registradas. Confirme que a hipótese espacial ainda vale (principalmente se a pessoa pode estar se deslocando) e justifique.',
+      atalhos.push(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-usar-atual', texto: 'Usar POA atual',
+        title: 'Preenche com o POA atualizado pelas buscas registradas. Confirme que a hipótese ainda vale e justifique.',
         onclick: function () {
-          var s = M.sugerirProximaVersao(resAtual);
-          campos.forEach(function (c) { c.poa.value = s[c.s.id] != null ? String(Math.round(s[c.s.id] * 1000) / 10) : '0'; });
-          atualizarTotal();
+          var s = M.sugerirProximaVersao(resAtual), tot = 0;
+          campos.forEach(function (c) { var v = Math.round((s[c.s.id] || 0) * 1000); c.poa.value = String(v / 10); tot += v; });
+          fora.value = String(Math.max(0, 1000 - tot) / 10); marcarSujo(); atualizarTotal();
         } }));
     }
 
-    var btnSalvar = el('button', { classe: 'btn', type: 'button', id: 'cenario-salvar', texto: 'Salvar rascunho' });
-    var btnAprovar = el('button', { classe: 'btn btn-escuro', type: 'button', id: 'cenario-aprovar', texto: 'Aprovar versão' });
-    var btnDescartar = rasc ? el('button', { classe: 'btn btn-perigo', type: 'button', id: 'cenario-descartar', texto: 'Descartar rascunho' }) : null;
-    var btnCancelar = el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } });
-
     function montarDados() {
-      if (campos.some(function (c) { var v = valorPct(c); return !(v >= 0 && v <= 100); })) throw new Error('Cada POA deve ficar entre 0 e 100%.');
-      if (somaPct() > 100.0001) throw new Error('A soma dos POA passou de 100%. Reduza algum setor.');
+      var t = totalDecimos();
+      if (isNaN(t)) throw new Error('Cada POA deve ficar entre 0 e 100%.');
+      if (t > 1000) throw new Error('A soma passou de 100%. Reduza algum valor.');
       var hrMs = hr.value ? new Date(hr.value).getTime() : null;
       return {
         justificativa: geral.value.trim(),
@@ -492,29 +522,31 @@
         horario_referencia: hrMs != null && !isNaN(hrMs) ? new Date(hrMs).toISOString() : null,
         ponto_confiavel_id: selPonto.value || null,
         atualizado_em: rasc ? rasc.atualizado_em : null,
-        setores: campos.filter(function (c) { return valorPct(c) > 0 || c.just.value.trim(); }).map(function (c) {
-          return { setor_id: c.s.id, poa: Math.round(valorPct(c) * 1e4) / 1e6, justificativa: c.just.value.trim() };
+        poa_fora: decimos(fora) / 1000,
+        setores: campos.filter(function (c) { return decimos(c.poa) > 0 || c.just.value.trim(); }).map(function (c) {
+          return { setor_id: c.s.id, poa: decimos(c.poa) / 1000, justificativa: c.just.value.trim() };
         }),
         evidencias: evCampos.filter(function (x) { return x.marcar.checked && (x.e.livre ? x.texto.value.trim() : true); }).map(function (x) {
           return x.e.livre ? { descricao: x.texto.value.trim(), confirmada: x.conf.checked } : { ponto_id: x.e.pontoId, descricao: x.e.texto, confirmada: x.conf.checked };
         }),
       };
     }
-    function ocupado(sim) { [btnSalvar, btnAprovar, btnDescartar].forEach(function (b) { if (b) b.disabled = sim; }); }
+    function ocupado(sim) { ocupadoAgora = sim; [btnSalvar, btnDescartar].forEach(function (b) { if (b) b.disabled = sim; }); atualizarTotal(); }
 
-    var chaveAprovacao = chaveNova();   // a mesma chave se a aprovação for reenviada: o servidor não duplica
+    var chaveAprovacao = chaveNova();   // a mesma chave se a publicação for reenviada: o servidor não duplica
     async function salvar(aprovar) {
       erro.hidden = true;
       var dados;
       try { dados = montarDados(); } catch (e) { erro.textContent = e.message; erro.hidden = false; return; }
       if (aprovar) {
-        if (dados.justificativa.length < 10) { erro.textContent = 'Para aprovar, escreva a justificativa da versão (pelo menos 10 caracteres).'; erro.hidden = false; geral.focus(); return; }
-        if (!dados.setores.some(function (s) { return s.poa > 0; })) { erro.textContent = 'Para aprovar, ao menos um setor precisa ter POA maior que zero.'; erro.hidden = false; return; }
-        if (!sobrep.hidden) { erro.textContent = 'Setores com POA se sobrepõem: ajuste antes de aprovar (ou salve como rascunho).'; erro.hidden = false; return; }
+        if (totalDecimos() !== 1000) { erro.textContent = 'A soma, com "Fora da área", precisa dar exatamente 100%.'; erro.hidden = false; return; }
+        if (dados.justificativa.length < 10) { erro.textContent = 'Escreva a justificativa da versão (mín. 10 caracteres).'; erro.hidden = false; geral.focus(); return; }
+        if (!dados.setores.some(function (s) { return s.poa > 0; })) { erro.textContent = 'Ao menos um setor precisa ter POA maior que zero.'; erro.hidden = false; return; }
+        if (!sobrep.hidden) { erro.textContent = 'Há setores sobrepostos: zere o POA de um deles.'; erro.hidden = false; return; }
         var okAprovar = await UI.confirmar({
-          titulo: 'Aprovar esta versão do cenário?',
-          texto: 'Depois de aprovada, a versão NÃO pode ser alterada nem apagada. Para rever, você cria uma nova versão e o histórico fica registrado no diário. Confira hipóteses, limitações e evidências.',
-          ok: 'Aprovar versão', empilhar: true,
+          titulo: 'Publicar esta versão?',
+          texto: 'Depois de publicada, a versão não pode ser alterada. Para mudar, você publica uma nova versão; o histórico fica no diário.',
+          ok: 'Publicar versão', empilhar: true,
         });
         if (!okAprovar) return;
       }
@@ -523,62 +555,63 @@
         var r = await C.rpc('cenario_salvar_rascunho', { p_vitima: vitimaId, p_dados: dados });
         if (aprovar) {
           await C.rpc('cenario_aprovar', { p_cenario: r.cenario.id, p_revisao: r.cenario.atualizado_em, p_chave: chaveAprovacao });
-          UI.aviso('Versão ' + r.cenario.numero + ' aprovada.', 'ok');
+          UI.aviso('Versão ' + r.cenario.numero + ' publicada.', 'ok');
         } else {
           UI.aviso('Rascunho salvo (ainda não vale nos cálculos).', 'ok');
         }
-        fechar(true);
+        est.editorSujo = false;
         if (aoConcluir) aoConcluir();
       } catch (e) {
         erro.textContent = e.message; erro.hidden = false;
-        if (e.codigo === 'cenario_versao_desatualizada') { erro.textContent += ' Feche e abra o cenário de novo para ver a versão do colega.'; }
+        if (e.codigo === 'cenario_versao_desatualizada') { erro.textContent += ' Feche e abra o painel para ver a versão do colega.'; }
         ocupado(false);
       }
     }
     btnSalvar.addEventListener('click', function () { salvar(false); });
     btnAprovar.addEventListener('click', function () { salvar(true); });
     if (btnDescartar) btnDescartar.addEventListener('click', async function () {
-      var ok = await UI.confirmar({ titulo: 'Descartar o rascunho?', texto: 'O rascunho da versão ' + rasc.numero + ' será apagado. As versões aprovadas não são afetadas.', ok: 'Descartar rascunho', perigo: true, empilhar: true });
+      var ok = await UI.confirmar({ titulo: 'Descartar o rascunho?', texto: 'As versões publicadas não são afetadas.', ok: 'Descartar rascunho', perigo: true, empilhar: true });
       if (!ok) return;
       ocupado(true);
       try {
         await C.rpc('cenario_descartar_rascunho', { p_cenario: rasc.id });
         UI.aviso('Rascunho descartado.', 'ok');
-        fechar(true);
+        est.editorSujo = false;
         if (aoConcluir) aoConcluir();
       } catch (e) { erro.textContent = e.message; erro.hidden = false; ocupado(false); }
     });
 
     var numero = rasc ? rasc.numero : ((versoesDa(vitimaId).slice(-1)[0] || { numero: 0 }).numero + 1);
-    var corpo = el('div', { classe: 'editor-cenario' }, [
-      el('h2', { id: 'modal-titulo', texto: 'Cenário de ' + nomeVitima(vitimaId) + ' — versão ' + numero + ' (' + (rasc ? 'rascunho' : 'nova versão') + ')' }),
-      aviso('POA é a chance de a pessoa estar em cada setor. É uma decisão sua (perfil, última posição, relatos, terreno): registre o raciocínio. A soma pode ficar abaixo de 100%; o resto é "fora dos setores desenhados". Setores com POA não podem se sobrepor.'),
-      origem && !rasc ? aviso('Parte da versão ' + ap.numero + ' aprovada. Ela continua no histórico; esta cria a versão ' + numero + '.') : null,
-      el('div', { classe: 'cenario-recursos' }, recursos),
-      tabelaCampos,
-      total,
+    var corpo = el('div', { classe: 'poa-editor' }, [
+      el('div', { classe: 'poa-editor-cab' }, [
+        el('strong', { texto: 'Versão ' + numero + (rasc ? ' (rascunho)' : '') }),
+        el('div', { classe: 'poa-ref' }, [rotuloComDica('Referência', 'cenario-hr', 'A que momento este cenário se refere.'), hr]),
+      ]),
+      el('div', { classe: 'poa-atalhos' }, atalhos),
+      el('div', { classe: 'poa-lista' }, linhas),
+      soma,
       sobrep,
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'cenario-just', texto: 'Justificativa da versão (obrigatória para aprovar)' }), geral]),
-      el('div', { classe: 'grupo grupo-2col' }, [
-        el('div', null, [el('label', { classe: 'rotulo', for: 'cenario-hr', texto: 'Horário de referência (a que momento o cenário se refere)' }), hr]),
-        el('div', null, [el('label', { classe: 'rotulo', for: 'cenario-ponto', texto: 'Último ponto confiável' }), selPonto]),
-      ]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'cenario-hip', texto: 'Hipóteses (deslocamento ou permanência)' }), hip]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'cenario-lim', texto: 'Limitações' }), lim]),
-      el('div', { classe: 'grupo grupo-2col' }, [
-        el('div', null, [el('label', { classe: 'rotulo', for: 'cenario-conf', texto: 'Sustentação dos dados (julgamento, não intervalo estatístico)' }), conf]),
-        el('div', null, [el('label', { classe: 'rotulo', for: 'cenario-origem', texto: 'Origem do POA' }), origemPoa]),
-      ]),
-      el('div', { classe: 'grupo' }, [
-        el('span', { classe: 'rotulo', texto: 'Evidências consideradas (marque as que sustentam o cenário e se estão confirmadas; relato não confirmado não vale como verificado)' }),
-        listaEv,
-        el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-add-evidencia', texto: '+ Outra evidência', onclick: function () { addEvidencia({ livre: true, texto: '', marcada: true, confirmada: false }); } }),
+      el('div', { classe: 'grupo' }, [rotuloComDica('Justificativa da versão', 'cenario-just', 'Obrigatória para publicar (mín. 10 caracteres). Ex.: última posição, relato da família, perfil, terreno.'), geral]),
+      el('details', { classe: 'poa-mais' }, [
+        el('summary', { texto: 'Mais detalhes' }),
+        el('div', { classe: 'grupo' }, [rotuloComDica('Hipóteses', 'cenario-hip'), hip]),
+        el('div', { classe: 'grupo' }, [rotuloComDica('Limitações', 'cenario-lim', 'O que não se sabe ou pode invalidar o cenário.'), lim]),
+        el('div', { classe: 'grupo grupo-2col' }, [
+          el('div', null, [rotuloComDica('Último ponto confiável', 'cenario-ponto'), selPonto]),
+          el('div', null, [rotuloComDica('Sustentação', 'cenario-conf', 'Julgamento do comando sobre a qualidade dos dados; não é intervalo estatístico.'), conf]),
+        ]),
+        el('div', { classe: 'grupo' }, [rotuloComDica('Origem do POA', 'cenario-origem'), origemPoa]),
+        el('div', { classe: 'grupo' }, [
+          rotuloComDica('Evidências', null, 'Marque as que sustentam o cenário e se estão confirmadas. Relato não confirmado não vale como verificado.'),
+          listaEv,
+          el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-add-evidencia', texto: '+ Evidência', onclick: function () { addEvidencia({ livre: true, texto: '', marcada: true, confirmada: false }); marcarSujo(); } }),
+        ]),
       ]),
       erro,
-      el('div', { classe: 'modal-acoes' }, [btnCancelar, btnDescartar, btnSalvar, btnAprovar]),
+      el('div', { classe: 'poa-acoes' }, [btnDescartar, btnSalvar, btnAprovar]),
     ]);
-    var fechar = UI.abrirModal(corpo, { fecharNoFundo: false, empilhar: true });
     atualizarTotal();
+    return corpo;
   }
 
   /* ---------- Registro manual da busca (POD) ----------------------------- */
@@ -745,41 +778,22 @@
     motivo.focus();
   }
 
-  /* ---------- Bloco no detalhe do setor ---------------------------------- */
+  /* ---------- Bloco no detalhe do setor (só informação; a edição fica no botão POA/POD do topo) ---------- */
   function blocoSetor(d) {
-    var sec = el('section', { classe: 'pod-bloco', 'aria-label': 'Probabilidades de busca' }, [el('h3', { texto: 'Probabilidades de busca' })]);
-    if (est.ausente) { sec.appendChild(el('p', { classe: 'muted', texto: 'Disponível depois de rodar as migrações 033 e 034 no banco.' })); return sec; }
-    if (!est.vitimas.length) {
-      sec.appendChild(el('p', { classe: 'muted', texto: 'Sem vítima cadastrada: o cenário (POA) é feito por vítima.' }));
-    } else {
-      var dl = el('dl', { classe: 'dados' });
-      est.vitimas.forEach(function (v) {
-        var ap = aprovadaDa(v.id);
-        var res = ap ? resultadoDa(v.id) : null;
-        var s = res && res.setores.find(function (x) { return x.setorId === d.id; });
-        var rasc = rascunhoDa(v.id);
-        dl.appendChild(el('dt', { texto: v.nome + (localizacaoDa(v.id) ? ' (localizada)' : '') }));
-        dl.appendChild(el('dd', null, [
-          ap
-            ? (s ? 'POA ' + pct(s.poa) + ' (versão ' + ap.numero + ') · POD ' + (s.pod != null ? pct(s.pod) : (s.semEstimativa ? 'não estimada' : '—')) + ' · POS ' + pct(s.pos) + ' · POA atual ' + pct(s.poaAtual)
-              : 'Este setor não está na versão ' + ap.numero + ' aprovada (POA zero).')
-            : 'Sem cenário aprovado (POA não definido).',
-          rasc ? el('small', { classe: 'muted', texto: ' Há rascunho da versão ' + rasc.numero + ' (não vale ainda).' }) : null,
-        ]));
-      });
-      sec.appendChild(dl);
-    }
-    var regs = est.registros.filter(function (r) { return r.setor_id === d.id; }).slice().reverse();
-    sec.appendChild(regs.length
-      ? el('ol', { classe: 'pod-buscas' }, regs.map(function (r) {
-        return el('li', { classe: r.anulado_em ? 'registro-anulado' : null, texto: C.hora(r.registrado_em, false) + ' · ' + (r.equipe || 'Equipe não informada') + (r.finalidade === 'planejada' ? ' (planejada)' : '') + ': ' +
-          (r.pod == null ? 'POD não estimada' : 'POD ' + pct(Number(r.pod)) + (r.alcance === 'parcial' ? ' em ' + pct(Number(r.cobertura_fracao), 0) + ' do setor' : '')) +
-          (r.vitima_id ? ' (só ' + nomeVitima(r.vitima_id) + ')' : '') + (r.anulado_em ? ' — anulado: ' + r.anulado_motivo : '') });
-      }))
-      : el('p', { classe: 'muted', texto: 'Nenhuma busca registrada neste setor. O POD vem do registro manual da equipe, nunca do GPS.' }));
-    var acoes = [el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'setor-abrir-cenario', texto: 'Abrir cenário', onclick: function () { UI.fecharModal(); abrir(); } })];
-    if (podeAlterar()) acoes.unshift(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'setor-registrar-busca', texto: 'Registrar busca neste setor', onclick: function () { UI.fecharModal(); abrirRegistro({ setorId: d.id }); } }));
-    sec.appendChild(el('div', { classe: 'cenario-recursos' }, acoes));
+    var sec = el('section', { classe: 'pod-bloco', 'aria-label': 'Probabilidades de busca' }, [el('h3', { texto: 'POA/POD' })]);
+    if (est.ausente) { sec.appendChild(el('p', { classe: 'muted', texto: 'Indisponível: faltam as migrações 033 e 034.' })); return sec; }
+    if (!est.vitimas.length) { sec.appendChild(el('p', { classe: 'muted', texto: 'Sem vítima cadastrada.' })); return sec; }
+    var dl = el('dl', { classe: 'dados' });
+    est.vitimas.forEach(function (v) {
+      var ap = aprovadaDa(v.id);
+      var res = ap ? resultadoDa(v.id) : null;
+      var s = res && res.setores.find(function (x) { return x.setorId === d.id; });
+      dl.appendChild(el('dt', { texto: v.nome + (localizacaoDa(v.id) ? ' (localizada)' : '') }));
+      dl.appendChild(el('dd', { texto: !ap ? 'Sem versão publicada'
+        : s ? 'v' + ap.numero + ' · POA ' + pct(s.poa) + ' · POD ' + (s.pod != null ? pct(s.pod) : (s.semEstimativa ? 'não estimada' : '—')) + ' · POS ' + pct(s.pos)
+          : 'v' + ap.numero + ' · fora do cenário' }));
+    });
+    sec.appendChild(dl);
     return sec;
   }
 

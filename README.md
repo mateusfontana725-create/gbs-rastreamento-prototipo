@@ -400,15 +400,18 @@ ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cad
   vasculhado. Os detalhes mostram, separado, **"Percorrido (estimativa pelos rastros GPS)"**: a parte do
   setor que ficou a até 25 m de algum rastro (rastros com precisão pior que 100 m não contam). É só uma
   estimativa; o setor só fica **Concluído** quando um responsável marca.
-- **Probabilidades de busca (POA, POD e POS)** — menu ☰ → **Probabilidades de busca (POA/POD)** e no detalhe de cada
-  setor (migrações **033** e **034**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`). Segue o guia
+- **Probabilidades de busca (POA, POD e POS)** — botão **POA/POD** no topo da operação (o único acesso; clicar num setor
+  só mostra as informações dele, sem editar). O painel tem as abas **POA** (lista de setores com o percentual e uma
+  justificativa curta, a linha fixa **Fora da área** e a **soma em destaque**: só publica quando dá exatamente 100%, em
+  décimos de ponto percentual), **Buscas** e **Versões**; detalhes extras ficam em "Mais detalhes" e as explicações atrás
+  de um (i). Violeta é a cor de probabilidade (fora das cores de emergência e risco). (migrações **033** e **034**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`). Segue o guia
   "POA e POD no GBS": o app organiza decisões documentadas do comando e nunca inventa percentuais.
   - **POA** = probabilidade de a pessoa estar em cada setor. É **decisão do responsável**, por vítima, num **cenário**:
-    POA por setor (soma até 100%; o resto é **"fora dos setores desenhados"**, sem busca), justificativa geral e por setor,
+    POA por setor mais **Fora da área** (a soma dos dois dá 100%; "fora" são os trechos sem setor desenhado, sem busca), justificativa geral e por setor,
     **horário de referência**, **hipóteses**, **limitações**, **sustentação dos dados** (baixa/média/alta, julgamento e não
     intervalo estatístico), **origem do POA**, **último ponto confiável** (referência a um ponto de interesse, com cópia dos
     dados) e **evidências** (pontos do mapa e anotações livres, cada uma "confirmada" ou "não confirmada"). O editor começa
-    vazio; "Preencher proporcional à área" é só uma hipótese uniforme opcional, que você ajusta e justifica.
+    vazio; "Dividir pela área" é só uma hipótese uniforme opcional, que você ajusta e justifica.
   - **Setores do cenário não se sobrepõem**: a mesma área seria contada duas vezes. A tela avisa na hora e **o servidor
     recusa aprovar** (mais de 2% do menor setor em comum; rascunho pode). A geometria e a área de cada setor ficam
     **copiadas na versão**: editar ou excluir o setor depois não altera a versão aprovada. A tela mostra a **densidade**

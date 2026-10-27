@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1320,5 +1320,65 @@ console.log('\nPedidos de ajuda: estados, prioridade, histórico e escalação �
   chk(pubA.includes('pedidos_ajuda') && pubA.includes('pedido_ajuda_eventos'), 'pedidos e histórico publicados no Realtime');
 }
 
-console.log('\nMigrações 007–035 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 036: recursos e disponibilidade das equipes ----------
+console.log('\nRecursos e disponibilidade das equipes — migração 036');
+{
+  const opR = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RECURSOS', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'aquatica' }) });
+  const gR = await rpc(resp1, 'salvar_grupo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ nome: 'Aquático' }) });
+  const uCiv = await usuario(null, true);
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+  const def = await db.query(`select disponibilidade, disponibilidade_obs, capacidades, disponivel_em from public.grupos where id = $1`, [gR.id]);
+  chk(def.rows[0].disponibilidade === 'disponivel' && def.rows[0].capacidades === '' && def.rows[0].disponivel_em === null, 'grupo novo: disponível, sem capacidades nem recursos');
+
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ disponibilidade: 'indisponivel' }) }))) && /sem_permissao/.test(await erroDe(rpc(uCiv, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({}) }))), 'quem não é responsável da operação não altera recursos');
+  chk(/grupo_inexistente/.test(await erroDe(rpc(resp1, 'salvar_recursos_grupo', { p_grupo: '00000000-0000-0000-0000-000000000000', p_dados: '{}' }))), 'grupo inexistente: recusado');
+  const ruim = (r) => rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify(r) });
+  chk(/dados_invalidos/.test(await erroDe(ruim({ disponibilidade: 'dormindo' }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'foguete' }] }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'drone', quantidade: 0 }] })))
+    && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'drone', quantidade: 100 }] }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'drone', situacao: 'quebrado' }] }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: 'tudo' }))), 'disponibilidade, tipo, quantidade e situação inválidos: recusados');
+  chk(/dados_invalidos/.test(await erroDe(ruim({ recursos: Array.from({ length: 31 }, () => ({ tipo: 'outro' })) }))), 'mais de 30 recursos: recusado');
+  chk((await db.query(`select count(*)::int n from public.grupo_recursos where grupo_id = $1`, [gR.id])).rows[0].n === 0, 'pedido recusado não grava nada pela metade');
+
+  const r1 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({
+    disponibilidade: 'em_descanso', disponibilidade_obs: 'Turno de 12 h terminado', disponivel_em: '2026-10-28T20:00:00Z', capacidades: 'Mergulho autônomo; resgate aquático',
+    recursos: [
+      { tipo: 'embarcacao', identificacao: 'Bote ABT-3', quantidade: 1, situacao: 'operacional' },
+      { tipo: 'viatura', identificacao: 'VTR ABT-12', quantidade: 2 },
+      { tipo: 'drone', identificacao: 'Mavic 3T', situacao: 'limitado', observacao: 'Bateria reserva única' },
+      { tipo: 'cao_busca', identificacao: 'Thor', quantidade: 1 },
+      { tipo: 'comunicacao', identificacao: 'HT UHF', quantidade: 6 },
+      { tipo: 'primeiros_socorros', identificacao: 'Mochila APH', quantidade: 1 },
+    ] }) });
+  chk(r1.grupo.disponibilidade === 'em_descanso' && r1.grupo.capacidades === 'Mergulho autônomo; resgate aquático' && r1.grupo.recursos_atualizado_por_nome === 'Sgt Um' && r1.recursos.length === 6, 'salva disponibilidade, capacidades e os seis tipos de recurso', r1.grupo);
+  const rec = (await q(resp1, `select tipo, identificacao, quantidade, situacao, observacao from public.grupo_recursos where grupo_id = $1 order by tipo`, [gR.id]));
+  chk(rec.find((x) => x.tipo === 'viatura').quantidade === 2 && rec.find((x) => x.tipo === 'drone').situacao === 'limitado' && rec.find((x) => x.tipo === 'drone').observacao === 'Bateria reserva única' && rec.find((x) => x.tipo === 'embarcacao').situacao === 'operacional', 'quantidade, situação e observação por recurso', rec);
+  chk((await q(resp2, `select count(*)::int n from public.grupo_recursos`))[0].n === 0 && (await q(uCiv, `select count(*)::int n from public.grupo_recursos`))[0].n === 0, 'recursos só para os responsáveis da operação');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `delete from public.grupo_recursos where grupo_id = $1`, [gR.id]))), 'sem escrita direta nos recursos');
+  const dia = (await db.query(`select titulo, detalhe from public.diario where operacao_id = $1 and tipo = 'equipe_recursos'`, [opR.id])).rows;
+  chk(dia.length === 1 && /Equipe Aquático: disponibilidade em descanso/.test(dia[0].titulo) && /Bote ABT-3/.test(dia[0].detalhe) && /viatura ×2 \(VTR ABT-12\)/.test(dia[0].detalhe) && /Mergulho/.test(dia[0].detalhe) && /Volta a ficar disponível: 28\/10 17:00/.test(dia[0].detalhe), 'mudança entra no diário com recursos, capacidades e hora de retorno', dia);
+
+  // só as chaves enviadas mudam; "recursos" substitui a lista inteira
+  const r2 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ disponibilidade: 'disponivel', disponivel_em: null }) });
+  chk(r2.grupo.disponibilidade === 'disponivel' && r2.grupo.capacidades === 'Mergulho autônomo; resgate aquático' && r2.recursos.length === 6 && r2.grupo.disponivel_em === null, 'sem "recursos" na chamada, a lista continua; as capacidades também');
+  const r3 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ recursos: [{ tipo: 'viatura', identificacao: 'VTR nova' }] }) });
+  chk(r3.recursos.length === 1 && r3.recursos[0].identificacao === 'VTR nova' && r3.grupo.disponibilidade === 'disponivel', 'com "recursos", a lista é substituída');
+  const r4 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ recursos: [] }) });
+  chk(r4.recursos.length === 0, 'lista vazia limpa os recursos');
+  const dia2 = (await db.query(`select titulo from public.diario where operacao_id = $1 and tipo = 'equipe_recursos' order by id`, [opR.id])).rows.map((x) => x.titulo);
+  chk(dia2.length === 4 && /recursos atualizados/.test(dia2[2]) && /disponibilidade disponível/.test(dia2[1]), 'o diário distingue mudança de disponibilidade de mudança de recursos', dia2);
+
+  console.log('  excluir equipe e operação encerrada');
+  await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ recursos: [{ tipo: 'drone' }] }) });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opR.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ disponibilidade: 'indisponivel' }) }))), 'operação encerrada: recursos e disponibilidade não mudam');
+  chk((await q(resp1, `select count(*)::int n from public.grupo_recursos where grupo_id = $1`, [gR.id]))[0].n === 1, 'encerrada: continua legível');
+  const opR2 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RECURSOS 2', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const gR2 = await rpc(resp1, 'salvar_grupo', { p_operacao: opR2.id, p_id: null, p_dados: JSON.stringify({ nome: 'Terrestre' }) });
+  await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR2.id, p_dados: JSON.stringify({ recursos: [{ tipo: 'cao_busca', identificacao: 'Rex' }] }) });
+  await rpc(resp1, 'excluir_grupo', { p_id: gR2.id });
+  chk((await db.query(`select count(*)::int n from public.grupo_recursos where grupo_id = $1`, [gR2.id])).rows[0].n === 0, 'excluir a equipe apaga os recursos dela');
+  const pubR = (await db.query(`select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'grupo_recursos'`)).rows;
+  chk(pubR.length === 1, 'recursos publicados no Realtime');
+}
+
+console.log('\nMigrações 007–036 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

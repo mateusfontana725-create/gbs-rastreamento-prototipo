@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1380,5 +1380,126 @@ console.log('\nRecursos e disponibilidade das equipes — migração 036');
   chk(pubR.length === 1, 'recursos publicados no Realtime');
 }
 
-console.log('\nMigrações 007–036 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 037: briefing da operação e passagem de comando ----------
+console.log('\nBriefing e passagem de comando — migração 037');
+{
+  const resp3 = await usuario('r3@cbm', false), resp4 = await usuario('r4@cbm', false), resp5 = await usuario('r5@cbm', false);
+  await db.query(`insert into public.responsaveis (user_id, nome) values ($1, 'Cap Três'), ($2, 'Ten Quatro'), ($3, 'Sd Cinco')`, [resp3, resp4, resp5]);
+  await db.query(`update public.responsaveis set ativo = false where user_id = $1`, [resp5]);
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+  const opB = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP BRIEFING', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre', descricao: 'Busca de idoso com demência desaparecido na mata' }) });
+  await db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2), ($1, $3), ($1, $4)`, [opB.id, resp2, resp3, resp5]);
+  const uBeto = await usuario(null, true);
+
+  console.log('  comando inicial');
+  const c0 = (await db.query(`select comando_user_id, comando_nome, comando_desde, criada_em from public.operacoes where id = $1`, [opB.id])).rows[0];
+  chk(c0.comando_user_id === resp1 && c0.comando_nome === 'Sgt Um' && +c0.comando_desde === +c0.criada_em, 'operação nova: o comando começa com quem criou');
+  chk((await db.query(`select count(*)::int n from public.operacoes where comando_user_id is null`)).rows[0].n === 0, 'operações que já existiam também ficaram com um comandante (o criador)');
+
+  // dados para o briefing: vítima, último local visto, risco, equipe sem comunicação, cenário aprovado, pedido de ajuda, decisão
+  const vit = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Seu Antônio', idade: 78, caracteristicas: 'Usa bengala', roupas: 'Camisa xadrez', perfil: ['idoso', 'demencia'] }) });
+  const vit2 = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Dona Maria' }) });
+  const setB = await rpc(resp1, 'salvar_setor', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Mata Norte', forma: 'circulo', centro_lat: -25.4, centro_lng: -49.2, raio_m: 300 }) });
+  await rpc(resp1, 'salvar_setor', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Rio Sul', forma: 'circulo', centro_lat: -25.45, centro_lng: -49.2, raio_m: 300 }) });
+  await rpc(resp1, 'salvar_ponto', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ categoria: 'ULTIMA_LOCALIZACAO', titulo: 'Casa do filho', lat: -25.401, lng: -49.2, descricao: 'Saiu às 14h' }) });
+  await rpc(resp1, 'salvar_ponto', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ categoria: 'RISCO', titulo: 'Barranco instável', lat: -25.402, lng: -49.2, descricao: 'Queda de 8 m' }) });
+  const gB = await rpc(resp1, 'salvar_grupo', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Alfa' }) });
+  await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gB.id, p_dados: JSON.stringify({ disponibilidade: 'em_descanso', capacidades: 'Busca em mata', recursos: [{ tipo: 'drone', identificacao: 'Mavic' }, { tipo: 'primeiros_socorros', identificacao: 'Mochila' }] }) });
+  const rasc = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vit.id, p_dados: JSON.stringify({ justificativa: 'Perto da casa do filho, trilha conhecida', hipoteses: 'Seguiu a trilha da mata', limitacoes: 'Sem testemunha', confianca: 'media',
+    setores: [{ setor_id: setB.id, poa: 0.7, justificativa: '' }] }) });
+  await rpc(resp1, 'cenario_aprovar', { p_cenario: rasc.cenario.id });
+  const beto = await rpc(uBeto, 'ingressar', { p_token: opB.token_civil, p_nome: 'Beto', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  await rpc(uBeto, 'participante_enviar_mensagem', { p_participante: beto.participante_id, p_categoria: 'AJUDA', p_texto: 'Machuquei a perna' });
+  await rpc(resp1, 'decisao_criar', { p_operacao: opB.id, p_dados: JSON.stringify({ texto: 'Pedir apoio aéreo ao CBMPR?', responsavel: 'Cmt Geral', prazo: '2026-10-28T22:00:00Z' }) });
+
+  console.log('  o briefing é montado com o que já existe');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp4, 'briefing_operacao_dados', { p_operacao: opB.id }))) && /sem_permissao/.test(await erroDe(rpc(uBeto, 'briefing_operacao_dados', { p_operacao: opB.id }))), 'só os responsáveis da operação leem o briefing');
+  const b = await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id });
+  chk(b.operacao.codigo === 'OP BRIEFING' && b.comando.nome === 'Sgt Um' && b.objetivo.texto === '' && /idoso com demência/.test(b.objetivo.sugerido), 'objetivo: sugerido pela descrição da operação (sem digitar de novo) e comando atual', b.objetivo);
+  chk(b.vitimas.length === 2 && b.vitimas[0].nome === 'Seu Antônio' && b.vitimas[0].perfil.includes('demencia') && b.vitimas[0].idade === 78, 'vítimas vêm da ficha');
+  chk(b.ultimo_local_visto.length === 1 && b.ultimo_local_visto[0].titulo === 'Casa do filho' && b.ultimo_local_visto[0].lat === -25.401, 'último local visto vem dos pontos de interesse');
+  chk(b.hipoteses.length === 1 && b.hipoteses[0].vitima === 'Seu Antônio' && b.hipoteses[0].hipoteses === 'Seguiu a trilha da mata' && b.hipoteses[0].setores[0].nome === 'Mata Norte' && Number(b.hipoteses[0].setores[0].poa) === 0.7, 'hipóteses vêm do cenário aprovado (versão, hipóteses, limitações e setores com POA)', b.hipoteses);
+  chk(b.riscos.pontos.length === 1 && b.riscos.pontos[0].titulo === 'Barranco instável' && b.riscos.pedidos_ajuda_abertos === 1, 'riscos: pontos de risco e pedidos de ajuda abertos');
+  const alfa = b.equipes.find((e) => e.nome === 'Alfa');
+  chk(alfa.disponibilidade_efetiva === 'em_descanso' && alfa.capacidades === 'Busca em mata' && alfa.recursos.length === 2 && alfa.sem_comunicacao === true && alfa.sem_primeiros_socorros === false, 'equipes: disponibilidade, recursos e alerta de "sem equipamento de comunicação"', alfa);
+  chk(b.tarefas.setores.total === 2 && b.tarefas.setores.pendente === 2 && b.tarefas.setores.pendentes.length === 2 && b.tarefas.deslocamentos.length === 0, 'tarefas: setores por situação e deslocamentos ativos');
+  chk(b.comunicacoes.dados.ultimas.length === 1 && /Machuquei a perna/.test(b.comunicacoes.dados.ultimas[0].texto) && b.comunicacoes.dados.ultimas[0].de === 'Beto', 'comunicações: últimas mensagens recebidas do campo');
+  chk(b.decisoes_pendentes.length === 1 && b.decisoes_pendentes[0].texto === 'Pedir apoio aéreo ao CBMPR?' && b.decisoes_pendentes[0].responsavel === 'Cmt Geral', 'decisões pendentes escritas pelo comando');
+  const auto = b.decisoes_automaticas.map((x) => x.texto);
+  chk(auto.some((x) => /Pedido de ajuda de Beto \(recebido, prioridade alta\)/.test(x)) && auto.some((x) => /Vítima Dona Maria sem cenário/.test(x)) && !auto.some((x) => /Seu Antônio sem cenário/.test(x)), 'decisões que o sistema vê esperando: pedido de ajuda aberto, vítima sem cenário aprovado', auto);
+
+  console.log('  textos do comando e decisões');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_briefing', { p_operacao: opB.id, p_dados: JSON.stringify({ objetivo: 'x'.repeat(1001) }) }))) && /sem_permissao/.test(await erroDe(rpc(resp4, 'salvar_briefing', { p_operacao: opB.id, p_dados: '{}' }))), 'texto acima de 1000 caracteres e quem não é responsável: recusados');
+  await rpc(resp1, 'salvar_briefing', { p_operacao: opB.id, p_dados: JSON.stringify({ objetivo: 'Localizar o Sr. Antônio com vida', comunicacoes: 'Canal 3 UHF; QG 41 99999-0000' }) });
+  await rpc(resp2, 'salvar_briefing', { p_operacao: opB.id, p_dados: JSON.stringify({ riscos: 'Chuva forte prevista às 18h' }) });
+  const b2 = await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id });
+  chk(b2.objetivo.texto === 'Localizar o Sr. Antônio com vida' && b2.comunicacoes.texto === 'Canal 3 UHF; QG 41 99999-0000' && b2.riscos.texto === 'Chuva forte prevista às 18h', 'só as chaves enviadas mudam; qualquer responsável da operação edita');
+  chk(/decisao_texto_invalido/.test(await erroDe(rpc(resp1, 'decisao_criar', { p_operacao: opB.id, p_dados: JSON.stringify({ texto: 'oi' }) }))), 'decisão com texto curto: recusada');
+  const dec = b2.decisoes_pendentes[0];
+  chk(/decisao_sem_texto/.test(await erroDe(rpc(resp1, 'decisao_resolver', { p_decisao: dec.id, p_estado: 'decidida', p_texto: '' }))), 'decidir exige o texto da decisão');
+  const dd = await rpc(resp2, 'decisao_resolver', { p_decisao: dec.id, p_estado: 'decidida', p_texto: 'Apoio aéreo solicitado às 16h10' });
+  chk(dd.estado === 'decidida' && dd.decidida_por_nome === 'Sgt Dois', 'decisão tomada: guarda a decisão, quem e quando');
+  chk(/decisao_ja_resolvida/.test(await erroDe(rpc(resp1, 'decisao_resolver', { p_decisao: dec.id, p_estado: 'cancelada', p_texto: 'x' }))), 'decisão já resolvida não muda');
+  chk((await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id })).decisoes_pendentes.length === 0, 'decidida sai da lista de pendentes');
+  const dec2 = await rpc(resp1, 'decisao_criar', { p_operacao: opB.id, p_dados: JSON.stringify({ texto: 'Trocar o turno das 18h?' }) });
+  await rpc(resp1, 'decisao_resolver', { p_decisao: dec2.id, p_estado: 'cancelada', p_texto: 'Não será necessário' });
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo in ('decisao_pendente', 'decisao_decidida', 'decisao_cancelada', 'briefing_atualizado')`, [opB.id])).rows[0].n === 6, 'briefing e decisões entram no diário');
+
+  console.log('  passagem de comando: foto, aceite e horário');
+  chk(/passagem_so_do_comandante/.test(await erroDe(rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 }))), 'só quem está no comando passa o comando');
+  chk(/passagem_destino_invalido/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp1 }))) && /passagem_destino_invalido/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp4 })))
+    && /passagem_destino_invalido/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp5 }))), 'destino inválido: a própria pessoa, quem não é da operação e responsável suspenso');
+  const p1 = await rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp2, p_nota: 'Vou para o QG; atenção à chuva às 18h' });
+  chk(p1.estado === 'pendente' && p1.para_nome === 'Sgt Dois' && p1.de_nome === 'Sgt Um' && p1.respondida_em === null && p1.resumo.vitimas.length === 2 && p1.resumo.hipoteses[0].hipoteses === 'Seguiu a trilha da mata' && p1.resumo.objetivo.texto === 'Localizar o Sr. Antônio com vida', 'passagem pendente guarda a foto do briefing (objetivo, vítimas, hipóteses…) e a nota', { e: p1.estado, para: p1.para_nome });
+  chk((await db.query(`select comando_nome from public.operacoes where id = $1`, [opB.id])).rows[0].comando_nome === 'Sgt Um', 'o comando NÃO muda enquanto não houver aceite');
+  chk(/passagem_pendente_existente/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 }))), 'só uma passagem pendente por vez');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp3, 'passagem_responder', { p_passagem: p1.id, p_aceitar: true }))) && /sem_permissao/.test(await erroDe(rpc(resp1, 'passagem_responder', { p_passagem: p1.id, p_aceitar: true }))), 'só quem recebe responde (nem o outro responsável, nem quem passou)');
+  // a situação muda depois da foto
+  await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: vit2.id, p_dados: JSON.stringify({ nome: 'Dona Maria Silva' }) });
+  const ac = await rpc(resp2, 'passagem_responder', { p_passagem: p1.id, p_aceitar: true, p_nota: 'Recebido' });
+  chk(ac.estado === 'aceita' && ac.respondida_em && ac.resposta_nota === 'Recebido', 'aceite: guarda o estado, a hora e a nota');
+  const cmd = (await db.query(`select comando_user_id, comando_nome, comando_desde from public.operacoes where id = $1`, [opB.id])).rows[0];
+  chk(cmd.comando_user_id === resp2 && cmd.comando_nome === 'Sgt Dois' && +cmd.comando_desde === +new Date(ac.respondida_em), 'no aceite o comando passa para quem recebeu, com a hora do aceite', cmd);
+  chk((await q(resp1, `select resumo from public.passagens_comando where id = $1`, [p1.id]))[0].resumo.vitimas.map((x) => x.nome).includes('Dona Maria'), 'a foto guardada continua a de quando o comando foi passado (não muda com o que mudou depois)');
+  chk(/passagem_nao_pendente/.test(await erroDe(rpc(resp2, 'passagem_responder', { p_passagem: p1.id, p_aceitar: false, p_nota: 'mudei de ideia' }))), 'passagem já respondida não se responde de novo');
+  chk(/passagem_imutavel/.test(await erroDe(db.query(`update public.passagens_comando set resumo = '{}'::jsonb where id = $1`, [p1.id]))) && /passagem_imutavel/.test(await erroDe(db.query(`update public.passagens_comando set estado = 'recusada' where id = $1`, [p1.id])))
+    && /passagem_imutavel/.test(await erroDe(db.query(`delete from public.passagens_comando where id = $1`, [p1.id]))), 'gatilho: foto, quem passou/recebeu e resposta não mudam nem se apagam');
+  const diaC = (await db.query(`select titulo, nivel from public.diario where operacao_id = $1 and tipo = 'comando_assumido'`, [opB.id])).rows;
+  chk(diaC.length === 1 && /Sgt Um passou o comando a Sgt Dois/.test(diaC[0].titulo) && diaC[0].nivel === 'critico', 'o aceite entra no diário como evento de destaque', diaC);
+
+  console.log('  recusa e cancelamento');
+  const p2 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 });
+  chk(/passagem_recusa_sem_motivo/.test(await erroDe(rpc(resp3, 'passagem_responder', { p_passagem: p2.id, p_aceitar: false, p_nota: '' }))), 'recusar exige motivo');
+  const rf = await rpc(resp3, 'passagem_responder', { p_passagem: p2.id, p_aceitar: false, p_nota: 'Estou de saída, passe a outro' });
+  chk(rf.estado === 'recusada' && (await db.query(`select comando_nome from public.operacoes where id = $1`, [opB.id])).rows[0].comando_nome === 'Sgt Dois', 'recusada: o comando continua com quem já estava');
+  const p3 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp3, 'passagem_cancelar', { p_passagem: p3.id }))), 'quem recebe não cancela a passagem de outro');
+  const cn = await rpc(resp2, 'passagem_cancelar', { p_passagem: p3.id });
+  chk(cn.estado === 'cancelada' && /passagem_nao_pendente/.test(await erroDe(rpc(resp2, 'passagem_cancelar', { p_passagem: p3.id }))), 'quem passou cancela enquanto está pendente');
+
+  console.log('  comandante ausente: assumir com motivo');
+  const p4 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 });
+  chk(/comando_ja_seu/.test(await erroDe(rpc(resp2, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'já estou no comando' }))), 'quem já comanda não precisa assumir');
+  chk(/comando_motivo_obrigatorio/.test(await erroDe(rpc(resp3, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'curto' }))), 'assumir exige motivo (mín. 10 caracteres)');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp4, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'não sou da operação, mas quero' }))), 'só responsável da operação assume');
+  const as = await rpc(resp1, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'Dr Dois sem rádio há 40 minutos; assumindo para manter a busca' });
+  chk(as.tipo === 'assuncao' && as.estado === 'assumida' && as.de_nome === 'Sgt Dois' && as.para_nome === 'Sgt Um' && /sem rádio/.test(as.motivo) && as.resumo.operacao.codigo === 'OP BRIEFING', 'assumir: registra de quem, para quem, o motivo e a foto do briefing', as);
+  chk((await db.query(`select estado from public.passagens_comando where id = $1`, [p4.id])).rows[0].estado === 'cancelada' && (await db.query(`select comando_nome from public.operacoes where id = $1`, [opB.id])).rows[0].comando_nome === 'Sgt Um', 'a passagem pendente é cancelada e o comando muda');
+  const diaA = (await db.query(`select titulo, nivel, detalhe from public.diario where operacao_id = $1 and tipo = 'comando_assumido_sem_aceite'`, [opB.id])).rows;
+  chk(diaA.length === 1 && diaA[0].nivel === 'critico' && /sem aceite/.test(diaA[0].titulo) && /Dr Dois sem rádio/.test(diaA[0].detalhe), 'assumir sem aceite fica no diário em destaque, com o motivo');
+  const hist = (await q(resp1, `select tipo, estado from public.passagens_comando where operacao_id = $1 order by criada_em, id`, [opB.id]));
+  chk(hist.map((h) => h.estado).join() === 'aceita,recusada,cancelada,cancelada,assumida', 'histórico completo das passagens', hist);
+  chk((await q(uBeto, `select count(*)::int n from public.passagens_comando`))[0].n === 0 && (await q(resp4, `select count(*)::int n from public.decisoes_pendentes`))[0].n === 0 && (await q(resp4, `select count(*)::int n from public.briefing_operacao`))[0].n === 0, 'participante e responsável de fora não leem passagens, decisões nem briefing');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `update public.operacoes set comando_nome = 'forjado' where id = $1`, [opB.id]))), 'o comando não muda por escrita direta');
+
+  console.log('  operação encerrada: somente leitura');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opB.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp2 }))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_briefing', { p_operacao: opB.id, p_dados: '{"objetivo":"x"}' })))
+    && /operacao_encerrada/.test(await erroDe(rpc(resp2, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'depois de encerrar a operação' }))), 'encerrada: sem passagem, briefing nem assumir comando');
+  chk((await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id })).operacao.status === 'encerrada', 'encerrada: o briefing continua legível');
+  const pubB = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['briefing_operacao', 'decisoes_pendentes', 'passagens_comando'].every((x) => pubB.includes(x)), 'briefing, decisões e passagens publicados no Realtime');
+}
+
+console.log('\nMigrações 007–037 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

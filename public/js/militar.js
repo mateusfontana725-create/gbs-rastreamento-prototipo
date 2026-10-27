@@ -354,6 +354,13 @@
     $('opt-setores').addEventListener('click', function () { definirPrefMapa('setores', !est.prefsMapa.setores); });
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
+    $('menu-regua').addEventListener('click', function () {
+      if (!est.mapa || !window.Regua) return;
+      fecharMenu(false);
+      var ligada = window.Regua.alternar(est.mapa);
+      $('menu-regua').setAttribute('aria-pressed', String(ligada));
+      UI.aviso(ligada ? 'Régua circular ligada no centro da tela: as distâncias acompanham o zoom.' : 'Régua circular desligada.', 'ok', 4000);
+    });
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });

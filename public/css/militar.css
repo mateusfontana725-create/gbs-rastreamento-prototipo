@@ -1673,3 +1673,14 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .ficha-lista-grupos li { display: flex; align-items: center; gap: 8px; font-size: .86rem; }
 .ficha-lista-grupos small { margin-left: auto; }
 .ficha-sem-grupo { margin: 0 0 8px; font-size: .84rem; }
+
+/* Régua circular (js/regua.js): anel no centro da tela, sem bloquear o toque no mapa */
+.regua-circular {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 450; pointer-events: none;
+}
+.regua-circular svg { display: block; overflow: visible; }
+.regua-anel { fill: rgba(250, 204, 21, .06); stroke: #fde047; stroke-width: 1.6; stroke-dasharray: 5 4; }
+.regua-anel-ext { stroke-width: 2.2; stroke-dasharray: none; stroke: #facc15; }
+.regua-cruz { stroke: #fde047; stroke-width: 1.4; }
+.regua-rot { fill: #fef9c3; font: 700 11px var(--mono); paint-order: stroke; stroke: rgba(10, 13, 16, .85); stroke-width: 3px; }
+.regua-rot-meio { font-weight: 600; opacity: .8; }

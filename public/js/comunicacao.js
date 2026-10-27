@@ -96,6 +96,18 @@
     grupo_invalido: 'O grupo escolhido não pertence a esta operação (pode ter sido excluído).',
     // depois de responsavel_trajeto_invalido (a busca pelo código é por trecho do texto)
     trajeto_invalido: 'Trajeto inválido: desenhe uma linha com pelo menos 2 pontos.',
+    cenario_imutavel_aprovado: 'Esta versão do cenário já foi aprovada e não pode mais ser alterada. Crie uma nova versão.',
+    cenario_versao_inexistente: 'Esta versão do cenário não existe mais (pode ter sido descartada por outro responsável).',
+    cenario_versao_desatualizada: 'O rascunho foi alterado por outro responsável depois que você abriu.',
+    cenario_poa_acima_de_100: 'A soma dos POA dos setores passou de 100%. Reduza algum setor.',
+    cenario_sem_justificativa: 'Escreva a justificativa da versão (pelo menos 10 caracteres) para aprovar.',
+    cenario_sem_setores: 'Para aprovar, ao menos um setor precisa ter POA maior que zero.',
+    busca_pod_invalido: 'O POD deve ficar entre 0 e 100%.',
+    busca_sem_base_estimativa: 'Diga em que o POD se baseia (pelo menos 5 caracteres).',
+    busca_registro_inexistente: 'Este registro de busca não existe mais.',
+    busca_registro_ja_anulado: 'Este registro de busca já foi anulado.',
+    busca_anulacao_sem_motivo: 'Escreva o motivo da anulação.',
+    busca_registro_imutavel: 'Registro de busca não pode ser editado nem apagado; anule e lance outro.',
   };
 
   function textoDoErro(err) {

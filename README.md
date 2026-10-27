@@ -349,23 +349,33 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   vasculhado. Os detalhes mostram, separado, **"Percorrido (estimativa pelos rastros GPS)"**: a parte do
   setor que ficou a até 25 m de algum rastro (rastros com precisão pior que 100 m não contam). É só uma
   estimativa; o setor só fica **Concluído** quando um responsável marca.
-- **Probabilidades de busca (POD, POA e POS)**: aparecem no detalhe de cada setor, com o POS da operação
-  inteira. Cada deslocamento de grupo que chega ao setor conta como **uma busca** (da chegada ao fim da
-  busca, ou até agora, se ainda está em andamento); o esforço são as trilhas GPS dos membros nesse intervalo.
-  Não há botão de soma: tudo é recalculado pelas trilhas e pelos horários. Cálculo em `public/js/pod.js`:
-  - **POA inicial**: a probabilidade de a pessoa estar na área, distribuída pela área dos setores.
-  - **Cobertura de cada célula** (~30 m): `C = W × L ÷ c²`, com `L` = metros de trilha dentro da célula e
-    `W` = 20 m de largura de varredura (estimativa típica para pessoa em mata; não calibrada para o terreno).
-  - **POD** da célula: `POD = 1 − e^(−C)`. Trilhas que se cruzam somam `L` no expoente: a sobreposição
-    **não** soma POD, então nunca passa de 100%.
-  - **Depois de cada busca**, a probabilidade das células varridas é multiplicada por `(1 − POD)` e a
-    área toda é renormalizada (Bayes): a chance migra para o que ainda não foi visto. Assim, a **POA atual**
-    de um setor cai quando ele é varrido, e cresce nos setores vizinhos.
-  - **POS da busca** = Σ (probabilidade × POD) do setor pesquisado. **POD** do setor = POS ÷ POA inicial.
-  - **POS acumulado** = `1 − Π(1 − POS de cada busca)`, calculado célula a célula: a área comum a dois
-    setores ou a duas buscas conta uma vez.
-  - Referências: Koopman, *Search and Screening* (1980); manual IAMSAR, vol. II (busca e salvamento).
-  - Limite: o modelo estima, não prova. A área só fica vasculhada quando um responsável marca **Concluído**.
+- **Probabilidades de busca (POA, POD e POS)** — menu ☰ → **Probabilidades de busca (POA/POD)** e no detalhe de cada
+  setor (migração **033**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`):
+  - **POA** = probabilidade de a pessoa estar em cada setor. É **decisão do responsável**, por vítima, num
+    **cenário** com justificativa (geral e por setor). A soma pode ficar abaixo de 100%: o resto é "fora dos
+    setores desenhados" (sem busca). O app nunca inventa o POA; **Distribuir pela área** é só um ponto de partida.
+  - **Versões do cenário**: cada versão nasce como **rascunho** (um por vítima, editável) e vira **aprovada**
+    depois de justificada (mín. 10 caracteres). **Versão aprovada não muda nem se apaga** (o servidor garante, não
+    só a tela). Para rever, "Rever o cenário (nova versão)": parte da aprovada, e o histórico completo fica
+    visível. Aprovação entra no diário com o POA de cada setor e a justificativa. Cada vítima tem o seu cenário.
+  - **POD** = probabilidade de a busca achar a pessoa, **se ela estiver no setor**. Vem do **registro manual da
+    busca** ("Registrar busca (POD)"): setor, equipe, POD estimado pela equipe (de 0 a 100), **em que a estimativa se
+    baseia** (obrigatório), condições, horários e se vale para todas as vítimas ou só uma. **Nunca vem do GPS**: a
+    trilha mostra por onde a equipe passou, não o que ela observou (por isso o cálculo antigo por trilhas saiu).
+    Registro não se edita nem se apaga: se errou, **Anular** (com motivo; fica no histórico) e lance outro.
+  - **O que o app calcula** (só com versão aprovada). Contam os registros não anulados, válidos para a vítima e
+    **lançados depois da aprovação** da versão (a versão já incorpora o que se sabia até ali; para levar as buscas
+    em conta, aprove uma nova versão — "Usar o POA atual" preenche com o resultado abaixo):
+    - **POD acumulado** do setor = `1 − Π(1 − POD de cada registro)` (supõe buscas independentes: repetir o mesmo
+      método no mesmo lugar tende a render menos, então é uma estimativa generosa).
+    - **POS** do setor = `POA × POD acumulado`. **POS total** = soma dos setores.
+    - **POA atual** (regra de Bayes) = `POA × (1 − POD acumulado)` ÷ o total que sobra: a probabilidade migra para o
+      que ainda não foi visto, inclusive para "fora dos setores".
+  - Referências: Koopman, *Search and Screening* (1980); manual IAMSAR, vol. II. O modelo estima, não prova: o setor só
+    fica **Concluído** quando um responsável marca.
+  - Banco: `busca_cenarios`, `busca_cenario_setores` e `busca_registros` (só leitura pelos responsáveis da operação, escrita
+    só pelas funções `cenario_salvar_rascunho`, `cenario_aprovar`, `cenario_descartar_rascunho`, `busca_registrar` e
+    `busca_anular`). Operação encerrada: somente leitura. **Antes de usar, rode `033_cenario_busca_pod_poa.sql` no Supabase.**
 - O participante atribuído vê o contorno do **seu** setor no mapa do celular ("Seu setor: A-1").
 - Ficam salvos no Supabase (tabela `setores`) e aparecem em tempo real para os outros responsáveis.
 

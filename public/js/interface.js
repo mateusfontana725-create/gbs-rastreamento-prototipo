@@ -108,7 +108,7 @@
   }
 
   /*
-   * confirmar({ titulo, texto, detalhe, ok, cancelar, perigo, campo: { rotulo, valor, max, obrigatorio } })
+   * confirmar({ titulo, texto, detalhe, ok, cancelar, perigo, empilhar, campo: { rotulo, valor, max, obrigatorio } })
    * → Promise que resolve { texto } se confirmado, ou null se cancelado.
    */
   function confirmar(o) {
@@ -132,6 +132,7 @@
       filhos.push(el('div', { classe: 'modal-acoes' }, [btnCancelar, btnOk]));
       var resolvido = false;
       var fechar = abrirModal(el('div', null, filhos), {
+        empilhar: Boolean(o.empilhar),   // abre por cima do que está aberto (ex.: confirmar dentro de um formulário)
         aoFechar: function (v) { if (!resolvido) { resolvido = true; resolve(v || null); } },
       });
       btnCancelar.addEventListener('click', function () { fechar(null); });

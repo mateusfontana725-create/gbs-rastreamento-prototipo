@@ -356,6 +356,7 @@
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
     $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
+    $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
     $('btn-regua').addEventListener('click', alternarRegua);
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
@@ -1339,6 +1340,7 @@
     assinarTempoReal();
     assinarTempoRealExtras();
     assinarTrilhasManuais();
+    if (window.BuscaCenario) window.BuscaCenario.iniciar();
     est.timerStatus = setInterval(atualizarEstados, 5000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
@@ -1436,6 +1438,7 @@
       est.canalExtras = null;
     }
     encerrarTrilhasManuais();
+    if (window.BuscaCenario) window.BuscaCenario.parar();
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -5442,68 +5445,6 @@
     est.mapa.fitBounds(L.latLngBounds(verticesSetor(d)), { padding: [40, 40], maxZoom: 17 });
   }
 
-  /* ---------- POD, POA e POS (js/pod.js) ---------- */
-  // Cada deslocamento de grupo que chegou ao setor é uma busca. O esforço são as trilhas dos
-  // membros entre a chegada e o fim da busca (ou até agora, se ela ainda está em andamento).
-  function trilhaComHorario(p) {
-    return window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp(), objetos: true }).segmentos;
-  }
-
-  function probabilidadesBusca() {
-    if (!window.POD || !est.op) return null;
-    var setores = [];
-    est.setores.forEach(function (s) { setores.push({ id: s.d.id, nome: s.d.nome, poligono: verticesSetor(s.d) }); });
-    var buscas = [];
-    est.missoes.forEach(function (m) {
-      if (!m.setor_id || !m.chegou_setor_em || !est.setores.has(m.setor_id)) return;
-      var trilhas = [];
-      (est.missaoMembros.get(m.id) || []).forEach(function (mb) {
-        var p = est.participantes.get(mb.participante_id);
-        if (p) trilhas = trilhas.concat(trilhaComHorario(p));
-      });
-      buscas.push({ id: m.id, setorId: m.setor_id, grupo: m.grupo_nome, inicio: C.paraMs(m.chegou_setor_em),
-        fim: C.paraMs(m.busca_finalizada_em), trilhas: trilhas });
-    });
-    return POD.calcular({ setores: setores, buscas: buscas, agora: Date.now() });
-  }
-
-  function blocoProbabilidades(d) {
-    var geral = probabilidadesBusca();
-    var r = geral && geral.setores.find(function (x) { return x.id === d.id; });
-    if (!r) return null;
-    var pct = function (v) { return v == null ? '—' : Math.round(v * 100) + '%'; };
-    var dl = UI.el('dl', { classe: 'dados' });
-    [
-      ['POA inicial', r.poaInicial, 'chance de a pessoa estar nesta área no começo, pela área'],
-      ['POA atual', r.poa, 'chance de estar nesta área depois das buscas feitas'],
-      ['POD', r.pod, 'se ela estiver aqui, chance de ser achada com as buscas feitas'],
-      ['POS', r.pos, 'POA inicial × POD: chance de achar nesta área com as buscas feitas'],
-      ['POS da operação', geral.posTotal, 'todos os setores; área comum a dois setores conta uma vez'],
-    ].forEach(function (linha) {
-      dl.appendChild(UI.el('dt', { texto: linha[0] }));
-      dl.appendChild(UI.el('dd', null, [pct(linha[1]), ' ', UI.el('small', { classe: 'muted', texto: linha[2] })]));
-    });
-    var buscas = r.buscas.length
-      ? UI.el('ol', { classe: 'pod-buscas' }, r.buscas.map(function (b) {
-        return UI.el('li', { texto: (b.grupo || 'Grupo') + ': POD ' + pct(b.pod) + ', POS desta busca ' + pct(b.pos) +
-          ', POA da área ' + pct(b.poaAntes) + ' → ' + pct(b.poaDepois) + ', ' + b.percorridoM + ' m' + (b.fim ? '' : ' (em andamento)') });
-      }))
-      : UI.el('p', { classe: 'muted', texto: 'Nenhuma busca neste setor ainda. Um grupo que chega ao setor conta como busca.' });
-    return UI.el('section', { classe: 'pod-bloco', 'aria-label': 'Probabilidades de busca' }, [
-      UI.el('h3', { texto: 'Probabilidades de busca' }),
-      dl,
-      buscas,
-      UI.el('details', { classe: 'pod-formulas' }, [
-        UI.el('summary', { texto: 'Como é calculado' }),
-        UI.el('p', { texto: 'Cobertura de cada célula (~30 m): C = W × L ÷ c², com W = ' + POD.W_PADRAO_M + ' m de largura de varredura e L = metros de trilha dentro dela.' }),
-        UI.el('p', { texto: 'POD da célula = 1 − e^(−C). Trilhas que se cruzam somam L dentro do expoente: a sobreposição nunca soma POD.' }),
-        UI.el('p', { texto: 'Após cada busca, a probabilidade das células varridas é multiplicada por (1 − POD) e tudo é renormalizado (Bayes). POS da busca = soma de probabilidade × POD.' }),
-        UI.el('p', { texto: 'POS acumulado = 1 − Π(1 − POS de cada busca), feito célula a célula: não passa de 100% e não conta duas vezes a mesma área.' }),
-        UI.el('p', { classe: 'muted', texto: 'Referência: Koopman, Search and Screening (1980); manual IAMSAR, vol. II. A largura de varredura é uma estimativa típica para pessoa em mata, não calibrada para o terreno desta operação.' }),
-      ]),
-    ]);
-  }
-
   /* ---------- Detalhes de setor, ponto de interesse e trilha (mesmo padrão visual) ---------- */
   // Cabeçalho com a cor do item, o tipo, o nome e uma etiqueta de situação
   function cabecaDetalhe(o) {
@@ -5576,7 +5517,7 @@
         d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome, true] : null,
       ]),
       d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
-      secaoDetalhe('Busca', UI.el('div', { classe: 'detalhe-busca' }, [caixaCob, blocoProbabilidades(d)])),
+      secaoDetalhe('Busca', UI.el('div', { classe: 'detalhe-busca' }, [caixaCob, window.BuscaCenario ? window.BuscaCenario.blocoSetor(d) : null])),
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verSetorNoMapa(d); } }),
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormSetor(d); } }) : null,
@@ -9764,6 +9705,9 @@
     posicao: function (p) { return posicaoAtual(p); },
     pontosInteresse: function () { return Array.from(est.pontosInt.values()).map(function (x) { return x.d; }); },
     setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },
+    areaSetorM2: areaSetorM2,
+    grupos: function () { return Array.from(est.grupos.values()); },
+    podeAlterar: podeAlterar,
     categorias: CAT_PONTO,
     raioAlertaPadrao: RAIO_ALERTA_PADRAO,
     formatoCoord: function () { return est.prefsMapa.coord || 'dec'; },

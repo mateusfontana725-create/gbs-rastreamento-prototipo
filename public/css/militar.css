@@ -1705,6 +1705,28 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .pod-formulas { margin-top: 8px; font-size: .85rem; }
 .pod-formulas p { margin: 4px 0; }
 
+/* Cenário de busca por vítima, registro de busca e versões (js/busca-cenario.js) */
+.modal:has(.cenario-busca), .modal:has(.editor-cenario) { width: min(1040px, 100%); }
+.modal:has(.form-busca) { width: min(640px, 100%); }
+.cenario-sec { margin: 14px 0; }
+.cenario-sec h3 { margin: 0 0 6px; font-size: 1rem; }
+.cenario-just { margin: 4px 0 8px; font-size: .88rem; }
+.cenario-acoes, .cenario-recursos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.cenario-versao { border: 1px solid var(--borda); border-radius: var(--raio); padding: 6px 10px; margin: 6px 0; background: var(--superficie-2); }
+.cenario-versao summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
+.cenario-total { margin: 8px 0; font-weight: 600; font-size: .9rem; }
+.cenario-total-erro { color: var(--perigo); }
+.tabela-pod-rolagem { overflow-x: auto; }
+.tabela-pod { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.tabela-pod th, .tabela-pod td { padding: 5px 8px; border-bottom: 1px solid var(--borda); text-align: left; vertical-align: top; }
+.tabela-pod th { font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; color: var(--texto-2); }
+.tabela-editor td:nth-child(2) { width: 110px; }
+.campo-poa { max-width: 110px; }
+.registro-anulado { opacity: .6; text-decoration: line-through; }
+.registro-anulado td:last-child, .registro-anulado td:nth-child(6) { text-decoration: none; }
+.grupo-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 560px) { .grupo-2col { grid-template-columns: 1fr; } }
+
 /* Dashboard em janela própria (dashboard.html): só o dashboard, sem o mapa nem o painel */
 body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); color: var(--texto); }
 .janela-dash-topo {

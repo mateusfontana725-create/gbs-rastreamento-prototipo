@@ -665,7 +665,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 | A pé | ponto quando o afastamento sai do círculo de precisão, ou com a velocidade medida pelo GPS (≥ 0,7 m/s), ou quando o afastamento se mantém por 3 leituras **na mesma direção**; no máximo 1 ponto a cada 2 s. Na prática: ~1 ponto a cada 3 s andando (com velocidade do GPS) ou a cada ~5 s (sem ela) |
 | Veículo | acima de 18 km/h (velocidade do GPS, ou deslocamento rápido e em linha): **até 1 ponto por segundo**, a cada 8 m |
 | Parado | oscilação menor que 0,6 × a precisão (de 3 a 25 m) não vira trilha; com o GPS informando velocidade 0, só um afastamento claro conta; confirma a posição a cada **15 s** (o **intervalo máximo sem ponto**, configurável por operação em Dados da operação: 5 a 300 s) |
-| Guardado no aparelho | todo ponto aceito é gravado **primeiro no IndexedDB** (sem ele, localStorage) com id único (UUID do aparelho), latitude, longitude, precisão, hora do GPS, usuário, operação e o **indicador de envio**; vale também para a "Minha posição" do responsável. A fila antiga (localStorage) é migrada sozinha |
+| Guardado no aparelho | todo ponto aceito é gravado **primeiro no IndexedDB** (durabilidade `strict`; se falhar, no localStorage como reserva) com id único (UUID do aparelho), latitude, longitude, precisão, hora do GPS, usuário, operação e o estado (pendente, enviado ou recusado); vale também para a "Minha posição" do responsável. **Só é "salvo" quando o aparelho confirma a gravação**: sem confirmação (sem espaço, banco indisponível, só memória) o ponto fica marcado como **não gravado**, é regravado a cada tentativa e o usuário é avisado para não fechar a página. O app pede ao navegador **armazenamento persistente** e monitora o espaço. **Não há limite de pendentes nem descarte dos mais antigos.** A fila antiga (localStorage e a versão 1 do banco) é migrada sozinha |
 | Saltos | só é "salto" o que for incoerente com o movimento recente (> 12 m/s sem histórico, ou > 2,5 × a velocidade recente; nunca acima de 252 km/h). Um pico isolado é descartado; se a leitura seguinte confirmar o novo local (ex.: entrou num carro), **as duas entram** — nada de pontos intermediários perdidos |
 | Precisão | até 150 m entra na trilha (com as regras acima); pior que 150 m vira "posição aproximada" (no máximo 1 a cada 30 s), fora da linha da trilha |
 | Leituras ruins | antiga (> 30 s), repetida, fora de ordem ou inválida (0,0, NaN): descartada. Relógio do GPS diferente do celular: corrigido. Relógio do celular errado: o horário dos pontos é convertido para o do servidor antes do envio (o servidor recusaria pontos "do futuro") |
@@ -673,6 +673,30 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 | Painel | recebe cada ponto pelo tempo real (com conferência periódica de reserva), insere na **ordem do horário do GPS** (empate: pelo id) e redesenha no quadro seguinte da tela. **Todos os pontos viram vértices** (nada é escondido). Quando dois pontos seguidos estão separados por mais que o **limite de falha** da operação (padrão **60 s**, configurável), ou há salto impossível, o trecho é desenhado **tracejado em cinza**, com **○ início** e **● fim** da falha marcados ("Falha: sem posições registradas de 10:02 a 10:21 — o percurso real é desconhecido"). Pontos de pessoas diferentes nunca se ligam |
 | Medição | o histórico da ficha mostra, para cada ponto, **quanto tempo levou da captura até chegar ao servidor** (coluna "Chegou") |
 
+- **Fila offline: garantias e transparência** (`public/js/trilha-local.js`, `public/js/fila-estado.js`):
+  - **Regra de ouro**: nenhum ponto é dado como *salvo* sem confirmação de gravação no aparelho, nem como *sincronizado*
+    sem confirmação do servidor (`enviar_posicoes_lote` devolve os ids que existem no servidor; só esses saem da fila de
+    pendentes). Resposta sem a lista de confirmados, ponto não citado e erro do servidor deixam o ponto **pendente**.
+    Reenviar é seguro: o servidor ignora o id repetido e o confirma de novo.
+  - **Servidor antigo** (sem a migração 009): os pontos são entregues por `enviar_posicoes`, mas **continuam pendentes**
+    ("entregues sem confirmação") e só saem da fila quando o servidor atualizado os confirmar; o aviso fica visível.
+  - **Nada é descartado em silêncio**: sem limite de 5.000; pontos recusados pelo servidor ficam guardados com o motivo
+    (e contam como perda no resumo); só enviados e confirmados são apagados do aparelho, 48 h depois.
+  - **O que a tela mostra** (bloco "Detalhes do envio" na página do participante e no menu Ferramentas do responsável):
+    quantidade de pontos **pendentes** e a **idade do mais antigo**, **estado da gravação local** (segura, reserva,
+    só memória, falha), **última sincronização confirmada**, recusados, intervalos sem registro, se o armazenamento é
+    persistente e quanto do espaço está usado. Se há ponto fora do armazenamento, aparece um alerta fixo e o navegador
+    pergunta antes de fechar a página.
+  - **Registro de falhas** (guardado no aparelho, só a mudança de estado, sem repetir a cada tentativa): GPS que parou e
+    voltou, falha ao gravar (com o motivo: sem espaço ou outro), armazenamento reserva em uso, falha e retorno do envio,
+    pontos recusados, pontos sem confirmação e **intervalos sem ponto** (início, fim e duração). A trilha não liga os
+    dois lados de um intervalo: o painel a mostra **interrompida/tracejada** (limite de falha da operação).
+  - **Desempenho**: só os pendentes ficam na memória (os enviados só são contados); lotes de 200, ou de 500 quando há
+    mais de 1.000 acumulados (limite do servidor); tentativas não são gravadas a cada ponto. Medido no navegador com
+    IndexedDB real: 50.000 pontos gravados em ~7 s, enviados e confirmados em ~8 s (103 lotes), reabrir leva ~1,7 s.
+  - Testes: `node testes/trilha_local.test.js` (sem internet, recarregar, sem espaço, servidor com erro e antigo, 60.000
+    pontos) e `node testes/fila_estado.test.js` (resumo na interface). Os testes com IndexedDB real (reabrir a página,
+    migrar o banco antigo, cota, durabilidade) rodam no navegador, fora do repositório.
 - **Diagnóstico**: **Ferramentas → Diagnóstico do GPS** (responsável) e, no participante, abrindo o link com
   `&diag=1` no fim. Mostra cada leitura: hora, aceita/descartada e o **motivo**, precisão, distância,
   idade e coordenadas arredondadas. Fica **só no aparelho**.

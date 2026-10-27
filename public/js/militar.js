@@ -451,8 +451,10 @@
     document.addEventListener('pointerdown', prepararAudio, { once: true });
     window.addEventListener('hashchange', rotear);
     window.addEventListener('online', function () { if (est.op) { sincronizar(); enviarFilaFotos(); } });
+    window.addEventListener('pagehide', function () { if (est.filaMinha) est.filaMinha.persistirPendentes(); });
     window.addEventListener('beforeunload', function (ev) {
-      if (est.fotosFila.length) { ev.preventDefault(); ev.returnValue = ''; }
+      // fotos não enviadas ou pontos de GPS que ainda não estão gravados no aparelho (só na memória)
+      if (est.fotosFila.length || (est.filaMinha && est.filaMinha.qtdNaoDuraveis()) || est.bufferMinha.length) { ev.preventDefault(); ev.returnValue = ''; }
     });
 
     if (!C.configurado) {
@@ -7414,6 +7416,7 @@
     $('ferramentas').classList.toggle('alerta-gps', Boolean(texto));
     if (texto && est.avisoGpsFeito !== e) UI.aviso(texto, 'erro', 8000);
     est.avisoGpsFeito = texto ? e : null;
+    atualizarFilaMinha();
   }
 
   function chaveMinhaPosAqui() { return 'gbs-minha-pos-aqui:' + (est.op ? est.op.id : ''); }
@@ -7611,18 +7614,47 @@
         est.filaMinha = f;
         var buf = est.bufferMinha;
         est.bufferMinha = [];
-        return (buf.length ? f.adicionar(buf) : Promise.resolve()).then(function () { enviarMinhaFila(); return f; });
+        return (buf.length ? f.adicionar(buf).then(avaliarGravacaoMinha) : Promise.resolve()).then(function () { enviarMinhaFila(); return f; });
       })
       .catch(function () { est.abrindoMinha = null; return null; });
     est.abrindoMinha = { pid: pid, promessa: promessa };
     return promessa;
   }
 
+  // Ponto só é "salvo" quando o aparelho confirma a gravação; senão o usuário é avisado (no máximo 1 vez por minuto).
+  function avaliarGravacaoMinha(res) {
+    if (res && res.duraveis === false && Date.now() - (est.ultimoAvisoGravacaoMinha || 0) > 60000) {
+      est.ultimoAvisoGravacaoMinha = Date.now();
+      UI.aviso('Atenção: não foi possível gravar a sua posição neste aparelho (pode estar sem espaço). Os pontos estão só na memória: não feche esta página.', 'erro', 12000);
+    }
+    return res;
+  }
+
   function guardarMinhaPosicao(pontos) {
-    if (est.filaMinha && est.filaMinha.ids.participanteId === est.meuPart) return est.filaMinha.adicionar(pontos);
+    if (est.filaMinha && est.filaMinha.ids.participanteId === est.meuPart) return est.filaMinha.adicionar(pontos).then(avaliarGravacaoMinha);
+    // a fila ainda está abrindo: os pontos esperam aqui, sem limite (nenhum é descartado)
     Array.prototype.push.apply(est.bufferMinha, pontos);
-    if (est.bufferMinha.length > 2000) est.bufferMinha.splice(0, est.bufferMinha.length - 2000);
     return abrirMinhaTrilha();
+  }
+
+  function qtdParaEnviarMinha() {
+    return (est.filaMinha ? est.filaMinha.qtdParaEnviar() : 0) + est.bufferMinha.length;
+  }
+
+  // Detalhes da fila (pendentes, gravação no aparelho, última sincronização confirmada, falhas) no menu Ferramentas
+  function atualizarFilaMinha() {
+    if (est.filaMinha && est.gpsMeu) {
+      var ruim = est.gpsMeu === 'negado' || est.gpsMeu === 'indisponivel' || est.gpsMeu === 'sem_sinal';
+      if (est.compartilhando) est.filaMinha.transicao('gps', ruim, { motivo: est.gpsMeu });
+    }
+    if (!est.filaMinhaUI && $('fila-estado-meu') && window.FilaEstado) {
+      est.filaMinhaUI = window.FilaEstado.montar($('fila-estado-meu'), {
+        fila: function () { return est.filaMinha; },
+        extra: function () { return { pendentes: est.bufferMinha.length, naoDuraveis: est.bufferMinha.length }; },
+        ativo: function () { return Boolean(est.compartilhando); },
+      });
+    }
+    if (est.filaMinhaUI) est.filaMinhaUI.atualizar();
   }
 
   function pendentesMinha() {
@@ -7663,7 +7695,7 @@
   // Envio em lote: o ponto só é marcado como enviado quando o servidor confirma.
   async function enviarMinhaFila() {
     var fila = est.filaMinha;
-    if (est.enviandoMinha || !est.meuPart || !fila || fila.ids.participanteId !== est.meuPart || !fila.qtdPendentes()) return;
+    if (est.enviandoMinha || !est.meuPart || !fila || fila.ids.participanteId !== est.meuPart || !fila.qtdParaEnviar()) return;
     est.enviandoMinha = true;
     try {
       var r = await window.TrilhaLocal.enviarLote(fila, C.rpc, {
@@ -7679,7 +7711,9 @@
         est.enviouMinhaAlguma = true;
         C.local.gravar(chaveMinhaPosAqui(), Date.now());   // este aparelho é o que compartilha
       }
-      if (fila.qtdPendentes()) setTimeout(enviarMinhaFila, 300);
+      if (r.resp && r.resp.gps_lacuna_s > 0) fila.lacunaMs = r.resp.gps_lacuna_s * 1000;
+      fila.persistirPendentes();   // o que não conseguiu ser gravado no aparelho é tentado de novo
+      if (fila.qtdParaEnviar()) setTimeout(enviarMinhaFila, 300);
     } catch (e) {
       if (e.codigo === 'operacao_encerrada' || e.codigo === 'participante_invalido') {
         fila.limpar();
@@ -7692,6 +7726,7 @@
       }
     } finally {
       est.enviandoMinha = false;
+      atualizarFilaMinha();
     }
   }
 

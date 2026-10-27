@@ -35,7 +35,6 @@
     reinclusaoMs: 20000,         // removido: verifica a cada 20 s se foi chamado de volta
     destinoMs: 15000,            // recuperação do destino (além do tempo real)
     loteMaximo: 200,
-    filaMaxima: 5000,
   };
 
   var estado = {
@@ -49,7 +48,7 @@
     ultimoAceito: null,       // { lat, lng, t }
     trilha: null,             // fila offline dos pontos (trilha-local.js: IndexedDB)
     trilhaAbrindo: null,
-    bufferPontos: [],         // pontos capturados enquanto a fila abre
+    bufferPontos: [],         // pontos capturados enquanto a fila abre (NÃO gravados no aparelho ainda; nunca descartados)
     filaLegada: null,         // fila da versão anterior (localStorage), migrada ao abrir
     userId: null,
     grupos: [],               // grupos deste participante (nome, cor, papel)
@@ -689,7 +688,7 @@
       if (legado) { C.local.apagar(CHAVE_FILA); estado.filaLegada = null; }
       var buf = estado.bufferPontos;
       estado.bufferPontos = [];
-      return (buf.length ? f.adicionar(buf) : Promise.resolve()).then(function () {
+      return (buf.length ? f.adicionar(buf).then(avaliarGravacao) : Promise.resolve()).then(function () {
         agendarEnvio(0);
         atualizarUI();
         return f;
@@ -702,17 +701,39 @@
     return promessa;
   }
 
+  // Ponto só é "salvo" quando o aparelho confirma a gravação. Se não confirmou, o usuário é avisado
+  // (no máximo uma vez por minuto) e o ponto continua na memória, sendo regravado a cada tentativa.
+  function avaliarGravacao(res) {
+    if (res && res.duraveis === false && Date.now() - (estado.ultimoAvisoGravacao || 0) > 60000) {
+      estado.ultimoAvisoGravacao = Date.now();
+      UI.aviso('Atenção: não foi possível gravar a sua localização no aparelho (pode estar sem espaço). Os pontos estão só na memória: não feche esta página.', 'erro', 12000);
+    }
+    return res;
+  }
+
   function guardarPontos(pontos) {
     if (estado.trilha && estado.part && estado.trilha.ids.participanteId === estado.part.participante_id) {
-      return estado.trilha.adicionar(pontos);
+      return estado.trilha.adicionar(pontos).then(avaliarGravacao);
     }
+    // a fila ainda está abrindo: os pontos esperam aqui, sem limite (nenhum é descartado)
     Array.prototype.push.apply(estado.bufferPontos, pontos);
-    if (estado.bufferPontos.length > CFG.filaMaxima) estado.bufferPontos.splice(0, estado.bufferPontos.length - CFG.filaMaxima);
     return abrirTrilha();
   }
 
   function qtdPendentes() {
     return (estado.trilha ? estado.trilha.qtdPendentes() : 0) + estado.bufferPontos.length;
+  }
+
+  // o que ainda precisa ser enviado agora (com servidor antigo, o já entregue sem confirmação espera)
+  function qtdParaEnviar() {
+    return (estado.trilha ? estado.trilha.qtdParaEnviar() : 0) + estado.bufferPontos.length;
+  }
+
+  // O GPS que parou e voltou também é registrado no aparelho (só a mudança, não cada leitura)
+  function registrarGpsNaFila() {
+    if (!estado.trilha || !estado.rastreando) return;
+    var ruim = estado.gps === 'negado' || estado.gps === 'indisponivel' || estado.gps === 'sem_sinal';
+    estado.trilha.transicao('gps', ruim, { motivo: estado.gps });
   }
 
   function fecharTrilha() {
@@ -744,7 +765,7 @@
   // depois que o servidor confirma que ele está gravado (enviar_posicoes_lote).
   async function enviarFila() {
     var fila = estado.trilha;
-    if (estado.enviando || !estado.part || estado.finalizado || !fila || !fila.qtdPendentes()) return;
+    if (estado.enviando || !estado.part || estado.finalizado || !fila || !fila.qtdParaEnviar()) return;
     estado.enviando = true;
     try {
       var r = await window.TrilhaLocal.enviarLote(fila, C.rpc, {
@@ -754,9 +775,11 @@
       });
       if (r.recusados) estado.filtro.registrar(null, false, 'servidor_recusou');
       if (r.resp && r.resp.gps_intervalo_s) aplicarIntervaloGps(r.resp.gps_intervalo_s);
+      if (r.resp && r.resp.gps_lacuna_s > 0) fila.lacunaMs = r.resp.gps_lacuna_s * 1000;
       if (r.ultimoT != null && (!estado.ultimoEnviadoT || r.ultimoT > estado.ultimoEnviadoT)) estado.ultimoEnviadoT = r.ultimoT;
       marcarSucesso();
-      if (fila.qtdPendentes()) agendarEnvio(300);
+      fila.persistirPendentes();   // o que não conseguiu ser gravado no aparelho é tentado de novo
+      if (fila.qtdParaEnviar()) agendarEnvio(300);
     } catch (e) {
       if (!tratarErroFatal(e)) {
         if (e.codigo === 'lote_invalido') {
@@ -769,7 +792,7 @@
       }
     } finally {
       estado.enviando = false;
-      if (qtdPendentes() && !estado.envioAgendadoPara && !estado.finalizado) agendarEnvio(CFG.envioPeMs);
+      if (qtdParaEnviar() && !estado.envioAgendadoPara && !estado.finalizado) agendarEnvio(CFG.envioPeMs);
       atualizarUI();
     }
   }
@@ -793,7 +816,7 @@
       estado.saidaSolicitadaEm = r.saida_solicitada_em || null;
       if (r.gps_intervalo_s) aplicarIntervaloGps(r.gps_intervalo_s);
       marcarSucesso();
-      if (qtdPendentes()) agendarEnvio(0);
+      if (qtdParaEnviar()) agendarEnvio(0);
       await buscarMensagens();
       await reenviarConfirmacoes();
       await reenviarMensagens();
@@ -1143,16 +1166,38 @@
     var pastilha = el && el.querySelector('.mk-eu');
     if (pastilha) pastilha.style.background = cor;
     if (estado.linhaMinha) estado.linhaMinha.setStyle({ color: cor });
+    if (estado.linhaFalhaMinha) estado.linhaFalhaMinha.setStyle({ color: cor });
   }
 
+  // A linha da trilha é desenhada em segmentos: se o GPS ficou sem registrar por mais que o limite de falha, os dois
+  // lados NÃO são ligados como se o percurso tivesse sido contínuo; o trecho sem registro aparece tracejado.
   function atualizarMinhaTrilha(pontos) {
     if (!estado.mapa || !pontos || !pontos.length) return;
-    estado.trilhaMinha = (estado.trilhaMinha || []).concat(pontos.map(function (p) { return [p.lat, p.lng]; }));
-    if (estado.trilhaMinha.length > MAX_TRILHA_TELA) estado.trilhaMinha = estado.trilhaMinha.slice(-MAX_TRILHA_TELA);
+    var lacunaMs = (estado.trilha && estado.trilha.lacunaMs) || 60000;
+    var segs = estado.trilhaMinha = estado.trilhaMinha || [];
+    var falhas = estado.falhasMinha = estado.falhasMinha || [];
+    pontos.forEach(function (p) {
+      var seg = segs[segs.length - 1];
+      if (seg && estado.ultimoTMinha != null && p.t - estado.ultimoTMinha > lacunaMs) {
+        falhas.push([seg[seg.length - 1], [p.lat, p.lng]]);
+        seg = null;
+      }
+      if (!seg) { seg = []; segs.push(seg); }
+      seg.push([p.lat, p.lng]);
+      estado.ultimoTMinha = p.t;
+    });
+    var total = segs.reduce(function (n, s) { return n + s.length; }, 0);
+    while (total > MAX_TRILHA_TELA && segs.length) {   // só limita o que é desenhado na tela (os pontos continuam na fila)
+      var sobra = total - MAX_TRILHA_TELA;
+      if (segs[0].length <= sobra) { total -= segs[0].length; segs.shift(); falhas.shift(); }
+      else { segs[0] = segs[0].slice(sobra); total = MAX_TRILHA_TELA; }
+    }
     if (!estado.linhaMinha) {
-      estado.linhaMinha = L.polyline(estado.trilhaMinha, { color: corMinha(), weight: 4, opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
+      estado.linhaMinha = L.polyline(segs, { color: corMinha(), weight: 4, opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
+      estado.linhaFalhaMinha = L.polyline(falhas, { color: corMinha(), weight: 2, opacity: 0.55, dashArray: '4 8', interactive: false }).addTo(estado.mapa);
     } else {
-      estado.linhaMinha.setLatLngs(estado.trilhaMinha);
+      estado.linhaMinha.setLatLngs(segs);
+      estado.linhaFalhaMinha.setLatLngs(falhas);
     }
   }
 
@@ -2356,6 +2401,7 @@
     atualizarUI();
   });
   window.addEventListener('offline', function () { atualizarUI(); });
+  window.addEventListener('pagehide', function () { if (estado.trilha) estado.trilha.persistirPendentes(); });
   window.addEventListener('beforeunload', function (ev) {
     if (estado.rastreando && !window.GBS_RECARREGANDO) {
       ev.preventDefault();
@@ -2534,6 +2580,15 @@
     var quem = [estado.part.nome, estado.part.operacao].concat(grupos).join(' · ');
     if ($('st-nome').textContent !== quem) $('st-nome').textContent = quem;
 
+    registrarGpsNaFila();
+    if (!estado.filaUI && $('fila-estado') && window.FilaEstado) {
+      estado.filaUI = window.FilaEstado.montar($('fila-estado'), {
+        fila: function () { return estado.trilha; },
+        extra: function () { return { pendentes: estado.bufferPontos.length, naoDuraveis: estado.bufferPontos.length }; },
+        ativo: function () { return Boolean(estado.part && !estado.finalizado); },
+      });
+    }
+    if (estado.filaUI) estado.filaUI.atualizar();
     var net = estadoInternet();
     var pend = qtdPendentes();
     var cod, titulo, sub;

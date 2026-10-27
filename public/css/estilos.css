@@ -1922,3 +1922,21 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 .aviso-fechar:hover, .aviso-fechar:focus-visible { opacity: 1; background: rgba(255, 255, 255, .08); outline: none; }
 @media (pointer: coarse) { .aviso-fechar { width: 44px; height: 44px; margin: -12px -12px -12px 0; } }
 .nav-modos[hidden] { display: none; }
+
+/* Estado da fila offline de pontos (js/fila-estado.js): pendentes, gravação no aparelho, última sincronização confirmada, falhas */
+.fila-estado { margin: 8px 0; font-size: .82rem; }
+.fila-estado[hidden] { display: none; }
+.fila-alerta { margin: 0 0 6px; padding: 8px 10px; border-radius: 8px; background: rgba(239, 68, 68, .16); border: 1px solid rgba(239, 68, 68, .6); color: var(--texto); font-weight: 600; }
+.fila-detalhes { border: 1px solid var(--borda); border-radius: 8px; background: var(--superficie-2); padding: 6px 10px; }
+.fila-detalhes summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.fila-ponto { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; flex: none; }
+.fila-estado[data-nivel="atencao"] .fila-ponto { background: #f59e0b; }
+.fila-estado[data-nivel="erro"] .fila-ponto { background: #ef4444; }
+.fila-linhas { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0 4px; }
+.fila-linhas dt { color: var(--texto-2); }
+.fila-linhas dd { margin: 0; }
+.fila-linhas dd.fila-atencao { color: #f59e0b; }
+.fila-linhas dd.fila-erro { color: #ef4444; font-weight: 700; }
+.fila-sub { margin: 8px 0 2px; color: var(--texto-2); }
+.fila-eventos { margin: 0; padding-left: 18px; max-height: 160px; overflow: auto; }
+

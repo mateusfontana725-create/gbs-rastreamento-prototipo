@@ -75,15 +75,16 @@
     resRegistros.forEach(function (x) {
       if (!x.conta) return;
       var antes = q[x.setorId];
+      // Z = probabilidade que sobra depois desta busca negativa. Z = 0 significa que "não achar" era impossível
+      // (POD 100% onde estava toda a probabilidade): não há posterior; o registro não é aplicado e fica o aviso.
+      var z = qFora - antes + antes * (1 - x.pod);
+      Object.keys(q).forEach(function (id) { z += q[id]; });
+      if (!(z > 1e-12)) { x.conta = false; x.motivo = 'inconsistente'; return; }
       x.poaAntes = antes;
       x.pos = antes * x.pod;                       // chance de achar nesta busca (dado que ainda não foi achada)
       q[x.setorId] = antes * (1 - x.pod);
-      var z = qFora;
-      Object.keys(q).forEach(function (id) { z += q[id]; });
-      if (z > 0) {
-        Object.keys(q).forEach(function (id) { q[id] /= z; });
-        qFora /= z;
-      }
+      Object.keys(q).forEach(function (id) { q[id] /= z; });
+      qFora /= z;
       x.poaDepois = q[x.setorId];
       (podsDoSetor[x.setorId] = podsDoSetor[x.setorId] || []).push(x.pod);
     });

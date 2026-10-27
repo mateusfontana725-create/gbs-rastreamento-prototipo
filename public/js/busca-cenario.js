@@ -25,6 +25,7 @@
     outra_vitima: 'vale para outra vítima',
     setor_fora_do_cenario: 'setor fora deste cenário',
     anterior_a_versao: 'lançado antes da versão aprovada',
+    inconsistente: 'inconsistente com o cenário (POD 100% onde estava toda a probabilidade): revise o POD ou o cenário',
   };
 
   /* ---------- Formatação e dados ---------------------------------------- */
@@ -213,6 +214,7 @@
         secAp.appendChild(el('h3', { texto: textoAprovacao(ap) }));
         secAp.appendChild(el('p', { classe: 'cenario-just' }, [el('strong', { texto: 'Justificativa: ' }), ap.justificativa]));
         secAp.appendChild(tabelaCenario(ap, res));
+        if (res.registros.some(function (x) { return x.motivo === 'inconsistente'; })) secAp.appendChild(aviso('Atenção: há registro de busca inconsistente com o cenário (a busca negativa seria impossível). Ele não foi aplicado; revise o POD informado ou o cenário.'));
         secAp.appendChild(el('p', { classe: 'ajuda', texto: 'POS total desde esta versão: ' + pct(res.posTotal) + '. O POA atual é o POA aprovado atualizado pelas buscas lançadas depois da aprovação (regra de Bayes); a probabilidade migra para o que ainda não foi visto.' }));
       } else {
         secAp.appendChild(el('h3', { texto: 'Nenhuma versão aprovada' }));
@@ -279,6 +281,7 @@
         el('p', { texto: 'POD acumulado do setor = 1 − (1 − POD₁) × (1 − POD₂) × …, usando só os registros não anulados, lançados depois da aprovação e válidos para a vítima. Supõe buscas independentes: repetir o mesmo método no mesmo lugar tende a render menos, então é uma estimativa generosa.' }),
         el('p', { texto: 'POS do setor = POA × POD acumulado. POS total = soma dos POS.' }),
         el('p', { texto: 'POA atual = POA × (1 − POD acumulado), dividido pelo total que sobra (Bayes). A probabilidade migra para os setores menos vistos e para "fora dos setores".' }),
+        el('p', { texto: 'POS é a probabilidade de a busca localizar a pessoa. Não é probabilidade de sobrevivência, de resgate com vida nem de conclusão segura da operação.' }),
         el('p', { classe: 'muted', texto: 'O GPS não entra: a trilha mostra por onde a equipe passou, não o que ela observou. Referência: Koopman, Search and Screening (1980); manual IAMSAR, vol. II.' }),
       ]));
       corpo.appendChild(rodape([]));

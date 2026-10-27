@@ -53,7 +53,7 @@ console.log('Várias buscas: nunca passa de 100% e não importa a ordem');
   const invertido = P.calcular({ cenario: cenario(setores), registros: [reg('r3', 'B', 0.9, 1), reg('r2', 'A', 0.5, 2), reg('r1', 'A', 0.5, 3)], vitimaId: 'v' });
   chk(perto(set(invertido, 'A').poaAtual, set(r, 'A').poaAtual) && perto(invertido.posTotal, r.posTotal), 'a ordem das buscas não muda o resultado final');
   const todas = P.calcular({ cenario: cenario(setores), registros: [reg('r1', 'A', 1, 1), reg('r2', 'B', 1, 2)], vitimaId: 'v' });
-  chk(perto(todas.posTotal, 1) && perto(todas.poaForaAtual, 0), 'POD 100% em tudo: POS 100%, nada sobra', todas);
+  chk(todas.registros[0].conta && todas.registros[1].motivo === 'inconsistente' && perto(set(todas, 'B').poaAtual, 1), 'POD 100% nos dois setores sem achar: a segunda busca negativa é impossível, fica marcada inconsistente', todas);
 }
 
 console.log('Quais registros contam');
@@ -99,6 +99,25 @@ console.log('Sugestões');
   const s = P.sugerirProximaVersao(r);
   chk(perto(s.A, 0.285) && perto(s.B, 0.428) && P.somaPoa(Object.values(s)) <= 1, 'sugestão da próxima versão = POA atual (Bayes), em 0,1%', s);
   chk(Object.keys(P.sugerirProximaVersao(null)).length === 0, 'sem resultado não há sugestão');
+}
+
+console.log('Exemplo do guia (cap. 13): A 45%, B 25%, C 20%, externo 10%');
+{
+  const setores = [{ setorId: 'A', nome: 'A', poa: 0.45 }, { setorId: 'B', nome: 'B', poa: 0.25 }, { setorId: 'C', nome: 'C', poa: 0.20 }];
+  const m1 = reg('M1', 'A', 0.6, 5), m2 = reg('M2', 'B', 0.5, 10);
+  const r1 = P.calcular({ cenario: cenario(setores), registros: [m1], vitimaId: 'v' });
+  chk(perto(r1.registros[0].pos, 0.27), 'POS de M1 = 0,45 × 0,60 = 27%');
+  chk(perto(set(r1, 'A').poaAtual, 0.18 / 0.73) && perto(set(r1, 'B').poaAtual, 0.25 / 0.73) && perto(set(r1, 'C').poaAtual, 0.20 / 0.73) && perto(r1.poaForaAtual, 0.10 / 0.73), 'depois de M1: A 24,66%, B 34,25%, C 27,40%, externo 13,70%', r1);
+  const r2 = P.calcular({ cenario: cenario(setores), registros: [m1, m2], vitimaId: 'v' });
+  chk(perto(r2.registros[1].pos, (0.25 / 0.73) * 0.5), 'POS de M2 dado M1 negativa = (0,25 ÷ 0,73) × 0,50 ≈ 17,12%', r2.registros[1].pos);
+  chk(perto(set(r2, 'A').poaAtual, 0.18 / 0.605) && perto(set(r2, 'B').poaAtual, 0.125 / 0.605) && perto(set(r2, 'C').poaAtual, 0.20 / 0.605) && perto(r2.poaForaAtual, 0.10 / 0.605), 'depois de M1 e M2: A 29,75%, B 20,66%, C 33,06%, externo 16,53%', r2);
+  chk(perto(r2.posTotal, 0.395), 'probabilidade cumulativa de detecção na base inicial = 39,5% (não 27% + 17,12%)', r2.posTotal);
+}
+
+console.log('Denominador zero: inconsistência explícita, sem inventar posterior');
+{
+  const r = P.calcular({ cenario: cenario([{ setorId: 'A', nome: 'A', poa: 1 }]), registros: [reg('r', 'A', 1, 5)], vitimaId: 'v' });
+  chk(r.registros[0].conta === false && r.registros[0].motivo === 'inconsistente' && perto(set(r, 'A').poaAtual, 1) && set(r, 'A').pod === null, 'POD 100% onde estava 100%: registro marcado inconsistente, cenário anterior mantido', r);
 }
 
 console.log('\nPOA, POD e POS: ' + ok + ' OK, ' + falha + ' falha(s)');

@@ -1962,3 +1962,6 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
   .campo-largo { grid-column: auto; }
   .form-rodape .btn { flex: 1 1 0; }
 }
+.titulo-com-dica { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.titulo-com-dica .dica-caixa { display: inline-flex; }
+.titulo-com-dica .dica-texto { font-size: .82rem; }

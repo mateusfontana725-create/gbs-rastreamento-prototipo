@@ -8719,11 +8719,12 @@
         UI.el('span', null, [UI.el('strong', { texto: '★ Responsável' }), UI.el('small', { texto: 'leva a equipe e finaliza a busca no celular' })])]),
     ]);
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'add-grupo-salvar', texto: 'Adicionar' });
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Adicionar ' + nomeExibido(p) + ' a um grupo' }),
-      UI.el('div', { classe: 'grupo grupo-largo' }, [UI.el('span', { classe: 'rotulo', texto: 'Grupo' }), lista]),
-      UI.el('div', { classe: 'grupo grupo-largo' }, [UI.el('span', { classe: 'rotulo', texto: 'Papel' }), papel]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Adicionar a grupo' }, [UI.dica('Responsável leva a equipe e finaliza a busca no celular.')]),
+      UI.el('p', { classe: 'ajuda', texto: nomeExibido(p) }),
+      UI.campo('Grupo', lista, { largo: true }),
+      UI.campo('Papel', papel, { largo: true }),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -8967,11 +8968,10 @@
         .catch(function () { /* cancelado */ });
     } }));
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' Link do grupo ' + g.nome]),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+        UI.dica('Quem abrir este link entra na operação e no grupo, como membro' + (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como civil.') + ' O link não dá acesso ao painel.')]),
       UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
       qr,
-      UI.el('p', { classe: 'nota', texto: 'Quem abrir este link entra na operação E no grupo ' + g.nome + ', como membro' +
-        (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como CIVIL.') + ' O link não dá acesso a este painel.' }),
       UI.el('div', { classe: 'modal-acoes' }, [
         UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Gerar novo link', onclick: async function () {
           fechar();

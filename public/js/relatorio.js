@@ -243,15 +243,17 @@
     escolha.addEventListener('change', function () { texto.placeholder = dicas[escolha.value] || dicas.observacao; });
     var erro = UI.el('p', { classe: 'erro-form', hidden: true });
     var salvar = UI.el('button', { classe: 'btn btn-primario', type: 'submit', texto: e ? 'Salvar edição' : 'Adicionar ao diário' });
-    var form = UI.el('form', { classe: 'form-observacao', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: e ? (TIPOS_IPO[e.tipo] ? 'Editar registro' : 'Editar observação') : 'Novo registro no diário' }),
-      e ? UI.el('p', { classe: 'muted', texto: 'Escrito por ' + e.autor_nome + '. A versão atual fica guardada no histórico.' }) : null,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-tipo', texto: 'Tipo do registro' }), escolha]),
-      grupoProc,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-quando', texto: 'Data e hora do fato' }), quando]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-texto', texto: 'Texto' }), texto]),
+    var form = UI.el('form', { classe: 'form-observacao form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: e ? (TIPOS_IPO[e.tipo] ? 'Editar registro' : 'Editar observação') : 'Novo registro' },
+        e ? [UI.dica('Escrito por ' + e.autor_nome + '. A versão anterior fica no histórico.')] : []),
+      UI.grade([
+        UI.campo('Tipo', escolha, { para: 'obs-tipo', largo: !grupoProc }),
+        grupoProc,
+        UI.campo('Data e hora', quando, { para: 'obs-quando' }),
+      ]),
+      UI.campo('Texto', texto, { para: 'obs-texto', largo: true }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirDiario(op); } }),
         salvar,
       ]),

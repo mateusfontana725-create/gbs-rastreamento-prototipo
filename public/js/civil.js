@@ -1881,10 +1881,9 @@
     var comFoto = UI.el('label', { classe: 'btn btn-escuro btn-gigante' }, [UI.el('span', { 'aria-hidden': 'true', texto: '📷 ' }), 'ENVIAR E TIRAR FOTO', inFoto]);
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: o[1] }),
-      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Se quiser, explique em poucas palavras:' }),
-      area,
+      UI.campo('Explique (opcional)', area, { para: 'encontrei-texto', dica: 'Sua localização vai junto com o aviso.' }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar, comFoto]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
     ]), { fecharNoFundo: false });
     var enviado = false;
     async function enviar() {
@@ -1914,7 +1913,7 @@
     if (!estado.part || estado.finalizado) return;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'encontrei' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Encontrei a vítima' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Como a vítima está? Só os bombeiros responsáveis vão ver esta informação.' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Só os bombeiros responsáveis veem.' }),
       UI.el('div', { classe: 'encontrei-opcoes' }, [
         UI.el('button', { classe: 'opcao-encontrei opcao-condicao', type: 'button', id: 'vitima-viva', onclick: function () { fechar(); confirmarVitima('viva', 'Viva'); } }, [
           UI.el('strong', { texto: 'Viva' }),
@@ -1932,7 +1931,7 @@
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Confirmar envio?' }),
       UI.el('p', { classe: 'confirma-condicao', texto: 'Vítima: ' + rotulo }),
-      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Depois de enviado, este celular mostra apenas "' + TEXTO_VITIMA + '".' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Depois, este celular mostra só "' + TEXTO_VITIMA + '".' }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar]),
       UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
     ]), { fecharNoFundo: false });

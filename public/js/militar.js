@@ -4834,8 +4834,7 @@
     inCam.addEventListener('change', function (ev) { aoEscolherFotoPainel(ev, true, aoEnviar); });
     inArq.addEventListener('change', function (ev) { aoEscolherFotoPainel(ev, false, aoEnviar); });
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Registrar foto' }),
-      UI.el('p', { classe: 'ajuda', texto: 'A foto fica vinculada a você e a esta operação, com o local do GPS no momento do registro (ou o gravado na própria foto). Sem localização, ela é salva mas não aparece no mapa.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Registrar foto', UI.dica('A foto fica vinculada a você e a esta operação. O local é o do GPS no momento ou o gravado na foto. Sem local, ela é salva mas não aparece no mapa.')]),
       UI.el('div', { classe: 'fotos-botoes' }, [
         UI.el('label', { classe: 'btn btn-escuro btn-foto' }, [UI.el('span', { classe: 'ico-camera', 'aria-hidden': 'true' }), ' TIRAR FOTO', inCam]),
         UI.el('label', { classe: 'btn btn-foto' }, ['Escolher arquivo', inArq]),

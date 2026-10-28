@@ -226,17 +226,17 @@
           UI.el('input', { type: 'radio', name: 'foto-origem', value: o[0], checked: i === 0 ? true : null }), ' ' + o[1],
         ]);
       }));
-      infoLocal.appendChild(UI.el('p', { classe: 'ajuda', texto: 'Onde esta foto foi tirada?' }));
+      infoLocal.appendChild(UI.el('p', { classe: 'ajuda', texto: 'Local da foto:' }));
       infoLocal.appendChild(escolhas);
     }
 
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'previa-foto' }, [
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'previa-foto form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: simples ? 'A foto ficou boa?' : 'Conferir a foto' }),
       UI.el('img', { src: url, alt: 'Prévia da foto', classe: 'previa-img' }),
       simples ? null : UI.el('p', { classe: 'ajuda', texto: (f.capturada ? (f.capturaExata ? 'Capturada em ' : 'Data do arquivo: ') + C.hora(f.capturada) : 'Data de captura desconhecida') + ' · ' + Math.round(f.blob.size / 1024) + ' KB' }),
       infoLocal,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'foto-legenda', texto: simples ? 'O que é? (se quiser)' : 'Descrição (opcional)' }), legenda]),
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.campo(simples ? 'O que é?' : 'Descrição', legenda, { para: 'foto-legenda', ajuda: simples ? 'Opcional' : null }),
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         btnSalvar,
       ]),

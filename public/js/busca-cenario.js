@@ -77,7 +77,7 @@
     var opId = op.id;
     try {
       var r = await Promise.all([
-        C.consultar(C.cliente.from('vitimas').select('id,nome').eq('operacao_id', opId).order('criado_em', { ascending: true })),
+        C.consultar(C.cliente.from('vitimas').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true })),
         C.consultar(C.cliente.from('busca_cenarios').select('*').eq('operacao_id', opId).order('numero', { ascending: true })),
         C.consultar(C.cliente.from('busca_cenario_setores').select('*').eq('operacao_id', opId)),
         C.consultar(C.cliente.from('busca_registros').select('*').eq('operacao_id', opId).order('registrado_em', { ascending: true })),
@@ -220,6 +220,44 @@
     linhas.push(celulas([el('em', { texto: 'Fora da área' }), pct(c.poa_fora != null ? Number(c.poa_fora) : Math.max(0, 1 - soma)),
       '—', c.poa_fora_origem === 'ia' ? 'sugerido por IA, revisado por ' + (c.aprovada_por_nome || '—') : (ORIGEM_VALOR[c.poa_fora_origem] || 'manual'), '']));
     return tabela(['Setor', 'POA', 'Área', 'Origem', 'Justificativa'], linhas);
+  }
+
+  /* ---------- IA opcional (sugestões; o responsável decide) -------------- */
+  // Chama /api/poa-ia (a chave da IA fica só no servidor). Devolve { ok, dados } ou { ok: false, mensagem }.
+  async function pedirIa(modo, contexto) {
+    var sessao = null;
+    try { sessao = (await C.cliente.auth.getSession()).data.session; } catch (e) { /* sem sessão */ }
+    if (!sessao) return { ok: false, mensagem: 'Entre de novo na sua conta para usar a IA.' };
+    try {
+      var r = await fetch('/api/poa-ia', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessao.access_token },
+        body: JSON.stringify({ modo: modo, operacao_id: P.op().id, contexto: contexto }) });
+      var corpo = await r.json().catch(function () { return {}; });
+      if (!r.ok) return { ok: false, mensagem: corpo.mensagem || 'A IA não respondeu agora. Preencha manualmente.' };
+      return { ok: true, dados: corpo };
+    } catch (e) { return { ok: false, mensagem: 'Sem conexão com a IA agora. Preencha manualmente.' }; }
+  }
+  function centroDoSetor(s) {
+    if (s.forma === 'circulo') return [s.centro_lat, s.centro_lng];
+    var pts = s.pontos || [];
+    if (!pts.length) return null;
+    return [pts.reduce(function (a, p) { return a + p[0]; }, 0) / pts.length, pts.reduce(function (a, p) { return a + p[1]; }, 0) / pts.length];
+  }
+  function setorParaIa(s) {
+    return { id: s.id, nome: s.nome, area_km2: Math.round(P.areaSetorM2(s) / 1e4) / 100, centro: centroDoSetor(s), observacoes: s.observacoes || '' };
+  }
+  // Contexto do POA: descrição da operação, ficha da vítima (sem nome/CPF/telefone), último ponto conhecido, observações, relatos e evidências
+  function contextoPoaIa(vitimaId, setores, extra) {
+    var op = P.op() || {}, v = est.vitimas.find(function (x) { return x.id === vitimaId; }) || {};
+    var pontos = (P.pontosInteresse ? P.pontosInteresse() : []) || [];
+    var ult = extra.pontoId ? pontos.find(function (p) { return p.id === extra.pontoId; }) : pontos.find(function (p) { return p.categoria === 'ULTIMA_LOCALIZACAO'; });
+    return {
+      operacao: { tipo: op.tipo || '', descricao: op.descricao || '', local: op.local_endereco || '', acionado_em: op.acionado_em || '' },
+      vitima: { idade: v.idade == null ? null : Number(v.idade), sexo: v.sexo || '', perfil: Array.isArray(v.perfil) ? v.perfil : [], caracteristicas: v.caracteristicas || '', roupas: v.roupas || '', observacoes: v.observacoes || '' },
+      ultimo_local: ult ? { titulo: ult.titulo, descricao: ult.descricao || '', lat: ult.lat, lng: ult.lng } : null,
+      observacoes: setores.map(function (s) { return s.observacoes ? s.nome + ': ' + s.observacoes : ''; }).filter(Boolean),
+      relatos: P.relatos ? P.relatos() : [], evidencias: extra.evidencias || [], hipoteses: extra.hipoteses || '', limitacoes: extra.limitacoes || '', horario_referencia: extra.horario || '',
+      setores: setores.map(setorParaIa),
+    };
   }
 
   /* ---------- Peças: dica (i) ------------------------------------------- */
@@ -381,7 +419,8 @@
       var poa = el('input', { classe: 'campo campo-poa', type: 'number', min: '0', max: '100', step: '0.1', inputmode: 'decimal', 'aria-label': 'POA do setor ' + s.nome + ' (%)',
         value: i ? String(Math.round(Number(i.poa) * 1000) / 10) : '' });
       var just = el('input', { classe: 'campo', maxlength: '500', placeholder: 'Justificativa', 'aria-label': 'Justificativa do setor ' + s.nome, value: i ? i.justificativa : '' });
-      return { s: s, poa: poa, just: just };
+      var tag = el('span', { classe: 'poa-ia-marca', hidden: true });
+      return { s: s, poa: poa, just: just, tag: tag, ia: false };
     });
     var somaInicial = origem ? origem.setores.reduce(function (a, i) { return a + (i.setor_id ? Number(i.poa) : 0); }, 0) : null;
     // "Fora da área" guardado na versão (038). Versão publicada antes disso: é o que sobra. Rascunho sem o valor: fica vazio, para você confirmar.
@@ -460,21 +499,69 @@
     [geral, hip, lim, hr, conf, origemPoa, selPonto].concat(campos.map(function (c) { return c.just; })).forEach(function (x) { x.addEventListener('input', marcarSujo); });
     campos.concat([{ poa: fora }]).forEach(function (c) { c.poa.addEventListener('input', function () { marcarSujo(); atualizarTotal(); }); });
 
+    var campoFora = { poa: fora, just: null, tag: el('span', { classe: 'poa-ia-marca', hidden: true }), ia: false };
+    // Marcação "sugerido por IA": valor e justificativa com borda tracejada, rótulo embaixo. Editar o valor devolve-o ao modo manual.
+    function marcarIa(c, justificativa, insuficiente) {
+      c.ia = !insuficiente;
+      c.poa.classList.toggle('poa-sugerido', !insuficiente);
+      if (c.just) c.just.classList.toggle('poa-sugerido', !insuficiente && Boolean(justificativa));
+      c.tag.hidden = false;
+      c.tag.textContent = insuficiente ? 'informação insuficiente' : 'sugerido por IA' + (justificativa && !c.just ? ': ' + justificativa : '');
+      c.tag.classList.toggle('poa-ia-insuficiente', Boolean(insuficiente));
+    }
+    function limparIa(c) { c.ia = false; c.poa.classList.remove('poa-sugerido'); if (c.just) c.just.classList.remove('poa-sugerido'); c.tag.hidden = true; }
+    campos.forEach(function (c) {
+      var i = inicial[c.s.id];
+      if (i && i.origem === 'ia') marcarIa(c, i.justificativa, false);
+      c.poa.addEventListener('input', function () { limparIa(c); });
+      c.just.addEventListener('input', function () { c.just.classList.remove('poa-sugerido'); });
+    });
+    if (origem && origem.poa_fora_origem === 'ia') marcarIa(campoFora, '', false);
+    fora.addEventListener('input', function () { limparIa(campoFora); });
+    var modeloIa = origem && origem.ia_modelo || null;
     var linhas = campos.map(function (c) {
-      return el('div', { classe: 'poa-linha' }, [el('span', { classe: 'poa-nome', texto: c.s.nome }), el('div', { classe: 'poa-campo' }, [c.poa, el('span', { classe: 'poa-pct', texto: '%' })]), c.just]);
+      return el('div', { classe: 'poa-linha' }, [el('span', { classe: 'poa-nome', texto: c.s.nome }), el('div', { classe: 'poa-campo' }, [c.poa, el('span', { classe: 'poa-pct', texto: '%' })]), c.just, el('div', { classe: 'poa-linha-ia' }, [c.tag])]);
     });
     linhas.push(el('div', { classe: 'poa-linha poa-linha-fora' }, [
       el('span', { classe: 'poa-nome' }, ['Fora da área', dica('Probabilidade de a pessoa estar fora de todos os setores desenhados. Entra na soma de 100%.')]),
       el('div', { classe: 'poa-campo' }, [fora, el('span', { classe: 'poa-pct', texto: '%' })]),
+      el('div', { classe: 'poa-linha-ia' }, [campoFora.tag]),
     ]));
 
+    var msgIa = el('p', { classe: 'poa-ia-msg', role: 'status', hidden: true });
+    var btnIa = el('button', { classe: 'btn btn-pequeno btn-ia', type: 'button', id: 'cenario-ia', texto: 'Sugerir com IA',
+      title: 'A IA só sugere, com uma frase de justificativa. Nada é publicado: você revisa, ajusta e publica.',
+      onclick: async function () {
+        btnIa.disabled = true; msgIa.hidden = false; msgIa.textContent = 'A IA está analisando…'; msgIa.classList.remove('poa-ia-erro');
+        var ev = evCampos.filter(function (x) { return x.marcar.checked && (x.e.livre ? x.texto.value.trim() : true); }).map(function (x) { return { descricao: x.e.livre ? x.texto.value.trim() : x.e.texto, confirmada: x.conf.checked }; });
+        var r = await pedirIa('poa', contextoPoaIa(vitimaId, setores, { pontoId: selPonto.value || null, evidencias: ev, hipoteses: hip.value.trim(), limitacoes: lim.value.trim(), horario: hr.value ? new Date(hr.value).toISOString() : '' }));
+        btnIa.disabled = false;
+        if (!r.ok) { msgIa.textContent = r.mensagem; msgIa.classList.add('poa-ia-erro'); return; }
+        var puladas = 0, aplicadas = 0, insuf = 0;
+        r.dados.setores.forEach(function (sg) {
+          var c = campos.find(function (x) { return x.s.id === sg.setor_id; });
+          if (!c) return;
+          var manual = c.poa.value.trim() !== '' && !c.ia;   // o que você digitou não é sobrescrito
+          if (manual) { puladas++; return; }
+          if (sg.insuficiente || sg.poa == null) { c.poa.value = ''; c.just.value = ''; marcarIa(c, '', true); insuf++; return; }
+          c.poa.value = String(Math.round(sg.poa * 1000) / 10); c.just.value = sg.justificativa; marcarIa(c, sg.justificativa, false); aplicadas++;
+        });
+        var f = r.dados.fora;
+        if (f && !(fora.value.trim() !== '' && !campoFora.ia)) {
+          if (f.insuficiente || f.poa == null) { fora.value = ''; marcarIa(campoFora, '', true); } else { fora.value = String(Math.round(f.poa * 1000) / 10); marcarIa(campoFora, f.justificativa, false); aplicadas++; }
+        }
+        if (aplicadas) modeloIa = r.dados.modelo || null;
+        marcarSujo(); atualizarTotal();
+        msgIa.textContent = 'Sugestão da IA aplicada: revise, ajuste e publique.' + (insuf ? ' ' + insuf + ' setor(es) sem dados suficientes.' : '') + (puladas ? ' ' + puladas + ' setor(es) já preenchido(s) foram mantidos.' : '') + (r.dados.aviso ? ' ' + r.dados.aviso : '');
+      } });
     var atalhos = [
+      btnIa,
       el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-distribuir', texto: 'Dividir pela área',
         title: 'Distribuição uniforme proporcional à área. É só um ponto de partida: ajuste e justifique.',
         onclick: function () {
           var d = M.distribuirPelaArea(setores.map(function (s) { return { id: s.id, areaM2: P.areaSetorM2(s) }; }));
-          campos.forEach(function (c) { c.poa.value = String(Math.round(d[c.s.id] * 1000) / 10); });
-          fora.value = '0'; marcarSujo(); atualizarTotal();
+          campos.forEach(function (c) { c.poa.value = String(Math.round(d[c.s.id] * 1000) / 10); limparIa(c); });
+          fora.value = '0'; limparIa(campoFora); marcarSujo(); atualizarTotal();
         } }),
     ];
     function montarDados() {
@@ -488,9 +575,10 @@
         horario_referencia: hrMs != null && !isNaN(hrMs) ? new Date(hrMs).toISOString() : null,
         ponto_confiavel_id: selPonto.value || null,
         atualizado_em: rasc ? rasc.atualizado_em : null,
-        poa_fora: decimos(fora) / 1000,
+        poa_fora: decimos(fora) / 1000, poa_fora_origem: campoFora.ia ? 'ia' : 'manual',
+        ia_modelo: (campoFora.ia || campos.some(function (c) { return c.ia; })) ? modeloIa : null,
         setores: campos.filter(function (c) { return decimos(c.poa) > 0 || c.just.value.trim(); }).map(function (c) {
-          return { setor_id: c.s.id, poa: decimos(c.poa) / 1000, justificativa: c.just.value.trim() };
+          return { setor_id: c.s.id, poa: decimos(c.poa) / 1000, justificativa: c.just.value.trim(), origem: c.ia ? 'ia' : 'manual' };
         }),
         evidencias: evCampos.filter(function (x) { return x.marcar.checked && (x.e.livre ? x.texto.value.trim() : true); }).map(function (x) {
           return x.e.livre ? { descricao: x.texto.value.trim(), confirmada: x.conf.checked } : { ponto_id: x.e.pontoId, descricao: x.e.texto, confirmada: x.conf.checked };
@@ -509,9 +597,11 @@
         if (dados.justificativa.length < 10) { erro.textContent = 'Escreva a justificativa da versão (mín. 10 caracteres).'; erro.hidden = false; geral.focus(); return; }
         if (!dados.setores.some(function (s) { return s.poa > 0; })) { erro.textContent = 'Ao menos um setor precisa ter POA maior que zero.'; erro.hidden = false; return; }
         if (!sobrep.hidden) { erro.textContent = 'Há setores sobrepostos: zere o POA de um deles.'; erro.hidden = false; return; }
+        var temIa = campoFora.ia || campos.some(function (c) { return c.ia && decimos(c.poa) > 0; });
         var okAprovar = await UI.confirmar({
           titulo: 'Publicar esta versão?',
-          texto: 'Depois de publicada, a versão não pode ser alterada. Para mudar, você publica uma nova versão; o histórico fica no diário.',
+          texto: 'Depois de publicada, a versão não pode ser alterada. Para mudar, você publica uma nova versão; o histórico fica no diário.'
+            + (temIa ? ' Os valores sugeridos por IA ficam registrados como "sugerido por IA, revisado por" você.' : ''),
           ok: 'Publicar versão', empilhar: true,
         });
         if (!okAprovar) return;
@@ -554,6 +644,7 @@
         el('div', { classe: 'poa-ref' }, [rotuloComDica('Referência', 'cenario-hr', 'A que momento este cenário se refere.'), hr]),
       ]),
       el('div', { classe: 'poa-atalhos' }, atalhos),
+      msgIa,
       el('div', { classe: 'poa-lista' }, linhas),
       soma,
       sobrep,
@@ -695,6 +786,28 @@
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = el('button', { classe: 'btn btn-prob', type: 'submit', id: 'missao-salvar', texto: 'Criar missão' });
     var podInput = pod.querySelector('input');
+    var msgIa = el('p', { classe: 'poa-ia-msg', role: 'status', hidden: true });
+    var btnIa = el('button', { classe: 'btn btn-pequeno btn-ia', type: 'button', id: 'missao-ia', texto: 'Sugerir POD com IA', title: 'A IA só sugere, com uma frase de justificativa. Você revisa e decide.',
+      onclick: async function () {
+        if (!metodo.value) { msgIa.hidden = false; msgIa.classList.add('poa-ia-erro'); msgIa.textContent = 'Escolha o método antes de pedir a sugestão.'; return; }
+        var ar = lerPct('missao-area');
+        var st = setores.find(function (x) { return x.id === selSetor.value; });
+        btnIa.disabled = true; msgIa.hidden = false; msgIa.classList.remove('poa-ia-erro'); msgIa.textContent = 'A IA está analisando…';
+        var op = P.op() || {};
+        var r = await pedirIa('pod', { operacao: { tipo: op.tipo || '', descricao: op.descricao || '' }, setor: { nome: st.nome, area_km2: Math.round(P.areaSetorM2(st) / 1e4) / 100, observacoes: st.observacoes || '' },
+          equipe: equipe.value.trim(), metodo: metodo.value, area_fracao: ar == null || isNaN(ar) ? 1 : ar, area_texto: areaTxt.value.trim() });
+        btnIa.disabled = false;
+        if (!r.ok) { msgIa.classList.add('poa-ia-erro'); msgIa.textContent = r.mensagem; return; }
+        if (r.dados.insuficiente || r.dados.pod == null) { msgIa.textContent = 'A IA respondeu: informação insuficiente para estimar o POD. Preencha manualmente.'; return; }
+        podInput.value = String(Math.round(r.dados.pod * 1000) / 10);
+        base.value = 'Sugestão da IA: ' + r.dados.justificativa;
+        estado.origem = 'ia'; estado.ia = r.dados;
+        podInput.classList.add('poa-sugerido'); base.classList.add('poa-sugerido');
+        tagOrigem.hidden = false; tagOrigem.textContent = 'sugerido por IA · revise o valor e a base antes de criar';
+        msgIa.textContent = 'Sugestão aplicada: ' + r.dados.justificativa;
+        atualizar();
+      } });
+    base.addEventListener('input', function () { base.classList.remove('poa-sugerido'); });
 
     function atualizar() {
       var v = lerPct('missao-pod');
@@ -709,7 +822,7 @@
       });
       previa.textContent = !partes.length ? 'Este setor não está na versão vigente (POA zero).' : v == null || isNaN(v) ? 'POD não estimada. ' + partes.join(' · ') : 'Chance de localizar nesta busca: ' + partes.join(' · ');
     }
-    podInput.addEventListener('input', function () { estado.origem = 'manual'; estado.ia = null; tagOrigem.hidden = true; podInput.classList.remove('poa-sugerido'); atualizar(); });
+    podInput.addEventListener('input', function () { estado.origem = 'manual'; estado.ia = null; tagOrigem.hidden = true; podInput.classList.remove('poa-sugerido'); base.classList.remove('poa-sugerido'); atualizar(); });
     [selSetor, selVitima].forEach(function (x) { x.addEventListener('change', atualizar); });
     area.querySelector('input').addEventListener('input', atualizar);
 
@@ -722,7 +835,8 @@
         campo('POD estimada', pod, { para: 'missao-pod', dica: 'Chance de a equipe achar a pessoa SE ela estiver na área coberta. Vem da estimativa da equipe, nunca do GPS. Vazio = "POD não estimada" (não vira zero).', largo: true }),
         gBase,
       ]),
-      el('div', { classe: 'poa-ia-linha' }, [tagOrigem]),
+      el('div', { classe: 'poa-ia-linha' }, [btnIa, tagOrigem]),
+      msgIa,
       previa, lista, erro,
       el('div', { classe: 'poa-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);

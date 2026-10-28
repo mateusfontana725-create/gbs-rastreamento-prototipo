@@ -1970,3 +1970,12 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
   .poa-grid { grid-template-columns: 1fr; gap: 14px; }
   .poa-g-largo { grid-column: auto; }
 }
+.btn-ia { border: 1px dashed var(--prob); color: var(--prob-texto); background: transparent; }
+.btn-ia:hover:not(:disabled) { background: var(--prob-claro); }
+.poa-ia-msg { margin: 8px 0; font-size: .86rem; color: var(--prob-texto); }
+.poa-ia-erro { color: var(--perigo-texto); font-weight: 600; }
+.poa-linha-ia { grid-column: 1 / -1; }
+.poa-linha-ia:empty, .poa-linha-ia:has(> [hidden]) { display: none; }
+.poa-ia-insuficiente { color: var(--texto-2); font-style: italic; }
+.poa-ia-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 4px 0; }
+.poa-ia-linha:empty { display: none; }

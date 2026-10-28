@@ -9835,6 +9835,12 @@
     blocoCoordenadas: blocoCoordenadas,
     copiar: copiarTexto,
     fecharMenu: function () { fecharMenu(false); },
+    // Relatos de campo recentes (pistas, vestígios, objetos, obstáculos), sem o nome de quem enviou: contexto da sugestão de POA por IA
+    relatos: function () {
+      return Array.from(est.mensagens.values()).filter(function (m) { return m.direcao === 'entrada' && m.categoria && m.categoria !== 'MENSAGEM' && m.categoria !== 'AJUDA' && m.categoria !== 'VITIMA' && m.texto; })
+        .sort(function (a, b) { return C.paraMs(b.criada_em) - C.paraMs(a.criada_em); }).slice(0, 15)
+        .map(function (m) { return { texto: m.texto, quando: new Date(C.paraMs(m.criada_em)).toISOString(), categoria: (CATEGORIAS[m.categoria] || CATEGORIAS.OUTRO).rotulo, lat: m.lat, lng: m.lng }; });
+    },
     irPara: function (lat, lng) { if (est.mapa && lat != null && lng != null) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 17)); },
     recarregarGrupos: function () { return carregarGrupos().then(function () { if (est.renderGruposAberto) est.renderGruposAberto(); }); },
     abrirCentral: function (aba) { abrirCentral(aba); },

@@ -4,7 +4,7 @@ App de rastreamento GPS de equipes em buscas (Bombeiros). Sem build: HTML/JS/CSS
 
 ## Estrutura
 - `public/` páginas (`militar.html` painel do responsável, `civil.html` página do participante, `index.html`), `js/` (lógica, sem bundler), `css/` (`estilos.css` base, `militar.css` painel).
-- `api/` endpoints serverless (`rota.js`, `meteo.js`, `responsaveis.js`, `config.js`, `limpeza.js`).
+- `api/` endpoints serverless (`rota.js`, `meteo.js`, `poa-ia.js`, `responsaveis.js`, `config.js`, `limpeza.js`).
 - `supabase/schema.sql` instalação completa e idempotente; `supabase/migracoes/NNN_*.sql` migrações numeradas (a última é a 039).
 - `testes/` testes unitários e `banco_migracoes.test.mjs` (banco real em PGlite).
 - `README.md` documenta funcionalidades e o roteiro de testes manuais.

@@ -447,6 +447,15 @@ ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cad
       cálculo**. O servidor ainda aceita `busca_registrar` (para telas antigas em cache), que a tela nova não usa mais.
     - O exemplo do capítulo 13 do guia (A 45%, B 25%, C 20%, externo 10%; M1 em A com POD 60%, M2 em B com POD 50%) segue como teste
       automático (`calcular`): 24,66% / 34,25% / 27,40% / 13,70% e depois 29,75% / 20,66% / 33,06% / 16,53%, cumulativo 39,5%.
+  - **Sugerir com IA** (opcional, etapa de revisão humana; `api/poa-ia.js`): no editor de POA, o botão **Sugerir com IA** analisa a
+    descrição da operação, a ficha da vítima, o último ponto conhecido, as observações, os relatos e as evidências marcadas, e
+    preenche valor e **uma frase de justificativa** por setor (e "Fora da área") como **sugestão**: borda tracejada e rótulo
+    "sugerido por IA". **A IA não publica nada**: você revisa, ajusta e publica. Sem dados suficientes ela responde
+    **"informação insuficiente"** e o campo fica vazio (não inventa percentual). O que você digitou não é sobrescrito; editar um
+    valor sugerido devolve-o ao modo manual. Ao salvar, cada valor guarda a origem (**manual** ou **sugerido por IA, revisado por
+    <usuário>**, com o modelo) e a publicação registra isso no diário. Na **Nova missão**, o botão **Sugerir POD com IA** faz o mesmo
+    com o método, a área e as observações do setor (mesma marcação, sempre revisável). Se a IA falhar (sem chave, cota, rede ou
+    resposta inválida), aparece uma mensagem simples e o fluxo manual continua igual. A chave só existe no servidor (`ANTHROPIC_API_KEY`).
   - **Mapa**: "Ver no mapa" pinta os setores da versão vigente numa escala própria (violeta, que não se confunde com
     as cores de emergência), com legenda (vítima, versão, horário de referência e "prévia"), separada da passagem GPS.
   - **Relatório final**: seção "Probabilidades de busca" com as versões aprovadas (hipóteses, limitações, evidências, origem
@@ -1203,6 +1212,7 @@ rastreamento-sar/
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
 │   ├── responsaveis.js         cria login e redefine senha de responsáveis (só administradores; chave SECRETA)
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
+│   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
 ├── supabase/
 │   ├── schema.sql              instalação completa e idempotente (inclui todas as migrações)
@@ -1423,6 +1433,8 @@ rastreamento-sar/
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
+   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
+   | `POA_IA_MODELO` | (opcional) modelo usado nas sugestões; padrão `claude-sonnet-5-5` |
 
 4. Clique em **Deploy**.
 
@@ -1542,6 +1554,7 @@ roda todo dia às 07:00 UTC (04:00 de Brasília) pelo Vercel Cron, que chama `/a
 | Mensagens e relatos | o participante só lê a própria conversa; os responsáveis leem as da operação. Envio só pela função `participante_enviar_mensagem` (valida participante, operação ativa, tipo, texto ≤ 1000 caracteres, coordenadas; limite de 20 por minuto; reenvio sem duplicar) |
 | Fotos | bucket **privado**: não existe link público. A imagem só é vista por **link temporário assinado (1 h)**, gerado apenas para os responsáveis da operação ou para o próprio autor. O envio só é aceito na pasta `operação/participante/` do próprio participante, com a operação ativa, JPEG até 10 MB; o registro (`registrar_foto`) confere que o arquivo existe e valida as coordenadas |
 | Setores, pontos e destinos | leitura só pelos responsáveis da operação (RLS); gravação só pelas funções, que conferem a equipe da operação; excluir só por quem criou o registro, quem criou a operação ou um administrador; participantes recebem só o próprio setor, pontos de encontro/risco e o próprio destino (`mapa_do_participante`, `meu_destino` e a política `destinos_ler_participante`, que só libera a linha do próprio participante — inclusive no tempo real); um destino só é enviado a participante da mesma operação |
+| IA do POA/POD | a chave da IA fica só na variável `ANTHROPIC_API_KEY` do servidor; `/api/poa-ia` exige login e que o banco confirme (com o token da própria pessoa) que ela é responsável **da operação**; limita a 6 pedidos por minuto por usuário; **nome, CPF e telefone da vítima não são enviados** (só idade, sexo, perfil, características, roupas e o que a ficha tem de descrição) e os textos são truncados. A IA só **sugere**; nada é publicado nem gravado pela função |
 | Rota por caminhos | a chave do openrouteservice fica só na variável `ORS_API_KEY` da Vercel; `/api/rota` exige login (participante ativo, só para si; ou responsável ativo), limita a 20 cálculos/min por pessoa, valida coordenadas e distância e não grava nada |
 | Fichas de vítimas | tabela `vitimas` e bucket privado `vitimas`: leitura, envio e visualização da foto **só pelos responsáveis da operação** (RLS no banco e regras no Storage); participantes não têm política de leitura; gravação só por `salvar_vitima`/`definir_foto_vitima` (confere que o arquivo existe na pasta da própria ficha); apagadas com a retenção ou a exclusão da operação |
 | Cadastro da operação | só responsáveis da operação editam (`atualizar_operacao`); tipo, acionamento (não pode estar no futuro), coordenadas e tamanhos validados no servidor; `info_operacao` continua entregando ao participante só o nome |

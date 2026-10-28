@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -92,6 +92,10 @@ let op = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TESTE', p_retencao_h
   tipo: 'outras', tipo_outro: 'Deslizamento', acionado_em: new Date(agora - 3600e3).toISOString(),
   local_endereco: 'Rua A, 1', local_lat: -22.9, local_lng: -43.2, descricao: 'Pessoa desaparecida' }) });
 chk(op.tipo === 'outras' && op.tipo_outro === 'Deslizamento' && op.local_lat === -22.9 && op.gps_intervalo_s === 15, 'cria com tipo, acionamento, local e descrição', op);
+// Migração 040: o painel envia 2160 h (90 dias, dados guardados até a exclusão); antes era recusado
+const ret90 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RETENCAO 90', p_retencao_horas: 2160, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+chk(ret90.retencao_horas === 2160, 'criar operação com retenção de 90 dias (2160 h) funciona', ret90.retencao_horas);
+chk(/retencao_invalida/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'OP RET X', p_retencao_horas: 100 }))), 'retenção fora da lista continua recusada');
 const antiga = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ANTIGA', p_retencao_horas: 0 });
 chk(antiga.tipo === null && antiga.descricao === '', 'chamada antiga (só nome) continua funcionando e a operação fica válida');
 const cadInicial = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CADASTRO INICIAL', p_retencao_horas: 0, p_dados: JSON.stringify({ natureza_x: 1, ipo: { natureza: 'BUSCA', solicitante_nome: 'Israel' }, descricao: 'Breve' }) });
@@ -1695,5 +1699,5 @@ console.log('\nMissão de busca e cálculo pós-busca — migração 039');
   chk(['busca_missoes', 'busca_missao_efeitos'].every((x) => pubM.includes(x)), 'missões e efeitos publicados no Realtime');
 }
 
-console.log('\nMigrações 007–039 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–040 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

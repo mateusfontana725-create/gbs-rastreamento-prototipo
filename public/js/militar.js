@@ -3965,14 +3965,14 @@
       btn.textContent = registrar ? 'Registrar a vítima…' : 'Encerrar operação';
       texto.parentNode.hidden = e === 'sem';
     }
-    var form = UI.el('form', { classe: 'form-encerrar', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Encerrar a operação "' + op.codigo + '"' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Os celulares dos participantes vão parar de enviar a localização e os links deixarão de funcionar. ' +
-        'Nada é apagado: o painel abre só para consulta e os dados só saem se a operação for excluída.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Resultado da busca' }), opcoes, blocoOutra]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'enc-texto', texto: 'Descrição do desfecho (aparece no relatório)' }), texto]),
+    var form = UI.el('form', { classe: 'form-encerrar form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Encerrar operação' }),
+      UI.el('p', { classe: 'ajuda', texto: op.codigo }),
+      UI.campo('Resultado da busca', opcoes, { largo: true, dica: 'Os celulares param de enviar localização e os links deixam de funcionar. Nada é apagado: o painel fica só para consulta.' }),
+      blocoOutra,
+      UI.campo('Desfecho', texto, { para: 'enc-texto', largo: true, ajuda: 'Aparece no relatório.' }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     opcoes.addEventListener('change', atualizar);
     outraVitima.addEventListener('change', atualizar);
@@ -4053,8 +4053,8 @@
       abaCivil.className = 'btn' + (tipo === 'civil' ? ' btn-ativo' : '');
       abaMil.className = 'btn' + (tipo === 'militar' ? ' btn-ativo' : '');
       nota.textContent = tipo === 'civil'
-        ? 'Compartilhe com os voluntários civis. Quem entrar por este link sempre aparecerá como CIVIL. O link não dá acesso a este painel.'
-        : 'Compartilhe SOMENTE com militares. Este link permite ao participante se identificar como MILITAR. O link não dá acesso a este painel.';
+        ? 'Quem entrar por este link aparece como civil.'
+        : 'Só para militares: quem entrar por este link se identifica como militar.';
       if (window.qrcode) {
         try {
           var q = window.qrcode(0, 'M');
@@ -4093,13 +4093,13 @@
     var botoes = [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Copiar', onclick: copiar })];
     if (navigator.share) botoes.push(UI.el('button', { classe: 'btn', type: 'button', texto: 'Compartilhar', onclick: compartilhar }));
 
-    var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Convidar participantes' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links não dão acesso ao painel. Só servem para entrar na operação como participante.')]),
       UI.el('div', { classe: 'abas' }, [abaCivil, abaMil]),
       UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
       qr,
       nota,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
     mostrar(atual);
   }
@@ -7949,9 +7949,7 @@
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btnAdd = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Adicionar' });
     var form = UI.el('form', { classe: 'equipe-form', novalidate: true }, [
-      UI.el('label', { classe: 'rotulo', for: 'equipe-email', texto: 'Adicionar responsável pelo e-mail' }),
-      UI.el('div', { classe: 'link-caixa' }, [entrada, btnAdd]),
-      UI.el('p', { classe: 'ajuda', id: 'equipe-ajuda', texto: 'Só é possível adicionar quem já tem acesso ao painel (cadastrado pelo administrador).' }),
+      UI.campo('Adicionar responsável (e-mail)', UI.el('div', { classe: 'link-caixa' }, [entrada, btnAdd]), { para: 'equipe-email', dica: 'Só é possível adicionar quem já tem acesso ao painel (cadastrado pelo administrador).' }),
       erro,
     ]);
 
@@ -8032,13 +8030,15 @@
     var s2 = UI.el('input', { classe: 'campo', type: 'password', id: 'conta-senha2', autocomplete: 'new-password', maxlength: '72' });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nova senha' });
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Minha conta' }),
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Minha senha' }),
       UI.el('p', { classe: 'ajuda', texto: (est.responsavel ? est.responsavel.nome + ' · ' : '') + (est.usuario && est.usuario.email || '') }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'conta-senha1', texto: 'Nova senha (mínimo 8 caracteres)' }), s1]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'conta-senha2', texto: 'Repita a nova senha' }), s2]),
+      UI.grade([
+        UI.campo('Nova senha', s1, { para: 'conta-senha1', dica: 'Mínimo de 8 caracteres, com letras e números.' }),
+        UI.campo('Repita', s2, { para: 'conta-senha2' }),
+      ]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

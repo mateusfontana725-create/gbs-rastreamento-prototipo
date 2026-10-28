@@ -892,6 +892,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     para o rastreamento.
 - **Personalizar tela** (Ferramentas → ✎ Personalizar tela; vale só no aparelho, não muda nada para os outros):
   - **arrastar** um botão do topo muda a ordem; arrastar para fora do topo (ou tocar no ×) manda para **Ferramentas**;
+  - **Mensagens** e **Convidar** também podem sair do topo (vão para Ferramentas) e voltar, como os outros botões;
   - **qualquer função das Ferramentas** (Grupos, Diário, Enviar destino, Vítima encontrada, Exportar…) pode ir para o
     topo: arraste da bandeja **Em Ferramentas** até o lugar desejado, ou toque nela para pôr no fim;
   - o painel **Grupos** do mapa pode ser arrastado para qualquer canto (ou escolhido no quadradinho);

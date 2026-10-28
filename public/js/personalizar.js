@@ -17,7 +17,7 @@
   function $(id) { return document.getElementById(id); }
 
   // Botões que a página já põe no topo (na ordem padrão) e funções do menu que podem ir para lá.
-  var PADRAO = ['menu-ponto', 'btn-registrar-foto', 'menu-setor', 'menu-trilha', 'btn-regua', 'menu-cenario', 'menu-dashboard'];
+  var PADRAO = ['menu-ponto', 'btn-registrar-foto', 'menu-setor', 'menu-trilha', 'btn-regua', 'menu-cenario', 'menu-dashboard', 'btn-mensagens', 'btn-convite'];
   var DO_MENU = ['menu-vitima', 'menu-destino', 'menu-areas', 'menu-grupos', 'menu-missoes', 'menu-ajuda', 'menu-briefing', 'menu-dados-op',
     'menu-diario', 'menu-relatorio', 'btn-equipe', 'menu-ir-coord', 'menu-medir', 'menu-importar', 'menu-exportar', 'menu-diag-gps'];
   var TODOS = PADRAO.concat(DO_MENU);
@@ -31,8 +31,9 @@
     var o = $(id);
     if (!o) return null;
     if (ehPadrao(id)) {
-      var ico = o.querySelector('.ico-acao, .ico-camera');
-      return { rotulo: (o.querySelector('.rotulo-acao') || o).textContent.trim(), icone: ico ? ico.cloneNode(true) : null };
+      var ico = o.querySelector('.ico-acao, .ico-camera, .ico-msg');
+      var rot = o.querySelector('.rotulo-acao');
+      return { rotulo: (rot || o).textContent.replace(/\s+/g, ' ').trim(), icone: ico ? ico.cloneNode(true) : null };
     }
     var spans = o.querySelectorAll(':scope > span');
     var rot = Array.prototype.filter.call(spans, function (s) { return !s.classList.contains('ico-item'); })[0];

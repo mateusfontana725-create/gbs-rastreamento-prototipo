@@ -2169,3 +2169,7 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
   .modal .briefing-modal .form-rodape .btn { flex: 1 1 calc(50% - 32px); white-space: normal; line-height: 1.1; }
   .modal .briefing-modal .form-rodape #briefing-atualizar { flex: 0 0 48px; margin-right: 0; }
 }
+/* Convidar: o nome aparece também no notebook (é o único botão de ação com texto curto e pouco óbvio sem ele) */
+@media (min-width: 861px) and (max-width: 1280px) {
+  #btn-convite .rotulo-acao { display: inline; }
+}

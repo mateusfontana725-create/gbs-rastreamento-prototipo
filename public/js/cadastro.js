@@ -391,45 +391,67 @@
   /* ------------------------------------------------------------------ */
   /* Dados da operação: ver e editar                                      */
   /* ------------------------------------------------------------------ */
+  // Quadros "rótulo em cima, valor embaixo" (UI.blocos). pares: [rótulo, valor, largo?]; valor vazio vira "—".
+  function blocos(pares) {
+    return UI.el('dl', { classe: 'kv-grade' }, pares.filter(Boolean).map(function (x) {
+      var vazio = x[1] == null || x[1] === '';
+      return UI.el('div', { classe: 'kv' + (x[2] ? ' kv-largo' : '') }, [UI.el('dt', { texto: x[0] }), UI.el('dd', { classe: vazio ? 'kv-vazio' : null }, [vazio ? '—' : x[1]])]);
+    }));
+  }
+
   // opcoes.aoSalvar(op) — chamado com a operação atualizada; opcoes.verNoMapa(op)
   function abrirDados(op, opcoes) {
     opcoes = opcoes || {};
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
-    linha('Nome', op.codigo);
-    linha('Acionamento (início das operações)', op.acionado_em ? dataHora(op.acionado_em) : '— não informado');
-    linha('Localidade / endereço', op.local_endereco || '— não informado');
-    linha('Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '— não marcado');
-    linha('Contexto / descrição', op.descricao || '—');
     var ipo = window.Ipo.normalizarIpo(op.ipo || {});
-    if (ipo.natureza || ipo.solicitante_nome || ipo.meio_liquido || ipo.pessoas_perdidas != null) {
-      linha('IPO para', ipo.destinatarios);
-      if (ipo.natureza) linha('Natureza', ipo.natureza);
-      if (ipo.solicitante_nome) linha('Solicitante', [ipo.solicitante_nome, ipo.solicitante_documento].filter(Boolean).join(' · '));
-      if (ipo.desaparecimento) linha('Data e hora do último momento visto', dataHora(ipo.desaparecimento));
-      if (ipo.meio_liquido) linha('Meio líquido', textoIpo(window.Ipo.MEIOS, ipo.meio_liquido));
-      if (ipo.pessoas_perdidas != null) linha('Pessoas perdidas', String(ipo.pessoas_perdidas));
-      if (ipo.bms_envolvidos != null) linha('BMs diretamente envolvidos', String(ipo.bms_envolvidos));
-      if (ipo.buscas_preliminares) linha('Buscas preliminares', textoIpo(window.Ipo.BUSCAS, ipo.buscas_preliminares));
-      if (ipo.possibilidade_vida) linha('Possibilidade real de vida', textoIpo(window.Ipo.VIDA, ipo.possibilidade_vida));
-      if (ipo.imagens_anexas != null) linha('Imagens anexas', ipo.imagens_anexas ? 'Sim' : 'Não');
-      if (ipo.responsavel_informacoes) linha('Responsável pelas informações', ipo.responsavel_informacoes);
-    }
-    if (op.gps_intervalo_s) linha('GPS', 'ponto pelo menos a cada ' + op.gps_intervalo_s + ' s · falha acima de ' + op.gps_lacuna_s + ' s sem ponto');
-    if ('permanencia_limite_min' in op) linha('Permanência no setor', op.permanencia_limite_min ? 'alerta depois de ' + textoMinutos(op.permanencia_limite_min) + ' no mesmo setor' : 'alerta desligado');
-    linha('Criada', dataHora(op.criada_em));
-    if (op.atualizado_por_nome) linha('Alterada', dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome);
     var editavel = opcoes.editavel !== false;
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
-      incompleto(op) ? UI.el('p', { classe: 'nota', texto: 'Cadastro incompleto: complete em Editar.' }) : null,
-      dl,
-      UI.rodape([
-        op.local_lat != null && opcoes.verNoMapa ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { fechar(); editarDados(op, opcoes); } }) : null,
-        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+    var temIpo = Boolean(ipo.solicitante_nome || ipo.solicitante_documento || ipo.destinatarios || ipo.responsavel_informacoes);
+    var temBusca = ipo.pessoas_perdidas != null || ipo.bms_envolvidos != null || ipo.buscas_preliminares || ipo.possibilidade_vida || ipo.meio_liquido || ipo.imagens_anexas != null;
+    var verNoMapa = op.local_lat != null && opcoes.verNoMapa
+      ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null;
+    var tipo = textoTipo(op) || ipo.natureza;
+    var resumo = UI.el('div', { classe: 'resumo-op' }, [
+      UI.el('div', { classe: 'resumo-op-nome' }, [UI.el('strong', { texto: op.codigo }), tipo ? UI.el('span', { texto: tipo }) : null]),
+      UI.el('div', { classe: 'resumo-op-selos' }, [
+        UI.el('span', { classe: 'selo ' + (op.status === 'ativa' ? 'selo-ok' : 'selo-neutro'), texto: op.status === 'ativa' ? 'Ativa' : 'Encerrada' }),
+        incompleto(op) ? UI.el('span', { classe: 'selo selo-alerta', title: 'Complete em Editar', texto: 'Cadastro incompleto' }) : null,
       ]),
-    ]));
+    ]);
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao dados-op' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
+      resumo,
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Ocorrência', [blocos([
+          ['Início das operações', op.acionado_em ? dataHora(op.acionado_em) : ''],
+          ['Último momento visto', ipo.desaparecimento ? dataHora(ipo.desaparecimento) : ''],
+          ipo.natureza && ipo.natureza !== tipo ? ['Natureza', ipo.natureza, true] : null,
+          ['Descrição', op.descricao, true],
+        ])]),
+        UI.secao('Local', [blocos([
+          ['Endereço', op.local_endereco, true],
+          ['Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '', true],
+        ]), verNoMapa]),
+        temIpo ? UI.secao('Solicitante', [blocos([
+          ['Nome', ipo.solicitante_nome], ['Documento', ipo.solicitante_documento],
+          ['IPO para', ipo.destinatarios], ['Informações por', ipo.responsavel_informacoes],
+        ])]) : null,
+        temBusca ? UI.secao('Busca', [blocos([
+          ipo.pessoas_perdidas != null ? ['Pessoas perdidas', String(ipo.pessoas_perdidas)] : null,
+          ipo.bms_envolvidos != null ? ['BMs envolvidos', String(ipo.bms_envolvidos)] : null,
+          ipo.possibilidade_vida ? ['Possibilidade de vida', textoIpo(window.Ipo.VIDA, ipo.possibilidade_vida)] : null,
+          ipo.buscas_preliminares ? ['Buscas preliminares', textoIpo(window.Ipo.BUSCAS, ipo.buscas_preliminares)] : null,
+          ipo.meio_liquido ? ['Meio líquido', textoIpo(window.Ipo.MEIOS, ipo.meio_liquido)] : null,
+          ipo.imagens_anexas != null ? ['Imagens anexas', ipo.imagens_anexas ? 'Sim' : 'Não'] : null,
+        ])]) : null,
+        UI.secao('Configuração', [blocos([
+          op.gps_intervalo_s ? ['GPS', 'ponto a cada ' + op.gps_intervalo_s + ' s · falha após ' + op.gps_lacuna_s + ' s'] : null,
+          'permanencia_limite_min' in op ? ['Permanência no setor', op.permanencia_limite_min ? 'alerta após ' + textoMinutos(op.permanencia_limite_min) : 'desligado'] : null,
+        ])]),
+      ]),
+      UI.el('p', { classe: 'meta-area dados-op-meta', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
+      UI.rodape([
+        editavel ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { fechar(); editarDados(op, opcoes); } }) : null,
+      ]),
+    ]), { tamanho: 'largo' });
   }
 
   function textoMinutos(m) { return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); }

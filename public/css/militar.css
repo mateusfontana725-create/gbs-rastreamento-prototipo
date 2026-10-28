@@ -1863,14 +1863,6 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
 .comando-chip { display: block; margin-top: 2px; padding: 1px 8px; border: 1px solid var(--borda); border-radius: 999px; background: transparent; color: var(--responsavel-texto); font-size: .72rem; font-weight: 700; cursor: pointer; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .comando-chip.comando-pendente { border-color: var(--alerta); color: var(--alerta-texto); background: var(--alerta-claro); animation: ajuda-pulso 1.6s ease-in-out infinite; }
 .briefing-modal, .passagem-recebimento { overflow-wrap: anywhere; }
-.briefing-barra { margin: 6px 0 10px; flex-wrap: wrap; }
-.briefing-cab { margin: 0 0 8px; }
-.briefing-sec { border-top: 1px solid var(--borda); padding: 8px 0; }
-.briefing-sec h3 { margin: 0 0 4px; font-size: .95rem; }
-.briefing-lista { margin: 4px 0; padding-left: 18px; }
-.briefing-lista li { margin: 3px 0; }
-.briefing-alerta { color: var(--alerta-texto); font-weight: 600; margin: 4px 0; }
-.briefing-obs { font-style: italic; }
 .briefing-pendente { border-left: 4px solid var(--alerta); }
 .briefing-historico { margin-top: 10px; font-size: .88rem; }
 .passagem-nota { background: var(--neutro-claro); border-radius: 6px; padding: 8px 10px; }
@@ -2136,3 +2128,44 @@ body.personalizando .controle-grupos[hidden] > * { display: none; }
 .modal .cad-modo-opcao { background: var(--superficie); }
 .modal .campos-cadastro { row-gap: 14px; }
 .modal .campos-cadastro > .cad-secao { margin: 0; }
+
+/* Briefing: cartões lado a lado (objetivo e decisões na largura toda) */
+.briefing-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 0 14px; align-items: start; }
+.briefing-grade > .briefing-sec, .briefing-corpo > .briefing-sec { margin: 0; }
+.briefing-corpo > .briefing-sec + .briefing-grade { margin-top: 14px; }
+.briefing-sec .secao-titulo { display: flex; align-items: center; gap: 6px; }
+.briefing-n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--superficie-3); color: var(--texto); font-size: .7rem; letter-spacing: 0; }
+.briefing-sec-alerta { border-color: var(--alerta); }
+.briefing-objetivo { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.briefing-texto { margin: 0; }
+.briefing-vazio { margin: 0; color: var(--texto-3); font-size: .88rem; }
+.briefing-lista { list-style: none; margin: 0; padding: 0; display: grid; }
+.briefing-lista > li { display: grid; gap: 3px; padding: 8px 0; border-top: 1px solid var(--borda); min-width: 0; }
+.briefing-lista > li:first-child { border-top: 0; padding-top: 0; }
+.briefing-lista > li:last-child { padding-bottom: 0; }
+.briefing-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.briefing-linha > .btn { margin-left: auto; }
+.briefing-meta { font-size: .78rem; color: var(--texto-3); }
+.briefing-sub { font-size: .82rem; color: var(--texto-2); line-height: 1.35; }
+.briefing-alerta { margin: 0; color: var(--alerta-texto); font-weight: 600; font-size: .88rem; }
+.briefing-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.briefing-chip { padding: 2px 8px; border-radius: 999px; background: rgba(139, 92, 246, .16); color: #c4b5fd; font-size: .76rem; font-weight: 700; }
+.briefing-comando { display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--responsavel); background: var(--responsavel-claro); color: var(--responsavel-texto); font-size: .85rem; }
+.briefing-cab { border-left-color: var(--responsavel); }
+.briefing-setores { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.briefing-pendente { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.briefing-pendente > span { flex: 1 1 220px; }
+.briefing-historico { margin-top: 14px; padding: 10px 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.briefing-historico summary { cursor: pointer; font-weight: 700; font-size: .85rem; }
+.briefing-historico[open] summary { margin-bottom: 8px; }
+.painel-carregando-inline { display: flex; align-items: center; gap: 10px; padding: 20px 0; color: var(--texto-2); }
+.painel-carregando-inline .spinner { width: 24px; height: 24px; border-width: 3px; }
+#briefing-atualizar { min-width: 44px; font-size: 1.1rem; }
+.modal .form-rodape #briefing-copiar { margin-right: 0; }
+.modal .form-rodape #briefing-atualizar { margin-right: auto; }
+html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
+@media (max-width: 760px) { .briefing-grade { grid-template-columns: 1fr; } }
+@media (max-width: 600px) {
+  .modal .briefing-modal .form-rodape .btn { flex: 1 1 calc(50% - 32px); white-space: normal; line-height: 1.1; }
+  .modal .briefing-modal .form-rodape #briefing-atualizar { flex: 0 0 48px; margin-right: 0; }
+}

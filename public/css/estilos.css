@@ -2088,3 +2088,21 @@ html[data-fonte="menor"] { font-size: 93.75%; }
 .rotulo-opcional { margin-left: 6px; font-size: .68rem; font-weight: 500; letter-spacing: .02em; text-transform: lowercase; color: var(--texto-3); opacity: .8; }
 .meta-area { margin: 0; align-self: end; padding: 10px 0; font-size: .85rem; color: var(--texto-2); font-variant-numeric: tabular-nums; }
 .acoes-iguais { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 0 0 14px; }
+
+/* Quadros de leitura: rótulo pequeno em cima, valor embaixo (Dados da operação, briefing) */
+.kv-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0; }
+.kv { min-width: 0; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie); }
+.kv dt { margin: 0 0 3px; font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--texto-3); }
+.kv dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; line-height: 1.3; }
+.kv dd.kv-vazio { font-weight: 400; color: var(--texto-3); }
+.kv-largo { grid-column: 1 / -1; }
+.kv-num dd { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+/* Faixa de resumo no topo de um modal de leitura */
+.resumo-op { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin: 0 0 14px; padding: 12px 14px;
+  border: 1px solid var(--borda); border-left: 4px solid var(--primaria); border-radius: var(--raio); background: var(--superficie-2); }
+.resumo-op-nome { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.resumo-op-nome strong { font-size: 1.15rem; overflow-wrap: anywhere; }
+.resumo-op-nome span { font-size: .85rem; color: var(--texto-2); }
+.resumo-op-selos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.secao-form > .btn { align-self: flex-start; }
+.dados-op-meta { padding: 0; }

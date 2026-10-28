@@ -106,13 +106,18 @@
   /* ---------- Formatação ------------------------------------------------- */
   function hora(v) { return v ? C.hora(v, false) : '—'; }
   function coord(l) { return Number(l.lat).toFixed(5) + ', ' + Number(l.lng).toFixed(5); }
-  function secao(titulo, filhos, id) {
-    return el('section', { classe: 'briefing-sec', id: id || null, 'aria-label': titulo }, [el('h3', { texto: titulo })].concat(filhos));
+  // Cartão do briefing: título pequeno (com contagem opcional) e conteúdo
+  function secao(titulo, filhos, o) {
+    o = o || {};
+    return el('section', { classe: 'secao-form briefing-sec' + (o.largo ? ' briefing-largo' : '') + (o.alerta ? ' briefing-sec-alerta' : ''), 'aria-label': titulo }, [
+      el('div', { classe: 'secao-titulo' }, [titulo, o.n != null ? el('span', { classe: 'briefing-n', texto: String(o.n) }) : null]),
+    ].concat(filhos));
   }
-  function vazio(t) { return el('p', { classe: 'muted', texto: t }); }
+  function vazio(t) { return el('p', { classe: 'briefing-vazio', texto: t }); }
   function lista(itens, vazioTxt) {
-    return itens.length ? el('ul', { classe: 'briefing-lista' }, itens) : vazio(vazioTxt);
+    return itens.length ? el('ul', { classe: 'briefing-lista' }, itens) : (vazioTxt ? vazio(vazioTxt) : null);
   }
+  function sub(t) { return t ? el('div', { classe: 'briefing-sub', texto: t }) : null; }
   function pct(v) { return (Number(v) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%'; }
 
   /*
@@ -122,96 +127,120 @@
   function renderizar(d, acoes, congelado) {
     var o = d.operacao;
     var partes = [];
-    partes.push(el('p', { classe: 'briefing-cab' }, [
-      el('strong', { texto: o.codigo }), ' · ', (o.tipo || 'operação'), o.acionado_em ? ' · acionada ' + C.hora(o.acionado_em, false) : '', o.local ? ' · ' + o.local : '',
-      el('br'), 'Comando: ', el('strong', { texto: d.comando && d.comando.nome ? d.comando.nome : '—' }), d.comando && d.comando.desde ? ' desde ' + hora(d.comando.desde) : '',
-      congelado ? el('span', { classe: 'selo selo-neutro', texto: 'foto de ' + C.hora(d.gerado_em, false) }) : null,
+    partes.push(el('div', { classe: 'resumo-op briefing-cab' }, [
+      el('div', { classe: 'resumo-op-nome' }, [
+        el('strong', { texto: o.codigo }),
+        el('span', { texto: [o.tipo, o.acionado_em ? 'acionada ' + C.hora(o.acionado_em, false) : '', o.local].filter(Boolean).join(' · ') }),
+      ]),
+      el('div', { classe: 'resumo-op-selos' }, [
+        el('span', { classe: 'briefing-comando' }, ['★ ', el('strong', { texto: d.comando && d.comando.nome ? d.comando.nome : '—' }), d.comando && d.comando.desde ? ' desde ' + hora(d.comando.desde) : '']),
+        congelado ? el('span', { classe: 'selo selo-neutro', texto: 'foto de ' + C.hora(d.gerado_em, false) }) : null,
+      ]),
     ]));
 
     // 1. objetivo
     var obj = d.objetivo.texto || '';
     partes.push(secao('Objetivo', [
-      obj ? el('p', { texto: obj }) : (d.objetivo.sugerido ? el('p', { classe: 'muted', texto: 'Ainda sem objetivo escrito. Da ocorrência: ' + d.objetivo.sugerido }) : vazio('Objetivo ainda não definido.')),
-      d.observacoes ? el('p', { classe: 'briefing-obs', texto: 'Observações: ' + d.observacoes }) : null,
-    ]));
+      obj ? el('p', { classe: 'briefing-objetivo', texto: obj })
+        : (d.objetivo.sugerido ? el('p', { classe: 'briefing-vazio', texto: 'Sem objetivo escrito. Da ocorrência: ' + d.objetivo.sugerido }) : vazio('Não definido.')),
+      d.observacoes ? sub('Observações: ' + d.observacoes) : null,
+    ], { largo: true }));
 
-    // 2. último local visto e vítimas
+    var grade = [];
+    // 2. vítimas e último local visto
     var vit = d.vitimas.map(function (v) {
-      return el('li', null, [el('strong', { texto: v.nome }), (v.idade != null ? ', ' + v.idade + ' anos' : ''), v.perfil && v.perfil.length ? ' · ' + v.perfil.join(', ') : '',
-        v.caracteristicas ? ' · ' + v.caracteristicas : '', v.roupas ? ' · ' + v.roupas : '',
-        v.localizada ? el('span', { classe: 'selo selo-ok', texto: 'LOCALIZADA (' + (v.localizada.condicao === 'obito' ? 'óbito' : 'com vida') + ') ' + hora(v.localizada.em) }) : null]);
+      return el('li', null, [
+        el('div', { classe: 'briefing-linha' }, [el('strong', { texto: v.nome + (v.idade != null ? ', ' + v.idade + ' anos' : '') }),
+          v.localizada ? el('span', { classe: 'selo selo-ok', texto: 'LOCALIZADA · ' + (v.localizada.condicao === 'obito' ? 'óbito' : 'com vida') + ' ' + hora(v.localizada.em) }) : null]),
+        sub([v.perfil && v.perfil.length ? v.perfil.join(', ') : '', v.caracteristicas, v.roupas].filter(Boolean).join(' · ')),
+      ]);
     });
     var ult = d.ultimo_local_visto.map(function (l) {
-      return el('li', null, [el('strong', { texto: l.titulo }), ' (' + (l.categoria === 'ULTIMA_LOCALIZACAO' ? 'última localização' : 'possível localização') + ') ', coord(l), l.descricao ? ' — ' + l.descricao : '',
-        !congelado && P.irPara ? el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'ver no mapa', onclick: function () { UI.fecharTodos(); P.irPara(l.lat, l.lng); } }) : null]);
+      return el('li', null, [
+        el('div', { classe: 'briefing-linha' }, [el('strong', { texto: '📍 ' + l.titulo }),
+          !congelado && P.irPara ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { UI.fecharTodos(); P.irPara(l.lat, l.lng); } }) : null]),
+        sub((l.categoria === 'ULTIMA_LOCALIZACAO' ? 'última localização' : 'possível localização') + ' · ' + coord(l) + (l.descricao ? ' · ' + l.descricao : '')),
+      ]);
     });
-    partes.push(secao('Vítimas e último local visto', [lista(vit, 'Nenhuma vítima cadastrada.'), lista(ult, 'Nenhum ponto de última localização marcado no mapa.')]));
+    grade.push(secao('Vítimas e último local visto', [lista(vit, 'Nenhuma vítima cadastrada.'), lista(ult, 'Último local visto não marcado.')], { n: d.vitimas.length }));
 
     // 3. hipóteses
-    partes.push(secao('Hipóteses', [lista(d.hipoteses.map(function (h) {
+    grade.push(secao('Hipóteses', [lista(d.hipoteses.map(function (h) {
       return el('li', null, [
-        el('strong', { texto: h.vitima }), ' (cenário v' + h.versao + ', ref. ' + hora(h.horario_referencia) + (h.confianca ? ', sustentação ' + h.confianca : '') + '): ',
-        h.hipoteses || h.justificativa || '—', h.limitacoes ? ' Limitações: ' + h.limitacoes : '',
-        h.setores && h.setores.length ? el('div', { classe: 'muted', texto: 'Setores mais prováveis: ' + h.setores.map(function (s) { return s.nome + ' ' + pct(s.poa); }).join(' · ') }) : null,
-        h.rascunho_aberto ? el('div', { classe: 'muted', texto: 'Há rascunho de nova versão aguardando aprovação.' }) : null,
-        !congelado && acoes && acoes.abrirCenario ? el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'abrir cenário', onclick: function () { acoes.abrirCenario(); } }) : null,
+        el('div', { classe: 'briefing-linha' }, [el('strong', { texto: h.vitima }), el('span', { classe: 'briefing-meta', texto: 'v' + h.versao + ' · ref. ' + hora(h.horario_referencia) + (h.confianca ? ' · ' + h.confianca : '') }),
+          !congelado && acoes && acoes.abrirCenario ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'POA/POD', onclick: function () { acoes.abrirCenario(); } }) : null]),
+        el('div', { texto: h.hipoteses || h.justificativa || '—' }),
+        h.limitacoes ? sub('Limitações: ' + h.limitacoes) : null,
+        h.setores && h.setores.length ? el('div', { classe: 'briefing-chips' }, h.setores.map(function (x) { return el('span', { classe: 'briefing-chip', texto: x.nome + ' ' + pct(x.poa) }); })) : null,
+        h.rascunho_aberto ? sub('Rascunho de nova versão aguardando aprovação.') : null,
       ]);
-    }), 'Nenhum cenário (POA) aprovado ainda. Sem ele não há distribuição de probabilidade publicada.')]));
+    }), 'Nenhum cenário (POA) publicado.')]));
 
     // 4. riscos
     var r = d.riscos;
-    partes.push(secao('Riscos', [
-      r.texto ? el('p', { texto: r.texto }) : null,
-      lista(r.pontos.map(function (x) { return el('li', null, [el('strong', { texto: x.titulo }), x.descricao ? ' — ' + x.descricao : '']); }), r.texto ? 'Nenhum ponto de risco marcado no mapa.' : 'Nenhum risco informado e nenhum ponto de risco no mapa.'),
-      r.pedidos_ajuda_abertos ? el('p', { classe: 'briefing-alerta', texto: '🆘 ' + r.pedidos_ajuda_abertos + ' pedido(s) de ajuda aberto(s).' }) : null,
-      r.alertas_criticos_sem_ciente ? el('p', { classe: 'briefing-alerta', texto: '⚠ ' + r.alertas_criticos_sem_ciente + ' alerta(s) crítico(s) sem ciente.' }) : null,
-    ]));
+    var alertasRisco = [
+      r.pedidos_ajuda_abertos ? el('p', { classe: 'briefing-alerta', texto: '🆘 ' + r.pedidos_ajuda_abertos + ' pedido(s) de ajuda aberto(s)' }) : null,
+      r.alertas_criticos_sem_ciente ? el('p', { classe: 'briefing-alerta', texto: '⚠ ' + r.alertas_criticos_sem_ciente + ' alerta(s) crítico(s) sem ciente' }) : null,
+    ];
+    grade.push(secao('Riscos', [
+      r.texto ? el('p', { classe: 'briefing-texto', texto: r.texto }) : null,
+      lista(r.pontos.map(function (x) { return el('li', null, [el('strong', { texto: '⚠ ' + x.titulo }), sub(x.descricao)]); }), r.texto ? '' : 'Nenhum risco informado.'),
+    ].concat(alertasRisco), { alerta: Boolean(r.pedidos_ajuda_abertos || r.alertas_criticos_sem_ciente) }));
 
     // 5. equipes
-    partes.push(secao('Equipes', [lista(d.equipes.map(function (g) {
-      var avisos = [g.sem_comunicacao && g.recursos.length ? 'sem equipamento de comunicação' : null, g.sem_primeiros_socorros && g.recursos.length ? 'sem primeiros socorros' : null].filter(Boolean);
+    grade.push(secao('Equipes', [lista(d.equipes.map(function (g) {
+      var avisos = [g.sem_comunicacao && g.recursos.length ? 'sem comunicação' : null, g.sem_primeiros_socorros && g.recursos.length ? 'sem primeiros socorros' : null].filter(Boolean);
       return el('li', null, [
-        el('strong', { texto: g.nome }), ' ', el('span', { classe: 'selo recurso-disp recurso-disp-' + g.disponibilidade_efetiva, texto: DISP[g.disponibilidade_efetiva] || g.disponibilidade_efetiva }),
-        ' · ' + g.conectados + ' de ' + g.membros + ' conectado(s)',
-        g.disponibilidade_obs && g.disponibilidade_efetiva !== 'disponivel' ? ' · ' + g.disponibilidade_obs : '', g.disponivel_em && g.disponibilidade !== 'disponivel' ? ' · volta às ' + hora(g.disponivel_em) : '',
-        g.capacidades ? el('div', { classe: 'muted', texto: 'Capacidades: ' + g.capacidades }) : null,
-        g.recursos.length ? el('div', { classe: 'muted', texto: g.recursos.map(function (x) { return (TIPOS_REC[x.tipo] || x.tipo) + (x.identificacao ? ' ' + x.identificacao : '') + (x.quantidade > 1 ? ' ×' + x.quantidade : '') + (x.situacao !== 'operacional' ? ' (' + x.situacao + ')' : ''); }).join(' · ') }) : el('div', { classe: 'muted', texto: 'Recursos não informados.' }),
+        el('div', { classe: 'briefing-linha' }, [el('strong', { texto: g.nome }),
+          el('span', { classe: 'selo recurso-disp recurso-disp-' + g.disponibilidade_efetiva, texto: DISP[g.disponibilidade_efetiva] || g.disponibilidade_efetiva }),
+          el('span', { classe: 'briefing-meta', texto: g.conectados + '/' + g.membros + ' conectados' })]),
+        sub([g.disponibilidade_obs && g.disponibilidade_efetiva !== 'disponivel' ? g.disponibilidade_obs : '', g.disponivel_em && g.disponibilidade !== 'disponivel' ? 'volta às ' + hora(g.disponivel_em) : '', g.capacidades].filter(Boolean).join(' · ')),
+        sub(g.recursos.length ? g.recursos.map(function (x) { return (TIPOS_REC[x.tipo] || x.tipo) + (x.identificacao ? ' ' + x.identificacao : '') + (x.quantidade > 1 ? ' ×' + x.quantidade : '') + (x.situacao !== 'operacional' ? ' (' + x.situacao + ')' : ''); }).join(' · ') : 'Recursos não informados'),
         avisos.length ? el('div', { classe: 'briefing-alerta', texto: '⚠ ' + avisos.join(' · ') }) : null,
       ]);
-    }), 'Nenhuma equipe criada.')]));
+    }), 'Nenhuma equipe criada.')], { n: d.equipes.length }));
 
     // 6. tarefas
     var s = d.tarefas.setores;
-    partes.push(secao('Tarefas', [
+    grade.push(secao('Tarefas', [
+      el('dl', { classe: 'kv-grade briefing-setores' }, [['Concluídos', s.concluido], ['Em andamento', s.andamento], ['Pendentes', s.pendente]].map(function (x) {
+        return el('div', { classe: 'kv kv-num' }, [el('dt', { texto: x[0] }), el('dd', { texto: String(x[1]) })]);
+      })),
+      s.pendentes && s.pendentes.length ? sub('Faltam: ' + s.pendentes.join(', ')) : null,
       lista(d.tarefas.deslocamentos.map(function (m) {
-        return el('li', null, [el('strong', { texto: m.grupo }), ' → ' + (m.setor || m.nome) + ' · ' + (STATUS_MISSAO[m.status] || m.status) + (m.prazo_retorno_em ? ' · retorno até ' + hora(m.prazo_retorno_em) : '')]);
+        return el('li', null, [el('div', { classe: 'briefing-linha' }, [el('strong', { texto: m.grupo + ' → ' + (m.setor || m.nome) }),
+          el('span', { classe: 'briefing-meta', texto: (STATUS_MISSAO[m.status] || m.status) + (m.prazo_retorno_em ? ' · volta até ' + hora(m.prazo_retorno_em) : '') })])]);
       }), 'Nenhum deslocamento em andamento.'),
-      el('p', { texto: 'Setores: ' + s.concluido + ' concluído(s), ' + s.andamento + ' em andamento, ' + s.pendente + ' pendente(s) (de ' + s.total + ').' + (s.pendentes && s.pendentes.length ? ' Faltam: ' + s.pendentes.join(', ') + '.' : '') }),
     ]));
 
     // 7. comunicações
     var c = d.comunicacoes;
-    partes.push(secao('Comunicações', [
-      c.texto ? el('p', { texto: c.texto }) : vazio('Canais e contatos ainda não informados.'),
+    grade.push(secao('Comunicações', [
+      c.texto ? el('p', { classe: 'briefing-texto', texto: c.texto }) : vazio('Canais e contatos não informados.'),
       c.dados.sem_comunicacao && c.dados.sem_comunicacao.length ? el('p', { classe: 'briefing-alerta', texto: '📵 ' + c.dados.sem_comunicacao.join(' · ') }) : null,
-      c.dados.mensagens_sem_confirmacao ? el('p', { texto: c.dados.mensagens_sem_confirmacao + ' mensagem(ns) enviada(s) ainda sem confirmação.' }) : null,
-      c.dados.ultimas && c.dados.ultimas.length ? lista(c.dados.ultimas.map(function (m) { return el('li', { texto: hora(m.em) + ' ' + m.de + (m.categoria ? ' [' + m.categoria + ']' : '') + ': ' + m.texto }); }), '') : null,
+      c.dados.mensagens_sem_confirmacao ? sub(c.dados.mensagens_sem_confirmacao + ' mensagem(ns) sem confirmação') : null,
+      c.dados.ultimas && c.dados.ultimas.length ? lista(c.dados.ultimas.map(function (m) {
+        return el('li', null, [el('div', { classe: 'briefing-linha' }, [el('strong', { texto: m.de }), el('span', { classe: 'briefing-meta', texto: hora(m.em) + (m.categoria ? ' · ' + m.categoria : '') })]), el('div', { texto: m.texto })]);
+      }), '') : null,
     ]));
 
     // 8. decisões pendentes
     var dec = d.decisoes_pendentes.map(function (x) {
-      return el('li', null, [el('strong', { texto: x.texto }), x.responsavel ? ' · quem decide: ' + x.responsavel : '', x.prazo ? ' · até ' + hora(x.prazo) : '',
-        !congelado && acoes && acoes.resolverDecisao ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Decidir / cancelar', onclick: function () { acoes.resolverDecisao(x); } }) : null]);
+      return el('li', null, [el('div', { classe: 'briefing-linha' }, [el('strong', { texto: x.texto }),
+        !congelado && acoes && acoes.resolverDecisao ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Decidir', onclick: function () { acoes.resolverDecisao(x); } }) : null]),
+        sub([x.responsavel ? 'quem decide: ' + x.responsavel : '', x.prazo ? 'até ' + hora(x.prazo) : ''].filter(Boolean).join(' · '))]);
     });
     var auto = d.decisoes_automaticas.map(function (x) {
-      return el('li', null, [x.texto, !congelado && acoes && acoes.abrirReferencia ? el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'abrir', onclick: function () { acoes.abrirReferencia(x.ref); } }) : null]);
+      return el('li', null, [el('div', { classe: 'briefing-linha' }, [el('span', { texto: '⏳ ' + x.texto }),
+        !congelado && acoes && acoes.abrirReferencia ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Abrir', onclick: function () { acoes.abrirReferencia(x.ref); } }) : null])]);
     });
-    partes.push(secao('Decisões pendentes', [
-      lista(dec, 'Nenhuma decisão registrada.'),
-      !congelado && acoes && acoes.novaDecisao && podeAlterar() ? el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'briefing-nova-decisao', texto: '+ Nova decisão a tomar', onclick: function () { acoes.novaDecisao(); } }) : null,
-      auto.length ? el('p', { classe: 'muted', texto: 'O que o sistema vê esperando alguém:' }) : null,
-      auto.length ? el('ul', { classe: 'briefing-lista briefing-auto' }, auto) : null,
-    ]));
+    var decisoes = secao('Decisões pendentes', [
+      lista(dec.concat(auto), 'Nenhuma decisão pendente.'),
+      !congelado && acoes && acoes.novaDecisao && podeAlterar() ? el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'briefing-nova-decisao', texto: '+ Nova decisão', onclick: function () { acoes.novaDecisao(); } }) : null,
+    ], { largo: true, n: dec.length + auto.length });
+
+    partes.push(el('div', { classe: 'briefing-grade' }, grade));
+    partes.push(decisoes);
     return el('div', { classe: 'briefing-corpo' }, partes);
   }
 
@@ -402,7 +431,8 @@
     var carregando = false;
     function desenhar() {
       corpo.innerHTML = '';
-      corpo.appendChild(el('h2', { id: 'modal-titulo', texto: 'Briefing e passagem de comando' }));
+      corpo.appendChild(el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Briefing e passagem de comando',
+        UI.dica('Montado com o que já está cadastrado (vítimas, cenário, equipes, setores, mensagens). Só objetivo, riscos, comunicações, observações e decisões são escritos aqui. Na passagem, quem recebe lê uma foto deste briefing e aceita.')]));
       if (est.ausente) {
         corpo.appendChild(el('p', { classe: 'nota', texto: 'Briefing indisponível: faltam as migrações 035 a 037 no banco.' }));
         corpo.appendChild(UI.rodape([el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
@@ -410,24 +440,24 @@
       }
       var pend = pendente();
       var meu = sou_comandante();
-      var barra = [];
+      var acoesRodape = [
+        el('button', { classe: 'btn', type: 'button', id: 'briefing-copiar', texto: 'Copiar texto', title: 'Texto curto para rádio, mensagem ou papel', onclick: function () { if (est.dados && P.copiar) P.copiar(textoPuro(est.dados)); } }),
+        el('button', { classe: 'btn', type: 'button', id: 'briefing-atualizar', texto: '↻', title: 'Atualizar', 'aria-label': 'Atualizar', onclick: function () { atualizar(); } }),
+      ];
       if (podeAlterar()) {
-        barra.push(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'briefing-editar', texto: 'Editar textos', onclick: function () { if (est.dados) abrirEdicao(est.dados, atualizar); } }));
-        if (meu || (P.admin && P.admin())) barra.push(el('button', { classe: 'btn btn-escuro btn-pequeno', type: 'button', id: 'briefing-passar', disabled: pend ? true : null, texto: 'Passar o comando…', title: pend ? 'Já há uma passagem aguardando aceite' : '', onclick: function () { abrirPassagem(desenhar); } }));
-        if (!meu) barra.push(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'briefing-assumir', texto: 'Assumir o comando…', onclick: function () { assumir(desenhar); } }));
+        acoesRodape.push(el('button', { classe: 'btn', type: 'button', id: 'briefing-editar', texto: 'Editar textos', onclick: function () { if (est.dados) abrirEdicao(est.dados, atualizar); } }));
+        if (meu || (P.admin && P.admin())) acoesRodape.push(el('button', { classe: 'btn btn-escuro', type: 'button', id: 'briefing-passar', disabled: pend ? true : null, texto: 'Passar o comando', title: pend ? 'Já há uma passagem aguardando aceite' : '', onclick: function () { abrirPassagem(desenhar); } }));
+        if (!meu) acoesRodape.push(el('button', { classe: 'btn btn-escuro', type: 'button', id: 'briefing-assumir', texto: 'Assumir o comando', onclick: function () { assumir(desenhar); } }));
       }
-      barra.push(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'briefing-copiar', texto: 'Copiar texto', onclick: function () { if (est.dados && P.copiar) P.copiar(textoPuro(est.dados)); } }));
-      barra.push(el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Atualizar', onclick: function () { atualizar(); } }));
-      corpo.appendChild(el('div', { classe: 'acoes-linha briefing-barra' }, barra));
       if (pend) {
         var paraMim = pend.para_user_id === eu();
-        corpo.appendChild(el('p', { classe: 'nota briefing-pendente' }, [
-          el('strong', { texto: 'Passagem de comando aguardando aceite: ' }), pend.de_nome + ' → ' + pend.para_nome + ' (' + C.hora(pend.criada_em, false) + '). ',
+        corpo.appendChild(el('div', { classe: 'nota briefing-pendente' }, [
+          el('span', null, [el('strong', { texto: 'Aguardando aceite: ' }), pend.de_nome + ' → ' + pend.para_nome + ' (' + C.hora(pend.criada_em, false) + ')']),
           paraMim ? el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Ler e responder', onclick: function () { abrirRecebimento(pend); } }) : null,
           pend.de_user_id === eu() || (P.admin && P.admin()) ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Cancelar passagem', onclick: async function () { await rpc('passagem_cancelar', { p_passagem: pend.id }, 'Passagem cancelada.'); desenhar(); } }) : null,
         ]));
       }
-      if (carregando && !est.dados) corpo.appendChild(el('p', { classe: 'muted', texto: 'Montando o briefing…' }));
+      if (carregando && !est.dados) corpo.appendChild(el('div', { classe: 'painel-carregando-inline' }, [el('span', { classe: 'spinner' }), 'Montando o briefing…']));
       if (est.dados) {
         corpo.appendChild(renderizar(est.dados, {
           novaDecisao: function () { novaDecisao(atualizar); }, resolverDecisao: function (x) { resolverDecisao(x, atualizar); },
@@ -444,17 +474,17 @@
       var hist = est.passagens;
       if (hist.length) {
         corpo.appendChild(el('details', { classe: 'briefing-historico' }, [
-          el('summary', { texto: 'Histórico de passagens de comando (' + hist.length + ')' }),
+          el('summary', { texto: 'Histórico de passagens (' + hist.length + ')' }),
           el('ul', { classe: 'briefing-lista' }, hist.map(function (p) {
             return el('li', null, [
               C.hora(p.criada_em, false) + ' · ' + (p.de_nome || '—') + ' → ' + p.para_nome + ' · ' + ESTADOS_PASSAGEM[p.estado] + (p.respondida_em ? ' às ' + C.hora(p.respondida_em, false) : ''),
               p.motivo ? ' · motivo: ' + p.motivo : '', p.resposta_nota ? ' · resposta: ' + p.resposta_nota : '', p.nota ? el('div', { classe: 'muted', texto: 'Recado: ' + p.nota }) : null,
-              el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'ver a foto do briefing', onclick: function () { abrirRecebimento(Object.assign({}, p, { estado: 'visualizacao' })); } }),
+              el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver foto do briefing', onclick: function () { abrirRecebimento(Object.assign({}, p, { estado: 'visualizacao' })); } }),
             ]);
           })),
         ]));
       }
-      corpo.appendChild(UI.rodape([el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
+      corpo.appendChild(UI.rodape(acoesRodape));
     }
     async function atualizar() {
       carregando = true;
@@ -468,7 +498,7 @@
     }
     est.renderAtual = function () { desenhar(); };
     desenhar();
-    fechar = UI.abrirModal(corpo, { aoFechar: function () { est.renderAtual = null; } });
+    fechar = UI.abrirModal(corpo, { tamanho: 'largo', aoFechar: function () { est.renderAtual = null; } });
     atualizar();
   }
 

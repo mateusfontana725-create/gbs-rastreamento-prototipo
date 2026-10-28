@@ -1434,7 +1434,7 @@ rastreamento-sar/
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
    | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
-   | `POA_IA_MODELO` | (opcional) modelo usado nas sugestões; padrão `claude-sonnet-5-5` |
+   | `POA_IA_MODELO` | (opcional) modelo usado nas sugestões; padrão `claude-haiku-5-5`, o mais barato (para mais qualidade, troque por `claude-sonnet-5-5`) |
 
 4. Clique em **Deploy**.
 

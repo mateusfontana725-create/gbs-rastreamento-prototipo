@@ -60,7 +60,7 @@ async function chamar(corpo, rotas, token) {
     assert.strictEqual(r.code, 200);
     assert.strictEqual(r.body.setores[0].poa, 0.55); assert.strictEqual(r.body.setores[0].insuficiente, false);
     assert.strictEqual(r.body.setores[1].poa, null); assert.strictEqual(r.body.setores[1].insuficiente, true); assert.strictEqual(r.body.setores[1].justificativa, 'informação insuficiente');
-    assert.strictEqual(r.body.fora.poa, 0.2); assert.strictEqual(r.body.modelo, 'claude-sonnet-5-5');
+    assert.strictEqual(r.body.fora.poa, 0.2); assert.strictEqual(r.body.modelo, 'claude-haiku-5-5');
     assert.ok(!JSON.stringify(r.body).includes('chave-secreta'), 'a chave não pode aparecer na resposta');
     const c = ch.find((x) => x.url.includes('anthropic'));
     assert.strictEqual(c.init.headers['x-api-key'], 'chave-secreta-de-teste');

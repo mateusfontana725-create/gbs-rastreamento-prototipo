@@ -4,7 +4,7 @@
 // como "sugerido por IA". Nada é publicado aqui, e nada é gravado por esta função.
 //
 // A chave da API de IA fica SÓ no servidor (variável ANTHROPIC_API_KEY); o navegador nunca a vê.
-// Modelo: variável POA_IA_MODELO (padrão claude-sonnet-5-5). Sem chave, responde 503 e a tela segue manual.
+// Modelo: variável POA_IA_MODELO (padrão claude-haiku-5-5). Sem chave, responde 503 e a tela segue manual.
 //
 // Corpo JSON:
 //   { "modo": "poa" | "pod", "operacao_id": "<uuid>", "contexto": { … } }
@@ -202,7 +202,7 @@ module.exports = async (req, res) => {
   const url = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
   const chavePublica = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
   const chaveIa = (process.env.ANTHROPIC_API_KEY || '').trim();
-  const modelo = (process.env.POA_IA_MODELO || 'claude-sonnet-5-5').trim();
+  const modelo = (process.env.POA_IA_MODELO || 'claude-haiku-5-5').trim();
   if (!url || !chavePublica) return res.status(500).json({ erro: 'variaveis_de_ambiente_ausentes' });
 
   const auth = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');

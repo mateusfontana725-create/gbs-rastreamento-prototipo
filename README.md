@@ -455,7 +455,7 @@ ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cad
     valor sugerido devolve-o ao modo manual. Ao salvar, cada valor guarda a origem (**manual** ou **sugerido por IA, revisado por
     <usuário>**, com o modelo) e a publicação registra isso no diário. Na **Nova missão**, o botão **Sugerir POD com IA** faz o mesmo
     com o método, a área e as observações do setor (mesma marcação, sempre revisável). Se a IA falhar (sem chave, cota, rede ou
-    resposta inválida), aparece uma mensagem simples e o fluxo manual continua igual. A chave só existe no servidor (`ANTHROPIC_API_KEY`).
+    resposta inválida), aparece uma mensagem simples e o fluxo manual continua igual. A chave só existe no servidor (`ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`). **Privacidade:** a ficha vai para um serviço externo (sem nome, CPF e telefone); em planos gratuitos, alguns provedores podem usar o conteúdo para melhorar produtos: confira a política antes de usar em operação real.
   - **Mapa**: "Ver no mapa" pinta os setores da versão vigente numa escala própria (violeta, que não se confunde com
     as cores de emergência), com legenda (vítima, versão, horário de referência e "prévia"), separada da passagem GPS.
   - **Relatório final**: seção "Probabilidades de busca" com as versões aprovadas (hipóteses, limitações, evidências, origem
@@ -1434,7 +1434,9 @@ rastreamento-sar/
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
    | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
-   | `POA_IA_MODELO` | (opcional) modelo usado nas sugestões; padrão `claude-haiku-5-5`, o mais barato (para mais qualidade, troque por `claude-sonnet-5-5`) |
+   | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-2.5-flash` |
+   | `POA_IA_PROVEDOR` | (opcional) `anthropic` ou `gemini`. Sem ela, usa o provedor que tiver chave (Anthropic primeiro) |
+   | `POA_IA_MODELO` | (opcional) troca o modelo do provedor escolhido. Padrões: `claude-haiku-5-5` (Anthropic, o mais barato) e `gemini-2.5-flash` |
 
 4. Clique em **Deploy**.
 
@@ -1554,7 +1556,7 @@ roda todo dia às 07:00 UTC (04:00 de Brasília) pelo Vercel Cron, que chama `/a
 | Mensagens e relatos | o participante só lê a própria conversa; os responsáveis leem as da operação. Envio só pela função `participante_enviar_mensagem` (valida participante, operação ativa, tipo, texto ≤ 1000 caracteres, coordenadas; limite de 20 por minuto; reenvio sem duplicar) |
 | Fotos | bucket **privado**: não existe link público. A imagem só é vista por **link temporário assinado (1 h)**, gerado apenas para os responsáveis da operação ou para o próprio autor. O envio só é aceito na pasta `operação/participante/` do próprio participante, com a operação ativa, JPEG até 10 MB; o registro (`registrar_foto`) confere que o arquivo existe e valida as coordenadas |
 | Setores, pontos e destinos | leitura só pelos responsáveis da operação (RLS); gravação só pelas funções, que conferem a equipe da operação; excluir só por quem criou o registro, quem criou a operação ou um administrador; participantes recebem só o próprio setor, pontos de encontro/risco e o próprio destino (`mapa_do_participante`, `meu_destino` e a política `destinos_ler_participante`, que só libera a linha do próprio participante — inclusive no tempo real); um destino só é enviado a participante da mesma operação |
-| IA do POA/POD | a chave da IA fica só na variável `ANTHROPIC_API_KEY` do servidor; `/api/poa-ia` exige login e que o banco confirme (com o token da própria pessoa) que ela é responsável **da operação**; limita a 6 pedidos por minuto por usuário; **nome, CPF e telefone da vítima não são enviados** (só idade, sexo, perfil, características, roupas e o que a ficha tem de descrição) e os textos são truncados. A IA só **sugere**; nada é publicado nem gravado pela função |
+| IA do POA/POD | a chave da IA (`ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`) fica só em variável do servidor; `/api/poa-ia` exige login e que o banco confirme (com o token da própria pessoa) que ela é responsável **da operação**; limita a 6 pedidos por minuto por usuário; **nome, CPF e telefone da vítima não são enviados** (só idade, sexo, perfil, características, roupas e o que a ficha tem de descrição) e os textos são truncados. A IA só **sugere**; nada é publicado nem gravado pela função |
 | Rota por caminhos | a chave do openrouteservice fica só na variável `ORS_API_KEY` da Vercel; `/api/rota` exige login (participante ativo, só para si; ou responsável ativo), limita a 20 cálculos/min por pessoa, valida coordenadas e distância e não grava nada |
 | Fichas de vítimas | tabela `vitimas` e bucket privado `vitimas`: leitura, envio e visualização da foto **só pelos responsáveis da operação** (RLS no banco e regras no Storage); participantes não têm política de leitura; gravação só por `salvar_vitima`/`definir_foto_vitima` (confere que o arquivo existe na pasta da própria ficha); apagadas com a retenção ou a exclusão da operação |
 | Cadastro da operação | só responsáveis da operação editam (`atualizar_operacao`); tipo, acionamento (não pode estar no futuro), coordenadas e tamanhos validados no servidor; `info_operacao` continua entregando ao participante só o nome |

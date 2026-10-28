@@ -14,7 +14,7 @@ function resposta() {
 const json = (obj, status) => ({ ok: (status || 200) < 300, status: status || 200, json: async () => obj, text: async () => JSON.stringify(obj) });
 const OP = '11111111-1111-4111-8111-111111111111';
 const ENV = { SUPABASE_URL: 'https://proj.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'pub', ANTHROPIC_API_KEY: 'chave-secreta-de-teste' };
-function ambiente(extra) { delete process.env.POA_IA_MODELO; Object.assign(process.env, ENV, extra || {}); }
+function ambiente(extra) { delete process.env.POA_IA_MODELO; delete process.env.POA_IA_PROVEDOR; delete process.env.GEMINI_API_KEY; delete process.env.GOOGLE_API_KEY; Object.assign(process.env, ENV, extra || {}); }
 const req = (corpo, token) => ({ method: 'POST', body: corpo, headers: token === null ? {} : { authorization: 'Bearer ' + (token || 'tok-' + Math.random()) } });
 const SETORES = [{ id: 's1', nome: 'Norte', area_km2: 0.4 }, { id: 's2', nome: 'Sul', area_km2: 0.3 }];
 const CTX = { operacao: { tipo: 'terrestre', descricao: 'Idoso saiu para caminhar' }, vitima: { idade: 78, sexo: 'M', perfil: ['idoso'], nome: 'Seu Antônio', cpf: '52998224725', telefone: '21998765432', caracteristicas: 'usa bengala' },
@@ -120,6 +120,38 @@ async function chamar(corpo, rotas, token) {
     ambiente();
     assert.strictEqual((await chamar({ modo: 'pod', operacao_id: OP, contexto: CTX_POD }, { 'api.anthropic.com': ia('{"pod":7}') })).code, 502);
     assert.strictEqual((await chamar({ modo: 'pod', operacao_id: OP, contexto: { setor: { nome: 'Norte' } } })).code, 400);
+  });
+
+  console.log('Gemini');
+  const gem = (texto, status) => () => json({ candidates: [{ content: { parts: [{ text: texto }] } }] }, status);
+  await teste('só GEMINI_API_KEY: usa o Gemini (chave no cabeçalho, JSON pedido, modelo padrão)', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'chave-gemini-teste' }); const ch = [];
+    global.fetch = rede(Object.assign({}, AUTORIZADO, { 'generativelanguage.googleapis.com': gem('{"setores":[{"setor_id":"s1","poa":0.6,"justificativa":"Perto da casa."},{"setor_id":"s2","poa":null,"insuficiente":true}],"fora":{"poa":0.1,"justificativa":"Pode ter saído."}}') }), ch);
+    const r = resposta(); await carregar()(req({ modo: 'poa', operacao_id: OP, contexto: CTX }), r);
+    assert.strictEqual(r.code, 200); assert.strictEqual(r.body.setores[0].poa, 0.6); assert.strictEqual(r.body.setores[1].poa, null); assert.strictEqual(r.body.modelo, 'gemini-2.5-flash');
+    const c = ch.find((x) => x.url.includes('generativelanguage'));
+    assert.ok(c.url.includes('/models/gemini-2.5-flash:generateContent')); assert.strictEqual(c.init.headers['x-goog-api-key'], 'chave-gemini-teste');
+    assert.ok(!c.url.includes('chave-gemini-teste'), 'a chave não vai na URL'); assert.strictEqual(JSON.parse(c.init.body).generationConfig.responseMimeType, 'application/json');
+    assert.ok(!/Antônio|52998224725|21998765432/.test(c.init.body), 'dados pessoais vazaram'); assert.ok(!ch.some((x) => x.url.includes('anthropic')));
+    assert.ok(!JSON.stringify(r.body).includes('chave-gemini-teste'));
+  });
+  await teste('POA_IA_PROVEDOR escolhe entre as duas chaves; POA_IA_MODELO troca o modelo', async () => {
+    ambiente({ ANTHROPIC_API_KEY: 'a', GEMINI_API_KEY: 'g', POA_IA_PROVEDOR: 'gemini', POA_IA_MODELO: 'gemini-x' }); const ch = [];
+    global.fetch = rede(Object.assign({}, AUTORIZADO, { 'generativelanguage.googleapis.com': gem('{"pod":0.5,"justificativa":"ok"}') }), ch);
+    const r = resposta(); await carregar()(req({ modo: 'pod', operacao_id: OP, contexto: { setor: { nome: 'Norte' }, metodo: 'Drone' } }), r);
+    assert.strictEqual(r.body.pod, 0.5); assert.strictEqual(r.body.modelo, 'gemini-x'); assert.ok(ch.some((x) => x.url.includes('models/gemini-x:')));
+  });
+  await teste('provedor escolhido sem a chave dele: 503 "não configurada" (não usa a outra)', async () => {
+    ambiente({ ANTHROPIC_API_KEY: 'a', POA_IA_PROVEDOR: 'gemini' }); const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }); assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_nao_configurada');
+  });
+  await teste('falhas do Gemini: cota (429), chave inválida (400 "API key not valid"), erro 500 e resposta sem JSON', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' });
+    const g = (fn) => chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': fn });
+    let r = await g(() => json({ error: { message: 'quota' } }, 429)); assert.strictEqual(r.body.erro, 'ia_cota');
+    r = await g(() => json({ error: { code: 400, message: 'API key not valid. Please pass a valid API key.' } }, 400)); assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_nao_configurada');
+    r = await g(() => json({}, 500)); assert.strictEqual(r.body.erro, 'ia_indisponivel');
+    r = await g(gem('não sei')); assert.strictEqual(r.body.erro, 'ia_resposta_invalida');
+    r = await g(() => json({ candidates: [] })); assert.strictEqual(r.body.erro, 'ia_resposta_invalida');
   });
 
   console.log('Limite de uso');

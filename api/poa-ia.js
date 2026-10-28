@@ -3,8 +3,11 @@
 // O responsável decide: a IA só devolve SUGESTÕES, com uma frase de justificativa, que a tela marca
 // como "sugerido por IA". Nada é publicado aqui, e nada é gravado por esta função.
 //
-// A chave da API de IA fica SÓ no servidor (variável ANTHROPIC_API_KEY); o navegador nunca a vê.
-// Modelo: variável POA_IA_MODELO (padrão claude-haiku-5-5). Sem chave, responde 503 e a tela segue manual.
+// A chave da API de IA fica SÓ no servidor; o navegador nunca a vê. Dois provedores:
+//   - Anthropic: ANTHROPIC_API_KEY (modelo padrão claude-haiku-5-5);
+//   - Google Gemini: GEMINI_API_KEY (modelo padrão gemini-2.5-flash).
+// POA_IA_PROVEDOR ("anthropic" ou "gemini") escolhe o provedor; sem ela, usa o que tiver chave (Anthropic primeiro).
+// POA_IA_MODELO troca o modelo. Sem chave, responde 503 e a tela segue manual.
 //
 // Corpo JSON:
 //   { "modo": "poa" | "pod", "operacao_id": "<uuid>", "contexto": { … } }
@@ -180,10 +183,28 @@ function normalizarPod(bruto) {
   return { pod: it.poa, justificativa: it.justificativa, insuficiente: it.insuficiente };
 }
 
-async function perguntar(chave, modelo, p) {
+// Chama o provedor escolhido e devolve { ok, status, texto } com o texto da resposta.
+async function perguntar(prov, chave, modelo, p) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TEMPO_LIMITE_MS);
   try {
+    if (prov === 'gemini') {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': chave },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: p.system }] },
+          contents: [{ role: 'user', parts: [{ text: p.user }] }],
+          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2000, temperature: 0 },
+        }),
+        signal: ctrl.signal,
+      });
+      const corpo = await r.json().catch(() => null);
+      const partes = corpo && corpo.candidates && corpo.candidates[0] && corpo.candidates[0].content && corpo.candidates[0].content.parts;
+      // chave inválida no Gemini volta como 400 ("API key not valid")
+      const chaveRuim = r.status === 400 && /api key/i.test(JSON.stringify(corpo && corpo.error || ''));
+      return { ok: r.ok, status: chaveRuim ? 401 : r.status, texto: Array.isArray(partes) ? partes.map((c) => c.text || '').join('') : '' };
+    }
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': chave, 'anthropic-version': '2023-06-01' },
@@ -195,14 +216,25 @@ async function perguntar(chave, modelo, p) {
   } finally { clearTimeout(t); }
 }
 
+// Provedor, chave e modelo a partir das variáveis de ambiente
+function configurarIa() {
+  const env = process.env;
+  const chaveAnthropic = (env.ANTHROPIC_API_KEY || '').trim();
+  const chaveGemini = (env.GEMINI_API_KEY || env.GOOGLE_API_KEY || '').trim();
+  let prov = (env.POA_IA_PROVEDOR || '').trim().toLowerCase();
+  if (prov !== 'anthropic' && prov !== 'gemini') prov = chaveAnthropic ? 'anthropic' : chaveGemini ? 'gemini' : 'anthropic';
+  const chave = prov === 'gemini' ? chaveGemini : chaveAnthropic;
+  const modelo = (env.POA_IA_MODELO || (prov === 'gemini' ? 'gemini-2.5-flash' : 'claude-haiku-5-5')).trim();
+  return { prov, chave, modelo };
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ erro: 'metodo_nao_permitido' });
 
   const url = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
   const chavePublica = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  const chaveIa = (process.env.ANTHROPIC_API_KEY || '').trim();
-  const modelo = (process.env.POA_IA_MODELO || 'claude-haiku-5-5').trim();
+  const { prov, chave: chaveIa, modelo } = configurarIa();
   if (!url || !chavePublica) return res.status(500).json({ erro: 'variaveis_de_ambiente_ausentes' });
 
   const auth = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');
@@ -234,7 +266,7 @@ module.exports = async (req, res) => {
       prompt = promptPod(ctx);
     }
 
-    const r = await perguntar(chaveIa, modelo, prompt);
+    const r = await perguntar(prov, chaveIa, modelo, prompt);
     if (r.status === 429) return res.status(503).json({ erro: 'ia_cota', mensagem: 'A IA atingiu o limite de uso agora. Tente em alguns minutos ou preencha manualmente.' });
     if (r.status === 401 || r.status === 403) return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: 'A chave da IA é inválida neste servidor. O preenchimento manual continua funcionando.' });
     if (!r.ok) return res.status(502).json({ erro: 'ia_indisponivel', mensagem: 'A IA não respondeu agora. Preencha manualmente ou tente de novo.' });

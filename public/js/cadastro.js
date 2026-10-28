@@ -422,7 +422,7 @@
     var editavel = opcoes.editavel !== false;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
-      incompleto(op) ? UI.el('p', { classe: 'nota', texto: 'Cadastro inicial: o restante (tipo, localidade e os dados do IPO) pode ser completado depois em Editar, no painel da operação.' }) : null,
+      incompleto(op) ? UI.el('p', { classe: 'nota', texto: 'Cadastro incompleto: complete em Editar.' }) : null,
       dl,
       UI.rodape([
         op.local_lat != null && opcoes.verNoMapa ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null,

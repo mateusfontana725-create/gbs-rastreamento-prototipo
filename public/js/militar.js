@@ -9609,7 +9609,7 @@
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'prazos-salvar', texto: 'Salvar horários' });
     var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Horários' }),
-      UI.el('p', { classe: 'ajuda', texto: m.grupo_nome + ' → ' + m.nome + (m.base_nome ? ' · base: ' + m.base_nome : ' · sem base') }),
+      UI.el('p', { classe: 'meta-area', texto: m.grupo_nome + ' → ' + m.nome + (m.base_nome ? ' · base: ' + m.base_nome : ' · sem base') }),
       campos.el, erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);

@@ -884,6 +884,18 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     Fotos), mais **Mostrar tudo**. Acima ficam **Tipo de mapa** e **Visualização (2D/3D)**. O botão **Camadas** mostra
     "personalizado" enquanto algo estiver escondido. A escolha fica lembrada no aparelho; esconder **Pessoas** não
     para o rastreamento.
+- **Personalizar tela** (Ferramentas → ✎ Personalizar tela; vale só no aparelho, não muda nada para os outros):
+  - **arrastar** um botão do topo muda a ordem; arrastar para fora do topo (ou tocar no ×) manda para **Ferramentas**;
+  - **qualquer função das Ferramentas** (Grupos, Diário, Enviar destino, Vítima encontrada, Exportar…) pode ir para o
+    topo: arraste da bandeja **Em Ferramentas** até o lugar desejado, ou toque nela para pôr no fim;
+  - o painel **Grupos** do mapa pode ser arrastado para qualquer canto (ou escolhido no quadradinho);
+  - **tamanho do texto** (Menor, Normal, Maior, Grande) muda o painel todo na hora;
+  - **Padrão** volta tudo como era; **Concluir** (ou Esc) sai do modo. No teclado: ← → mudam a ordem do botão em foco e
+    Delete tira do topo. No modo de edição os botões não executam a ação, só se movem.
+- **Modais e formulários** (padrão único, `UI.abrirModal` em `js/interface.js`): cabeçalho fixo com o título, o **i**
+  (explicação, em vez de parágrafos de texto) e o **×**; corpo que rola; rodapé com as ações sempre à vista. Campos
+  agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
+  e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.
@@ -1204,6 +1216,7 @@ rastreamento-sar/
 │       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
 │       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
 │       ├── briefing.js         briefing da operação e passagem de comando com aceite
+│       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
 │       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
 │       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 │   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
@@ -1684,6 +1697,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40 | Repetir com prazo de retorno de 5 min e um membro que não volta (ou com o celular em modo avião) | ao vencer o prazo, faixa vermelha "EQUIPE PODE ESTAR PERDIDA" com o alarme repetindo até **Ciente**, mesmo com o painel fechado durante o prazo (com `pg_cron` ativo) |
 | 40a | Enviar destino a um grupo com **retornar até** daqui a 5 min, tolerância 0, e deixar um membro longe da base; noutro celular do grupo, ligar o modo avião por 12 min | no horário, faixa "RETORNO ATRASADO" com quem falta; após 10 min sem contato, "SEM COMUNICAÇÃO — nome" com a última posição; ao religar, aviso "Comunicação restabelecida" com as posições gravadas sem internet |
 | 40b | Na ficha de um participante, **📍 Rota até ela** saindo da base, e ele andar 100 m | a rota aparece com a barra embaixo e se refaz sozinha; **Parar** apaga |
+| 40c | **Ferramentas → Personalizar tela**: arrastar **Foto** para fora do topo, arrastar **Grupos** da bandeja para o 2º lugar, arrastar o painel de grupos para o canto inferior esquerdo, texto **Maior**, **Concluir** e recarregar | Foto passa a ficar em Ferramentas e funciona de lá; Grupos aparece no topo e abre a lista de grupos; o painel de grupos fica no canto escolhido; tudo continua igual depois de recarregar; **Padrão** desfaz |
+| 40d | Abrir os modais (Encerrar, Vítima encontrada, Marcar ponto, Enviar destino, Relatório final) no computador e no celular | título com **i** e **×** no topo; ações sempre visíveis embaixo; no celular, folha de baixo sem rolagem lateral |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

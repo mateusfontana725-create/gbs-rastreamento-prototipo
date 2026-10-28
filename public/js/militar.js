@@ -2935,6 +2935,16 @@
   // Não liga pontos imprecisos, separados por longa pausa ou por salto
   // impossível, nem desenha o vaivém de quem está parado (gps.js). Os pontos
   // guardados não mudam: o histórico completo continua na ficha.
+  // Distância percorrida pelo participante (rastros GPS válidos; as falhas sem registro não contam)
+  function distanciaPercorridaM(p) {
+    var m = 0;
+    trilhaDe(p).segmentos.forEach(function (seg) { m += comprimentoLinhaM(seg); });
+    return m;
+  }
+  function formatarKm(m) {
+    return (m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' km';
+  }
+
   function trilhaDe(p) {
     return window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp() });
   }
@@ -3517,6 +3527,7 @@
         '<button type="button" class="btn btn-pequeno btn-link" data-cpf="' + p.id + '">' + (est.cpfVisivel.has(p.id) ? 'ocultar' : 'mostrar') + '</button>' : '—'],
       ['Coordenadas', pos ? '<span class="mono">' + C.esc(window.Coords.formatar(pos.lat, pos.lng, est.prefsMapa.coord || 'dec')) + '</span> <span class="muted">' + C.esc(C.precisao(pos.prec)) + '</span>' : '—'],
       ['Última posição', pos ? C.hora(pos.t) + ' <span class="muted">(' + C.idade(pos.t) + ')</span>' : '—'],
+      ['Distância percorrida', (p.pontos && p.pontos.length) ? formatarKm(distanciaPercorridaM(p)) + ' <span class="muted">(rastros GPS, sem as falhas)</span>' : '—'],
       ['Último contato', d.ultimo_contato_em ? C.hora(d.ultimo_contato_em) + ' <span class="muted">(' + C.idade(d.ultimo_contato_em) + ')</span>' : '—'],
       ['Rastreamento', (ehResp ? (d.rastreando ? 'Compartilhando posição' : 'Posição não compartilhada') : (d.rastreando ? 'Ativo' : 'Interrompido')) + ' · ' + C.esc(textoGps(d.gps_estado))],
       [ehResp ? 'Entrou no painel' : 'Ingressou', C.hora(d.criado_em)],

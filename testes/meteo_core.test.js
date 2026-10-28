@@ -129,5 +129,52 @@ teste('alerta de chuva na área: nível pela distância e intensidade, sem prome
   assert.ok(/sem direção de deslocamento/.test(perto.detalhe));
 });
 
+teste('escala Beaufort: forças e nomes pelos limites em km/h', () => {
+  const casos = [[0, 0, 'Calmaria'], [5, 1, 'Aragem'], [6, 2, 'Brisa leve'], [19, 3, 'Brisa fraca'], [28, 4, 'Brisa moderada'], [29, 5, 'Brisa forte'],
+    [38, 5, 'Brisa forte'], [39, 6, 'Vento fresco'], [49, 6, 'Vento fresco'], [50, 7, 'Vento forte'], [62, 8, 'Ventania'], [75, 9, 'Ventania forte'],
+    [89, 10, 'Tempestade'], [103, 11, 'Tempestade violenta'], [118, 12, 'Furacão'], [200, 12, 'Furacão']];
+  casos.forEach(([kmh, forca, nome]) => {
+    const b = M.beaufort(kmh);
+    assert.strictEqual(b.forca, forca, kmh + ' km/h');
+    assert.strictEqual(b.nome, nome, kmh + ' km/h');
+  });
+  assert.strictEqual(M.beaufort(null), null);
+  assert.strictEqual(M.beaufort(-3), null);
+});
+teste('Beaufort: nível do alerta pela força (nenhum até 4; atenção em 6; alerta em 7–8; crítico a partir de 9)', () => {
+  assert.strictEqual(M.alertaBeaufort(4), null);
+  assert.strictEqual(M.alertaBeaufort(5).nivel, 'informativo');
+  assert.strictEqual(M.alertaBeaufort(6).nivel, 'atencao');
+  assert.strictEqual(M.alertaBeaufort(7).nivel, 'alerta');
+  assert.strictEqual(M.alertaBeaufort(8).nivel, 'alerta');
+  assert.strictEqual(M.alertaBeaufort(9).nivel, 'critico');
+  assert.strictEqual(M.alertaBeaufort(12).nivel, 'critico');
+});
+teste('vento calmo ou fraco não gera alerta de Beaufort', () => {
+  const horas = [0, 1, 2].map((h) => Object.assign(hora(h), { vento: 18 }));
+  const r = M.analisar({ atual: { precipitacao: 0, vento: 12 }, horas }, [], agora);
+  assert.ok(!r.some((a) => a.chave === 'beaufort'));
+});
+teste('vento agora em força 7: alerta com o efeito para a equipe e sem horário de chegada', () => {
+  const horas = [0, 1, 2].map((h) => Object.assign(hora(h), { vento: 20 }));
+  const a = M.analisar({ atual: { precipitacao: 0, vento: 55 }, horas }, [], agora).find((x) => x.chave === 'beaufort');
+  assert.strictEqual(a.nivel, 'alerta');
+  assert.ok(/Vento forte \(Beaufort 7\)/.test(a.titulo), a.titulo);
+  assert.ok(/drones/.test(a.detalhe) && /agora/.test(a.detalhe), a.detalhe);
+  assert.strictEqual(a.eta, null);
+});
+teste('vento forte previsto para daqui a 2 h: alerta com a hora do pico', () => {
+  const horas = [0, 1, 2].map((h) => Object.assign(hora(h), { vento: h === 2 ? 80 : 15 }));
+  const a = M.analisar({ atual: { precipitacao: 0, vento: 14 }, horas }, [], agora).find((x) => x.chave === 'beaufort');
+  assert.strictEqual(a.nivel, 'critico');
+  assert.ok(/Ventania forte \(Beaufort 9\)/.test(a.titulo), a.titulo);
+  assert.ok(/agora 14 km\/h/.test(a.detalhe), a.detalhe);
+  assert.strictEqual(a.eta.t, horas[2].t);
+});
+teste('vento fora da janela de alerta (muito à frente) não conta', () => {
+  const horas = [0, 1].map(hora).concat([Object.assign(hora(8), { vento: 90 })]);
+  assert.ok(!M.analisar({ atual: { precipitacao: 0, vento: 10 }, horas }, [], agora).some((a) => a.chave === 'beaufort'));
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes de meteorologia passaram.');

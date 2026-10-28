@@ -60,7 +60,7 @@ async function previsaoOpenMeteo(lat, lng) {
   const q = new URLSearchParams({
     latitude: String(lat), longitude: String(lng), timezone: 'GMT', forecast_hours: '12',
     current: 'temperature_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m',
-    hourly: 'precipitation,precipitation_probability,weather_code,wind_gusts_10m',
+    hourly: 'precipitation,precipitation_probability,weather_code,wind_gusts_10m,wind_speed_10m',
   });
   if (chave) q.set('apikey', chave);
   const j = await getJson(base + '?' + q.toString());
@@ -71,7 +71,8 @@ async function previsaoOpenMeteo(lat, lng) {
     atual: { t: iso(c.time), temperatura: c.temperature_2m, precipitacao: c.precipitation, codigo: c.weather_code, vento: c.wind_speed_10m, rajada: c.wind_gusts_10m },
     horas: (h.time || []).map(function (t, i) {
       return { t: iso(t), precip: h.precipitation ? h.precipitation[i] : null, prob: h.precipitation_probability ? h.precipitation_probability[i] : null,
-        codigo: h.weather_code ? h.weather_code[i] : null, rajada: h.wind_gusts_10m ? h.wind_gusts_10m[i] : null };
+        codigo: h.weather_code ? h.weather_code[i] : null, rajada: h.wind_gusts_10m ? h.wind_gusts_10m[i] : null,
+        vento: h.wind_speed_10m ? h.wind_speed_10m[i] : null };
     }),
   };
 }
@@ -127,7 +128,7 @@ async function previsaoMetNorway(lat, lng) {
   const a = linhas[0];
   return {
     atual: { t: a.t, temperatura: a.temperatura, precipitacao: a.precip, codigo: a.codigo, vento: a.vento, rajada: null, direcao: a.direcao },
-    horas: linhas.map(function (l) { return { t: l.t, precip: l.precip, prob: null, codigo: l.codigo, rajada: null }; }),
+    horas: linhas.map(function (l) { return { t: l.t, precip: l.precip, prob: null, codigo: l.codigo, rajada: null, vento: l.vento }; }),
   };
 }
 // Grade mais leve que a do Open-Meteo (uma consulta por ponto): 7 × 7, em lotes de 6 consultas simultâneas.

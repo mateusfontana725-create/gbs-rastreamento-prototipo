@@ -112,6 +112,9 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   comuns não viram marcador (para não poluir o mapa), mas têm **Ver no mapa**.
 - O participante pode pedir ajuda respondendo **PRECISO DE AJUDA** ao comando CONFIRME (alarme,
   destaque na lista e no mapa, **Marcar como atendido** na ficha).
+- Na aba **Dados** da ficha, cada participante mostra a **última posição** (coordenadas, horário e há quanto tempo) e a
+  **distância percorrida em km**, somada dos rastros GPS válidos (as falhas sem registro não contam). Os detalhes (tempo em
+  movimento, velocidades e altitude) ficam em **Trilha de…**, e o total por pessoa no dashboard (**Percorrido**).
 - A **ficha** do participante (menu lateral) é enxuta: no topo, em texto simples, **nome** (✎ renomeia), **tipo · grupo**,
   a **situação** e "Posição há X · ±Y m", com **✕** para fechar. Abaixo, o que pede atenção (pedido de ajuda, pedido de
   saída, destino em andamento), **Ver no mapa** e **⋮ Mais** (enviar destino, rota até a pessoa, trilha, encontrou a
@@ -614,6 +617,12 @@ e o mapa e o rastreamento continuam funcionando.
 - **Previsão** (MET Norway; Open-Meteo se houver chave) para o centro da operação: temperatura, vento e chuva agora, e a
   chegada prevista da chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). A fonte MET não informa rajadas nem
   probabilidade de chuva: esses campos ficam em branco e não geram alerta de rajada. É previsão de modelo, não extrapolação do radar.
+- **Vento pela escala Beaufort**: o painel usa o maior vento médio previsto agora e nas próximas 3 h e o classifica em
+  força 0–12 (km/h: 1, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103 e 118 marcam as forças 1 a 12). O cartão de vento mostra "Bf n".
+  Alerta pelo efeito na equipe: força 5 informativo; **6 atenção** (progressão difícil, drones e embarcações pequenas em
+  risco); **7 e 8 alerta** (difícil caminhar contra o vento; suspender drones, embarcações e helicóptero; queda de galhos);
+  **9 a 12 crítico** (queda de árvores e estruturas; considerar suspender deslocamentos). Quando o pico é daqui a algumas
+  horas, o alerta traz o horário previsto. É previsão de modelo, não medição.
 - **Alertas**: níveis Informativo, Atenção, Alerta e Crítico, com fonte, horário, validade e estado (novo, atualizado,
   ativo, expirado). Alertas oficiais do INMET (formato CAP) têm prioridade. Os indicativos calculados (chuva, rajada,
   tempestade e granizo a partir do código do modelo) são rotulados como tal. O som toca só para Alerta e Crítico,

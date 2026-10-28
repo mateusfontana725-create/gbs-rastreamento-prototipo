@@ -379,7 +379,7 @@
     var a = pv.atual;
     var itens = [
       ['Temperatura', a.temperatura != null ? Math.round(a.temperatura) + ' °C' : '—'],
-      ['Vento', a.vento != null ? Math.round(a.vento) + ' km/h' : '—'],
+      ['Vento', a.vento != null ? Math.round(a.vento) + ' km/h · Bf ' + Core.beaufort(a.vento).forca : '—'],
       ['Rajadas', a.rajada != null ? Math.round(a.rajada) + ' km/h' : '—'],
     ];
     cartoes.innerHTML = '';

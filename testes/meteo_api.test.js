@@ -146,6 +146,7 @@ const MET = (fn) => (url) => json(fn(url));
     assert.strictEqual(r.body.previsao.atual.codigo, 61);
     assert.strictEqual(r.body.previsao.atual.rajada, null);
     assert.strictEqual(r.body.previsao.horas.length, 12);
+    assert.strictEqual(r.body.previsao.horas[0].vento, 18);   // vento por hora (km/h), para o alerta Beaufort
   });
   await teste('identifica o aplicativo na consulta à MET Norway (User-Agent)', async () => {
     ambiente({ METEO_ALERTAS_URL: '' }); delete process.env.OPEN_METEO_API_KEY; process.env.METEO_USER_AGENT = 'GBS-Teste/9.9 (contato@exemplo.test)';

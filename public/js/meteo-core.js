@@ -21,6 +21,31 @@
     incertezaDepois: 60      // ± min para horários mais distantes
   };
 
+  // Escala Beaufort (vento médio, km/h): força, nome e efeito para a equipe em campo.
+  var BEAUFORT = [
+    { min: 0, nome: 'Calmaria' }, { min: 1, nome: 'Aragem' }, { min: 6, nome: 'Brisa leve' }, { min: 12, nome: 'Brisa fraca' },
+    { min: 20, nome: 'Brisa moderada' }, { min: 29, nome: 'Brisa forte' }, { min: 39, nome: 'Vento fresco' }, { min: 50, nome: 'Vento forte' },
+    { min: 62, nome: 'Ventania' }, { min: 75, nome: 'Ventania forte' }, { min: 89, nome: 'Tempestade' }, { min: 103, nome: 'Tempestade violenta' },
+    { min: 118, nome: 'Furacão' }
+  ];
+  function beaufort(kmh) {
+    if (kmh == null || kmh === '') return null;
+    var v = Number(kmh);
+    if (!isFinite(v) || v < 0) return null;
+    var f = 0;
+    for (var i = 0; i < BEAUFORT.length; i++) if (v >= BEAUFORT[i].min) f = i;
+    return { forca: f, nome: BEAUFORT[f].nome, kmh: v };
+  }
+  // Nível do alerta e o que muda para a equipe, por força (a partir de 5).
+  function alertaBeaufort(forca) {
+    if (forca >= 9) return { nivel: 'critico', efeito: 'Risco de queda de árvores e estruturas. Considere suspender deslocamentos em mata e a céu aberto e abrigar a equipe.' };
+    if (forca >= 8) return { nivel: 'alerta', efeito: 'Galhos quebram e árvores podem cair. Suspenda drones, embarcações e helicóptero; avance com cautela e longe de árvores altas.' };
+    if (forca >= 7) return { nivel: 'alerta', efeito: 'Difícil caminhar contra o vento. Evite drones, embarcações pequenas e helicóptero; atenção à queda de galhos.' };
+    if (forca >= 6) return { nivel: 'atencao', efeito: 'Dificulta a progressão e o uso de lonas. Drones e embarcações pequenas em risco.' };
+    if (forca >= 5) return { nivel: 'informativo', efeito: 'Vento perceptível: atenção com drones e embarcações leves.' };
+    return null;
+  }
+
   // Códigos WMO (Open-Meteo): tempestade e granizo.
   var CODIGOS_TEMPESTADE = [95, 96, 99];
   var CODIGOS_GRANIZO = [96, 99];
@@ -103,6 +128,22 @@
       if (!tempestade && CODIGOS_TEMPESTADE.indexOf(h.codigo) >= 0) tempestade = h;
       if (!granizo && CODIGOS_GRANIZO.indexOf(h.codigo) >= 0) granizo = h;
     });
+
+    // Beaufort: maior vento médio agora e nas próximas horas (a fonte de previsão informa a velocidade em km/h)
+    var vPico = atual && atual.vento != null ? { kmh: atual.vento, t: null } : null;
+    janela.forEach(function (h) {
+      if (h.vento != null && (!vPico || h.vento > vPico.kmh)) vPico = { kmh: h.vento, t: h.t };
+    });
+    if (vPico) {
+      var bf = beaufort(vPico.kmh), aviso = bf && alertaBeaufort(bf.forca);
+      if (aviso) {
+        var agoraKmh = atual && atual.vento != null ? Math.round(atual.vento) : null;
+        out.push({ chave: 'beaufort', tipo: 'vento', nivel: aviso.nivel,
+          titulo: bf.nome + ' (Beaufort ' + bf.forca + ')',
+          detalhe: Math.round(vPico.kmh) + ' km/h' + (vPico.t && agoraKmh != null ? ' previstos (agora ' + agoraKmh + ' km/h)' : ' agora') + '. ' + aviso.efeito,
+          fonte: 'Modelo de previsão', eta: vPico.t ? { t: vPico.t, incertezaMin: LIMIARES.incertezaDepois, tipo: 'previsao_modelo' } : null });
+      }
+    }
 
     var chegada = previsaoChegada(prev.horas, agoraMs);
     if (pMax >= LIMIARES.chuvaIntensa) {
@@ -242,6 +283,7 @@
   }
 
   var API = {
+    beaufort: beaufort, alertaBeaufort: alertaBeaufort, BEAUFORT: BEAUFORT,
     direcaoCardeal: direcaoCardeal, chuvaMaisProxima: chuvaMaisProxima, alertaChuvaProxima: alertaChuvaProxima,
     componentesVento: componentesVento, interpolar: interpolar, corTemperatura: corTemperatura, corVento: corVento,
     PARADAS_TEMP: PARADAS_TEMP, PARADAS_VENTO: PARADAS_VENTO,

@@ -1851,11 +1851,10 @@
       renderizarLegenda();
       UI.aviso('Legenda atualizada (neste aparelho).', 'ok');
     } }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Editar legenda do mapa' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Troque o texto de cada item (vazio = texto padrão) ou desmarque para tirar da legenda. Só muda a legenda, não o mapa. Fica guardado neste aparelho. Os nomes dos grupos se mudam em Ferramentas → Grupos.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Legenda do mapa' }, [UI.dica('Muda só o texto da legenda, não o mapa. Fica neste aparelho. Os nomes dos grupos mudam em Ferramentas → Grupos.')]),
     ].concat(corpo).concat([
       UI.el('div', { classe: 'modal-acoes' }, [
-        UI.el('button', { classe: 'btn', type: 'button', id: 'legenda-padrao', texto: 'Restaurar padrão', onclick: function () {
+        UI.el('button', { classe: 'btn', type: 'button', id: 'legenda-padrao', texto: 'Padrão', onclick: function () {
           Object.keys(campos).forEach(function (k) { campos[k].txt.value = ''; campos[k].ver.checked = true; });
         } }),
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),

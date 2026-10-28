@@ -1688,7 +1688,7 @@ body.conversa-aberta { overflow: hidden; }
 .item-grupo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 10px; background: var(--superficie-2); display: grid; gap: 6px; }
 .item-grupo-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .item-grupo-topo small { flex-basis: 100%; }
-.modal-grupos, .modal-membros, .modal-missoes, .modal-vitimas { width: min(760px, 100%); }
+/* largura dos modais: ver "Modais: uma estrutura só" no fim do arquivo */
 .campo-pequeno { min-height: 36px; padding: 4px 8px; font-size: .9rem; width: auto; }
 
 /* Alerta crítico (equipe pode estar perdida) */
@@ -2061,7 +2061,7 @@ html[data-fonte="menor"] { font-size: 93.75%; }
 
 @media (max-width: 600px) {
   .modal-fundo { padding: 0; align-items: flex-end; }
-  .modal-fundo > .modal, .modal-fundo > .modal.modal-largo, .modal-fundo > .modal.modal-cheio, .modal-fundo > .modal.modal-estreito {
+  .modal-fundo > .modal.form-padrao {
     width: 100%; margin: auto 0 0; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px);
     border-radius: 14px 14px 0 0; border-left: 0; border-right: 0; border-bottom: 0;
   }
@@ -2087,3 +2087,5 @@ html[data-fonte="menor"] { font-size: 93.75%; }
   margin-right: 12px; min-height: 36px; padding: 0 14px; cursor: pointer; font: inherit; font-weight: 700; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase;
   color: var(--texto); background: var(--superficie-3); border: 1px solid var(--borda-forte); border-radius: var(--raio);
 }
+.rotulo-opcional { margin-left: 6px; font-size: .68rem; font-weight: 500; letter-spacing: .02em; text-transform: lowercase; color: var(--texto-3); opacity: .8; }
+.meta-area { margin: 0; align-self: end; padding: 10px 0; font-size: .85rem; color: var(--texto-2); font-variant-numeric: tabular-nums; }

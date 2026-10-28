@@ -231,11 +231,11 @@
     return el('span', { classe: 'dica-caixa' }, [b, tip]);
   }
 
-  // Campo com rótulo (opcionalmente com "i") e controle. Opções: para (id do controle), dica, ajuda (linha curta), largo, oculto
+  // Campo com rótulo (opcionalmente com "i") e controle. Opções: para (id do controle), dica, ajuda (linha curta), opcional, largo, oculto
   function campo(rotulo, controle, o) {
     o = o || {};
     return el('div', { classe: 'campo-bloco' + (o.largo ? ' campo-largo' : ''), hidden: o.oculto ? true : null }, [
-      el('label', { classe: 'rotulo', for: o.para || null }, [rotulo, o.dica ? dica(o.dica) : null]),
+      el('label', { classe: 'rotulo', for: o.para || null }, [rotulo, o.opcional ? el('span', { classe: 'rotulo-opcional', texto: 'opcional' }) : null, o.dica ? dica(o.dica) : null]),
       controle,
       o.ajuda ? el('small', { classe: 'muted', texto: o.ajuda }) : null,
     ]);

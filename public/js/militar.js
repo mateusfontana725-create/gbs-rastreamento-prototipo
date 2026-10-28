@@ -5390,11 +5390,11 @@
     }
     var nome = UI.el('input', { classe: 'campo', id: 'setor-nome', maxlength: '60', value: d.nome });
     var raio = d.forma === 'circulo' ? UI.el('input', { classe: 'campo', id: 'setor-raio', type: 'number', min: '5', max: '50000', step: '10', inputmode: 'numeric', value: String(Math.round(d.raio_m)) }) : null;
-    var area = UI.el('p', { classe: 'ajuda', id: 'setor-area' });
+    var area = UI.el('p', { classe: 'meta-area', id: 'setor-area' });
     function atualizarArea() {
       var r = raio ? Number(raio.value) : null;
       var dd = Object.assign({}, d, raio ? { raio_m: r } : {});
-      area.textContent = 'Área aproximada: ' + (raio && !(r >= 5 && r <= 50000) ? '—' : formatarArea(areaSetorM2(dd)));
+      area.textContent = 'Área ≈ ' + (raio && !(r >= 5 && r <= 50000) ? '—' : formatarArea(areaSetorM2(dd)));
       if (raio && r >= 5 && r <= 50000) desenharPrevia(r);
     }
     if (raio) raio.addEventListener('input', atualizarArea);
@@ -5416,16 +5416,19 @@
     var salvo = false;
     var form = UI.el('form', { classe: 'form-setor form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo setor' : 'Editar setor' }),
-      UI.grade([
-        UI.campo('Nome', nome, { para: 'setor-nome', dica: 'Nome, número ou código que a equipe reconhece no rádio.' }),
-        raio ? UI.campo('Raio (m)', raio, { para: 'setor-raio' }) : null,
-        UI.campo('Responsável', part, { para: 'setor-participante' }),
-        UI.campo('Equipe', equipe, { para: 'setor-equipe', ajuda: 'Opcional' }),
-        UI.campo('Situação', status, { para: 'setor-status' }),
-        UI.campo('Cor', cores, { largo: true }),
-        UI.campo('Observações', obs, { para: 'setor-obs', largo: true, ajuda: 'Opcional' }),
+      UI.secao(null, [
+        UI.grade([
+          UI.campo('Nome', nome, { para: 'setor-nome', dica: 'Nome, número ou código que a equipe reconhece no rádio.' }),
+          raio ? UI.campo('Raio (m)', raio, { para: 'setor-raio' }) : null,
+          UI.campo('Situação', status, { para: 'setor-status' }),
+          UI.campo('Responsável', part, { para: 'setor-participante' }),
+          UI.campo('Equipe', equipe, { para: 'setor-equipe', opcional: true }),
+          raio ? null : area,
+        ], { tres: true }),
+        raio ? area : null,
       ]),
-      area,
+      UI.campo('Cor', cores, { largo: true }),
+      UI.campo('Observações', obs, { para: 'setor-obs', largo: true, opcional: true }),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnSalvar]),
     ]);
@@ -5713,14 +5716,14 @@
       ]);
     }));
     var titulo = UI.el('input', { classe: 'campo', id: 'ponto-titulo', maxlength: '80', value: d.titulo, placeholder: 'Ex.: Última vez vista na trilha da cachoeira' });
-    var desc = UI.el('textarea', { classe: 'campo', id: 'ponto-desc', maxlength: '1000', rows: '3' });
+    var desc = UI.el('textarea', { classe: 'campo', id: 'ponto-desc', maxlength: '1000', rows: '3', placeholder: 'Opcional' });
     desc.value = d.descricao || '';
     var lat = UI.el('input', { classe: 'campo mono', id: 'ponto-lat', type: 'number', step: 'any', inputmode: 'decimal', value: String(d.lat) });
     var lng = UI.el('input', { classe: 'campo mono', id: 'ponto-lng', type: 'number', step: 'any', inputmode: 'decimal', value: String(d.lng) });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'ponto-salvar', texto: novo ? 'Marcar ponto' : 'Salvar' });
     // coordenada digitada em qualquer formato (UTM, MGRS, GMS, decimal) preenche latitude/longitude
-    var coordTxt = UI.el('input', { classe: 'campo mono', id: 'ponto-coord', placeholder: 'Ex.: 23K 707870 7515797 ou 22°27\'05"S 42°58\'48"O' });
+    var coordTxt = UI.el('input', { classe: 'campo mono', id: 'ponto-coord', placeholder: 'Colar coordenada (UTM, MGRS, graus…)' });
     var coordInfo = UI.el('small', { classe: 'muted', id: 'ponto-coord-info' });
     coordTxt.addEventListener('input', function () {
       var c = window.Coords.interpretar(coordTxt.value);
@@ -5755,17 +5758,21 @@
     var form = UI.el('form', { classe: 'form-ponto form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Marcar ponto' : 'Editar ponto' }),
       d.relatado_por_nome ? UI.el('p', { classe: 'ajuda', texto: 'Relato de ' + d.relatado_por_nome }) : null,
-      UI.campo('Categoria', grade, { largo: true }),
-      UI.grade([
-        UI.campo('Nome', titulo, { para: 'ponto-titulo' }),
-        grupoRaio,
-        UI.campo('Observações', desc, { para: 'ponto-desc', largo: true, ajuda: 'Opcional' }),
-      ]),
-      UI.campo('Coordenada', coordTxt, { para: 'ponto-coord', largo: true, dica: 'Pode colar em qualquer formato: decimal, UTM, MGRS ou graus. A latitude e a longitude são preenchidas sozinhas.' }),
-      coordInfo,
-      UI.grade([
-        UI.campo('Latitude', lat, { para: 'ponto-lat' }),
-        UI.campo('Longitude', lng, { para: 'ponto-lng' }),
+      UI.secao('Categoria', [grade]),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Identificação', [
+          UI.campo('Nome', titulo, { para: 'ponto-titulo' }),
+          grupoRaio,
+          UI.campo('Observações', desc, { para: 'ponto-desc' }),
+        ]),
+        UI.secao('Local', [
+          UI.campo('Coordenada', coordTxt, { para: 'ponto-coord', dica: 'Pode colar em qualquer formato: decimal, UTM, MGRS ou graus. A latitude e a longitude são preenchidas sozinhas.' }),
+          coordInfo,
+          UI.grade([
+            UI.campo('Latitude', lat, { para: 'ponto-lat' }),
+            UI.campo('Longitude', lng, { para: 'ponto-lng' }),
+          ]),
+        ]),
       ]),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
@@ -5806,7 +5813,7 @@
         btn.disabled = false;
       }
     });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () { if (!salvo) cancelarDesenho(); } });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () { if (!salvo) cancelarDesenho(); } });
   }
 
   // Coordenadas no formato escolhido (Ferramentas › Formato das coordenadas), com os
@@ -6978,7 +6985,7 @@
       })));
     var part = opcoesParticipantes(novo ? null : d.participante_id, true);
     part.id = 'trilha-participante';
-    var equipe = UI.el('input', { classe: 'campo', id: 'trilha-equipe', maxlength: '60', value: novo ? '' : d.equipe || '', placeholder: 'Ex.: Equipe Alfa (se não for um grupo cadastrado)' });
+    var equipe = UI.el('input', { classe: 'campo', id: 'trilha-equipe', maxlength: '60', value: novo ? '' : d.equipe || '', placeholder: 'Se não for um grupo cadastrado' });
     var obs = UI.el('textarea', { classe: 'campo', id: 'trilha-obs', maxlength: '1000', rows: '2' });
     obs.value = novo ? '' : d.observacoes || '';
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
@@ -6986,18 +6993,24 @@
     var salvo = false;
     var form = UI.el('form', { classe: 'form-trilha form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Nova trilha' : 'Editar trilha' }),
-      UI.el('p', { classe: 'ajuda', texto: pontos.length + ' pontos · ' + formatarComprimento(comprimentoLinhaM(pontos)) }),
-      UI.grade([
-        UI.campo('Nome', nome, { para: 'trilha-nome', largo: true }),
-        UI.campo('Situação', estados, { largo: true, dica: 'Trilha desenhada à mão: não é rastro de GPS e não conclui setores.' }),
-        grupoQuando,
-        UI.campo('Feito por', meio, { para: 'trilha-meio' }),
-        UI.campo('Cor no mapa', UI.el('div', { classe: 'linha-cor' }, [UI.el('label', { classe: 'linha-opcao' }, [corPropria, ' própria']), cor]), { dica: 'Sem cor própria: amarelo (planejada) ou branco (percorrida).' }),
-        UI.campo('Grupo', grupoSel, { para: 'trilha-grupo', ajuda: 'Opcional' }),
-        UI.campo('Responsável', part, { para: 'trilha-participante', ajuda: 'Opcional' }),
-        UI.campo('Equipe', equipe, { para: 'trilha-equipe', ajuda: 'Opcional' }),
-        UI.campo('Observações', obs, { para: 'trilha-obs', largo: true, ajuda: 'Opcional' }),
+      UI.el('p', { classe: 'meta-area', texto: pontos.length + ' pontos · ' + formatarComprimento(comprimentoLinhaM(pontos)) }),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Trilha', [
+          UI.campo('Nome', nome, { para: 'trilha-nome' }),
+          UI.campo('Situação', estados, { dica: 'Trilha desenhada à mão: não é rastro de GPS e não conclui setores.' }),
+          grupoQuando,
+          UI.grade([
+            UI.campo('Feito por', meio, { para: 'trilha-meio' }),
+            UI.campo('Cor no mapa', UI.el('div', { classe: 'linha-cor' }, [UI.el('label', { classe: 'linha-opcao' }, [corPropria, ' própria']), cor]), { dica: 'Sem cor própria: amarelo (planejada) ou branco (percorrida).' }),
+          ]),
+        ]),
+        UI.secao('Quem', [
+          UI.campo('Grupo', grupoSel, { para: 'trilha-grupo', opcional: true }),
+          UI.campo('Responsável', part, { para: 'trilha-participante', opcional: true }),
+          UI.campo('Equipe', equipe, { para: 'trilha-equipe', opcional: true }),
+        ]),
       ]),
+      UI.campo('Observações', obs, { para: 'trilha-obs', largo: true, opcional: true }),
       erro,
       UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-voltar', texto: novo ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); } }),
@@ -7051,7 +7064,7 @@
         btnSalvar.textContent = novo ? 'Tentar de novo' : 'Salvar';
       }
     });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () {
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () {
       // fechar sem salvar volta ao desenho (nada se perde)
       if (!salvo && novo && dz && est.desenho === dz) { atualizarBarraTrilha(); }
     } });
@@ -8871,9 +8884,11 @@
     function render() {
       corpo.innerHTML = '';
       var mem = membrosDe(gid);
-      corpo.appendChild(UI.el('h3', { texto: 'No grupo (' + mem.length + ')' }));
-      if (!mem.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Ninguém ainda. Marque abaixo quem faz parte do grupo ou envie o link do grupo.' }));
-      corpo.appendChild(UI.el('ul', { classe: 'lista-membros' }, mem.map(function (x) {
+      var noGrupo = UI.secao('No grupo (' + mem.length + ')', []);
+      var adicionar = UI.secao('Adicionar pessoas', []);
+      corpo.appendChild(UI.el('div', { classe: 'form-colunas' }, editavel ? [noGrupo, adicionar] : [noGrupo]));
+      if (!mem.length) noGrupo.appendChild(UI.el('p', { classe: 'muted', texto: 'Ninguém ainda. Marque ao lado ou envie o link do grupo.' }));
+      noGrupo.appendChild(UI.el('ul', { classe: 'lista-membros' }, mem.map(function (x) {
         var papel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel de ' + x.p.dados.nome, disabled: editavel ? null : true }, [
           UI.el('option', { value: 'membro', selected: x.m.papel === 'membro' ? true : null, texto: 'Membro' }),
           UI.el('option', { value: 'responsavel', selected: x.m.papel === 'responsavel' ? true : null, texto: '★ Responsável' }),
@@ -8890,8 +8905,7 @@
       var naoMembros = Array.from(est.participantes.values())
         .filter(function (p) { return !p.dados.removido && !(est.membros.get(gid) && est.membros.get(gid).has(p.id)); })
         .sort(function (a, b) { return a.dados.nome.localeCompare(b.dados.nome, 'pt-BR'); });
-      corpo.appendChild(UI.el('h3', { texto: 'Adicionar pessoas' }));
-      if (!naoMembros.length) { corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Todos os participantes ativos já estão no grupo.' })); return; }
+      if (!naoMembros.length) { adicionar.appendChild(UI.el('p', { classe: 'muted', texto: 'Todos os participantes ativos já estão no grupo.' })); return; }
       var caixas = UI.el('div', { classe: 'lista-destino' }, naoMembros.map(function (p) {
         var outros = gruposDe(p.id).map(function (x) { return x.nome; });
         return UI.el('label', { classe: 'linha-opcao' }, [
@@ -8909,8 +8923,8 @@
         for (var i = 0; i < ids.length; i++) await definirMembro(gid, ids[i], pap.value);
         render();
       } });
-      corpo.appendChild(caixas);
-      corpo.appendChild(UI.el('div', { classe: 'acoes-linha' }, [pap, btnAdd]));
+      adicionar.appendChild(caixas);
+      adicionar.appendChild(UI.el('div', { classe: 'acoes-linha' }, [pap, btnAdd]));
     }
     render();
     est.renderGruposAberto = render;
@@ -8922,7 +8936,7 @@
         UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
-    ]), { aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
+    ]), { tamanho: 'largo', aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
   }
 
   // QR Code de um link (mesma biblioteca do convite da operação).

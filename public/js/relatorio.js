@@ -706,36 +706,34 @@
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Relatório final' },
         [UI.dica('PDF com cadastro, pessoas e grupos, setores varridos, diário e resultado. Cada relatório gerado fica guardado; só o administrador pode excluir.')]),
       opcoes.aviso ? UI.el('p', { classe: 'rel-aviso', texto: opcoes.aviso }) : null,
-      UI.el('section', { classe: 'rel-bloco' }, [
-        UI.el('h3', { texto: 'Resultado da operação' }),
-        UI.campo('Desfecho', selRes, { para: 'rel-resultado' }),
-        UI.campo('Descrição', txtRes, { para: 'rel-resultado-texto', largo: true }),
-        infoRes,
-        UI.el('div', { classe: 'acoes-linha' }, [btnRes]),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Resultado da operação', [
+          UI.campo('Desfecho', selRes, { para: 'rel-resultado' }),
+          UI.campo('Descrição', txtRes, { para: 'rel-resultado-texto' }),
+          infoRes,
+          UI.el('div', { classe: 'acoes-linha' }, [btnRes]),
+        ], { dica: 'O resultado aparece na capa e no fim do relatório.' }),
+        UI.secao('Gerar o PDF', [
+          UI.campo('Fotos dos setores', selFotos, { para: 'rel-fotos' }),
+          UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-fundo' }, [chkFundo, ' Mapa de fundo nos mapas']),
+          progresso,
+          erro,
+          UI.el('div', { classe: 'acoes-linha' }, [btnGerar]),
+        ]),
       ]),
-      UI.el('section', { classe: 'rel-bloco' }, [
-        UI.el('h3', { texto: 'Gerar o PDF' }),
-        UI.campo('Fotos dos setores', selFotos, { para: 'rel-fotos' }),
-        UI.el('label', { classe: 'rel-check', for: 'rel-fundo' }, [chkFundo, ' Mapa de fundo (OpenStreetMap) nos mapas do relatório']),
-        progresso,
-        erro,
-        UI.el('div', { classe: 'acoes-linha' }, [btnGerar]),
-      ]),
-      UI.el('section', { classe: 'rel-bloco' }, [
-        UI.el('h3', { texto: 'Relatórios já gerados' }),
-        listaSalvos,
-      ]),
+      UI.secao('Relatórios já gerados', [listaSalvos]),
       UI.rodape([
         opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', onclick: function () { fechar(); abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),
-    ]), { fecharNoFundo: false, aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });
+    ]), { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });
 
     var gerou = false;
     selRes.value = op.resultado || '';
     txtRes.value = op.resultado_texto || '';
     function mostrarInfoRes() {
-      infoRes.textContent = op.resultado_em ? 'Registrado por ' + (op.resultado_por_nome || '') + ' em ' + dataHora(op.resultado_em) + '.' : 'O resultado aparece na capa e no fim do relatório.';
+      infoRes.textContent = op.resultado_em ? 'Registrado por ' + (op.resultado_por_nome || '') + ' em ' + dataHora(op.resultado_em) + '.' : '';
+      infoRes.hidden = !op.resultado_em;
     }
     mostrarInfoRes();
 

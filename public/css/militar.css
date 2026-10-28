@@ -2128,3 +2128,11 @@ body.personalizando .controle-grupos[hidden] > * { display: none; }
   .pers-bloco-bandeja { grid-column: 1 / -1; }
   .pers-fonte .seg-opcao { padding: 0 6px; font-size: .72rem; }
 }
+/* Cadastro da operação: seções em cartão, como as linhas do POA/POD */
+.modal .cad-secao { padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.modal .cad-secao-titulo { margin: 0 0 10px; padding: 0; border: 0; font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--texto-3); }
+.modal .cad-secao .campo { background: var(--fundo); }
+.modal .cad-secao .grupo:last-child { margin-bottom: 0; }
+.modal .cad-modo-opcao { background: var(--superficie); }
+.modal .campos-cadastro { row-gap: 14px; }
+.modal .campos-cadastro > .cad-secao { margin: 0; }

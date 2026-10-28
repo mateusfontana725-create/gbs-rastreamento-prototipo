@@ -2613,13 +2613,12 @@
     var campo = UI.el('input', { classe: 'campo', id: 'renomear-nome', maxlength: '40', value: d.nome, autofocus: true });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nome' });
-    var form = UI.el('form', { novalidate: true }, [
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Renomear participante' }),
-      UI.el('p', { classe: 'ajuda', texto: 'O novo nome aparece para os responsáveis, no mapa e nas listas. A pessoa continua vendo o nome que ela digitou (' + original + ').' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'renomear-nome', texto: 'Nome no painel' }), campo]),
+      UI.campo('Nome no painel', campo, { para: 'renomear-nome', dica: 'O novo nome aparece para os responsáveis, no mapa e nas listas. A pessoa continua vendo o nome que digitou: ' + original + '.' }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [
-        d.nome_painel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao nome original', onclick: function () { salvar(''); } }) : null,
+      UI.rodape([
+        d.nome_painel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Nome original', onclick: function () { salvar(''); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         btn,
       ]),
@@ -5887,11 +5886,11 @@
     var campo = UI.el('input', { classe: 'campo', id: 'ponto-novo-nome', maxlength: '80', value: d.titulo, autofocus: true });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nome' });
-    var form = UI.el('form', { novalidate: true }, [
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Renomear ponto' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-novo-nome', texto: 'Nome do ponto' }), campo]),
+      UI.campo('Nome do ponto', campo, { para: 'ponto-novo-nome' }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

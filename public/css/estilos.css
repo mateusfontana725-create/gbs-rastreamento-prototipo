@@ -1940,3 +1940,25 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 .fila-sub { margin: 8px 0 2px; color: var(--texto-2); }
 .fila-eventos { margin: 0; padding-left: 18px; max-height: 160px; overflow: auto; }
 
+
+/* ---------- Formulários e modais (padrão único, js/interface.js) ---------- */
+.dica-caixa { display: inline-block; position: relative; vertical-align: middle; }
+.dica { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 6px; padding: 0; border: 1px solid var(--primaria, #38bdf8); border-radius: 50%; background: transparent; color: var(--primaria, #38bdf8); font: italic 700 .72rem/1 Georgia, serif; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: middle; }
+.dica:hover, .dica:focus-visible { background: rgba(56, 189, 248, .15); }
+.dica-texto { display: block; margin-top: 6px; padding: 8px 10px; border-radius: 6px; background: var(--superficie-2); border: 1px solid var(--borda); font-size: .82rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--texto-2); }
+.dica-texto[hidden] { display: none; }
+.form-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 12px 0; }
+.form-grade-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.form-grade > [hidden], .campo-bloco[hidden] { display: none; }
+.campo-bloco { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.campo-bloco .rotulo { margin: 0; display: flex; align-items: center; min-height: 22px; }
+.campo-bloco .campo { width: 100%; min-width: 0; min-height: 44px; }
+.campo-bloco small { line-height: 1.3; }
+.campo-largo { grid-column: 1 / -1; }
+.form-rodape { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 18px; }
+.form-rodape .btn { min-width: 120px; }
+@media (max-width: 600px) {
+  .form-grade, .form-grade-3 { grid-template-columns: 1fr; gap: 12px; }
+  .campo-largo { grid-column: auto; }
+  .form-rodape .btn { flex: 1 1 0; }
+}

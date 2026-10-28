@@ -180,5 +180,39 @@
   }
   verificarVersao();
 
-  window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar };
+  /*
+   * Padrão dos formulários e modais (usado em todo o app):
+   *   - rótulo curto; a explicação vai para um ícone "i" ao lado (UI.dica), não para parágrafos;
+   *   - campos em grade (UI.grade) e um rodapé com no máximo uma ação primária (UI.rodape).
+   */
+  // Ícone "i" com a explicação: toque ou clique abre embaixo do rótulo; o mouse mostra no título.
+  function dica(texto) {
+    var tip = el('span', { classe: 'dica-texto', role: 'note', hidden: true, texto: texto });
+    var b = el('button', { classe: 'dica', type: 'button', 'aria-label': 'Explicação', title: texto, texto: 'i' });
+    b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); tip.hidden = !tip.hidden; });
+    return el('span', { classe: 'dica-caixa' }, [b, tip]);
+  }
+
+  // Campo com rótulo (opcionalmente com "i") e controle. Opções: para (id do controle), dica, ajuda (linha curta), largo, oculto
+  function campo(rotulo, controle, o) {
+    o = o || {};
+    return el('div', { classe: 'campo-bloco' + (o.largo ? ' campo-largo' : ''), hidden: o.oculto ? true : null }, [
+      el('label', { classe: 'rotulo', for: o.para || null }, [rotulo, o.dica ? dica(o.dica) : null]),
+      controle,
+      o.ajuda ? el('small', { classe: 'muted', texto: o.ajuda }) : null,
+    ]);
+  }
+
+  // Grade de campos: 2 colunas no computador, 1 no celular (ver estilos.css)
+  function grade(filhos, o) {
+    return el('div', { classe: 'form-grade' + (o && o.tres ? ' form-grade-3' : '') }, filhos);
+  }
+
+  // Rodapé: botões à direita, o secundário à esquerda. Recebe os botões já criados, na ordem visual.
+  function rodape(botoes) {
+    return el('div', { classe: 'form-rodape' }, botoes);
+  }
+
+  window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar,
+    dica: dica, campo: campo, grade: grade, rodape: rodape };
 })();

@@ -8840,14 +8840,15 @@
     var mil = UI.el('input', { type: 'checkbox', id: 'grupo-militar', checked: g && g.permite_militar ? true : null });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'grupo-salvar', texto: novo ? 'Criar grupo' : 'Salvar' });
-    var form = UI.el('form', { novalidate: true }, [
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo grupo' : 'Editar grupo' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'grupo-nome', texto: 'Nome do grupo' }), nome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor' }), cores]),
-      UI.el('label', { classe: 'linha-opcao' }, [mil, ' Quem entrar pelo link do grupo pode se identificar como militar']),
-      UI.el('p', { classe: 'ajuda', texto: 'Sem esta opção, quem entra pelo link do grupo aparece sempre como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.' }),
+      UI.grade([
+        UI.campo('Nome do grupo', nome, { para: 'grupo-nome', largo: true }),
+      ]),
+      UI.campo('Cor', cores, { largo: true }),
+      UI.el('label', { classe: 'linha-opcao' }, [mil, ' Militar pelo link do grupo', UI.dica('Sem esta opção, quem entra pelo link do grupo aparece como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.')]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

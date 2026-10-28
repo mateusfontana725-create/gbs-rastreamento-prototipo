@@ -257,7 +257,7 @@
     });
     var fechar = UI.abrirModal(el('div', { classe: 'form-briefing' }, [
       el('h2', { id: 'modal-titulo', texto: 'Textos do briefing' }),
-      el('p', { classe: 'ajuda', texto: 'O resto do briefing (vítimas, último local visto, hipóteses, equipes, tarefas, decisões) vem do que já está cadastrado: não precisa digitar de novo. Aqui só o que não existe em outro lugar.' }),
+      el('p', { classe: 'ajuda', texto: 'Vítimas, equipes, hipóteses e decisões vêm do cadastro: só digite o que não existe em outro lugar.' }),
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-objetivo', texto: 'Objetivo' }), f.objetivo]),
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-riscos', texto: 'Riscos' }), f.riscos]),
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-com', texto: 'Comunicações' }), f.comunicacoes]),
@@ -389,7 +389,7 @@
   async function assumir(aposSalvar) {
     var r = await UI.confirmar({
       titulo: 'Assumir o comando sem o aceite de ' + (est.comando && est.comando.comando_nome || 'quem está no comando') + '?',
-      texto: 'Use só quando o comandante não pode responder. O motivo fica registrado no diário, em destaque, junto com a foto do briefing.',
+      texto: 'Só quando o comandante não pode responder. O motivo fica no diário, em destaque.',
       campo: { rotulo: 'Motivo (obrigatório, mín. 10 caracteres)', max: 500, obrigatorio: true }, ok: 'Assumir o comando', perigo: true, empilhar: true,
     });
     if (!r) return;
@@ -405,7 +405,7 @@
       corpo.innerHTML = '';
       corpo.appendChild(el('h2', { id: 'modal-titulo', texto: 'Briefing e passagem de comando' }));
       if (est.ausente) {
-        corpo.appendChild(el('p', { classe: 'nota', texto: 'O briefing ainda não está no servidor: rode as migrações 035, 036 e 037 no Supabase.' }));
+        corpo.appendChild(el('p', { classe: 'nota', texto: 'Briefing indisponível: faltam as migrações 035 a 037 no banco.' }));
         corpo.appendChild(el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
         return;
       }

@@ -81,7 +81,7 @@
         mostrar();
       }
       var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-mapa-escolha' }, [
-        UI.el('h2', { id: 'modal-titulo', texto: titulo || 'Escolher o local no mapa' }),
+        UI.el('h2', { id: 'modal-titulo', texto: titulo || 'Escolher no mapa' }),
         caixaMapa,
         info,
         UI.rodape([

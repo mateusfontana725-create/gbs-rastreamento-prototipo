@@ -7821,10 +7821,9 @@
     }
     render();
     var timer = setInterval(render, 2000);
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Diagnóstico do GPS (este aparelho)' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Mostra cada leitura do GPS e se ela entrou na trilha ou foi descartada, com o motivo. Fica só neste aparelho. ' +
-        'Para ver o de um participante, peça que ele abra o link com "&diag=1" no fim.' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Diagnóstico do GPS' },
+        [UI.dica('Cada leitura do GPS: entrou na trilha ou foi descartada, com o motivo. Fica neste aparelho. Para o de um participante, ele abre o link com "&diag=1".')]),
       info,
       caixa,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),

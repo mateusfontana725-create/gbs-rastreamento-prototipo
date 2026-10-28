@@ -2557,13 +2557,10 @@
     render();
     var resumo = f.resumo().map(function (x) { return x.texto + ': ' + x.qtd; }).join(' · ');
     var timer = setInterval(render, 2000);
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Diagnóstico do GPS' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Fica só neste aparelho; não é enviado. Permissão: ' + estado.permissao + ' · estado: ' + estado.gps +
-        ' · na fila: ' + qtdPendentes() + ' ponto(s)' +
-        (estado.trilha ? ' · guardados em: ' + estado.trilha.tipo + ' · enviados: ' + estado.trilha.qtdEnviados() +
-          ' · recusados pelo servidor: ' + estado.trilha.recusados().length + (estado.trilha.falhaGravacao ? ' · falha ao gravar: ' + estado.trilha.falhaGravacao : '') : '') +
-        ' · intervalo máximo: ' + Math.round(f.cfg.intervaloParadoMs / 1000) + ' s.' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Diagnóstico do GPS' },
+        [UI.dica('Fica só neste aparelho; não é enviado. Permissão: ' + estado.permissao + ' · estado: ' + estado.gps + ' · na fila: ' + qtdPendentes() + ' ponto(s) · intervalo máximo: ' + Math.round(f.cfg.intervaloParadoMs / 1000) + ' s.' +
+          (estado.trilha ? ' · guardados em ' + estado.trilha.tipo + ' · enviados ' + estado.trilha.qtdEnviados() + ' · recusados ' + estado.trilha.recusados().length + (estado.trilha.falhaGravacao ? ' · falha ao gravar: ' + estado.trilha.falhaGravacao : '') : ''))]),
       UI.el('p', { classe: 'ajuda', texto: resumo || 'Sem leituras ainda.' }),
       caixa,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),

@@ -703,20 +703,20 @@
     var listaSalvos = UI.el('ul', { classe: 'rel-salvos', id: 'rel-salvos' });
     var erro = UI.el('p', { classe: 'erro-form', hidden: true });
 
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-relatorio' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Relatório final' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-relatorio form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Relatório final' },
+        [UI.dica('PDF com cadastro, pessoas e grupos, setores varridos, diário e resultado. Cada relatório gerado fica guardado; só o administrador pode excluir.')]),
       opcoes.aviso ? UI.el('p', { classe: 'rel-aviso', texto: opcoes.aviso }) : null,
-      UI.el('p', { classe: 'muted', texto: 'Documento em PDF com o cadastro, as pessoas e grupos, os setores varridos (mapas e fotos), o diário consolidado e o resultado. Cada relatório gerado fica guardado. Só o administrador pode excluir um relatório, e a exclusão fica registrada no diário.' }),
       UI.el('section', { classe: 'rel-bloco' }, [
         UI.el('h3', { texto: 'Resultado da operação' }),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rel-resultado', texto: 'Desfecho' }), selRes]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rel-resultado-texto', texto: 'Descrição' }), txtRes]),
+        UI.campo('Desfecho', selRes, { para: 'rel-resultado' }),
+        UI.campo('Descrição', txtRes, { para: 'rel-resultado-texto', largo: true }),
         infoRes,
         UI.el('div', { classe: 'acoes-linha' }, [btnRes]),
       ]),
       UI.el('section', { classe: 'rel-bloco' }, [
         UI.el('h3', { texto: 'Gerar o PDF' }),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rel-fotos', texto: 'Fotos dos setores' }), selFotos]),
+        UI.campo('Fotos dos setores', selFotos, { para: 'rel-fotos' }),
         UI.el('label', { classe: 'rel-check', for: 'rel-fundo' }, [chkFundo, ' Mapa de fundo (OpenStreetMap) nos mapas do relatório']),
         progresso,
         erro,
@@ -727,7 +727,7 @@
         listaSalvos,
       ]),
       UI.rodape([
-        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário da operação', onclick: function () { fechar(); abrirDiario(op); } }),
+        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', onclick: function () { fechar(); abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { fecharNoFundo: false, aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });

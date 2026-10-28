@@ -445,13 +445,12 @@
       .concat(d.linhas.map(function (it, i) { return linhaItem('linhas', it, i); }))
       .concat(d.areas.map(function (it, i) { return linhaItem('areas', it, i); }))
       .concat(d.pontos.slice(0, 300).map(function (it, i) { return linhaItem('pontos', it, i); })));
-    var form = UI.el('form', { classe: 'form-importado', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Editar camada importada' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Formato ' + (FORMATO_NOME[d.formato] || 'do arquivo') + '. As propriedades lidas do arquivo (cor, espessura, opacidade, descrição, tipo e horários) aparecem em cada item. ' +
-        'As mudanças ficam neste aparelho; para todos verem, use "Registrar como trilha" ou "Enviar como trajeto" tocando na linha.' }),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'imp-nome-camada', texto: 'Nome da camada' }), nomeCamada]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'imp-cor-camada', texto: 'Cor dos itens sem cor própria' }), corCamada]),
+    var form = UI.el('form', { classe: 'form-importado form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Editar camada' },
+        [UI.dica('As mudanças ficam neste aparelho. Para todos verem, use "Registrar como trilha" ou "Enviar como trajeto" tocando na linha.')]),
+      UI.grade([
+        UI.campo('Nome', nomeCamada, { para: 'imp-nome-camada' }),
+        UI.campo('Cor padrão', corCamada, { para: 'imp-cor-camada', ajuda: 'Itens sem cor própria' }),
       ]),
       lista,
       d.pontos.length > 300 ? UI.el('p', { classe: 'muted', texto: 'Mostrando os 300 primeiros pontos.' }) : null,
@@ -534,11 +533,10 @@
       }
     });
     render();
-    var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Importar arquivo de mapa' }),
-      UI.el('p', { classe: 'ajuda', texto: 'GPX, KML, KMZ, GeoJSON ou CSV (com colunas latitude e longitude) — por exemplo, trilhas conhecidas, a última rota da vítima ou áreas de outro órgão. ' +
-        'A camada usa as cores do arquivo (ou verde-limão) e fica guardada só neste aparelho. Toque numa linha para editar, registrar como trilha da operação (equipe, drone…) ou enviar como trajeto.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'imp-arquivo', texto: 'Arquivo' }), entrada]),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Importar mapa' },
+        [UI.dica('GPX, KML, KMZ, GeoJSON ou CSV com latitude e longitude. A camada fica só neste aparelho. Toque numa linha para editar, registrar como trilha da operação ou enviar como trajeto.')]),
+      UI.campo('Arquivo', entrada, { para: 'imp-arquivo', largo: true }),
       erro,
       UI.el('h3', { texto: 'Camadas importadas' }),
       lista,
@@ -654,12 +652,11 @@
     var grafico = UI.el('div', { classe: 'perfil-altitude', id: 'perfil-altitude' }, [UI.el('p', { classe: 'muted', texto: s.distancia ? 'Montando o perfil de altitude…' : 'Sem trilha para o perfil.' })]);
     var tabela = UI.el('details', { classe: 'perfil-tabela' }, [UI.el('summary', { texto: 'Ver perfil em tabela' })]);
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-estatisticas' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Trilha de ' + P.nome(p) }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Trilha de ' + P.nome(p) }, [UI.dica('Altitude do modelo de terreno (≈ 20–30 m de resolução), não a do GPS. Velocidade máxima: percentil 95, para não contar erro de GPS.')]),
       dl,
       UI.el('h3', { texto: 'Perfil de altitude' }),
       grafico,
       tabela,
-      UI.el('p', { classe: 'ajuda', texto: 'Altitude do modelo de terreno (≈ 20–30 m de resolução) nos pontos da trilha, não a do GPS. Velocidade máxima: valor alto típico (percentil 95), para não contar erro de GPS.' }),
       UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (atual.marcaPerfil) { atual.marcaPerfil.remove(); atual.marcaPerfil = null; } } });
     if (!s.distancia) { subida.textContent = descida.textContent = extremos.textContent = '—'; return; }

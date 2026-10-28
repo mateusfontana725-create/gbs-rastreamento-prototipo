@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1568,5 +1568,132 @@ console.log('\nPOA: Fora da área e origem dos valores — migração 038');
   chk(/operacao_encerrada/.test(await erroDe(salvar([it(sA, 0.4)], { poa_fora: 0.6 }))), 'encerrada: sem novo rascunho');
 }
 
-console.log('\nMigrações 007–038 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 039: missão de busca (POD por missão) e cálculo pós-busca por versão ----------
+console.log('\nMissão de busca e cálculo pós-busca — migração 039');
+{
+  const opM = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP MISSAO BUSCA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const outraOp = await rpc(resp1, 'criar_operacao', { p_codigo: 'OUTRA OP', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const vit = (n) => rpc(resp1, 'salvar_vitima', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: n }) });
+  const vEva = await vit('Eva'), vFred = await vit('Fred'), vGil = await vit('Gil');
+  const d = (m) => m / 111194.93;
+  const circ = (op, nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: op, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 200 }) });
+  const sA = await circ(opM.id, 'Alfa', -25.40), sB = await circ(opM.id, 'Bravo', -25.40 + d(2000)), sC = await circ(opM.id, 'Charlie', -25.40 + d(4000));
+  const sOutro = await circ(outraOp.id, 'Outro', -25.40);
+  const gM = await rpc(resp1, 'salvar_grupo', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: 'Equipe A' }) });
+  const publicar = async (vitima, itens, fora) => {
+    const r = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vitima.id, p_dados: JSON.stringify({ justificativa: 'Seguiu a trilha do rio ao norte', poa_fora: fora, setores: itens.map(([s, poa]) => ({ setor_id: s.id, poa, justificativa: '' })) }) });
+    return (await rpc(resp1, 'cenario_aprovar', { p_cenario: r.cenario.id })).cenario;
+  };
+  const eva1 = await publicar(vEva, [[sA, 0.5], [sB, 0.3]], 0.2);
+  await publicar(vFred, [[sA, 0.2], [sB, 0.2]], 0.6);
+  await publicar(vGil, [[sA, 1]], 0);
+  const versoes = async (vitima) => (await db.query(`select numero, estado, origem_poa, poa_fora, base_numero, missao_id from public.busca_cenarios where vitima_id = $1 order by numero`, [vitima.id])).rows;
+  const poas = async (cen) => Object.fromEntries((await db.query(`select setor_nome, poa, origem from public.busca_cenario_setores where cenario_id = $1`, [cen]) ).rows.map((r) => [r.setor_nome, Number(r.poa)]));
+  const criar = (extra, uid) => rpc(uid || resp1, 'busca_missao_criar', { p_operacao: opM.id, p_dados: JSON.stringify(Object.assign({ setor_id: sA.id, vitima_id: vEva.id, grupo_id: gM.id, equipe: 'Equipe A', metodo: 'A pé, em linha', area_fracao: 1 }, extra || {})) });
+
+  console.log('  criar a missão');
+  chk(/busca_missao_equipe_obrigatoria/.test(await erroDe(criar({ grupo_id: null, equipe: '' }))), 'sem equipe: recusado');
+  chk(/busca_missao_metodo_obrigatorio/.test(await erroDe(criar({ metodo: '' }))), 'sem método: recusado');
+  chk(/busca_pod_sem_base/.test(await erroDe(criar({ pod: 0.6 }))), 'POD informada sem dizer em que se baseia: recusado');
+  chk(/dados_invalidos/.test(await erroDe(criar({ pod: 1.2, pod_base: 'varredura em linha' }))) && /busca_cobertura_invalida/.test(await erroDe(criar({ area_fracao: 0 }))) && /busca_cobertura_invalida/.test(await erroDe(criar({ area_fracao: 1.5 }))), 'POD fora de 0 a 1 e área fora de 0 a 100%: recusados');
+  chk(/sem_permissao/.test(await erroDe(criar({}, resp2))), 'outro responsável não cria missão');
+  chk(/setor_nao_encontrado/.test(await erroDe(criar({ setor_id: sOutro.id }))), 'setor de outra operação: recusado');
+  const m1r = await criar({ pod: 0.6, pod_base: 'Varredura em linha, 5 m entre buscadores', chave_cliente: 'k1' });
+  const m1 = m1r.missao;
+  chk(m1.estado === 'planejada' && Number(m1.pod_planejada) === 0.6 && m1.setor_nome === 'Alfa' && m1.calculo_estado === 'nao_aplicavel' && m1r.repetida === false, 'missão planejada com equipe, método, área e POD estimada');
+  chk((await criar({ pod: 0.6, pod_base: 'Varredura em linha, 5 m entre buscadores', chave_cliente: 'k1' })).repetida === true, 'reenviar a mesma missão (mesma chave) não duplica');
+  chk(/busca_chave_reutilizada/.test(await erroDe(criar({ pod: 0.7, pod_base: 'Varredura em linha, 5 m entre buscadores', chave_cliente: 'k1' }))), 'mesma chave com outro conteúdo: recusada');
+  const m2 = (await criar({ setor_id: sB.id })).missao;
+  chk(m2.pod_planejada === null, '"POD não estimada" fica nula, nunca zero', m2.pod_planejada);
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'busca_missao_criada'`, [opM.id])).rows[0].n === 2, 'a criação entra no diário');
+  chk(/permission denied/.test(await erroDe(como(resp1, `insert into public.busca_missoes (operacao_id, setor_nome, equipe, metodo, criada_por_nome) values ($1, 'X', 'Y', 'Z', 'W')`, [opM.id]))), 'escrita direta na tabela é recusada');
+  chk((await como(resp2, `select id from public.busca_missoes`)).rows.length === 0, 'outro responsável (sem acesso à operação) não lê as missões');
+
+  console.log('  resultado negativo: r = p × (1 − q), Z = Σr, p\' = r/Z');
+  chk(/busca_missao_resultado_invalido/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'talvez' }) }))), 'resultado inválido: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))), 'outro responsável não registra o resultado');
+  const r1 = await rpc(resp1, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'nao_localizado', observacao: 'Mata fechada' }) });
+  chk(r1.missao.estado === 'concluida' && r1.missao.calculo_estado === 'aplicado' && Number(r1.missao.cobertura_real_fracao) === 1, 'negativa: concluída, cobertura = área atribuída, cálculo aplicado');
+  const vEvaDepois = await versoes(vEva);
+  chk(vEvaDepois.length === 2 && vEvaDepois[1].origem_poa === 'calculo_pos_busca' && vEvaDepois[1].estado === 'aprovada' && vEvaDepois[1].base_numero === 1 && vEvaDepois[1].missao_id === m1.id, 'gerou a versão 2 aprovada (origem: cálculo pós-busca), a partir da 1');
+  const p2 = await poas((await db.query(`select id from public.busca_cenarios where vitima_id = $1 and numero = 2`, [vEva.id])).rows[0].id);
+  const esperado = { Alfa: 0.2 / 0.7, Bravo: 0.3 / 0.7 };
+  chk(Math.abs(p2.Alfa - esperado.Alfa) < 1e-6 && Math.abs(p2.Bravo - esperado.Bravo) < 1e-6, 'Alfa 28,57% e Bravo 42,86%: 0,5×0,4÷0,7 e 0,3÷0,7', p2);
+  chk(Math.abs(Number(vEvaDepois[1].poa_fora) - 0.2 / 0.7) < 1e-6 && Math.abs(p2.Alfa + p2.Bravo + Number(vEvaDepois[1].poa_fora) - 1) < 1e-9, '"Fora da área" 28,57% e a soma fecha em exatamente 100%');
+  const eva1Itens = await poas(eva1.id);
+  chk(eva1Itens.Alfa === 0.5 && eva1Itens.Bravo === 0.3 && (await versoes(vEva))[0].estado === 'aprovada' && Number((await versoes(vEva))[0].poa_fora) === 0.2, 'a versão 1 continua intacta');
+  const ef = (await db.query(`select poa_setor_antes, poa_setor_depois, q, pos, z from public.busca_missao_efeitos where missao_id = $1`, [m1.id])).rows;
+  chk(ef.length === 1 && Number(ef[0].pos) === 0.3 && Number(ef[0].q) === 0.6 && Math.abs(Number(ef[0].z) - 0.7) < 1e-6, 'POS da missão = POA do setor × POD = 50% × 60% = 30% ("chance de localizar nesta busca")', ef);
+  chk((await db.query(`select count(*)::int n from public.busca_cenario_setores where cenario_id = (select id from public.busca_cenarios where vitima_id = $1 and numero = 2) and origem = 'calculo'`, [vEva.id])).rows[0].n === 2, 'os valores da versão calculada têm origem "calculo"');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'cenario_pos_busca'`, [opM.id])).rows[0].n === 1, 'a atualização entra no diário');
+  chk(/busca_missao_nao_planejada/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))), 'o resultado entra uma vez só');
+  chk(/busca_missao_imutavel/.test(await erroDe(db.query(`update public.busca_missoes set equipe = 'Outra' where id = $1`, [m1.id]))) && /busca_missao_imutavel/.test(await erroDe(db.query(`delete from public.busca_missoes where id = $1`, [m1.id]))), 'missão concluída não muda nem some');
+  chk(/busca_missao_imutavel/.test(await erroDe(db.query(`update public.busca_missao_efeitos set pos = 0`))), 'o efeito calculado não muda');
+
+  console.log('  POD desconhecido: pendência, sem recalcular');
+  const antes = (await versoes(vEva)).length;
+  const r2 = await rpc(resp1, 'busca_missao_resultado', { p_missao: m2.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(r2.missao.calculo_estado === 'pendente_pod' && r2.missao.pod_final === null && (await versoes(vEva)).length === antes, 'POD não estimada: não recalcula e fica "pendente de POD" (não vira zero)');
+  chk(/busca_pod_sem_base/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 0.5, p_base: '' }))) && /dados_invalidos/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 2, p_base: 'Estimativa da equipe' }))), 'informar o POD exige a base e valor entre 0 e 1');
+  chk(/busca_missao_pod_nao_pendente/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m1.id, p_pod: 0.5, p_base: 'Estimativa da equipe' }))), 'missão sem pendência não aceita POD novo');
+  const dp = await rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 0.5, p_base: 'Estimativa da equipe', p_origem: 'ia' });
+  chk(dp.missao.calculo_estado === 'aplicado' && dp.missao.pod_final_origem === 'ia' && dp.missao.pod_final_revisor === 'Sgt Um', 'POD informado depois: recalcula; origem "ia" guarda quem revisou');
+  const v3 = (await versoes(vEva))[2];
+  const p3 = await poas((await db.query(`select id from public.busca_cenarios where vitima_id = $1 and numero = 3`, [vEva.id])).rows[0].id);
+  const rA = (0.2 / 0.7), rB = (0.3 / 0.7) * 0.5, rF = 0.2 / 0.7, Z = rA + rB + rF;
+  chk(v3 && v3.base_numero === 2 && Math.abs(p3.Alfa - rA / Z) < 1e-6 && Math.abs(p3.Bravo - rB / Z) < 1e-6 && Math.abs(Number(v3.poa_fora) - rF / Z) < 1e-6, 'versão 3 parte da versão vigente (2): as missões se aplicam em sequência, sem somar PODs', p3);
+  chk(/busca_missao_pod_nao_pendente/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 0.9, p_base: 'Outra estimativa' }))), 'o POD informado depois não se troca');
+
+  console.log('  casos que não recalculam');
+  const nVer = (await versoes(vEva)).length;
+  const mC = (await criar({ setor_id: sC.id, pod: 0.8, pod_base: 'Estimativa da equipe' })).missao;
+  const rC = await rpc(resp1, 'busca_missao_resultado', { p_missao: mC.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(rC.missao.calculo_estado === 'nao_aplicavel' && (await versoes(vEva)).length === nVer, 'setor que não está no cenário (POA zero): nada a atualizar');
+  const mL = (await criar({ pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rL = await rpc(resp1, 'busca_missao_resultado', { p_missao: mL.id, p_dados: JSON.stringify({ resultado: 'localizado' }) });
+  chk(rL.missao.calculo_estado === 'nao_aplicavel' && (await versoes(vEva)).length === nVer, 'localizado: não recalcula o POA');
+  const mN = (await criar({ pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rN = await rpc(resp1, 'busca_missao_resultado', { p_missao: mN.id, p_dados: JSON.stringify({ resultado: 'nao_concluido' }) });
+  chk(rN.missao.calculo_estado === 'nao_aplicavel' && rN.missao.cobertura_real_fracao === null && (await versoes(vEva)).length === nVer, 'não concluído sem cobertura informada: não recalcula');
+  const mN2 = (await criar({ pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rN2 = await rpc(resp1, 'busca_missao_resultado', { p_missao: mN2.id, p_dados: JSON.stringify({ resultado: 'nao_concluido', cobertura: 0.4 }) });
+  chk(rN2.missao.calculo_estado === 'aplicado' && Number(rN2.efeitos[0].q) === 0.2, 'não concluído com cobertura real (40%): recalcula com q = POD × cobertura = 20%', rN2.efeitos);
+  chk(/busca_cobertura_invalida/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: (await criar({})).missao.id, p_dados: JSON.stringify({ resultado: 'nao_localizado', cobertura: 1.5 }) }))), 'cobertura real fora de 0 a 100%: recusada');
+
+  console.log('  várias vítimas e inconsistência');
+  const mT = (await criar({ setor_id: sB.id, vitima_id: null, pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rT = await rpc(resp1, 'busca_missao_resultado', { p_missao: mT.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(rT.efeitos.length === 2 && rT.efeitos.every((e) => e.vitima_id !== vGil.id), 'missão para todas as vítimas atualiza cada uma que tem o setor no cenário (Gil não tem Bravo: intacto)');
+  chk((await versoes(vGil)).length === 1, 'a vítima sem o setor não ganha versão');
+  const mZ = (await criar({ vitima_id: vGil.id, pod: 1, pod_base: 'Cobertura total confirmada' })).missao;
+  const rZ = await rpc(resp1, 'busca_missao_resultado', { p_missao: mZ.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(rZ.missao.estado === 'concluida' && rZ.missao.calculo_estado === 'inconsistente' && /Z = Σ r = 0/.test(rZ.missao.calculo_detalhe), 'Z = 0 (tudo no setor e POD 100%): resultado registrado, cálculo INCONSISTENTE com o motivo');
+  chk((await versoes(vGil)).length === 1 && Number((await versoes(vGil))[0].poa_fora) === 0, 'na inconsistência a versão anterior não é alterada');
+
+  console.log('  rascunho em aberto e ordem das versões');
+  const rascEva = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vEva.id, p_dados: JSON.stringify({ justificativa: 'Revisão do comando após as buscas', poa_fora: 0.5, setores: [{ setor_id: sA.id, poa: 0.3 }, { setor_id: sB.id, poa: 0.2 }] }) });
+  const baseRasc = rascEva.cenario.base_numero;
+  const mR = (await criar({ pod: 0.3, pod_base: 'Estimativa da equipe' })).missao;
+  await rpc(resp1, 'busca_missao_resultado', { p_missao: mR.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(/cenario_base_desatualizada/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: rascEva.cenario.id }))), 'rascunho de antes de uma busca negativa: publicar é recusado (a vigente mudou)');
+  const rasc2 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vEva.id, p_dados: JSON.stringify({ justificativa: 'Revisão do comando após as buscas', poa_fora: 0.5, setores: [{ setor_id: sA.id, poa: 0.3 }, { setor_id: sB.id, poa: 0.2 }] }) });
+  const maxAprov = (await db.query(`select max(numero) n from public.busca_cenarios where vitima_id = $1 and estado = 'aprovada'`, [vEva.id])).rows[0].n;
+  chk(rasc2.cenario.base_numero === maxAprov && baseRasc < maxAprov, 'salvar o rascunho de novo atualiza a base para a versão vigente', [baseRasc, maxAprov]);
+  const apFinal = await rpc(resp1, 'cenario_aprovar', { p_cenario: rasc2.cenario.id });
+  chk(apFinal.cenario.numero === maxAprov + 1, 'o rascunho publicado fica depois da versão calculada (numeração em ordem)', apFinal.cenario.numero);
+
+  console.log('  cancelar, encerrada e Realtime');
+  const mK = (await criar({})).missao;
+  chk(/busca_missao_cancelamento_sem_motivo/.test(await erroDe(rpc(resp1, 'busca_missao_cancelar', { p_missao: mK.id, p_motivo: '' }))), 'cancelar exige o motivo');
+  const kc = await rpc(resp1, 'busca_missao_cancelar', { p_missao: mK.id, p_motivo: 'Equipe remanejada' });
+  chk(kc.missao.estado === 'cancelada' && /busca_missao_nao_planejada/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: mK.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))), 'cancelada fica no histórico e não recebe resultado');
+  chk(/busca_missao_nao_planejada/.test(await erroDe(rpc(resp1, 'busca_missao_cancelar', { p_missao: m1.id, p_motivo: 'Tarde demais' }))), 'missão concluída não se cancela');
+  const mE = (await criar({})).missao;
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opM.id });
+  chk(/operacao_encerrada/.test(await erroDe(criar({}))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: mE.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'busca_missao_cancelar', { p_missao: mE.id, p_motivo: 'Encerrada a operação' }))), 'encerrada: sem criar, concluir nem cancelar missão');
+  const pubM = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['busca_missoes', 'busca_missao_efeitos'].every((x) => pubM.includes(x)), 'missões e efeitos publicados no Realtime');
+}
+
+console.log('\nMigrações 007–039 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

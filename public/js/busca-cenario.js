@@ -19,17 +19,9 @@
     opId: null, vitimas: [], cenarios: [], itens: [], evidencias: [], registros: [], localizacoes: [],
     ausente: false, erro: null, canal: null, timer: null, timerCanal: null,
     vitimaSel: null, renderAtual: null, camadaVitima: null, aba: 'poa', editorSujo: false,
+    missoes: [], efeitos: [], semMissoes: false,
   };
 
-  var MOTIVOS = {
-    anulado: 'anulado',
-    outra_vitima: 'vale para outra vítima',
-    setor_fora_do_cenario: 'setor fora deste cenário',
-    anterior_a_versao: 'lançado antes da versão aprovada',
-    inconsistente: 'inconsistente com o cenário (POD 100% onde estava toda a probabilidade): revise o POD ou o cenário',
-    planejada: 'planejada: não altera o POA',
-    sem_estimativa: 'POD não estimada: não altera o POA',
-  };
   var CONFIANCA = { baixa: 'baixa', media: 'média', alta: 'alta' };
   var ORIGENS = { julgamento_comando: 'julgamento documentado do comando', consenso_documentado: 'consenso documentado da equipe', modelo_validado: 'modelo validado' };
   var METODOS = ['A pé, em linha', 'A pé, em grupo livre', 'Cão de busca', 'Drone', 'Embarcação', 'Mergulho', 'Veículo ou moto', 'Outro'];
@@ -65,21 +57,6 @@
   }
   function rascunhoDa(vitimaId) {
     return versoesDa(vitimaId).filter(function (c) { return c.estado === 'rascunho'; })[0] || null;
-  }
-  function registrosParaCalculo() {
-    return est.registros.map(function (r) {
-      return { id: r.id, setorId: r.setor_id, vitimaId: r.vitima_id, finalidade: r.finalidade, pod: r.pod == null ? null : Number(r.pod),
-        coberturaFracao: r.cobertura_fracao == null ? null : Number(r.cobertura_fracao), registradoEm: C.paraMs(r.registrado_em), anulado: Boolean(r.anulado_em) };
-    });
-  }
-  function resultadoDa(vitimaId) {
-    var ap = aprovadaDa(vitimaId);
-    if (!ap) return null;
-    return M.calcular({
-      vitimaId: vitimaId, registros: registrosParaCalculo(),
-      cenario: { id: ap.id, numero: ap.numero, aprovadaEm: C.paraMs(ap.aprovada_em),
-        setores: ap.setores.map(function (i) { return { setorId: i.setor_id, nome: i.setor_nome, poa: Number(i.poa), areaM2: i.area_m2 }; }) },
-    });
   }
   function geometriaDoSetor(s, poa) {
     return { nome: s.nome, poa: poa, forma: s.forma, centroLat: s.centro_lat, centroLng: s.centro_lng, raioM: s.raio_m, pontos: s.pontos };
@@ -118,6 +95,16 @@
     try {
       est.localizacoes = (await C.consultar(C.cliente.from('vitima_localizacoes').select('vitima_id,condicao,registrado_em').eq('operacao_id', opId))) || [];
     } catch (e) { est.localizacoes = []; }
+    try {
+      var rm = await Promise.all([
+        C.consultar(C.cliente.from('busca_missoes').select('*').eq('operacao_id', opId).order('criada_em', { ascending: true })),
+        C.consultar(C.cliente.from('busca_missao_efeitos').select('*').eq('operacao_id', opId)),
+      ]);
+      if (P.op() && P.op().id === opId) { est.missoes = rm[0] || []; est.efeitos = rm[1] || []; est.semMissoes = false; }
+    } catch (e) {
+      // banco sem a migração 039: o POA segue, só as missões ficam indisponíveis
+      est.missoes = []; est.efeitos = []; est.semMissoes = true;
+    }
     atualizarCamada();
     if (est.renderAtual) est.renderAtual();
   }
@@ -134,7 +121,7 @@
     if (est.canal) { try { C.cliente.removeChannel(est.canal); } catch (e) { /* ignora */ } }
     try {
       est.canal = C.cliente.channel('op-busca-' + opId + '-' + Date.now());
-      ['busca_cenarios', 'busca_cenario_setores', 'busca_cenario_evidencias', 'busca_registros', 'vitimas', 'vitima_localizacoes'].forEach(function (tabela) {
+      ['busca_cenarios', 'busca_cenario_setores', 'busca_cenario_evidencias', 'busca_registros', 'busca_missoes', 'busca_missao_efeitos', 'vitimas', 'vitima_localizacoes'].forEach(function (tabela) {
         est.canal.on('postgres_changes', { event: '*', schema: 'public', table: tabela, filter: 'operacao_id=eq.' + opId }, agendar);
       });
       est.canal.subscribe(function (status) {
@@ -160,7 +147,7 @@
     clearTimeout(est.timerCanal);
     if (est.canal) { try { C.cliente.removeChannel(est.canal); } catch (e) { /* ignora */ } }
     est.canal = null;
-    est.opId = null; est.vitimas = []; est.cenarios = []; est.itens = []; est.evidencias = []; est.registros = []; est.localizacoes = [];
+    est.opId = null; est.vitimas = []; est.cenarios = []; est.itens = []; est.evidencias = []; est.registros = []; est.localizacoes = []; est.missoes = []; est.efeitos = []; est.semMissoes = false;
     est.ausente = false; est.erro = null; est.vitimaSel = null; est.renderAtual = null; est.aba = 'poa'; est.editorSujo = false;
     est.camadaVitima = null;
     if (P.camadaProbabilidade) P.camadaProbabilidade(null);
@@ -172,9 +159,9 @@
     var vid = est.camadaVitima;
     var ap = vid && aprovadaDa(vid);
     if (!vid || !ap) { P.camadaProbabilidade(null); return; }
-    var res = resultadoDa(vid), valores = {};
-    res.setores.forEach(function (s) { valores[s.setorId] = s.poaAtual; });
-    P.camadaProbabilidade(valores, 'POA atual · ' + nomeVitima(vid) + ' · versão ' + ap.numero + ' · referência ' + C.hora(ap.horario_referencia || ap.aprovada_em, false) + ' (prévia)');
+    var valores = {};
+    ap.setores.forEach(function (i) { if (i.setor_id) valores[i.setor_id] = Number(i.poa); });
+    P.camadaProbabilidade(valores, 'POA vigente · ' + nomeVitima(vid) + ' · versão ' + ap.numero + ' · referência ' + C.hora(ap.horario_referencia || ap.aprovada_em, false));
   }
 
   /* ---------- Peças de tela ---------------------------------------------- */
@@ -218,28 +205,23 @@
     return el('div', { classe: 'cenario-ref' }, partes);
   }
 
-  function tabelaCenario(c, resultado) {
+  var ORIGEM_VALOR = { manual: 'manual', ia: 'sugerido por IA', calculo: 'cálculo pós-busca' };
+  function tabelaCenario(c) {
     var linhas = c.setores.slice().sort(function (a, b) { return Number(b.poa) - Number(a.poa) || a.setor_nome.localeCompare(b.setor_nome, 'pt-BR'); }).map(function (i) {
-      var s = resultado && i.setor_id ? resultado.setores.find(function (x) { return x.setorId === i.setor_id; }) : null;
-      var podTxt = !s ? '—' : s.pod != null ? pct(s.pod) + ' (' + s.registros + ' busca' + (s.registros > 1 ? 's' : '') + ')' : (s.semEstimativa ? 'não estimada' : '—');
       return celulas([
         el('span', null, [i.setor_nome, i.setor_id ? null : el('small', { classe: 'muted', texto: ' (setor excluído)' })]),
         pct(Number(i.poa)),
         i.area_m2 ? (i.area_m2 / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + ' km²' : '—',
-        s && s.pdenPorKm2 != null ? s.pdenPorKm2.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—',
-        podTxt,
-        s ? pct(s.pos) : '—',
-        s ? pct(s.poaAtual) : '—',
+        i.origem === 'ia' ? 'sugerido por IA, revisado por ' + (i.ia_revisado_por_nome || '—') : (ORIGEM_VALOR[i.origem] || 'manual'),
         i.justificativa ? el('small', { classe: 'muted', texto: i.justificativa }) : '',
       ]);
     });
     var soma = M.somaPoa(c.setores.map(function (i) { return i.setor_id ? Number(i.poa) : 0; }));
-    linhas.push(celulas([
-      el('em', { texto: 'Fora dos setores desenhados' }), pct(resultado ? resultado.poaFora : Math.max(0, 1 - soma)), '—', '—', '—', '—',
-      resultado ? pct(resultado.poaForaAtual) : '—', el('small', { classe: 'muted', texto: 'o que sobra de 100%; não tem busca nem área' }),
-    ]));
-    return tabela(['Setor', 'POA aprovado', 'Área', 'Densidade (% por km²)', 'POD acumulado', 'POS', 'POA atual', 'Justificativa do setor'], linhas);
+    linhas.push(celulas([el('em', { texto: 'Fora da área' }), pct(c.poa_fora != null ? Number(c.poa_fora) : Math.max(0, 1 - soma)),
+      '—', c.poa_fora_origem === 'ia' ? 'sugerido por IA, revisado por ' + (c.aprovada_por_nome || '—') : (ORIGEM_VALOR[c.poa_fora_origem] || 'manual'), '']));
+    return tabela(['Setor', 'POA', 'Área', 'Origem', 'Justificativa'], linhas);
   }
+
   /* ---------- Peças: dica (i) ------------------------------------------- */
   // Explicação curta atrás de um (i): passa o mouse (title) ou toca para abrir embaixo do rótulo.
   function dica(texto) {
@@ -254,7 +236,7 @@
   var DICA_GERAL = 'POA: chance de a pessoa estar em cada setor. POD: chance de a busca achá-la se ela estiver ali; vem do registro da equipe, nunca do GPS. POS = POA × POD: chance de localizar nesta busca (não é chance de sobrevivência).';
 
   /* ---------- Tela principal: painel POA/POD (botão do topo) ------------- */
-  var ABAS = [['poa', 'POA'], ['buscas', 'Buscas'], ['versoes', 'Versões']];
+  var ABAS = [['poa', 'POA'], ['buscas', 'Missões'], ['versoes', 'Versões']];
 
   function abrir(vitimaId) {
     if (vitimaId) est.vitimaSel = vitimaId;
@@ -267,7 +249,7 @@
       return el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]);
     }
 
-    function abaPoa(vid, ap, rasc, res, editavel) {
+    function abaPoa(vid, ap, rasc, editavel) {
       if (editavel) return montarEditor(vid, function () { est.editorSujo = false; carregar().then(function () { desenhar(); }); });
       var caixa = el('div', { classe: 'poa-leitura' });
       if (!ap) { caixa.appendChild(aviso('Sem versão publicada.')); return caixa; }
@@ -278,60 +260,52 @@
       return caixa;
     }
 
-    function abaBuscas(vid, res) {
-      var mapaReg = {};
-      if (res) res.registros.forEach(function (x) { mapaReg[x.id] = x; });
-      var visiveis = est.registros.filter(function (r) { return !r.vitima_id || r.vitima_id === vid; }).slice().reverse();
+    function abaMissoes(vid) {
       var sec = el('div', { classe: 'poa-sec' });
-      if (podeAlterar()) sec.appendChild(el('div', { classe: 'poa-acoes-topo' }, [el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-registrar', texto: 'Registrar busca', onclick: function () { abrirRegistro({}); } })]));
-      if (!visiveis.length) { sec.appendChild(aviso('Nenhuma busca registrada.')); return sec; }
-      sec.appendChild(tabela(['Quando', 'Setor', 'Equipe e método', 'POD', 'Situação', ''], visiveis.map(function (r) {
-        var x = mapaReg[r.id];
-        var situacao = r.anulado_em ? 'Anulado: ' + r.anulado_motivo + ' (' + (r.anulado_por_nome || '—') + ')'
-          : !res ? 'Aguardando versão publicada'
-            : x && x.conta ? 'Conta no cálculo'
-              : x && x.motivo === 'planejada' ? 'Planejada' + (x.posPrevista != null ? ' · POS prevista ' + pct(x.posPrevista) : '')
-                : 'Não conta: ' + (MOTIVOS[x && x.motivo] || '—');
-        var podTxt = r.pod == null ? 'não estimada' : pct(Number(r.pod)) + (r.alcance === 'parcial' ? ' em ' + pct(Number(r.cobertura_fracao), 0) + ' do setor' : '');
-        return el('tr', { classe: r.anulado_em ? 'registro-anulado' : null }, [
-          el('td', { texto: C.hora(r.registrado_em, false) }),
-          el('td', { texto: r.setor_nome }),
-          el('td', { texto: [(r.equipe || '—') + (r.vitima_id ? ' · só ' + nomeVitima(r.vitima_id) : ''), r.metodo].filter(Boolean).join(' · ') }),
-          el('td', { texto: podTxt, title: r.base_estimativa || '' }),
-          el('td', null, [el('small', { classe: 'muted', texto: situacao })]),
-          el('td', null, [podeAlterar() && !r.anulado_em ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Anular', onclick: function () { abrirAnulacao(r); } }) : null]),
-        ]);
-      })));
+      if (est.semMissoes) { sec.appendChild(aviso('Faltam as migrações 038 e 039 no banco.')); return sec; }
+      if (podeAlterar()) sec.appendChild(el('div', { classe: 'poa-acoes-topo' }, [el('button', { classe: 'btn btn-prob', type: 'button', id: 'cenario-registrar', texto: 'Nova missão', onclick: function () { abrirMissao({ aoConcluir: desenhar }); } })]));
+      var visiveis = est.missoes.filter(function (m) { return !m.vitima_id || m.vitima_id === vid; });
+      var ordem = { planejada: 0, concluida: 1, cancelada: 2 };
+      visiveis.sort(function (a, b) { return ordem[a.estado] - ordem[b.estado] || (a.estado === 'planejada' ? C.paraMs(a.criada_em) - C.paraMs(b.criada_em) : C.paraMs(b.criada_em) - C.paraMs(a.criada_em)); });
+      if (!visiveis.length) sec.appendChild(aviso('Nenhuma missão de busca.'));
+      else sec.appendChild(el('ul', { classe: 'poa-missoes' }, visiveis.map(function (m) { return cartaoMissao(m, desenhar); })));
+      var antigos = est.registros.filter(function (r) { return !r.vitima_id || r.vitima_id === vid; });
+      if (antigos.length) {
+        sec.appendChild(el('details', { classe: 'cenario-versao' }, [
+          el('summary', { texto: 'Registros anteriores (' + antigos.length + ')' }),
+          el('p', { classe: 'muted', texto: 'Formato antigo, por setor. Ficam guardados, mas não entram mais no cálculo do POA.' }),
+          el('ul', { classe: 'pod-buscas' }, antigos.slice().reverse().map(function (r) {
+            return el('li', { texto: C.hora(r.registrado_em, false) + ' · ' + r.setor_nome + ' · ' + (r.equipe || '—') + ': ' + (r.pod == null ? 'POD não estimada' : 'POD ' + pct(Number(r.pod))) + (r.anulado_em ? ' (anulado)' : '') });
+          })),
+        ]));
+      }
       return sec;
     }
 
-    function abaVersoes(vid, ap, res) {
+    function abaVersoes(vid, ap) {
       var sec = el('div', { classe: 'poa-sec' });
       if (ap) {
         sec.appendChild(el('h3', { texto: textoAprovacao(ap) }));
-        sec.appendChild(tabelaCenario(ap, res));
-        sec.appendChild(el('p', { classe: 'muted', texto: 'POS total desde esta versão: ' + pct(res.posTotal) }));
-        if (res.registros.some(function (x) { return x.motivo === 'inconsistente'; })) sec.appendChild(aviso('Há busca inconsistente com o cenário; ela não foi aplicada. Revise o POD informado.'));
+        sec.appendChild(tabelaCenario(ap));
         sec.appendChild(el('details', { classe: 'cenario-versao' }, [el('summary', { texto: 'Referência e hipóteses' }), el('p', { classe: 'cenario-just' }, [el('strong', { texto: 'Justificativa: ' }), ap.justificativa]), blocoReferencia(ap)]));
       } else sec.appendChild(aviso('Sem versão publicada.'));
       var vers = versoesDa(vid).slice().reverse();
       if (vers.length) {
         sec.appendChild(el('h3', { texto: 'Histórico' }));
         vers.forEach(function (c) {
+          var m = c.missao_id ? est.missoes.find(function (x) { return x.id === c.missao_id; }) : null;
           sec.appendChild(el('details', { classe: 'cenario-versao' }, [
-            el('summary', { texto: c.estado === 'aprovada' ? textoAprovacao(c) : 'Rascunho da versão ' + c.numero }),
+            el('summary', { texto: (c.estado === 'aprovada' ? textoAprovacao(c) : 'Rascunho da versão ' + c.numero) + (m ? ' · calculada: busca negativa em ' + m.setor_nome : '') }),
             el('p', { classe: 'cenario-just' }, [el('strong', { texto: 'Justificativa: ' }), c.justificativa || '—']),
             blocoReferencia(c),
-            tabela(['Setor', 'POA', 'Justificativa do setor'], c.setores.slice().sort(function (a, b) { return Number(b.poa) - Number(a.poa); }).map(function (i) {
-              return celulas([i.setor_nome + (i.setor_id ? '' : ' (excluído)'), pct(Number(i.poa)), i.justificativa || '']);
-            })),
+            tabelaCenario(c),
           ]));
         });
       }
       sec.appendChild(el('details', { classe: 'pod-formulas' }, [
         el('summary', { texto: 'Como é calculado' }),
-        el('p', { texto: 'POD acumulado do setor = 1 − (1 − POD₁) × (1 − POD₂) × …, só com busca executada, com POD estimada, não anulada, lançada depois da versão. POD não estimada nunca vira zero e não reduz o POA.' }),
-        el('p', { texto: 'POS do setor = POA × POD. POA atual = POA × (1 − POD), dividido pelo total que sobra (Bayes). O GPS não entra: a trilha mostra por onde a equipe passou, não o que ela observou.' }),
+        el('p', { texto: 'Cada busca negativa gera uma nova versão: q = POD × cobertura no setor pesquisado (0 nos demais); r = POA × (1 − q); novo POA = r ÷ Σr, com "Fora da área" entre os valores. Sem POD, não recalcula.' }),
+        el('p', { texto: 'POS da missão = POA do setor × POD da missão. O app nunca soma PODs de missões diferentes: cada missão atualiza a versão vigente, uma depois da outra. O GPS não entra.' }),
       ]));
       return sec;
     }
@@ -352,7 +326,7 @@
       }
       if (!est.vitimaSel || !est.vitimas.some(function (v) { return v.id === est.vitimaSel; })) est.vitimaSel = est.vitimas[0].id;
       var vid = est.vitimaSel;
-      var ap = aprovadaDa(vid), rasc = rascunhoDa(vid), res = resultadoDa(vid), loc = localizacaoDa(vid);
+      var ap = aprovadaDa(vid), rasc = rascunhoDa(vid), loc = localizacaoDa(vid);
       var editavel = podeAlterar() && !loc;
 
       var linhaTopo = [];
@@ -379,7 +353,7 @@
           onclick: function () { if (est.aba === a[0]) return; est.aba = a[0]; est.editorSujo = false; desenhar(); } });
       }));
       corpo.appendChild(abas);
-      corpo.appendChild(est.aba === 'buscas' ? abaBuscas(vid, res) : est.aba === 'versoes' ? abaVersoes(vid, ap, res) : abaPoa(vid, ap, rasc, res, editavel));
+      corpo.appendChild(est.aba === 'buscas' ? abaMissoes(vid) : est.aba === 'versoes' ? abaVersoes(vid, ap) : abaPoa(vid, ap, rasc, editavel));
       corpo.appendChild(rodape());
     }
 
@@ -503,17 +477,6 @@
           fora.value = '0'; marcarSujo(); atualizarTotal();
         } }),
     ];
-    var resAtual = ap ? resultadoDa(vitimaId) : null;
-    if (resAtual && resAtual.registros.some(function (x) { return x.conta; })) {
-      atalhos.push(el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'cenario-usar-atual', texto: 'Usar POA atual',
-        title: 'Preenche com o POA atualizado pelas buscas registradas. Confirme que a hipótese ainda vale e justifique.',
-        onclick: function () {
-          var s = M.sugerirProximaVersao(resAtual), tot = 0;
-          campos.forEach(function (c) { var v = Math.round((s[c.s.id] || 0) * 1000); c.poa.value = String(v / 10); tot += v; });
-          fora.value = String(Math.max(0, 1000 - tot) / 10); marcarSujo(); atualizarTotal();
-        } }));
-    }
-
     function montarDados() {
       var t = totalDecimos();
       if (isNaN(t)) throw new Error('Cada POA deve ficar entre 0 e 100%.');
@@ -617,168 +580,303 @@
     return corpo;
   }
 
-  /* ---------- Registro manual da busca (POD) ----------------------------- */
-  function abrirRegistro(o) {
-    o = o || {};
-    var setores = (P.setores() || []).slice().sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-    if (!setores.length) { UI.aviso('Desenhe pelo menos um setor de busca antes de registrar uma busca.', 'erro', 7000); return; }
-    var grupos = (P.grupos ? P.grupos() : []) || [];
-    var missoes = (P.missoes ? P.missoes() : []) || [];
-    var chave = chaveNova();   // a mesma chave se o envio for repetido: o servidor não duplica
+  /* ---------- Missões de busca: o POD pertence à missão ------------------ */
+  var RESULTADOS = { localizado: 'Localizado', nao_localizado: 'Não localizado', nao_concluido: 'Não concluído' };
 
-    var selSetor = el('select', { classe: 'campo', id: 'busca-setor' }, setores.map(function (s) {
-      return el('option', { value: s.id, selected: s.id === o.setorId ? true : null, texto: s.nome });
-    }));
-    var finalidade = el('select', { classe: 'campo', id: 'busca-final' }, [
-      el('option', { value: 'pos_execucao', texto: 'Busca realizada (pós-execução)' }),
-      el('option', { value: 'planejada', texto: 'Busca planejada (previsão: não altera o POA)' }),
-    ]);
-    var equipe = el('input', { classe: 'campo', id: 'busca-equipe', maxlength: '60', list: 'busca-equipes', placeholder: 'Grupo ou equipe que fez a busca' });
-    var lista = el('datalist', { id: 'busca-equipes' }, grupos.map(function (g) { return el('option', { value: g.nome }); }));
-    var metodo = el('select', { classe: 'campo', id: 'busca-metodo' }, [el('option', { value: '', texto: 'não informado' })].concat(METODOS.map(function (m) { return el('option', { value: m, texto: m }); })));
-    var observ = el('input', { classe: 'campo campo-poa', id: 'busca-observ', type: 'number', min: '1', max: '500', step: '1', inputmode: 'numeric', placeholder: 'nº' });
-    var selMissao = el('select', { classe: 'campo', id: 'busca-missao' });
-    function atualizarMissoes() {
-      selMissao.innerHTML = '';
-      selMissao.appendChild(el('option', { value: '', texto: 'nenhum' }));
-      missoes.filter(function (m) { return m.setor_id === selSetor.value; }).forEach(function (m) {
-        selMissao.appendChild(el('option', { value: m.id, texto: m.grupo_nome + (m.chegou_setor_em ? ' · chegou às ' + C.hora(m.chegou_setor_em, false) : '') }));
-      });
-    }
-    selSetor.addEventListener('change', atualizarMissoes);
-    atualizarMissoes();
-    var alcance = el('select', { classe: 'campo', id: 'busca-alcance' }, [
-      el('option', { value: 'setor_inteiro', texto: 'O setor inteiro' }),
-      el('option', { value: 'parcial', texto: 'Só parte do setor' }),
-    ]);
-    var cobertura = el('input', { classe: 'campo campo-poa', id: 'busca-cobertura', type: 'number', min: '1', max: '99', step: '1', inputmode: 'decimal', placeholder: '% do setor' });
-    var gCobertura = el('div', { classe: 'grupo', hidden: true }, [
-      el('label', { classe: 'rotulo', for: 'busca-cobertura', texto: 'Quanto do setor foi coberto (%)' }), cobertura,
-      el('p', { classe: 'ajuda', texto: 'O POD abaixo é o da parte coberta. O app o converte para o setor inteiro (POD × fração coberta), supondo a pessoa, se estiver no setor, distribuída de forma uniforme nele. Se isso não vale (trilha, ponto específico), divida o setor em setores menores.' }),
-    ]);
-    alcance.addEventListener('change', function () { gCobertura.hidden = alcance.value !== 'parcial'; });
-    var naoEst = el('input', { type: 'checkbox', id: 'busca-nao-estimada' });
-    var pod = el('input', { classe: 'campo campo-poa', id: 'busca-pod', type: 'number', min: '0', max: '100', step: '1', inputmode: 'decimal', placeholder: '0 a 100' });
-    var rotBase = el('label', { classe: 'rotulo', for: 'busca-base', texto: 'Em que o POD se baseia (obrigatório)' });
-    var base = el('textarea', { classe: 'campo', id: 'busca-base', rows: '2', maxlength: '1000', placeholder: 'Ex.: varredura em linha, 5 m entre buscadores, cobrimos 80% do setor; mata fechada' });
-    function aoMudarEstimativa() {
-      var nao = naoEst.checked && finalidade.value !== 'planejada';
-      pod.disabled = nao;
-      if (nao) pod.value = '';
-      rotBase.textContent = nao ? 'Por que não foi possível estimar o POD (obrigatório)' : 'Em que o POD se baseia (obrigatório)';
-      base.placeholder = nao ? 'Ex.: equipe sem observador treinado, sem relato do que foi visto' : 'Ex.: varredura em linha, 5 m entre buscadores, cobrimos 80% do setor; mata fechada';
-    }
-    naoEst.addEventListener('change', aoMudarEstimativa);
-    finalidade.addEventListener('change', function () { if (finalidade.value === 'planejada') naoEst.checked = false; naoEst.disabled = finalidade.value === 'planejada'; aoMudarEstimativa(); });
-    var origemPod = el('select', { classe: 'campo', id: 'busca-origem' }, ['julgamento_comando', 'consenso_documentado'].map(function (k) { return el('option', { value: k, texto: ORIGENS[k] }); }));
-    var cond = el('input', { classe: 'campo', id: 'busca-cond', maxlength: '500', placeholder: 'Visibilidade, clima, terreno (opcional)' });
-    var imped = el('input', { classe: 'campo', id: 'busca-imped', maxlength: '500', placeholder: 'Obstáculos, pausas, desvios (opcional)' });
-    var naoObs = el('input', { classe: 'campo', id: 'busca-nao-obs', maxlength: '500', placeholder: 'Trechos que ficaram sem observação adequada (opcional)' });
-    var ini = el('input', { classe: 'campo', id: 'busca-ini', type: 'datetime-local' });
-    var fim = el('input', { classe: 'campo', id: 'busca-fim', type: 'datetime-local' });
-    var vale = el('select', { classe: 'campo', id: 'busca-vale' }, [el('option', { value: '', texto: 'Todas as vítimas' })].concat(est.vitimas.map(function (v) {
-      return el('option', { value: v.id, selected: v.id === o.vitimaId ? true : null, texto: 'Só ' + v.nome });
-    })));
-    var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'busca-salvar', texto: 'Registrar busca' });
-
-    var form = el('form', { classe: 'form-busca', novalidate: true }, [
-      el('h2', { id: 'modal-titulo', texto: 'Registrar busca (POD)' }),
-      aviso('O POD é o que a equipe estima: se a pessoa estivesse neste setor, quantas chances em 100 a equipe teria tido de achá-la? Vem do relato, não do GPS (a trilha mostra por onde passaram, não o que viram). Sem base para estimar, marque "POD não estimada": a busca fica registrada, mas não reduz o POA (e não vira zero). Não dá para editar depois; se errar, anule e lance outro.'),
-      el('div', { classe: 'grupo grupo-2col' }, [
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-setor', texto: 'Setor pesquisado' }), selSetor]),
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-final', texto: 'Tipo de registro' }), finalidade]),
-      ]),
-      el('div', { classe: 'grupo grupo-2col' }, [
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-equipe', texto: 'Equipe' }), equipe, lista]),
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-metodo', texto: 'Método' }), metodo]),
-      ]),
-      el('div', { classe: 'grupo grupo-2col' }, [
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-observ', texto: 'Observadores efetivos' }), observ]),
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-missao', texto: 'Deslocamento relacionado' }), selMissao]),
-      ]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'busca-alcance', texto: 'A busca cobriu' }), alcance]),
-      gCobertura,
-      el('div', { classe: 'grupo' }, [
-        el('label', { classe: 'rotulo', for: 'busca-pod', texto: 'POD estimado (%)' }), pod,
-        el('label', { classe: 'cenario-nao-est' }, [naoEst, ' POD não estimada (sem base para estimar)']),
-      ]),
-      el('div', { classe: 'grupo' }, [rotBase, base]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'busca-origem', texto: 'Origem da estimativa' }), origemPod]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'busca-cond', texto: 'Condições da busca' }), cond]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'busca-imped', texto: 'Impedimentos' }), imped]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'busca-nao-obs', texto: 'Áreas não observadas' }), naoObs]),
-      el('div', { classe: 'grupo grupo-2col' }, [
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-ini', texto: 'Início (opcional)' }), ini]),
-        el('div', null, [el('label', { classe: 'rotulo', for: 'busca-fim', texto: 'Fim (opcional)' }), fim]),
-      ]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'busca-vale', texto: 'Vale para' }), vale]),
-      erro,
-      el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
-    ]);
-    form.addEventListener('submit', async function (ev) {
-      ev.preventDefault();
-      erro.hidden = true;
-      var planejada = finalidade.value === 'planejada';
-      var naoEstimada = naoEst.checked && !planejada;
-      var v = naoEstimada ? null : Number(pod.value.replace(',', '.'));
-      if (!naoEstimada && (pod.value.trim() === '' || !(v >= 0 && v <= 100))) { erro.textContent = 'Informe o POD entre 0 e 100% ou marque "POD não estimada".'; erro.hidden = false; return; }
-      if (base.value.trim().length < 5) { erro.textContent = naoEstimada ? 'Diga por que não foi possível estimar (pelo menos 5 caracteres).' : 'Diga em que o POD se baseia (pelo menos 5 caracteres).'; erro.hidden = false; base.focus(); return; }
-      var cob = null;
-      if (alcance.value === 'parcial') {
-        cob = Number(cobertura.value.replace(',', '.')) / 100;
-        if (!(cob > 0 && cob < 1)) { erro.textContent = 'Informe quanto do setor foi coberto, entre 1% e 99%.'; erro.hidden = false; return; }
-      }
-      var iniMs = ini.value ? new Date(ini.value).getTime() : null, fimMs = fim.value ? new Date(fim.value).getTime() : null;
-      if (iniMs != null && fimMs != null && fimMs < iniMs) { erro.textContent = 'O fim não pode ser antes do início.'; erro.hidden = false; return; }
-      var nomeEquipe = equipe.value.trim();
-      var grupo = grupos.find(function (g) { return g.nome.trim().toLowerCase() === nomeEquipe.toLowerCase(); });
-      btn.disabled = true;
-      try {
-        await C.rpc('busca_registrar', { p_operacao: P.op().id, p_dados: {
-          setor_id: selSetor.value, finalidade: finalidade.value, pod: v == null ? null : Math.round(v * 100) / 10000, base_estimativa: base.value.trim(), condicoes: cond.value.trim(),
-          origem_pod: origemPod.value, metodo: metodo.value || null, missao_id: selMissao.value || null,
-          alcance: alcance.value, cobertura_fracao: cob == null ? null : Math.round(cob * 1e4) / 1e4, observadores: observ.value ? Number(observ.value) : null,
-          impedimentos: imped.value.trim(), areas_nao_observadas: naoObs.value.trim(),
-          equipe: nomeEquipe, grupo_id: grupo ? grupo.id : null, vitima_id: vale.value || null, chave_cliente: chave,
-          inicio: iniMs != null ? new Date(iniMs).toISOString() : null, fim: fimMs != null ? new Date(fimMs).toISOString() : null,
-        } });
-        UI.aviso(planejada ? 'Busca planejada registrada.' : naoEstimada ? 'Busca registrada (POD não estimada: o POA não foi alterado).' : 'Busca registrada.', 'ok');
-        fechar(true);
-        carregar();
-      } catch (e) {
-        erro.textContent = e.message; erro.hidden = false; btn.disabled = false;
-      }
-    });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false, empilhar: true });
-    pod.focus();
+  function efeitosDe(missaoId) { return est.efeitos.filter(function (e) { return e.missao_id === missaoId; }); }
+  function vitimasAtivas() { return est.vitimas.filter(function (v) { return !localizacaoDa(v.id); }); }
+  function alvosDaMissao(m) { return m.vitima_id ? [m.vitima_id] : vitimasAtivas().map(function (v) { return v.id; }); }
+  function itemDoSetor(vitimaId, setorId) {
+    var ap = aprovadaDa(vitimaId);
+    return ap ? ap.setores.find(function (i) { return i.setor_id === setorId; }) || null : null;
+  }
+  function numeroVersao(cenarioId) {
+    var c = est.cenarios.find(function (x) { return x.id === cenarioId; });
+    return c ? c.numero : null;
+  }
+  // Entrada de posBusca a partir da versão vigente da vítima
+  function entradaPos(vitimaId, setorId, pod, cobertura) {
+    var ap = aprovadaDa(vitimaId);
+    if (!ap) return null;
+    return { setores: ap.setores.map(function (i) { return { id: i.setor_id || i.id, poa: Number(i.poa) }; }), fora: ap.poa_fora != null ? Number(ap.poa_fora) : undefined, setorId: setorId, pod: pod, cobertura: cobertura };
+  }
+  // Marca "sugerido por IA, revisado por…" ao lado de um valor
+  function seloOrigem(origem, revisor) {
+    return origem === 'ia' ? el('span', { classe: 'selo selo-ia', title: 'Sugerido por IA e revisado por ' + (revisor || 'um responsável'), texto: 'sugerido por IA · revisado por ' + (revisor || '—') }) : null;
   }
 
-  function abrirAnulacao(r) {
-    var motivo = el('textarea', { classe: 'campo', id: 'anular-motivo', rows: '2', maxlength: '500', placeholder: 'Ex.: lancei no setor errado' });
+  function cartaoMissao(m, aoMudar) {
+    var concluida = m.estado === 'concluida', cancelada = m.estado === 'cancelada';
+    var pod = concluida ? m.pod_final : m.pod_planejada;
+    var origem = concluida ? m.pod_final_origem : m.pod_planejada_origem, revisor = concluida ? m.pod_final_revisor : m.pod_planejada_revisor;
+    var efs = efeitosDe(m.id);
+    var estadoTxt = cancelada ? 'Cancelada' : concluida ? RESULTADOS[m.resultado] : 'Planejada';
+    var chip = el('span', { classe: 'selo ' + (cancelada ? 'selo-neutro' : concluida ? (m.resultado === 'localizado' ? 'selo-ok' : 'selo-prob') : 'selo-prob-rasc'), texto: estadoTxt });
+    var linhas = [
+      el('p', { classe: 'poa-meta', texto: m.metodo + ' · área atribuída ' + pct(Number(m.area_atribuida_fracao), 0) + ' do setor' + (m.area_texto ? ' (' + m.area_texto + ')' : '') }),
+      el('p', null, [el('strong', { texto: pod == null ? 'POD não estimada' : 'POD ' + pct(Number(pod)) }), ' ', seloOrigem(origem, revisor)]),
+    ];
+    // POS = POA do setor × POD da missão: "chance de localizar nesta busca" (não é chance de sobrevivência)
+    var pos = [];
+    if (concluida && efs.length) {
+      efs.forEach(function (e) { pos.push(nomeVitima(e.vitima_id) + ': ' + pct(Number(e.pos)) + ' (POA ' + pct(Number(e.poa_setor_antes)) + ' × POD ' + pct(Number(e.q)) + ')'); });
+    } else if (!concluida && !cancelada && pod != null) {
+      alvosDaMissao(m).forEach(function (vid) {
+        var i = itemDoSetor(vid, m.setor_id);
+        if (i) pos.push(nomeVitima(vid) + ': ' + pct(Number(i.poa) * Number(pod) * Number(m.area_atribuida_fracao)) + ' (POA ' + pct(Number(i.poa)) + ' × POD ' + pct(Number(pod) * Number(m.area_atribuida_fracao)) + ')');
+      });
+    }
+    if (pos.length) linhas.push(el('p', { classe: 'poa-pos' }, [el('span', { classe: 'muted', texto: 'Chance de localizar nesta busca ' }), dica('POS = POA do setor × POD da missão. É a chance de esta busca localizar a pessoa; não é chance de sobrevivência.'), ' ' + pos.join(' · ')]));
+    if (concluida) {
+      linhas.push(el('p', { classe: 'muted', texto: 'Execução real: ' + (m.cobertura_real_fracao != null ? pct(Number(m.cobertura_real_fracao), 0) + ' do setor' : 'cobertura não informada')
+        + (m.fim_real ? ' · fim ' + C.hora(m.fim_real, false) : '') + ' · registrado por ' + m.resultado_por_nome + ' às ' + C.hora(m.resultado_em, false) + (m.resultado_obs ? ' · ' + m.resultado_obs : '') }));
+      var estadoCalc = m.calculo_estado;
+      if (estadoCalc === 'aplicado') linhas.push(el('p', { classe: 'poa-calc poa-calc-ok', texto: '✓ POA recalculado: ' + efs.map(function (e) { var n = numeroVersao(e.cenario_depois_id); return nomeVitima(e.vitima_id) + ' → versão ' + (n || '—') + ' (' + pct(Number(e.poa_setor_antes)) + ' → ' + pct(Number(e.poa_setor_depois)) + ')'; }).join(' · ') }));
+      else if (estadoCalc === 'pendente_pod') linhas.push(el('p', { classe: 'poa-calc poa-calc-pend', texto: 'Pendente: POD não estimada. O POA não foi recalculado.' }));
+      else if (estadoCalc === 'inconsistente') linhas.push(el('p', { classe: 'poa-calc poa-calc-erro', texto: '⚠ ' + m.calculo_detalhe }));
+      else if (m.calculo_detalhe) linhas.push(el('p', { classe: 'muted', texto: m.calculo_detalhe }));
+    }
+    if (cancelada) linhas.push(el('p', { classe: 'muted', texto: 'Cancelada por ' + m.cancelada_por_nome + ': ' + m.cancelada_motivo }));
+    var acoes = [];
+    if (podeAlterar()) {
+      if (m.estado === 'planejada') {
+        acoes.push(el('button', { classe: 'btn btn-pequeno btn-prob', type: 'button', texto: 'Registrar resultado', onclick: function () { abrirResultado(m); } }));
+        acoes.push(el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Cancelar', onclick: async function () {
+          var r = await UI.confirmar({ titulo: 'Cancelar esta missão?', texto: 'Fica no histórico, com o motivo.', campo: { rotulo: 'Motivo', max: 500, obrigatorio: true }, ok: 'Cancelar missão', perigo: true, empilhar: true });
+          if (!r) return;
+          try { await C.rpc('busca_missao_cancelar', { p_missao: m.id, p_motivo: r.texto }); UI.aviso('Missão cancelada.', 'ok'); await carregar(); if (aoMudar) aoMudar(); } catch (e) { UI.aviso(e.message, 'erro', 7000); }
+        } }));
+      } else if (concluida && m.calculo_estado === 'pendente_pod') {
+        acoes.push(el('button', { classe: 'btn btn-pequeno btn-prob', type: 'button', texto: 'Informar POD', onclick: function () { abrirPod(m); } }));
+      }
+    }
+    return el('li', { classe: 'poa-missao poa-missao-' + m.estado, 'data-missao': m.id }, [
+      el('div', { classe: 'poa-missao-topo' }, [el('strong', { texto: m.setor_nome + ' · ' + m.equipe }), chip]),
+      el('div', { classe: 'poa-missao-corpo' }, linhas),
+      acoes.length ? el('div', { classe: 'poa-missao-acoes' }, acoes) : null,
+    ]);
+  }
+
+  // Campo com rótulo, controle e ajuda curta, alinhado na grade do formulário
+  function campo(rotulo, controle, o) {
+    o = o || {};
+    return el('div', { classe: 'poa-g' + (o.largo ? ' poa-g-largo' : ''), hidden: o.oculto ? true : null }, [rotuloComDica(rotulo, o.para, o.dica), controle, o.ajuda ? el('small', { classe: 'muted', texto: o.ajuda }) : null]);
+  }
+  function campoPct(id, valor, placeholder, rotuloAria) {
+    return el('div', { classe: 'poa-campo' }, [el('input', { classe: 'campo', id: id, type: 'number', min: '0', max: '100', step: '0.1', inputmode: 'decimal', placeholder: placeholder || '', value: valor == null ? '' : String(valor), 'aria-label': rotuloAria || null }), el('span', { classe: 'poa-pct', texto: '%' })]);
+  }
+  function lerPct(id) {
+    var t = document.getElementById(id).value.trim().replace(',', '.');
+    if (t === '') return null;
+    var v = Number(t);
+    return isFinite(v) ? v / 100 : NaN;
+  }
+
+  /* ---------- Nova missão ------------------------------------------------ */
+  function abrirMissao(o) {
+    o = o || {};
+    var setores = (P.setores() || []).slice().sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    if (!setores.length) { UI.aviso('Desenhe um setor de busca antes de criar a missão.', 'erro', 7000); return; }
+    var grupos = (P.grupos ? P.grupos() : []) || [];
+    var chave = chaveNova();   // a mesma chave se o envio for repetido: o servidor não duplica
+    var selSetor = el('select', { classe: 'campo', id: 'missao-setor' }, setores.map(function (s) { return el('option', { value: s.id, selected: s.id === o.setorId ? true : null, texto: s.nome }); }));
+    var selVitima = el('select', { classe: 'campo', id: 'missao-vitima' }, [el('option', { value: '', texto: 'Todas' })].concat(vitimasAtivas().map(function (v) { return el('option', { value: v.id, texto: v.nome }); })));
+    var equipe = el('input', { classe: 'campo', id: 'missao-equipe', maxlength: '60', list: 'missao-equipes', placeholder: 'Escolha ou digite', autocomplete: 'off' });
+    var lista = el('datalist', { id: 'missao-equipes' }, grupos.map(function (g) { return el('option', { value: g.nome }); }));
+    var metodo = el('select', { classe: 'campo', id: 'missao-metodo' }, [el('option', { value: '', texto: 'Escolha' })].concat(METODOS.map(function (m) { return el('option', { value: m, texto: m }); })));
+    var area = campoPct('missao-area', 100, '100', 'Área atribuída (% do setor)');
+    var areaTxt = el('input', { classe: 'campo', id: 'missao-area-txt', maxlength: '200', placeholder: 'Opcional: onde, dentro do setor' });
+    var pod = campoPct('missao-pod', '', 'não estimada', 'POD estimada (%)');
+    var base = el('textarea', { classe: 'campo', id: 'missao-base', rows: '2', maxlength: '1000', placeholder: 'Ex.: varredura em linha, 5 m entre buscadores; mata fechada' });
+    var gBase = campo('Em que se baseia', base, { para: 'missao-base', oculto: true, largo: true });
+    var estado = { origem: 'manual', ia: null };
+    var tagOrigem = el('span', { classe: 'poa-ia-marca', hidden: true });
+    var previa = el('p', { classe: 'poa-previa', role: 'status' });
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btn = el('button', { classe: 'btn btn-perigo', type: 'submit', id: 'anular-confirmar', texto: 'Anular registro' });
-    var form = el('form', { novalidate: true }, [
-      el('h2', { id: 'modal-titulo', texto: 'Anular registro de busca' }),
-      aviso('Setor ' + r.setor_nome + ' · ' + (r.pod == null ? 'POD não estimada' : 'POD ' + pct(Number(r.pod))) + ' · ' + (r.equipe || 'equipe não informada') + '. O registro continua no histórico, mas deixa de contar no cálculo.'),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'anular-motivo', texto: 'Motivo (obrigatório)' }), motivo]),
-      erro,
-      el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    var btn = el('button', { classe: 'btn btn-prob', type: 'submit', id: 'missao-salvar', texto: 'Criar missão' });
+    var podInput = pod.querySelector('input');
+
+    function atualizar() {
+      var v = lerPct('missao-pod');
+      gBase.hidden = !(v != null && !isNaN(v));
+      var ar = lerPct('missao-area');
+      var alvos = selVitima.value ? [selVitima.value] : vitimasAtivas().map(function (x) { return x.id; });
+      var partes = [];
+      alvos.forEach(function (vid) {
+        var i = itemDoSetor(vid, selSetor.value);
+        if (!i) return;
+        partes.push(nomeVitima(vid) + ' ' + (v == null || isNaN(v) || ar == null || isNaN(ar) ? 'POS: informe o POD' : 'POS ' + pct(Number(i.poa) * v * ar) + ' (POA ' + pct(Number(i.poa)) + ')'));
+      });
+      previa.textContent = !partes.length ? 'Este setor não está na versão vigente (POA zero).' : v == null || isNaN(v) ? 'POD não estimada. ' + partes.join(' · ') : 'Chance de localizar nesta busca: ' + partes.join(' · ');
+    }
+    podInput.addEventListener('input', function () { estado.origem = 'manual'; estado.ia = null; tagOrigem.hidden = true; podInput.classList.remove('poa-sugerido'); atualizar(); });
+    [selSetor, selVitima].forEach(function (x) { x.addEventListener('change', atualizar); });
+    area.querySelector('input').addEventListener('input', atualizar);
+
+    var form = el('form', { classe: 'poa-form', novalidate: true }, [
+      el('h2', { id: 'modal-titulo', texto: 'Nova missão de busca' }),
+      el('div', { classe: 'poa-grid' }, [
+        campo('Setor', selSetor, { para: 'missao-setor' }), campo('Vítima', selVitima, { para: 'missao-vitima' }),
+        campo('Equipe', equipe, { para: 'missao-equipe' }), campo('Método', metodo, { para: 'missao-metodo' }),
+        campo('Área atribuída', area, { para: 'missao-area', dica: 'Quanto do setor esta equipe vai cobrir. 100% = o setor inteiro.' }), campo('Descrição da área', areaTxt, { para: 'missao-area-txt' }),
+        campo('POD estimada', pod, { para: 'missao-pod', dica: 'Chance de a equipe achar a pessoa SE ela estiver na área coberta. Vem da estimativa da equipe, nunca do GPS. Vazio = "POD não estimada" (não vira zero).', largo: true }),
+        gBase,
+      ]),
+      el('div', { classe: 'poa-ia-linha' }, [tagOrigem]),
+      previa, lista, erro,
+      el('div', { classe: 'poa-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       erro.hidden = true;
-      if (motivo.value.trim().length < 3) { erro.textContent = 'Escreva o motivo da anulação.'; erro.hidden = false; return; }
+      var v = lerPct('missao-pod'), ar = lerPct('missao-area');
+      function falha(t) { erro.textContent = t; erro.hidden = false; }
+      if (!equipe.value.trim()) return falha('Informe a equipe.');
+      if (!metodo.value) return falha('Escolha o método.');
+      if (ar == null || isNaN(ar) || ar <= 0 || ar > 1) return falha('A área atribuída deve ficar entre 1% e 100%.');
+      if (v != null && (isNaN(v) || v < 0 || v > 1)) return falha('O POD deve ficar entre 0 e 100%.');
+      if (v != null && base.value.trim().length < 5) { gBase.hidden = false; return falha('Diga em que o POD se baseia (pelo menos 5 caracteres).'); }
+      var g = grupos.find(function (x) { return x.nome === equipe.value.trim(); });
       btn.disabled = true;
       try {
-        await C.rpc('busca_anular', { p_registro: r.id, p_motivo: motivo.value.trim() });
-        UI.aviso('Registro anulado.', 'ok');
+        await C.rpc('busca_missao_criar', { p_operacao: P.op().id, p_dados: {
+          setor_id: selSetor.value, vitima_id: selVitima.value || null, grupo_id: g ? g.id : null, equipe: equipe.value.trim(), metodo: metodo.value,
+          area_fracao: ar, area_texto: areaTxt.value.trim(), pod: v, pod_base: v == null ? '' : base.value.trim(), pod_origem: v == null ? 'manual' : estado.origem, chave_cliente: chave,
+        } });
+        UI.aviso('Missão criada.', 'ok');
         fechar(true);
-        carregar();
-      } catch (e) { erro.textContent = e.message; erro.hidden = false; btn.disabled = false; }
+        await carregar();
+        if (o.aoConcluir) o.aoConcluir();
+      } catch (e) { falha(e.message); btn.disabled = false; }
     });
     var fechar = UI.abrirModal(form, { fecharNoFundo: false, empilhar: true });
-    motivo.focus();
+    atualizar();
+  }
+
+  /* ---------- Resultado da missão (depois do retorno da equipe) ---------- */
+  function abrirResultado(m) {
+    var res = el('select', { classe: 'campo', id: 'res-resultado' }, Object.keys(RESULTADOS).map(function (k) { return el('option', { value: k, selected: k === 'nao_localizado' ? true : null, texto: RESULTADOS[k] }); }));
+    var cob = campoPct('res-cobertura', Math.round(Number(m.area_atribuida_fracao) * 1000) / 10, '', 'Cobertura real (% do setor)');
+    var ini = el('input', { classe: 'campo', id: 'res-ini', type: 'datetime-local' });
+    var fim = el('input', { classe: 'campo', id: 'res-fim', type: 'datetime-local', value: dataLocal(Date.now()) });
+    var pod = campoPct('res-pod', m.pod_planejada == null ? '' : Math.round(Number(m.pod_planejada) * 1000) / 10, 'não estimada', 'POD final (%)');
+    var base = el('textarea', { classe: 'campo', id: 'res-base', rows: '2', maxlength: '1000', placeholder: 'Em que o POD se baseia' });
+    base.value = m.pod_planejada == null ? '' : m.pod_planejada_base;
+    var obs = el('textarea', { classe: 'campo', id: 'res-obs', rows: '2', maxlength: '1000', placeholder: 'Opcional: impedimentos, o que não foi observado, condições' });
+    var gBase = campo('Em que se baseia', base, { para: 'res-base', largo: true });
+    var gExec = el('div', { classe: 'poa-grid poa-grid-exec' }, [
+      campo('Cobertura real', cob, { para: 'res-cobertura', dica: 'Quanto do setor a equipe realmente cobriu. O POD é o da área coberta.' }),
+      campo('POD final', pod, { para: 'res-pod', dica: 'Pode ser o planejado ou outro, se a execução foi diferente. Vazio = "POD não estimada": o POA não é recalculado.' }),
+      campo('Início real', ini, { para: 'res-ini' }), campo('Fim real', fim, { para: 'res-fim' }),
+      gBase,
+    ]);
+    var previa = el('div', { classe: 'poa-previa', role: 'status' });
+    var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = el('button', { classe: 'btn btn-prob', type: 'submit', id: 'res-salvar', texto: 'Registrar resultado' });
+    var estado = { origem: m.pod_planejada_origem, revisor: m.pod_planejada_revisor };
+    var podInput = pod.querySelector('input');
+    var MOTIVOS_CALC = { pod_desconhecido: 'POD não estimada: o POA não será recalculado (ficará pendente).', z_zero: 'Inconsistência: Z = 0 (todo o POA no setor e POD de 100%). Nada será alterado.', invalido: 'Valores inválidos na versão vigente. Nada será alterado.', setor_fora_do_cenario: 'Este setor não está na versão vigente: o POA não muda.' };
+
+    function atualizar() {
+      var r = res.value;
+      gExec.hidden = r === 'localizado';
+      previa.innerHTML = '';
+      if (r === 'localizado') { previa.appendChild(el('p', { texto: 'Registre o encontro em "Vítima encontrada". O POA não é recalculado.' })); return; }
+      var c = lerPct('res-cobertura'), p = lerPct('res-pod');
+      if (r === 'nao_concluido' && (c == null || isNaN(c))) { previa.appendChild(el('p', { texto: 'Sem cobertura real informada: o POA não é recalculado.' })); return; }
+      var alvos = alvosDaMissao(m), alguma = false;
+      alvos.forEach(function (vid) {
+        var ent = entradaPos(vid, m.setor_id, p == null || isNaN(p) ? null : p, c == null || isNaN(c) ? m.area_atribuida_fracao : c);
+        if (!ent) return;
+        var out = M.posBusca(ent);
+        if (out.motivo === 'setor_fora_do_cenario') return;
+        alguma = true;
+        var ap = aprovadaDa(vid);
+        if (!out.ok) { previa.appendChild(el('p', { classe: 'poa-calc ' + (out.motivo === 'pod_desconhecido' ? 'poa-calc-pend' : 'poa-calc-erro'), texto: nomeVitima(vid) + ': ' + (MOTIVOS_CALC[out.motivo] || out.motivo) })); return; }
+        var nomes = {}; ap.setores.forEach(function (i) { nomes[i.setor_id || i.id] = i.setor_nome; });
+        previa.appendChild(el('p', { classe: 'poa-calc poa-calc-ok' }, [el('strong', { texto: nomeVitima(vid) + ' → nova versão ' + (Math.max.apply(null, versoesDa(vid).map(function (x) { return x.numero; })) + 1) + ': ' }),
+          out.setores.map(function (s) { return nomes[s.id] + ' ' + pct(ent.setores.find(function (x) { return x.id === s.id; }).poa) + ' → ' + pct(s.poa); }).concat(['Fora da área ' + pct(ent.fora != null ? ent.fora : 1 - ent.setores.reduce(function (a, x) { return a + x.poa; }, 0)) + ' → ' + pct(out.fora)]).join(' · '),
+          el('br'), el('span', { classe: 'muted', texto: 'Chance de localizar nesta busca: ' + pct(out.pos) })]));
+      });
+      if (!alguma) previa.appendChild(el('p', { texto: 'Nenhuma vítima com versão vigente que inclua este setor: o POA não muda.' }));
+    }
+    res.addEventListener('change', atualizar);
+    ['res-cobertura', 'res-pod'].forEach(function (id) { var x = (id === 'res-pod' ? pod : cob).querySelector('input'); x.addEventListener('input', function () { if (id === 'res-pod') { estado.origem = 'manual'; estado.revisor = null; } atualizar(); }); });
+
+    var form = el('form', { classe: 'poa-form', novalidate: true }, [
+      el('h2', { id: 'modal-titulo', texto: 'Resultado da missão' }),
+      el('p', { classe: 'poa-meta', texto: m.setor_nome + ' · ' + m.equipe + ' · ' + m.metodo }),
+      el('div', { classe: 'poa-grid' }, [campo('Resultado', res, { para: 'res-resultado', largo: true })]),
+      gExec,
+      el('div', { classe: 'poa-grid' }, [campo('Observações', obs, { para: 'res-obs', largo: true })]),
+      previa, erro,
+      el('div', { classe: 'poa-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      function falha(t) { erro.textContent = t; erro.hidden = false; }
+      var c = lerPct('res-cobertura'), p = lerPct('res-pod');
+      var iniMs = ini.value ? new Date(ini.value).getTime() : null, fimMs = fim.value ? new Date(fim.value).getTime() : null;
+      var r = res.value;
+      if (r !== 'localizado') {
+        if (c != null && (isNaN(c) || c <= 0 || c > 1)) return falha('A cobertura real deve ficar entre 1% e 100%.');
+        if (r === 'nao_localizado' && c == null) return falha('Informe a cobertura real do setor.');
+        if (p != null && (isNaN(p) || p < 0 || p > 1)) return falha('O POD deve ficar entre 0 e 100%.');
+      }
+      if (iniMs != null && fimMs != null && fimMs < iniMs) return falha('O fim não pode ser antes do início.');
+      var mudouPod = p != null && (m.pod_planejada == null || Math.abs(p - Number(m.pod_planejada)) > 1e-9);
+      if (p != null && (mudouPod || m.pod_planejada == null) && base.value.trim().length < 5) return falha('Diga em que o POD se baseia (pelo menos 5 caracteres).');
+      if (r === 'nao_localizado') {
+        var ok = await UI.confirmar({ titulo: 'Registrar busca negativa?', texto: p == null ? 'Sem POD, o POA não será recalculado: a missão fica pendente.' : 'Isto gera uma nova versão do cenário (o POA é recalculado pela busca negativa). As versões anteriores não mudam.', ok: 'Registrar resultado', empilhar: true });
+        if (!ok) return;
+      }
+      btn.disabled = true;
+      try {
+        var dados = { resultado: r, observacao: obs.value.trim(), inicio_real: iniMs ? new Date(iniMs).toISOString() : null, fim_real: fimMs ? new Date(fimMs).toISOString() : null };
+        if (r !== 'localizado') {
+          dados.cobertura = c; dados.pod = p; dados.pod_base = p == null ? '' : base.value.trim();
+          dados.pod_origem = mudouPod ? estado.origem : m.pod_planejada_origem;
+        }
+        await C.rpc('busca_missao_resultado', { p_missao: m.id, p_dados: dados });
+        UI.aviso('Resultado registrado.', 'ok');
+        fechar(true);
+        await carregar();
+      } catch (e) { falha(e.message); btn.disabled = false; }
+    });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, empilhar: true });
+    atualizar();
+  }
+
+  /* ---------- Informar o POD que faltava -------------------------------- */
+  function abrirPod(m) {
+    var pod = campoPct('pod-valor', '', '0 a 100', 'POD (%)');
+    var base = el('textarea', { classe: 'campo', id: 'pod-base', rows: '2', maxlength: '1000', placeholder: 'Em que o POD se baseia' });
+    var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = el('button', { classe: 'btn btn-prob', type: 'submit', id: 'pod-salvar', texto: 'Informar e recalcular' });
+    var form = el('form', { classe: 'poa-form', novalidate: true }, [
+      el('h2', { id: 'modal-titulo', texto: 'POD da missão' }),
+      el('p', { classe: 'poa-meta', texto: m.setor_nome + ' · ' + m.equipe + ' · só pode ser informado uma vez; gera uma nova versão do cenário' }),
+      el('div', { classe: 'poa-grid' }, [campo('POD', pod, { para: 'pod-valor' }), campo('Em que se baseia', base, { para: 'pod-base', largo: true })]),
+      erro,
+      el('div', { classe: 'poa-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var p = lerPct('pod-valor');
+      function falha(t) { erro.textContent = t; erro.hidden = false; }
+      if (p == null || isNaN(p) || p < 0 || p > 1) return falha('Informe o POD entre 0 e 100%.');
+      if (base.value.trim().length < 5) return falha('Diga em que o POD se baseia (pelo menos 5 caracteres).');
+      btn.disabled = true;
+      try {
+        await C.rpc('busca_missao_definir_pod', { p_missao: m.id, p_pod: p, p_base: base.value.trim(), p_origem: 'manual' });
+        UI.aviso('POD informado.', 'ok');
+        fechar(true);
+        await carregar();
+      } catch (e) { falha(e.message); btn.disabled = false; }
+    });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, empilhar: true });
   }
 
   /* ---------- Bloco no detalhe do setor (só informação; a edição fica no botão POA/POD do topo) ---------- */
@@ -789,45 +887,53 @@
     var dl = el('dl', { classe: 'dados' });
     est.vitimas.forEach(function (v) {
       var ap = aprovadaDa(v.id);
-      var res = ap ? resultadoDa(v.id) : null;
-      var s = res && res.setores.find(function (x) { return x.setorId === d.id; });
+      var i = ap && ap.setores.find(function (x) { return x.setor_id === d.id; });
       dl.appendChild(el('dt', { texto: v.nome + (localizacaoDa(v.id) ? ' (localizada)' : '') }));
-      dl.appendChild(el('dd', { texto: !ap ? 'Sem versão publicada'
-        : s ? 'v' + ap.numero + ' · POA ' + pct(s.poa) + ' · POD ' + (s.pod != null ? pct(s.pod) : (s.semEstimativa ? 'não estimada' : '—')) + ' · POS ' + pct(s.pos)
-          : 'v' + ap.numero + ' · fora do cenário' }));
+      dl.appendChild(el('dd', { texto: !ap ? 'Sem versão publicada' : i ? 'v' + ap.numero + ' · POA ' + pct(Number(i.poa)) : 'v' + ap.numero + ' · fora do cenário' }));
     });
     sec.appendChild(dl);
+    var ms = est.missoes.filter(function (m) { return m.setor_id === d.id && m.estado !== 'cancelada'; });
+    if (ms.length) {
+      sec.appendChild(el('ol', { classe: 'pod-buscas' }, ms.slice().reverse().slice(0, 4).map(function (m) {
+        var pod = m.estado === 'concluida' ? m.pod_final : m.pod_planejada;
+        return el('li', { texto: m.equipe + ' · ' + (m.estado === 'concluida' ? RESULTADOS[m.resultado] : 'planejada') + ' · ' + (pod == null ? 'POD não estimada' : 'POD ' + pct(Number(pod))) });
+      })));
+    }
     return sec;
   }
 
-  /* ---------- Dados para o relatório final (versões aprovadas, buscas e situação atual) ---------- */
+  /* ---------- Dados para o relatório final (versões aprovadas e missões de busca) ---------- */
   async function dadosRelatorio() {
     await carregar();
     if (est.ausente || !est.vitimas.length) return null;
     var vitimas = est.vitimas.map(function (v) {
-      var versoes = versoesDa(v.id).filter(function (c) { return c.estado === 'aprovada'; });
-      var res = resultadoDa(v.id);
       var loc = localizacaoDa(v.id);
+      var versoes = versoesDa(v.id).filter(function (c) { return c.estado === 'aprovada'; });
       return {
         nome: v.nome, localizada: loc ? { condicao: loc.condicao, em: loc.registrado_em } : null,
         versoes: versoes.map(function (c) {
           return { numero: c.numero, aprovada_em: c.aprovada_em, aprovada_por_nome: c.aprovada_por_nome, horario_referencia: c.horario_referencia, justificativa: c.justificativa,
             hipoteses: c.hipoteses, limitacoes: c.limitacoes, confianca: c.confianca, origem_poa: c.origem_poa, ponto_confiavel: c.ponto_confiavel,
-            setores: c.setores.map(function (i) { return { nome: i.setor_nome, poa: Number(i.poa), area_m2: i.area_m2, justificativa: i.justificativa }; }),
+            poa_fora: c.poa_fora != null ? Number(c.poa_fora) : null, poa_fora_origem: c.poa_fora_origem, ia_modelo: c.ia_modelo, missao_id: c.missao_id,
+            setores: c.setores.map(function (i) { return { nome: i.setor_nome, poa: Number(i.poa), area_m2: i.area_m2, justificativa: i.justificativa, origem: i.origem, ia_revisado_por_nome: i.ia_revisado_por_nome }; }),
             evidencias: c.evidencias.map(function (e) { return { descricao: e.descricao, confirmada: e.confirmada }; }) };
         }),
-        atual: res ? { versao: res.versao, posTotal: res.posTotal, poaFora: res.poaFora, poaForaAtual: res.poaForaAtual,
-          setores: res.setores.map(function (s) { return { nome: s.nome, poa: s.poa, pod: s.pod, semEstimativa: s.semEstimativa, pos: s.pos, poaAtual: s.poaAtual }; }) } : null,
       };
     });
-    var registros = est.registros.map(function (r) {
-      return { registrado_em: r.registrado_em, setor: r.setor_nome, equipe: r.equipe, metodo: r.metodo, finalidade: r.finalidade, pod: r.pod == null ? null : Number(r.pod),
-        cobertura_fracao: r.cobertura_fracao == null ? null : Number(r.cobertura_fracao), base_estimativa: r.base_estimativa, origem_pod: r.origem_pod,
-        vitima: r.vitima_id ? nomeVitima(r.vitima_id) : null, anulado: r.anulado_em ? { motivo: r.anulado_motivo, por: r.anulado_por_nome } : null };
+    var missoes = est.missoes.map(function (m) {
+      return { criada_em: m.criada_em, setor: m.setor_nome, equipe: m.equipe, metodo: m.metodo, area_fracao: Number(m.area_atribuida_fracao), area_texto: m.area_texto, estado: m.estado,
+        pod_planejada: m.pod_planejada == null ? null : Number(m.pod_planejada), pod_planejada_origem: m.pod_planejada_origem, pod_planejada_revisor: m.pod_planejada_revisor,
+        resultado: m.resultado, resultado_em: m.resultado_em, resultado_por: m.resultado_por_nome, cobertura_real: m.cobertura_real_fracao == null ? null : Number(m.cobertura_real_fracao),
+        pod_final: m.pod_final == null ? null : Number(m.pod_final), pod_final_base: m.pod_final_base, pod_final_origem: m.pod_final_origem, pod_final_revisor: m.pod_final_revisor,
+        calculo_estado: m.calculo_estado, calculo_detalhe: m.calculo_detalhe, cancelada_motivo: m.cancelada_motivo, vitima: m.vitima_id ? nomeVitima(m.vitima_id) : null,
+        efeitos: efeitosDe(m.id).map(function (e) { return { vitima: nomeVitima(e.vitima_id), poa_antes: Number(e.poa_setor_antes), poa_depois: Number(e.poa_setor_depois), q: Number(e.q), pos: Number(e.pos), versao: numeroVersao(e.cenario_depois_id) }; }) };
     });
-    if (!registros.length && !vitimas.some(function (x) { return x.versoes.length; })) return null;
-    return { vitimas: vitimas, registros: registros };
+    if (!missoes.length && !est.registros.length && !vitimas.some(function (x) { return x.versoes.length; })) return null;
+    var antigos = est.registros.map(function (r) {
+      return { registrado_em: r.registrado_em, setor: r.setor_nome, equipe: r.equipe, metodo: r.metodo, pod: r.pod == null ? null : Number(r.pod), anulado: r.anulado_em ? { motivo: r.anulado_motivo } : null };
+    });
+    return { vitimas: vitimas, missoes: missoes, registros_antigos: antigos };
   }
 
-  window.BuscaCenario = { iniciar: iniciar, parar: parar, abrir: abrir, abrirRegistro: abrirRegistro, blocoSetor: blocoSetor, recarregar: carregar, dadosRelatorio: dadosRelatorio };
+  window.BuscaCenario = { iniciar: iniciar, parar: parar, abrir: abrir, abrirMissao: abrirMissao, blocoSetor: blocoSetor, recarregar: carregar, dadosRelatorio: dadosRelatorio };
 })();

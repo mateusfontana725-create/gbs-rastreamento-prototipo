@@ -414,7 +414,9 @@
   }
 
   /* ---------- Probabilidades de busca (POA, POD e POS) ------------------- */
-  var ORIGEM_PROB = { julgamento_comando: 'julgamento documentado do comando', consenso_documentado: 'consenso documentado da equipe', modelo_validado: 'modelo validado' };
+  var ORIGEM_PROB = { julgamento_comando: 'julgamento documentado do comando', consenso_documentado: 'consenso documentado da equipe', modelo_validado: 'modelo validado', calculo_pos_busca: 'cálculo pós-busca (busca negativa)' };
+  var ORIGEM_VALOR_PDF = function (o, revisor) { return o === 'ia' ? 'sugerido por IA, revisado por ' + (revisor || '—') : o === 'calculo' ? 'cálculo' : 'manual'; };
+  var RESULTADO_MISSAO = { localizado: 'localizado', nao_localizado: 'não localizado', nao_concluido: 'não concluído' };
   function porc(v, casas) { return v == null ? '—' : (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: casas == null ? 1 : casas }) + '%'; }
 
   function secaoBusca(d, numero) {
@@ -437,32 +439,34 @@
           vazio(c.limitacoes) ? null : ['Limitações', c.limitacoes],
         ]));
         var soma = c.setores.reduce(function (a, s) { return a + (s.poa || 0); }, 0);
-        out.push(tabela(['Setor', 'POA', 'Área', 'Justificativa do setor'], c.setores.map(function (s) {
-          return [{ text: s.nome, style: 'td', bold: true }, porc(s.poa), s.area_m2 ? textoArea(s.area_m2) : '—', txt(s.justificativa, '')];
-        }).concat([[{ text: 'Fora dos setores desenhados', style: 'td', italics: true }, porc(Math.max(0, 1 - soma)), '—', '']]), [130, 50, 70, '*']));
+        out.push(tabela(['Setor', 'POA', 'Área', 'Origem', 'Justificativa do setor'], c.setores.map(function (s) {
+          return [{ text: s.nome, style: 'td', bold: true }, porc(s.poa), s.area_m2 ? textoArea(s.area_m2) : '—', ORIGEM_VALOR_PDF(s.origem, s.ia_revisado_por_nome), txt(s.justificativa, '')];
+        }).concat([[{ text: 'Fora da área', style: 'td', italics: true }, porc(c.poa_fora != null ? c.poa_fora : Math.max(0, 1 - soma)), '—', ORIGEM_VALOR_PDF(c.poa_fora_origem, c.aprovada_por_nome), '']]), [110, 44, 62, 90, '*']));
         if ((c.evidencias || []).length) {
           out.push({ text: 'Evidências consideradas', style: 'rotulo' });
           out.push({ ul: c.evidencias.map(function (e) { return e.descricao + ' — ' + (e.confirmada ? 'confirmada' : 'não confirmada'); }), style: 'td', margin: [0, 2, 0, 8] });
         }
       });
-      if (v.atual) {
-        out.push({ text: 'Situação atual (versão ' + v.atual.versao + ' e buscas registradas depois dela) · POS total ' + porc(v.atual.posTotal), style: 'dia', headlineLevel: 2 });
-        out.push(tabela(['Setor', 'POA aprovado', 'POD acumulado', 'POS', 'POA atual'], v.atual.setores.map(function (s) {
-          return [{ text: s.nome, style: 'td', bold: true }, porc(s.poa), s.pod != null ? porc(s.pod) : (s.semEstimativa ? 'não estimada' : '—'), porc(s.pos), porc(s.poaAtual)];
-        }).concat([[{ text: 'Fora dos setores desenhados', style: 'td', italics: true }, porc(v.atual.poaFora), '—', '—', porc(v.atual.poaForaAtual)]]), [150, 70, 80, 60, '*']));
-      }
     });
-    if ((b.registros || []).length) {
-      out.push(subtitulo('Buscas registradas (origem do POD)'));
-      out.push(tabela(['Quando', 'Setor e equipe', 'Tipo', 'POD', 'Base da estimativa', 'Situação'], b.registros.map(function (r) {
-        return [{ text: dataHoraCurta(r.registrado_em), style: 'tdMono' },
-          { stack: [{ text: r.setor, style: 'td', bold: true }, { text: [txt(r.equipe, 'equipe não informada'), r.metodo].filter(Boolean).join(' · ') + (r.vitima ? ' · só ' + r.vitima : ''), style: 'tdSuave' }] },
-          r.finalidade === 'planejada' ? 'planejada' : 'executada',
-          r.pod == null ? 'não estimada' : porc(r.pod) + (r.cobertura_fracao ? ' em ' + porc(r.cobertura_fracao, 0) + ' do setor' : ''),
-          { text: r.base_estimativa + ' [' + (ORIGEM_PROB[r.origem_pod] || r.origem_pod) + ']', style: 'tdSuave' },
-          r.anulado ? 'Anulado: ' + r.anulado.motivo + ' (' + txt(r.anulado.por) + ')' : 'Válido'];
-      }), [52, '*', 46, 60, '*', 70]));
-      out.push(nota('Registro de busca não se edita: erros são anulados (com motivo) e ficam no histórico.'));
+    if ((b.missoes || []).length) {
+      out.push(subtitulo('Missões de busca (o POD pertence à missão)'));
+      out.push(tabela(['Quando', 'Setor, equipe e método', 'POD', 'Resultado e execução real', 'POA recalculado'], b.missoes.map(function (m) {
+        var pod = m.estado === 'concluida' ? m.pod_final : m.pod_planejada;
+        var origem = m.estado === 'concluida' ? m.pod_final_origem : m.pod_planejada_origem, revisor = m.estado === 'concluida' ? m.pod_final_revisor : m.pod_planejada_revisor;
+        return [{ text: dataHoraCurta(m.criada_em), style: 'tdMono' },
+          { stack: [{ text: m.setor, style: 'td', bold: true }, { text: [m.equipe, m.metodo, 'área ' + porc(m.area_fracao, 0)].join(' · ') + (m.vitima ? ' · só ' + m.vitima : ''), style: 'tdSuave' }] },
+          { text: (pod == null ? 'não estimada' : porc(pod)) + (origem === 'ia' ? ' (sugerido por IA, revisado por ' + txt(revisor) + ')' : ''), style: 'td' },
+          m.estado === 'cancelada' ? 'Cancelada: ' + txt(m.cancelada_motivo) : m.estado === 'planejada' ? 'Planejada' : { stack: [{ text: RESULTADO_MISSAO[m.resultado] + ' · ' + txt(m.resultado_por), style: 'td' }, { text: 'cobertura real ' + (m.cobertura_real == null ? 'não informada' : porc(m.cobertura_real, 0)), style: 'tdSuave' }] },
+          m.calculo_estado === 'aplicado' ? { stack: m.efeitos.map(function (e) { return { text: e.vitima + ': versão ' + e.versao + ' (POA ' + porc(e.poa_antes) + ' → ' + porc(e.poa_depois) + '; POS ' + porc(e.pos) + ')', style: 'tdSuave' }; }) }
+            : m.calculo_estado === 'pendente_pod' ? 'Pendente: POD não estimada' : m.calculo_estado === 'inconsistente' ? 'Inconsistente: ' + txt(m.calculo_detalhe) : '—'];
+      }), [52, '*', 70, 90, '*']));
+      out.push(nota('POS = POA do setor × POD da missão: a chance de aquela busca localizar a pessoa (não é chance de sobrevivência). Cada busca negativa gera uma nova versão do cenário; as anteriores não mudam e PODs de missões diferentes nunca são somados.'));
+    }
+    if ((b.registros_antigos || []).length) {
+      out.push(subtitulo('Registros de busca anteriores (formato antigo, não entram no cálculo)'));
+      out.push(tabela(['Quando', 'Setor e equipe', 'POD', 'Situação'], b.registros_antigos.map(function (r) {
+        return [{ text: dataHoraCurta(r.registrado_em), style: 'tdMono' }, [r.setor, txt(r.equipe, 'equipe não informada')].join(' · '), r.pod == null ? 'não estimada' : porc(r.pod), r.anulado ? 'Anulado: ' + r.anulado.motivo : 'Válido'];
+      }), [52, '*', 60, 90]));
     }
     return out;
   }

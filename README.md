@@ -421,31 +421,36 @@ ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cad
     cria a próxima versão, e o histórico fica visível. A aprovação confere a **revisão esperada** (outro responsável mexeu
     no rascunho: recusa) e usa uma **chave de idempotência** (reenviar não duplica). Entra no diário.
   - **Vítima localizada**: o cenário dela fica **encerrado** (só consulta); os das demais vítimas seguem.
-  - **POD** = probabilidade de a busca achar a pessoa, **se ela estiver no setor**. Vem do **registro manual da busca**,
-    **nunca do GPS** (a trilha mostra por onde a equipe passou, não o que observou). O registro tem: setor, **tipo**
-    (**pós-execução** ou **planejada** = previsão, que nunca altera o POA), equipe, método, observadores efetivos,
-    **deslocamento relacionado**, se cobriu o setor inteiro ou **parte dele** (a conta usa POD da área × fração coberta,
-    supondo distribuição uniforme no setor), POD estimado (0 a 100), **em que se baseia**, origem da estimativa (julgamento
-    do comando ou consenso documentado; não há catálogo de modelos validados), condições, impedimentos, áreas não
-    observadas, horários e se vale para todas as vítimas ou só uma. **"POD não estimada"** registra a busca sem reduzir o
-    POA e **nunca vira zero**. O registro não se edita nem se apaga: se errou, **Anular** (com motivo). Reenviar o mesmo
-    registro (mesma chave) não duplica.
-  - **O que o app calcula** (só com versão aprovada). Contam os registros de busca executada, com POD estimada, não
-    anulados, válidos para a vítima e **lançados depois da aprovação** da versão (a versão já incorpora o que se sabia):
-    - **POD acumulado** do setor = `1 − Π(1 − POD de cada registro)` (supõe buscas independentes; repetir o mesmo método no
-      mesmo lugar rende menos, então é uma estimativa generosa).
-    - **POS** do setor = `POA × POD acumulado`. **POS total** = soma dos setores (probabilidade de a busca localizar a pessoa;
-      **não** é probabilidade de sobrevivência nem de resgate com vida).
-    - **POA atual** (regra de Bayes) = `POA × (1 − POD acumulado)` ÷ o total que sobra: a probabilidade migra para o que não foi
-      visto, inclusive para "fora dos setores". Se a busca negativa seria impossível (POD 100% onde estava toda a probabilidade),
-      o registro é marcado **inconsistente** e não é aplicado. Vale para alvo parado; se a pessoa pode estar se deslocando,
-      faça um novo cenário. "Usar o POA atual" preenche a próxima versão com esse resultado, para você revisar e justificar.
-    - O exemplo do capítulo 13 do guia (A 45%, B 25%, C 20%, externo 10%; M1 em A com POD 60%, M2 em B com POD 50%) é teste
-      automático: dá 24,66% / 34,25% / 27,40% / 13,70% e depois 29,75% / 20,66% / 33,06% / 16,53%, cumulativo 39,5%.
-  - **Mapa**: "Mostrar POA atual no mapa" pinta os setores do cenário numa escala própria (violeta, que não se confunde com
+  - **Publicar** (migração **038**): o servidor guarda o **"Fora da área"** da versão e só aceita publicar quando **setores +
+    fora = exatamente 100%** (tolerância de 0,05 ponto, o arredondamento de uma casa). Versões antigas, sem esse campo,
+    seguem como estão ("fora" = o que sobra). Cada valor guarda sua **origem**: manual, **sugerido por IA e revisado por <nome>**
+    ou cálculo pós-busca. Se a versão vigente mudou depois do rascunho, publicar o rascunho é recusado até você revisá-lo e
+    salvá-lo de novo; a numeração das versões nunca volta atrás.
+  - **POD** = probabilidade de a busca achar a pessoa, **se ela estiver na área coberta**. Vem da estimativa da equipe,
+    **nunca do GPS**, e **pertence à missão de busca** (migração **039**), não ao setor. Aba **Missões** → **Nova missão**:
+    setor, vítima (ou todas), **equipe**, **método**, **área atribuída** (% do setor, com descrição), **POD estimada** (opcional;
+    vazio = **"POD não estimada"**, nunca zero) e em que ela se baseia (obrigatório quando há POD). Depois do retorno da equipe,
+    **Registrar resultado**: **localizado / não localizado / não concluído**, a **execução real** (cobertura real, horários), o
+    POD final e observações. O resultado entra uma vez só; missão concluída não se edita nem se apaga; planejada pode ser
+    cancelada (com motivo, fica no histórico). Reenviar a mesma missão (mesma chave) não duplica.
+  - **Cálculo pós-busca** (feito no servidor, `busca_missao_resultado`; o mesmo cálculo existe em `public/js/pod.js` e os dois são
+    conferidos nos testes). Só **busca negativa** (não localizado; ou não concluído com cobertura real informada): `q = POD ×
+    cobertura` no setor pesquisado e `q = 0` nos demais (inclusive "Fora da área"); `r_j = p_j × (1 − q_j)`; `Z = Σ r_k`;
+    `p'_j = r_j ÷ Z`. **Cada cálculo gera uma nova versão aprovada** (origem "cálculo pós-busca"); as anteriores não mudam.
+    - **POD desconhecido**: não recalcula; a missão fica **pendente de POD** até alguém informá-lo (uma vez, com a base).
+    - **Z = 0 ou valores inválidos**: a missão fica **inconsistente**, com o motivo, e **nada é alterado**.
+    - **Nunca soma PODs de missões diferentes**: cada missão atualiza a versão vigente, uma depois da outra.
+    - **POS da missão = POA do setor × POD da missão**, mostrado como **"chance de localizar nesta busca"** (nunca como chance
+      de sobrevivência); fica guardado por vítima com a versão antes e depois.
+    - Localizado: não recalcula (registre o encontro em "Vítima encontrada"). A tela mostra a **prévia** do novo POA antes de confirmar.
+    - Os **registros antigos** (por setor) continuam guardados e aparecem em "Registros anteriores", mas **não entram mais no
+      cálculo**. O servidor ainda aceita `busca_registrar` (para telas antigas em cache), que a tela nova não usa mais.
+    - O exemplo do capítulo 13 do guia (A 45%, B 25%, C 20%, externo 10%; M1 em A com POD 60%, M2 em B com POD 50%) segue como teste
+      automático (`calcular`): 24,66% / 34,25% / 27,40% / 13,70% e depois 29,75% / 20,66% / 33,06% / 16,53%, cumulativo 39,5%.
+  - **Mapa**: "Ver no mapa" pinta os setores da versão vigente numa escala própria (violeta, que não se confunde com
     as cores de emergência), com legenda (vítima, versão, horário de referência e "prévia"), separada da passagem GPS.
-  - **Relatório final**: seção "Probabilidades de busca" com as versões aprovadas (hipóteses, limitações, evidências), a
-    situação atual e as buscas registradas (inclusive as anuladas, marcadas).
+  - **Relatório final**: seção "Probabilidades de busca" com as versões aprovadas (hipóteses, limitações, evidências, origem
+    de cada valor, inclusive as calculadas) e as missões de busca (POD, resultado, execução real, POA recalculado).
   - Referências: Koopman, *Search and Screening* (1980); manual IAMSAR, vol. II; Guarda Costeira dos EUA, *The Theory of
     Search*. O modelo estima, não prova: o setor só fica **Concluído** quando um responsável marca.
   - Banco: `busca_cenarios`, `busca_cenario_setores`, `busca_cenario_evidencias` e `busca_registros` (só leitura pelos
@@ -1219,6 +1224,7 @@ rastreamento-sar/
 │       ├── 030_percursos_trajetos.sql         meio/cor/origem das trilhas; trajeto desenhado como destino
 │       ├── 031_vitima_encontrada_detalhes.sql ficha, estado, local e quem encontrou no registro da vítima
 │       ├── 032_controle_tempo_missoes.sql     horários combinados, alertas de atraso e de falta de comunicação
+│       ├── 038_poa_fora_origem.sql / 039_missoes_busca_pos.sql   Fora da área, origem dos valores, missões de busca e cálculo pós-busca
 │       ├── 033_cenario_busca_pod_poa.sql / 034_poa_pod_guia.sql   POA/POD: cenários, versões, registros de busca
 │       ├── 035_pedidos_ajuda.sql              pedidos de ajuda com estados, prioridade, escalonamento e histórico
 │       ├── 036_recursos_equipes.sql           disponibilidade, capacidades e recursos das equipes

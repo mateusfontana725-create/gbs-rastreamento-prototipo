@@ -1707,6 +1707,7 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 
 /* Cenário de busca por vítima, registro de busca e versões (js/busca-cenario.js) */
 .modal:has(.poa-painel) { width: min(760px, 100%); }
+.modal:has(.poa-form) { width: min(680px, 100%); }
 .modal:has(.form-busca) { width: min(640px, 100%); }
 .cenario-sec { margin: 14px 0; }
 .cenario-sec h3 { margin: 0 0 6px; font-size: 1rem; }
@@ -1933,4 +1934,39 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
   .poa-acoes .btn-perigo { margin-right: 0; flex-basis: 100%; }
   .cenario-evid-linha { grid-template-columns: 1fr 1fr; }
   .cenario-evid-linha > span, .cenario-evid-linha > input { grid-column: 1 / -1; }
+}
+
+/* Missões de busca e formulários do POA/POD */
+.poa-form h2 { margin: 0 0 4px; }
+.poa-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; margin: 14px 0; }
+.poa-grid[hidden], .poa-g[hidden] { display: none; }
+.poa-g { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.poa-g-largo { grid-column: 1 / -1; }
+.poa-g .campo { width: 100%; min-width: 0; }
+.poa-g .rotulo { margin: 0; min-height: 22px; display: flex; align-items: center; }
+.poa-g .campo, .poa-g .poa-campo { min-height: 46px; }
+.poa-g small { line-height: 1.3; }
+.poa-meta { margin: 0; color: var(--texto-2); font-size: .88rem; }
+.poa-previa { margin: 4px 0 8px; padding: 10px 12px; border: 1px dashed var(--prob); border-radius: var(--raio); background: var(--prob-claro); font-size: .88rem; }
+.poa-previa p { margin: 2px 0; }
+.poa-previa:empty { display: none; }
+.poa-calc { margin: 6px 0 0; font-size: .86rem; }
+.poa-calc-ok { color: var(--prob-texto); }
+.poa-calc-pend { color: var(--alerta-texto); }
+.poa-calc-erro { color: var(--perigo-texto); font-weight: 600; }
+.poa-missoes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.poa-missao { border: 1px solid var(--borda); border-left: 4px solid var(--prob); border-radius: var(--raio); padding: 12px 14px; background: var(--superficie-2); }
+.poa-missao-planejada { border-left-style: dashed; }
+.poa-missao-cancelada { opacity: .7; border-left-color: var(--borda-forte); }
+.poa-missao-topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; margin-bottom: 6px; }
+.poa-missao-corpo p { margin: 4px 0; }
+.poa-missao-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.poa-pos { font-weight: 600; }
+.selo-ia { color: var(--prob-texto); background: transparent; border: 1px dashed var(--prob); text-transform: none; letter-spacing: 0; }
+.poa-sugerido { border-style: dashed !important; border-color: var(--prob) !important; background: var(--prob-claro) !important; }
+.poa-ia-marca { display: inline-block; font-size: .78rem; font-weight: 600; color: var(--prob-texto); }
+.poa-ia-linha:empty { display: none; }
+@media (max-width: 600px) {
+  .poa-grid { grid-template-columns: 1fr; gap: 14px; }
+  .poa-g-largo { grid-column: auto; }
 }

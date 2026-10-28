@@ -7,6 +7,9 @@
  *   - POD (probabilidade de a busca achar a pessoa, SE ela estiver no setor): vem do registro manual
  *     da busca. Nunca do GPS: a trilha mostra por onde a equipe passou, não o que ela observou.
  *
+ * Desde a missão de busca (migração 039): cada missão negativa gera uma NOVA VERSÃO do cenário (posBusca, abaixo); o POD
+ * pertence à missão e não é somado entre missões. As funções calcular/acumular valem só para os registros do formato antigo.
+ *
  * O que o app calcula a partir deles (Koopman, "Search and Screening", 1980; IAMSAR, vol. II):
  *   - POD planejada (previsão) e POD não estimada (nulo, nunca zero) NÃO alteram o POA. Planejada só gera uma "POS prevista".
  *   - Só contam os registros lançados DEPOIS da aprovação da versão (a versão já incorpora o que se sabia
@@ -224,10 +227,47 @@
     return (valores || []).reduce(function (a, v) { return a + (Number(v) || 0); }, 0);
   }
 
+  // Atualização depois de UMA busca negativa (a mesma conta do servidor, busca_missao_aplicar, conferida pelos testes):
+  //   q = POD × cobertura no setor pesquisado e q = 0 nos demais ("Fora da área" não é pesquisada);
+  //   r_j = p_j × (1 − q_j);  Z = Σ r_k;  p'_j = r_j / Z.  Cada missão se aplica à versão vigente, em sequência:
+  //   o app NUNCA soma PODs de missões diferentes como se fossem independentes.
+  // entrada: { setores: [{ id, poa }], fora, setorId, pod, cobertura }  (probabilidades entre 0 e 1)
+  // saída: { ok: true, q, z, antes, depois, pos, setores: [{ id, poa }], fora } ou { ok: false, motivo }
+  //   motivo: 'pod_desconhecido' (não recalcula: pendência), 'setor_fora_do_cenario', 'invalido' (valor fora de 0–1 ou soma ≠ 100%),
+  //           'z_zero' (Z = 0: inconsistência; nada muda)
+  function posBusca(entrada) {
+    var e = entrada || {};
+    var lista = e.setores || [];
+    var num = function (v) { return v === null || v === undefined || v === '' ? NaN : Number(v); };
+    var pod = num(e.pod), cob = e.cobertura == null ? 1 : num(e.cobertura);
+    if (isNaN(pod)) return { ok: false, motivo: 'pod_desconhecido' };
+    if (!(pod >= 0 && pod <= 1) || !(cob > 0 && cob <= 1)) return { ok: false, motivo: 'invalido' };
+    var alvo = lista.find(function (s) { return s.id === e.setorId; });
+    if (!alvo) return { ok: false, motivo: 'setor_fora_do_cenario' };
+    var soma = 0, valido = true;
+    lista.forEach(function (s) { var v = num(s.poa); if (!(v >= 0 && v <= 1)) valido = false; soma += v; });
+    var fora = e.fora == null ? 1 - soma : num(e.fora);
+    if (!valido || !(fora >= 0 && fora <= 1) || soma + fora < 0.999 || soma + fora > 1.001) return { ok: false, motivo: 'invalido' };
+    var q = Math.round(pod * cob * 1e6) / 1e6;
+    var r = lista.map(function (s) { return { id: s.id, r: Number(s.poa) * (1 - (s.id === e.setorId ? q : 0)) }; });
+    var z = r.reduce(function (a, x) { return a + x.r; }, 0) + fora;
+    if (!(z > 0)) return { ok: false, motivo: 'z_zero' };
+    var arred = function (x) { return Math.round(x * 1e6) / 1e6; };
+    var novos = r.map(function (x) { return { id: x.id, poa: arred(x.r / z) }; });
+    var foraNovo = arred(fora / z);
+    var diff = arred(1 - foraNovo - novos.reduce(function (a, x) { return a + x.poa; }, 0));
+    if (diff !== 0) {
+      var maior = novos.reduce(function (m, x) { return m === null || x.poa > m.poa ? x : m; }, null);
+      if (maior && maior.poa >= foraNovo) maior.poa = arred(maior.poa + diff); else foraNovo = arred(foraNovo + diff);
+    }
+    var antes = Number(alvo.poa);
+    return { ok: true, q: q, z: z, antes: antes, depois: novos.find(function (x) { return x.id === e.setorId; }).poa, pos: arred(antes * q), setores: novos, fora: foraNovo };
+  }
+
   var alvo = typeof window !== 'undefined' ? window : globalThis;
   alvo.POD = {
     calcular: calcular, acumular: acumular, distribuirPelaArea: distribuirPelaArea,
-    sugerirProximaVersao: sugerirProximaVersao, somaPoa: somaPoa,
+    sugerirProximaVersao: sugerirProximaVersao, somaPoa: somaPoa, posBusca: posBusca,
     poligonoDoSetor: poligonoDoSetor, sobreposicaoFracao: sobreposicaoFracao, sobreposicoes: sobreposicoes, LIMITE_SOBREPOSICAO: LIMITE_SOBREPOSICAO,
   };
 })();

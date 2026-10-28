@@ -150,5 +150,27 @@ console.log('Setores sobrepostos (guia, cap. 1 e 8.3) — mesmos números do ban
   chk(pares.length === 1 && pares[0].a === 'A' && pares[0].b === 'B', 'só pares com POA > 0 entram na conta (C tem POA zero)', pares);
 }
 
+console.log('Atualização pós-busca negativa (posBusca): r = p × (1 − q), Z = Σr, p\' = r/Z — igual à do servidor');
+{
+  const base = { setores: [{ id: 'A', poa: 0.5 }, { id: 'B', poa: 0.3 }], fora: 0.2, setorId: 'A' };
+  const r = P.posBusca(Object.assign({ pod: 0.6 }, base));
+  chk(r.ok && perto(r.z, 0.7) && perto(r.q, 0.6) && perto(r.pos, 0.3, 1e-6), 'q = 60%, Z = 0,7 e POS = POA × POD = 50% × 60% = 30%', r);
+  chk(perto(r.setores[0].poa, 0.2 / 0.7, 1e-6) && perto(r.setores[1].poa, 0.3 / 0.7, 1e-6) && perto(r.fora, 0.2 / 0.7, 1e-6), 'novo POA: Alfa 28,57%, Bravo 42,86%, fora 28,57%', r);
+  chk(perto(r.setores.reduce((a, s) => a + s.poa, 0) + r.fora, 1, 1e-12), 'a soma, com "Fora da área", fecha em exatamente 100%');
+  const c = P.posBusca(Object.assign({ pod: 0.5, cobertura: 0.4 }, base));
+  chk(perto(c.q, 0.2) && perto(c.setores[0].poa, 0.4 / 0.9, 1e-6), 'cobertura real de 40%: q = POD × cobertura = 20%', c);
+  chk(P.posBusca(Object.assign({ pod: null }, base)).motivo === 'pod_desconhecido' && P.posBusca(Object.assign({}, base)).motivo === 'pod_desconhecido', 'POD desconhecido não recalcula (pendência), nunca vira zero');
+  chk(P.posBusca({ setores: [{ id: 'A', poa: 1 }], fora: 0, setorId: 'A', pod: 1 }).motivo === 'z_zero', 'Z = 0 (tudo no setor, POD 100%): inconsistência, sem resultado');
+  chk(P.posBusca(Object.assign({ pod: 0.5 }, base, { setorId: 'X' })).motivo === 'setor_fora_do_cenario', 'setor fora do cenário: nada a atualizar');
+  chk(P.posBusca({ setores: [{ id: 'A', poa: 0.7 }, { id: 'B', poa: 0.5 }], fora: 0, setorId: 'A', pod: 0.5 }).motivo === 'invalido' && P.posBusca(Object.assign({ pod: 1.5 }, base)).motivo === 'invalido', 'soma diferente de 100% ou POD fora de 0–1: inválido');
+  // sequência: duas missões em setores diferentes = aplicar uma depois da outra (sem somar PODs)
+  const um = P.posBusca(Object.assign({ pod: 0.6 }, base));
+  const dois = P.posBusca({ setores: um.setores, fora: um.fora, setorId: 'B', pod: 0.5 });
+  const rA = 0.2 / 0.7, rB = (0.3 / 0.7) * 0.5, rF = 0.2 / 0.7, Z = rA + rB + rF;
+  chk(dois.ok && perto(dois.setores[0].poa, rA / Z, 1e-6) && perto(dois.setores[1].poa, rB / Z, 1e-6), 'missões em sequência: a segunda parte da versão já atualizada (igual ao teste do banco)', dois);
+  const mesmo = P.posBusca({ setores: um.setores, fora: um.fora, setorId: 'A', pod: 0.6 });
+  chk(perto(mesmo.setores[0].poa, (0.2 / 0.7 * 0.4) / ((0.2 / 0.7) * 0.4 + 0.3 / 0.7 + 0.2 / 0.7), 1e-6), 'mesmo setor de novo: usa o POA já atualizado (1 − POD aplicado sobre o que sobrou)');
+}
+
 console.log('\nPOA, POD e POS: ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

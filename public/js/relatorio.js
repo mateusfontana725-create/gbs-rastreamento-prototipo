@@ -131,7 +131,7 @@
       filtros,
       lista,
       UI.el('p', { classe: 'nota diario-nota', texto: 'Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [btnAtualizar, UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([btnAtualizar, UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { pararDiario(); diario.render = null; diario.fechar = null; } });
     diario.fechar = fechar;
 
@@ -299,7 +299,7 @@
         UI.el('p', { texto: e.detalhe }),
       ]),
       ul,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirDiario(op); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirDiario(op); } })]),
     ]));
     try {
       var v = await C.consultar(C.cliente.from('diario_versoes').select('*').eq('diario_id', e.id).order('versao', { ascending: false }));
@@ -726,7 +726,7 @@
         UI.el('h3', { texto: 'Relatórios já gerados' }),
         listaSalvos,
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário da operação', onclick: function () { fechar(); abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),

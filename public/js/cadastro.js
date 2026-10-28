@@ -84,7 +84,7 @@
         UI.el('h2', { id: 'modal-titulo', texto: titulo || 'Escolher o local no mapa' }),
         caixaMapa,
         info,
-        UI.el('div', { classe: 'modal-acoes' }, [
+        UI.rodape([
           UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
           btnOk,
         ]),
@@ -424,7 +424,7 @@
       UI.el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
       incompleto(op) ? UI.el('p', { classe: 'nota', texto: 'Cadastro inicial: o restante (tipo, localidade e os dados do IPO) pode ser completado depois em Editar, no painel da operação.' }) : null,
       dl,
-      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      UI.rodape([
         op.local_lat != null && opcoes.verNoMapa ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { fechar(); editarDados(op, opcoes); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
@@ -612,7 +612,7 @@
       UI.el('h2', { id: 'modal-titulo', texto: v.nome }),
       caixaFoto,
       dl,
-      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      UI.rodape([
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitima-editar', texto: 'Editar', onclick: function () { fechar(); editarFicha(op, v, opcoes); } }) : null,
         editavel ? rotFoto : null,
         editavel ? inFoto : null,

@@ -68,7 +68,7 @@
     opcoes = opcoes || {};
     if (!opcoes.empilhar) fecharTodos();
     var anterior = document.activeElement;
-    var caixa = el('div', { classe: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [conteudo]);
+    var caixa = el('div', { classe: 'modal form-padrao', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [conteudo]);
     var fundo = el('div', { classe: 'modal-fundo' }, [caixa]);
     fundo.addEventListener('click', function (ev) {
       if (ev.target === fundo && opcoes.fecharNoFundo !== false) fechar(null);
@@ -129,7 +129,7 @@
       filhos.push(erro);
       var btnOk = el('button', { classe: 'btn ' + (o.perigo ? 'btn-primario' : 'btn-escuro'), type: 'button', texto: o.ok || 'Confirmar' });
       var btnCancelar = el('button', { classe: 'btn', type: 'button', texto: o.cancelar || 'Cancelar', autofocus: !area });
-      filhos.push(el('div', { classe: 'modal-acoes' }, [btnCancelar, btnOk]));
+      filhos.push(rodape([btnCancelar, btnOk]));
       var resolvido = false;
       var fechar = abrirModal(el('div', null, filhos), {
         empilhar: Boolean(o.empilhar),   // abre por cima do que está aberto (ex.: confirmar dentro de um formulário)

@@ -1275,7 +1275,7 @@
         entrada,
       ]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [btnCancelar, btnOk]),
+      UI.rodape([btnCancelar, btnOk]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -1854,7 +1854,7 @@
     } }, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Legenda do mapa' }, [UI.dica('Muda só o texto da legenda, não o mapa. Fica neste aparelho. Os nomes dos grupos mudam em Ferramentas → Grupos.')]),
     ].concat(corpo).concat([
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', id: 'legenda-padrao', texto: 'Padrão', onclick: function () {
           Object.keys(campos).forEach(function (k) { campos[k].txt.value = ''; campos[k].ver.checked = true; });
         } }),
@@ -1984,7 +1984,7 @@
           UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '◯' }),
           UI.el('strong', { texto: 'Por raio' }), UI.el('small', { texto: 'toque no centro e informe o raio em metros' })]),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
   }
 
@@ -4337,7 +4337,7 @@
       m.categoria === 'VITIMA' ? seloCondicao(m) : null,
       UI.el('p', { classe: 'relato-texto', texto: m.texto }),
       dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes' }, [
+      compactarAcoes(UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
         p ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
@@ -4756,7 +4756,7 @@
       caixa,
       nav,
       dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes' }, [
+      compactarAcoes(UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', id: 'visor-ampliar', texto: 'Ampliar', onclick: function () { if (urlAtual) abrirLightbox(urlAtual, 'Foto de ' + autor); } }),
         f.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () {
           fechar();
@@ -4839,7 +4839,7 @@
         UI.el('label', { classe: 'btn btn-escuro btn-foto' }, [UI.el('span', { classe: 'ico-camera', 'aria-hidden': 'true' }), ' TIRAR FOTO', inCam]),
         UI.el('label', { classe: 'btn btn-foto' }, ['Escolher arquivo', inArq]),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
   }
 
@@ -6074,7 +6074,7 @@
       blocoPessoas,
       blocoGrupo,
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     mostrarModo();
     form.addEventListener('submit', async function (ev) {
@@ -6203,7 +6203,7 @@
         } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
           UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
       })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto de interesse marcado ainda.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
   }
 
@@ -6322,7 +6322,7 @@
         (idade > 5 * 60000 ? '. ATENÇÃO: posição antiga — a pessoa pode estar sem sinal; a rota vai até onde ela foi vista por último.' : '. A rota acompanha a pessoa enquanto ela anda.') }),
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rota-ate-origem', texto: 'Saindo de' }), sel]),
       UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Como vai até lá' }), modos]),
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', id: 'rota-ate-enviar', texto: 'Mandar alguém até ela',
           title: 'Envia a posição atual da pessoa como destino para outra pessoa ou grupo',
@@ -6913,7 +6913,7 @@
         opcao('desenho-enviar', '➝ Enviar para alguém percorrer', 'A pessoa ou o grupo segue a linha no celular, do início (verde) ao fim.', function () { enviarDesenhoComoTrajeto(dz, guardar.checked); },
           UI.el('label', { classe: 'linha-opcao opcao-desenho-extra' }, [guardar, ' Guardar também no mapa como trilha planejada'])),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao desenho', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao desenho', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (!escolhido && est.desenho === dz) atualizarBarraTrilha(); } });
   }
 
@@ -7543,7 +7543,7 @@
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: inst.titulo }),
       UI.el('ol', { classe: 'perm-passos' }, inst.passos.map(function (t) { return UI.el('li', { texto: t }); })),
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Verificar de novo', onclick: function () { fechar(); ligarMinhaPosicao(false); } }),
       ]),
@@ -7828,7 +7828,7 @@
         'Para ver o de um participante, peça que ele abra o link com "&diag=1" no fim.' }),
       info,
       caixa,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { clearInterval(timer); } });
   }
 
@@ -8013,7 +8013,7 @@
       UI.el('p', { classe: 'ajuda', texto: 'Todos os responsáveis abaixo veem o mapa, os participantes, as posições uns dos outros e as mensagens desta operação, e podem enviar orientações.' + (souCriador ? '' : ' Só quem criou a operação pode remover responsáveis.') }),
       lista,
       podeAlterar() ? form : UI.el('p', { classe: 'muted', texto: 'Operação encerrada: a equipe não pode ser alterada.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
 
     C.rpc('listar_responsaveis', { p_operacao: op.id }).then(render).catch(function (e) {
@@ -8847,7 +8847,7 @@
       UI.el('h2', { id: 'modal-titulo', texto: 'Grupos da operação' }),
       UI.el('p', { classe: 'ajuda', texto: 'Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.' }),
       corpo,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { fechar(); abrirFormGrupo(null); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
@@ -8962,7 +8962,7 @@
       UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' Membros — ' + g.nome]),
       UI.el('p', { classe: 'ajuda', texto: 'O responsável do grupo (★) pode receber o destino pelo grupo e avisar pelo celular que a busca no setor terminou.' }),
       corpo,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
@@ -9004,7 +9004,7 @@
         UI.dica('Quem abrir este link entra na operação e no grupo, como membro' + (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como civil.') + ' O link não dá acesso ao painel.')]),
       UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
       qr,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Gerar novo link', onclick: async function () {
           fechar();
           var r = await UI.confirmar({ titulo: 'Gerar um novo link para o grupo ' + g.nome + '?', texto: 'O link atual (e o QR Code) deixa de funcionar na hora. Quem já entrou continua no grupo.', ok: 'Gerar novo link', perigo: true });
@@ -9636,7 +9636,7 @@
       UI.el('h2', { id: 'modal-titulo', texto: 'Horários do deslocamento' }),
       UI.el('p', { classe: 'ajuda', texto: m.grupo_nome + ' → ' + m.nome + (m.base_nome ? ' · base: ' + m.base_nome : ' · sem base') }),
       campos.el, erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -9766,7 +9766,7 @@
       UI.el('p', { classe: 'ajuda', texto: 'Cada cartão é um deslocamento: horários combinados, onde está cada pessoa e o que falta. ' +
         'Os alertas de atraso e de falta de contato são verificados pelo servidor, mesmo sem internet.' }),
       corpo,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (est.renderMissoesAberto === render) est.renderMissoesAberto = null; } });
   }
 

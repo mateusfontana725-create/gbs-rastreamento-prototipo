@@ -170,7 +170,7 @@
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'rec-cap', texto: 'Capacidades' }), cap]),
       el('div', { classe: 'grupo' }, [el('span', { classe: 'rotulo', texto: 'Recursos' }), lista, atalhos]),
       erro,
-      el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: editavel ? 'Cancelar' : 'Fechar', onclick: function () { fechar(); } }), editavel ? btnSalvar : null]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: editavel ? 'Cancelar' : 'Fechar', onclick: function () { fechar(); } }), editavel ? btnSalvar : null]),
     ]);
     var fechar = UI.abrirModal(corpo, { fecharNoFundo: false });
   }

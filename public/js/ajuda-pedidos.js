@@ -275,7 +275,7 @@
       corpo.appendChild(el('p', { classe: 'ajuda', texto: 'Só "Resolver" encerra o pedido. "Lido" ou "ciente" não resolvem.' }));
       if (est.ausente) {
         corpo.appendChild(el('p', { classe: 'nota', texto: 'O fluxo de pedidos de ajuda ainda não está no servidor: rode a migração 035_pedidos_ajuda.sql no Supabase.' }));
-        corpo.appendChild(el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
+        corpo.appendChild(UI.rodape([el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
         return;
       }
       if (est.erro) corpo.appendChild(el('p', { classe: 'nota', texto: 'Não foi possível atualizar: ' + est.erro }));
@@ -291,7 +291,7 @@
         : rs.sort(function (a, b) { return C.paraMs(b.resolvido_em) - C.paraMs(a.resolvido_em); });
       if (!lista.length) corpo.appendChild(el('p', { classe: 'muted', texto: abaAtual === 'abertos' ? 'Nenhum pedido de ajuda aberto.' : 'Nenhum pedido resolvido ainda.' }));
       corpo.appendChild(el('ul', { classe: 'ajuda-lista' }, lista.map(function (p) { return cartao(p, p.id === pedidoId); })));
-      corpo.appendChild(el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
+      corpo.appendChild(UI.rodape([el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
     }
     if (pedidoId && est.pedidos.get(pedidoId)) abaAtual = est.pedidos.get(pedidoId).estado === 'resolvido' ? 'resolvidos' : 'abertos';
     est.renderAtual = desenhar;

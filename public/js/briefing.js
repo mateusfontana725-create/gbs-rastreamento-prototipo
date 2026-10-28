@@ -263,7 +263,7 @@
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-com', texto: 'Comunicações' }), f.comunicacoes]),
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-obs', texto: 'Observações' }), f.observacoes]),
       erro,
-      el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]), { fecharNoFundo: false, empilhar: true });
   }
 
@@ -406,7 +406,7 @@
       corpo.appendChild(el('h2', { id: 'modal-titulo', texto: 'Briefing e passagem de comando' }));
       if (est.ausente) {
         corpo.appendChild(el('p', { classe: 'nota', texto: 'Briefing indisponível: faltam as migrações 035 a 037 no banco.' }));
-        corpo.appendChild(el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
+        corpo.appendChild(UI.rodape([el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
         return;
       }
       var pend = pendente();
@@ -455,7 +455,7 @@
           })),
         ]));
       }
-      corpo.appendChild(el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
+      corpo.appendChild(UI.rodape([el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
     }
     async function atualizar() {
       carregando = true;

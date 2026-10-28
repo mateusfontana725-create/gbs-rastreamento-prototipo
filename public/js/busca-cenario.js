@@ -285,7 +285,7 @@
     function fechando() { est.renderAtual = null; est.editorSujo = false; }
 
     function rodape() {
-      return el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]);
+      return UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]);
     }
 
     function abaPoa(vid, ap, rasc, editavel) {

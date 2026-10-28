@@ -349,7 +349,7 @@
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: inst.titulo }),
       ol,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Verificar de novo', onclick: function () { fechar(); religarGps(true); } }),
       ]),
@@ -1865,7 +1865,7 @@
         UI.el('strong', { texto: 'Encontrei a vítima' }), UI.el('span', { texto: 'a pessoa que está sendo procurada' }),
       ]),
       grade,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
     opcoes.forEach(function (o) {
       grade.appendChild(UI.el('button', { classe: 'opcao-encontrei', type: 'button', 'data-cat': o[0], onclick: function () { fechar(); detalharEncontrei(o); } }, [
@@ -1922,7 +1922,7 @@
           UI.el('strong', { texto: 'Morta' }),
         ]),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
     ]), { fecharNoFundo: false });
   }
 
@@ -1933,7 +1933,7 @@
       UI.el('p', { classe: 'confirma-condicao', texto: 'Vítima: ' + rotulo }),
       UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Depois, este celular mostra só "' + TEXTO_VITIMA + '".' }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
     ]), { fecharNoFundo: false });
     var enviado = false;
     btnEnviar.addEventListener('click', async function () {
@@ -2566,7 +2566,7 @@
         ' · intervalo máximo: ' + Math.round(f.cfg.intervaloParadoMs / 1000) + ' s.' }),
       UI.el('p', { classe: 'ajuda', texto: resumo || 'Sem leituras ainda.' }),
       caixa,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { clearInterval(timer); } });
   }
 

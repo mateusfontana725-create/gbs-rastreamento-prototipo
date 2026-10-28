@@ -6967,18 +6967,17 @@
     var cor = UI.el('input', { type: 'color', classe: 'campo-cor', id: 'trilha-cor', value: base.cor || '#22d3ee', 'aria-label': 'Cor da trilha' });
     cor.disabled = !base.cor;
     corPropria.addEventListener('change', function () { cor.disabled = !corPropria.checked; });
-    var estados = UI.el('div', { classe: 'opcoes-estado-trilha', role: 'radiogroup', 'aria-labelledby': 'trilha-estado-rot' }, Object.keys(ESTADO_TRILHA).map(function (k) {
+    var estados = UI.el('div', { classe: 'opcoes-estado-trilha', role: 'radiogroup', 'aria-label': 'Situação da trilha' }, Object.keys(ESTADO_TRILHA).map(function (k) {
       var e = ESTADO_TRILHA[k];
       return UI.el('label', { classe: 'opcao-estado-trilha' }, [
         UI.el('input', { type: 'radio', name: 'trilha-estado', value: k, checked: k === estadoAtual ? true : null }),
         UI.el('span', { classe: 'lg-trilha-desenhada lg-' + k, 'aria-hidden': 'true' }),
-        UI.el('span', null, [UI.el('strong', { texto: e.rotulo }), UI.el('small', { classe: 'muted', texto: ' — ' + e.dica })]),
+        UI.el('span', null, [UI.el('strong', { texto: e.rotulo })]),
       ]);
     }));
     var quando = UI.el('input', { classe: 'campo', id: 'trilha-percorrida-em', type: 'datetime-local', max: paraCampoDataHora(C.agora()),
       value: paraCampoDataHora(!novo && d.percorrida_em ? d.percorrida_em : (extra && extra.percorrida_em) || C.agora()) });
-    var grupoQuando = UI.el('div', { classe: 'grupo', hidden: estadoAtual !== 'percorrida' }, [
-      UI.el('label', { classe: 'rotulo', for: 'trilha-percorrida-em', texto: 'Quando foi percorrida' }), quando]);
+    var grupoQuando = UI.campo('Quando foi percorrida', quando, { para: 'trilha-percorrida-em', oculto: estadoAtual !== 'percorrida' });
     estados.addEventListener('change', function () {
       grupoQuando.hidden = ((form.querySelector('input[name="trilha-estado"]:checked') || {}).value) !== 'percorrida';
     });
@@ -6994,26 +6993,23 @@
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btnSalvar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'trilha-salvar', texto: novo ? 'Salvar trilha' : 'Salvar' });
     var salvo = false;
-    var form = UI.el('form', { classe: 'form-trilha', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Nova trilha desenhada' : 'Editar trilha' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Operação ' + est.op.codigo + ' · ' + pontos.length + ' pontos · ' + formatarComprimento(comprimentoLinhaM(pontos)) +
-        '. Trilha desenhada à mão: não é rastro de GPS e não conclui setores.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-nome', texto: 'Nome da trilha' }), nome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', id: 'trilha-estado-rot', texto: 'Situação (escolha uma)' }), estados]),
-      grupoQuando,
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-meio', texto: 'Percurso feito por' }), meio]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor no mapa' }),
-          UI.el('label', { classe: 'linha-opcao' }, [corPropria, ' própria ', cor]),
-          UI.el('small', { classe: 'muted', texto: 'Sem cor própria: amarelo (planejada) ou branco (percorrida).' })]),
+    var form = UI.el('form', { classe: 'form-trilha form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Nova trilha' : 'Editar trilha' }),
+      UI.el('p', { classe: 'ajuda', texto: pontos.length + ' pontos · ' + formatarComprimento(comprimentoLinhaM(pontos)) }),
+      UI.grade([
+        UI.campo('Nome', nome, { para: 'trilha-nome', largo: true }),
+        UI.campo('Situação', estados, { largo: true, dica: 'Trilha desenhada à mão: não é rastro de GPS e não conclui setores.' }),
+        grupoQuando,
+        UI.campo('Feito por', meio, { para: 'trilha-meio' }),
+        UI.campo('Cor no mapa', UI.el('div', { classe: 'linha-cor' }, [UI.el('label', { classe: 'linha-opcao' }, [corPropria, ' própria']), cor]), { dica: 'Sem cor própria: amarelo (planejada) ou branco (percorrida).' }),
+        UI.campo('Grupo', grupoSel, { para: 'trilha-grupo', ajuda: 'Opcional' }),
+        UI.campo('Responsável', part, { para: 'trilha-participante', ajuda: 'Opcional' }),
+        UI.campo('Equipe', equipe, { para: 'trilha-equipe', ajuda: 'Opcional' }),
+        UI.campo('Observações', obs, { para: 'trilha-obs', largo: true, ajuda: 'Opcional' }),
       ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-grupo', texto: 'Grupo (opcional)' }), grupoSel]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-participante', texto: 'Responsável pelo trajeto (opcional)' }), part]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-equipe', texto: 'Equipe (opcional)' }), equipe]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-obs', texto: 'Observações (opcional)' }), obs]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [
-        UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-voltar', texto: novo ? 'Voltar ao desenho' : 'Cancelar', onclick: function () { fechar(); } }),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-voltar', texto: novo ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); } }),
         btnSalvar,
       ]),
     ]);

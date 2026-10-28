@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1707,5 +1707,93 @@ console.log('\nMissão de busca e cálculo pós-busca — migração 039');
   chk(['busca_missoes', 'busca_missao_efeitos'].every((x) => pubM.includes(x)), 'missões e efeitos publicados no Realtime');
 }
 
-console.log('\nMigrações 007–041 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Proveniência, incerteza, binômio, drone e água (migração 042)');
+{
+  const opR = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 042', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uR = await usuario(null, true), uFora = await usuario(null, true);
+  const pR = await rpc(uR, 'ingressar', { p_token: opR.token_civil, p_nome: 'Relatora', p_tipo: 'civil', p_cpf: null, p_telefone: tel });
+  const rel = await rpc(uR, 'participante_enviar_mensagem', { p_participante: pR.participante_id, p_categoria: 'OBJETO', p_texto: 'mochila azul', p_lat: -22.9, p_lng: -43.2, p_precisao: 8, p_posicao_em: new Date(Date.now() - 600e3).toISOString() });
+
+  console.log('  revisão de relatos');
+  chk(/justificativa_obrigatoria/.test(await erroDe(rpc(resp1, 'revisar_relato', { p_mensagem: rel.id, p_estado: 'confirmado', p_nota: '' }))), 'confirmar sem dizer como foi verificado: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'revisar_relato', { p_mensagem: rel.id, p_estado: 'em_analise', p_nota: '' }))), 'responsável de fora da operação não revisa');
+  chk(/sem_permissao/.test(await erroDe(rpc(uR, 'revisar_relato', { p_mensagem: rel.id, p_estado: 'em_analise', p_nota: '' }))), 'participante não revisa o próprio relato');
+  chk(/data_invalida/.test(await erroDe(rpc(resp1, 'revisar_relato', { p_mensagem: rel.id, p_estado: 'em_analise', p_nota: '', p_fato_em: new Date(Date.now() + 3600e3).toISOString() }))), 'momento do fato no futuro: recusado');
+  const v1 = await rpc(resp1, 'revisar_relato', { p_mensagem: rel.id, p_estado: 'em_analise', p_nota: '', p_fato_em: new Date(Date.now() - 3 * 3600e3).toISOString(), p_fato_origem: 'estimado' });
+  const v2 = await rpc(resp1, 'revisar_relato', { p_mensagem: rel.id, p_estado: 'confirmado', p_nota: 'Equipe Alfa foi ao local e recolheu a mochila' });
+  chk(v1.versao === 1 && v1.fato_origem === 'estimado' && v2.versao === 2 && v2.estado === 'confirmado', 'cada revisão é uma versão nova, com a origem da hora do fato', [v1.versao, v1.fato_origem, v2.versao]);
+  chk((await db.query(`select count(*)::int n from public.relato_revisoes where mensagem_id = $1`, [rel.id])).rows[0].n === 2, 'as versões anteriores continuam guardadas');
+  const dRel = (await db.query(`select titulo, detalhe from public.diario where operacao_id = $1 and tipo = 'relato_revisado' order by registrado_em`, [opR.id])).rows;
+  chk(dRel.length === 2 && /confirmado/.test(dRel[1].titulo) && /Equipe Alfa/.test(dRel[1].detalhe), 'revisão registrada no diário', dRel);
+  chk((await como(uR, `select count(*)::int n from public.relato_revisoes`)).rows[0].n === 0, 'participante não lê a revisão interna');
+  chk((await como(uR, `select count(*)::int n from public.mensagens where id = $1`, [rel.id])).rows[0].n === 1, 'participante continua lendo a própria mensagem');
+  chk((await como(resp1, `select count(*)::int n from public.relato_revisoes where mensagem_id = $1`, [rel.id])).rows[0].n === 2, 'responsável da operação lê as revisões');
+  chk(/permission denied|row-level/.test(await erroDe(como(resp1, `insert into public.relato_revisoes (operacao_id, mensagem_id, versao, estado, revisado_por_nome) values ($1, $2, 9, 'confirmado', 'x')`, [opR.id, rel.id]))), 'revisão só pela função');
+  const saida = await rpc(resp1, 'enviar_mensagem', { p_participante: pR.participante_id, p_tipo: 'PERSONALIZADA', p_texto: 'ok' }).catch(() => null);
+  if (saida && saida.id) chk(/relato_nao_encontrado/.test(await erroDe(rpc(resp1, 'revisar_relato', { p_mensagem: saida.id, p_estado: 'em_analise', p_nota: '' }))), 'mensagem enviada pelo painel não é relato');
+
+  console.log('  idade estimada da vítima');
+  const vt = await rpc(resp1, 'salvar_vitima', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ nome: 'Pessoa', idade: 70, idade_qualidade: 'estimada' }) });
+  chk(vt.idade === 70 && vt.idade_qualidade === 'estimada', 'idade marcada como estimada', vt);
+  const vt2 = await rpc(resp1, 'salvar_vitima', { p_operacao: opR.id, p_id: vt.id, p_dados: JSON.stringify({ idade: null }) });
+  chk(vt2.idade === null && vt2.idade_qualidade === null, 'sem idade: "não informada" (nada de zero nem de qualidade)', vt2);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_vitima', { p_operacao: opR.id, p_id: vt.id, p_dados: JSON.stringify({ idade: 30, idade_qualidade: 'chutada' }) }))), 'qualidade fora da lista: recusada');
+
+  console.log('  binômio');
+  const setorR = await rpc(resp1, 'salvar_setor', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ nome: 'S1', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 300 }) });
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_binomio_sessao', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ cao_nome: '' }) }))), 'sessão sem o nome do cão: recusada');
+  const ses = await rpc(resp1, 'salvar_binomio_sessao', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ cao_nome: 'Thor', setor_id: setorR.id, condutor_participante_id: pR.participante_id, artigo_odor: 'camiseta', artigo_origem: 'quarto da pessoa', artigo_manipulacao: 'lacrada pela família', condicoes: 'vento fraco de leste' }) });
+  chk(ses.estado === 'planejada' && ses.cao_gps === 'sem_dispositivo' && ses.setor_id === setorR.id, 'sessão criada ligada ao setor, GPS do cão sem dispositivo', ses);
+  chk(/sessao_nao_iniciada/.test(await erroDe(rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'indicacao' }) }))), 'indicação só com a sessão iniciada');
+  chk(/transicao_invalida/.test(await erroDe(rpc(resp1, 'binomio_controle', { p_sessao: ses.id, p_acao: 'pausar' }))), 'não pausa o que não começou');
+  const s1 = await rpc(resp1, 'binomio_controle', { p_sessao: ses.id, p_acao: 'iniciar' });
+  const s2 = await rpc(resp1, 'binomio_controle', { p_sessao: ses.id, p_acao: 'pausar' });
+  const s3 = await rpc(resp1, 'binomio_controle', { p_sessao: ses.id, p_acao: 'retomar' });
+  chk(s1.estado === 'em_andamento' && s1.iniciada_em && s2.estado === 'pausada' && s3.estado === 'em_andamento' && s3.pausas.length === 1 && s3.pausas[0].de && s3.pausas[0].ate, 'iniciar, pausar e retomar com a pausa guardada (início e fim)', s3.pausas);
+  const i1 = await rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'indicacao', lat: -22.901, lng: -43.201, descricao: 'mudança de comportamento na trilha' }) });
+  const i2 = await rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'indicacao' }) });
+  chk(i1.codigo === 'I1' && i1.estado === 'em_analise' && i2.codigo === 'I2', 'indicações numeradas e sempre "em análise"', [i1.codigo, i1.estado, i2.codigo]);
+  chk(/indicacao_obrigatoria/.test(await erroDe(rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'confirmacao', metodo: 'equipe' }) }))), 'confirmação precisa apontar a indicação');
+  chk(/metodo_obrigatorio/.test(await erroDe(rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'confirmacao', relacionado_a: i1.id }) }))), 'confirmação precisa do método independente');
+  const c1 = await rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'confirmacao', relacionado_a: i1.id, metodo: 'busca visual' }) });
+  chk(c1.codigo === 'C1' && c1.estado === 'pendente' && c1.lat === -22.901, 'confirmação C1 pendente, no local da indicação', c1);
+  chk(/justificativa_obrigatoria/.test(await erroDe(rpc(resp1, 'revisar_binomio_evento', { p_evento: c1.id, p_estado: 'confirmada', p_nota: '' }))), 'confirmar exige justificativa');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'revisar_binomio_evento', { p_evento: i1.id, p_estado: 'pendente', p_nota: '' }))), 'indicação não fica "pendente" (isso é da confirmação)');
+  const rc = await rpc(resp1, 'revisar_binomio_evento', { p_evento: c1.id, p_estado: 'descartada', p_nota: 'nada encontrado no ponto' });
+  chk(rc.estado === 'descartada' && rc.revisado_por_nome === 'Sgt Um', 'confirmação descartada com justificativa');
+  const fim = await rpc(resp1, 'binomio_controle', { p_sessao: ses.id, p_acao: 'finalizar' });
+  chk(fim.estado === 'finalizada' && fim.finalizada_em, 'sessão finalizada');
+  chk(/sessao_nao_iniciada/.test(await erroDe(rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'indicacao' }) }))), 'sessão finalizada não recebe indicação nova');
+  const c2 = await rpc(resp1, 'registrar_binomio_evento', { p_sessao: ses.id, p_dados: JSON.stringify({ tipo: 'confirmacao', relacionado_a: i2.id, metodo: 'drone' }) });
+  chk(c2.codigo === 'C2', 'confirmação continua possível depois do fim da sessão');
+  const tiposDiario = (await db.query(`select tipo from public.diario where operacao_id = $1 and tipo like 'binomio%'`, [opR.id])).rows.map((r) => r.tipo);
+  chk(['binomio_sessao', 'binomio_iniciar', 'binomio_pausar', 'binomio_retomar', 'binomio_indicacao', 'binomio_confirmacao', 'binomio_revisao', 'binomio_finalizar'].every((t) => tiposDiario.includes(t)), 'sessão e eventos no diário', tiposDiario);
+  chk((await como(uR, `select count(*)::int n from public.binomio_eventos`)).rows[0].n === 0 && (await como(resp2, `select count(*)::int n from public.binomio_sessoes`)).rows[0].n === 0, 'binômio só para os responsáveis da operação');
+
+  console.log('  drone e água');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_observacao_campo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ modalidade: 'drone', tipo: 'indicacao_aquatica', titulo: 'x' }) }))), 'tipo e modalidade precisam combinar');
+  const plano = await rpc(resp1, 'salvar_observacao_campo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ modalidade: 'drone', tipo: 'plano_voo', titulo: 'Voo S1', fonte: 'piloto Sgt Dois', geometria: { tipo: 'linha', pts: [[-22.9, -43.2], [-22.91, -43.21]] }, dados: { altitude_m: 60 } }) });
+  chk(plano.estado === 'planejado' && plano.geometria.tipo === 'linha', 'plano de voo começa "planejado" (plano não prova voo)', plano.estado);
+  const foco = await rpc(resp1, 'salvar_observacao_campo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ modalidade: 'drone', tipo: 'foco_termico', titulo: 'Foco 1', geometria: { tipo: 'ponto', pts: [[-22.905, -43.205]] } }) });
+  chk(foco.estado === 'a_verificar', 'foco térmico começa "a verificar" (térmico não é vítima)');
+  const agua = await rpc(resp1, 'salvar_observacao_campo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ modalidade: 'aquatica', tipo: 'indicacao_aquatica', titulo: 'Margem esquerda', dados: { corrente: 'desconhecida', vento: 'informar fonte', area_origem: 'curva do rio' } }) });
+  chk(agua.estado === 'a_verificar' && agua.dados.corrente === 'desconhecida', 'indicação aquática com corrente desconhecida aceita');
+  chk(/area_invalida/.test(await erroDe(rpc(resp1, 'salvar_observacao_campo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ modalidade: 'drone', tipo: 'area_observada', titulo: 'Área', geometria: { tipo: 'area', pts: [[-22.9, -43.2], [-22.91, -43.2]] } }) }))), 'área com menos de 3 pontos: recusada');
+  chk(/justificativa_obrigatoria/.test(await erroDe(rpc(resp1, 'revisar_observacao_campo', { p_id: foco.id, p_estado: 'verificado', p_nota: '' }))), 'verificar foco exige justificativa');
+  const fv = await rpc(resp1, 'revisar_observacao_campo', { p_id: foco.id, p_estado: 'descartado', p_nota: 'era um animal' });
+  chk(fv.estado === 'descartado' && fv.nota === 'era um animal', 'foco descartado com justificativa');
+  chk((await como(uR, `select count(*)::int n from public.observacoes_campo`)).rows[0].n === 0, 'observações só para os responsáveis');
+
+  console.log('  encerrada e Realtime');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opR.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'revisar_relato', { p_mensagem: rel.id, p_estado: 'em_analise', p_nota: '' })))
+    && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_observacao_campo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ modalidade: 'drone', tipo: 'plano_voo', titulo: 'x' }) })))
+    && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_binomio_sessao', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ cao_nome: 'Rex' }) }))), 'encerrada: somente leitura');
+  const pub42 = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['relato_revisoes', 'binomio_sessoes', 'binomio_eventos', 'observacoes_campo'].every((x) => pub42.includes(x)), 'tabelas novas no Realtime');
+  const exc42 = await rpc(resp1, 'excluir_operacao', { p_operacao: opR.id });
+  chk(exc42.operacao === 'OP 042' && (await db.query(`select (select count(*) from public.relato_revisoes where operacao_id = $1) + (select count(*) from public.binomio_eventos where operacao_id = $1) + (select count(*) from public.observacoes_campo where operacao_id = $1) n`, [opR.id])).rows[0].n == 0, 'excluir a operação apaga revisões, binômio e observações');
+}
+
+console.log('\nMigrações 007–042 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

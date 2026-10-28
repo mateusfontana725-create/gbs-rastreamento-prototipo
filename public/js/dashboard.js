@@ -212,9 +212,8 @@
     var amostra = o.n == null ? el('span', { classe: 'dash-n dash-n-baixo', texto: 'n < 5' })
       : el('span', { classe: 'dash-n', texto: 'n = ' + o.n });
     return clicavel(el('section', { classe: 'dash-card dash-s' + (o.span || 12) }, [
-      el('header', { classe: 'dash-card-topo' }, [el('h3', { texto: o.titulo }), o.n === undefined ? null : amostra,
+      el('header', { classe: 'dash-card-topo' }, [el('h3', { classe: 'titulo-com-dica' }, [o.titulo, o.pergunta && window.UI ? UI.dica(o.pergunta) : null]), o.n === undefined ? null : amostra,
         o.aoClicar ? el('span', { classe: 'dash-card-dica', texto: o.dica || 'Detalhes ›' }) : null]),
-      o.pergunta ? el('p', { classe: 'dash-pergunta', texto: o.pergunta }) : null,
       el('div', { classe: 'dash-card-corpo' }, o.corpo),
       o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
     ]), o.aoClicar, 'Ver detalhes: ' + o.titulo);

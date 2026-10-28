@@ -6004,7 +6004,7 @@
     var abaPessoas = UI.el('button', { classe: 'btn', type: 'button', id: 'destino-aba-pessoas', texto: 'Pessoas' });
     var abaGrupo = UI.el('button', { classe: 'btn', type: 'button', id: 'destino-aba-grupo', texto: 'Grupo', disabled: est.semGrupos ? true : null });
     var blocoPessoas = UI.el('div', { classe: 'grupo' }, [
-      UI.el('div', { classe: 'linha-rotulo' }, [UI.el('span', { classe: 'rotulo', texto: 'Para quem' }),
+      UI.el('div', { classe: 'linha-rotulo' }, [UI.el('span', { classe: 'rotulo', texto: 'Pessoas' }),
         lista.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Marcar todos', onclick: function () { caixas.querySelectorAll('input').forEach(function (c) { c.checked = true; }); } }) : null]),
       caixas,
     ]);
@@ -6068,11 +6068,15 @@
         [UI.dica(traj
           ? 'O celular mostra a linha desenhada (' + window.Rotas.formatarDistancia(rotaTraj.distancia_m) + ', ' + rotaTraj.passos.filter(function (x) { return x.tipo === 'curva'; }).length + ' curva(s)) e guia a pessoa do início ao fim.'
           : 'O celular mostra o destino no mapa, a distância em linha reta e a direção. ' + C.coord(alvo.lat) + ', ' + C.coord(alvo.lng) + '.')]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-nome', texto: traj ? 'Nome do trajeto (o participante vê este nome)' : 'Nome do destino (o participante vê este nome)' }), nome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: traj ? 'Como vão percorrer (para estimar o tempo)' : 'Rota até lá (o celular calcula por ruas, caminhos e trilhas)' }), modos]),
-      UI.el('div', { classe: 'abas', role: 'group', 'aria-label': 'Enviar para' }, [abaPessoas, abaGrupo]),
-      blocoPessoas,
-      blocoGrupo,
+      UI.secao(null, [
+        UI.campo(traj ? 'Nome do trajeto' : 'Nome do destino', nome, { para: 'destino-nome', dica: 'É o nome que aparece no celular de quem recebe.' }),
+        UI.campo(traj ? 'Como vão percorrer' : 'Rota até lá', modos, { dica: traj ? 'Serve para estimar o tempo.' : 'O celular calcula a rota por ruas, caminhos e trilhas.' }),
+      ]),
+      UI.secao('Para quem', [
+        UI.el('div', { classe: 'abas', role: 'group', 'aria-label': 'Enviar para' }, [abaPessoas, abaGrupo]),
+        blocoPessoas,
+        blocoGrupo,
+      ]),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
@@ -6181,27 +6185,29 @@
     var setores = Array.from(est.setores.values()).map(function (s) { return s.d; });
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Enviar destino' }, [UI.dica('Escolha um setor, um ponto de interesse ou toque no mapa.')]),
-      UI.el('div', { classe: 'acoes-linha' }, [
+      UI.el('div', { classe: 'acoes-linha acoes-iguais' }, [
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'destino-no-mapa', texto: 'Escolher no mapa', onclick: function () {
           fechar(); iniciarDesenho('destino', { participantes: participantes || [], grupo_id: grupoId || null });
         } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'destino-desenhar-trajeto', texto: '✎ Desenhar o trajeto', title: 'A equipe segue a linha que você desenhar',
           onclick: function () { fechar(); iniciarDesenhoTrajeto(participantes, grupoId); } }),
       ]),
-      setores.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, setores.map(function (d) {
-        return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
-          var c = centroSetor(d);
-          fechar(); abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: participantes, grupo_id: grupoId });
-        } }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }),
-          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: STATUS_SETOR[d.status].rotulo + ' · o centro do setor é o destino' })])])]);
-      })) : null,
-      pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
-        var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
-        return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
-          fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes, grupo_id: grupoId });
-        } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
-          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
-      })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto de interesse marcado ainda.' }),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Setores', [setores.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, setores.map(function (d) {
+          return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
+            var c = centroSetor(d);
+            fechar(); abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: participantes, grupo_id: grupoId });
+          } }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }),
+            UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: (STATUS_SETOR[d.status] || STATUS_SETOR.pendente).rotulo })])])]);
+        })) : UI.el('p', { classe: 'muted', texto: 'Nenhum setor.' })], { dica: 'O centro do setor é o destino.' }),
+        UI.secao('Pontos de interesse', [pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
+          var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+          return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
+            fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes, grupo_id: grupoId });
+          } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
+            UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
+        })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto marcado.' })]),
+      ]),
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
   }

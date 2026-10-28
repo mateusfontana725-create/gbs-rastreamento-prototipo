@@ -86,11 +86,13 @@
       if (b) b.click(); else fechar(null);
     });
     function botaoDeSaida() {
+      var f = corpo.querySelector('button.so-x');
+      if (f) return f;
       var bs = corpo.querySelectorAll('.form-rodape > button, .modal-acoes > button');
-      for (var i = 0; i < bs.length; i++) if (/^(fechar|cancelar)$/i.test(bs[i].textContent.trim())) return bs[i];
+      for (var i = 0; i < bs.length; i++) if (/^cancelar$/i.test(bs[i].textContent.trim())) return bs[i];
       return null;
     }
-    // Título para o cabeçalho; "Fechar" sozinho no rodapé some (o × faz o mesmo)
+    // Título para o cabeçalho; botões "Fechar" somem (o × faz o mesmo, chamando o próprio botão)
     function arrumar() {
       var t = corpo.querySelector('#modal-titulo');
       if (t) {
@@ -98,10 +100,10 @@
         cabeca.insertBefore(t, btnX);
       }
       cabeca.classList.toggle('sem-titulo', !cabeca.querySelector('#modal-titulo'));
+      Array.prototype.forEach.call(corpo.querySelectorAll('button'), function (b) {
+        if (/^fechar$/i.test(b.textContent.trim())) b.classList.add('so-x');
+      });
       Array.prototype.forEach.call(corpo.querySelectorAll('.form-rodape, .modal-acoes'), function (r) {
-        Array.prototype.forEach.call(r.children, function (b) {
-          if (b.tagName === 'BUTTON' && /^fechar$/i.test(b.textContent.trim())) b.classList.add('so-x');
-        });
         var visiveis = Array.prototype.filter.call(r.children, function (b) { return !b.hidden && !b.classList.contains('so-x'); });
         r.classList.toggle('rodape-vazio', visiveis.length === 0);
       });

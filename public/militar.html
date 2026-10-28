@@ -233,13 +233,13 @@
       <span class="pilula-conexao" id="pilula" role="status"><span class="ponto ponto-aguardando"></span><span>Conectando…</span></span>
       <!-- Ações mais usadas, sempre à vista no topo (no celular, numa faixa logo abaixo) -->
       <div class="acoes-topo" id="acoes-topo" role="toolbar" aria-label="Ações rápidas">
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" data-pref="menu-ponto" id="menu-ponto" title="Marcar um ponto de interesse no mapa"><span class="ico-acao" aria-hidden="true">▾</span><span class="rotulo-acao">Marcar ponto</span></button>
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" data-pref="btn-registrar-foto" id="btn-registrar-foto" title="Registrar uma foto com a localização"><span class="ico-camera" aria-hidden="true"></span><span class="rotulo-acao">Foto</span></button>
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" data-pref="menu-setor" id="menu-setor" title="Novo setor de busca: desenhando a área ou por raio"><span class="ico-acao" aria-hidden="true">⬠</span><span class="rotulo-acao">Setor</span></button>
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" data-pref="menu-trilha" id="menu-trilha" title="Desenhe e depois escolha: trilha já feita, planejada ou enviar para alguém percorrer"><span class="ico-acao" aria-hidden="true">〰</span><span class="rotulo-acao">Trilha</span></button>
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" data-pref="btn-regua" id="btn-regua" aria-pressed="false" title="Régua circular no centro da tela: mostra as distâncias a partir do centro"><span class="ico-acao" aria-hidden="true">◎</span><span class="rotulo-acao">Régua</span></button>
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" data-pref="menu-cenario" id="menu-cenario" title="POA/POD: probabilidade de a pessoa estar em cada setor e registro das buscas"><span class="ico-acao" aria-hidden="true">◍</span><span class="rotulo-acao">POA/POD</span></button>
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" data-pref="menu-dashboard" id="menu-dashboard" title="Dashboard da operação"><span class="ico-acao" aria-hidden="true">▦</span><span class="rotulo-acao">Dashboard</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-ponto" title="Marcar um ponto de interesse no mapa"><span class="ico-acao" aria-hidden="true">▾</span><span class="rotulo-acao">Marcar ponto</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="btn-registrar-foto" title="Registrar uma foto com a localização"><span class="ico-camera" aria-hidden="true"></span><span class="rotulo-acao">Foto</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-setor" title="Novo setor de busca: desenhando a área ou por raio"><span class="ico-acao" aria-hidden="true">⬠</span><span class="rotulo-acao">Setor</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-trilha" title="Desenhe e depois escolha: trilha já feita, planejada ou enviar para alguém percorrer"><span class="ico-acao" aria-hidden="true">〰</span><span class="rotulo-acao">Trilha</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="btn-regua" aria-pressed="false" title="Régua circular no centro da tela: mostra as distâncias a partir do centro"><span class="ico-acao" aria-hidden="true">◎</span><span class="rotulo-acao">Régua</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-cenario" title="POA/POD: probabilidade de a pessoa estar em cada setor e registro das buscas"><span class="ico-acao" aria-hidden="true">◍</span><span class="rotulo-acao">POA/POD</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-dashboard" title="Dashboard da operação"><span class="ico-acao" aria-hidden="true">▦</span><span class="rotulo-acao">Dashboard</span></button>
       </div>
       <div class="painel-acoes">
         <button class="btn btn-barra btn-pequeno btn-msgs" type="button" id="btn-mensagens" aria-label="Mensagens, relatos e fotos" aria-controls="central" aria-expanded="false" title="Mensagens, relatos e fotos dos participantes">
@@ -283,7 +283,7 @@
               <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
               <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
               <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
-              <button class="menu-item" type="button" id="menu-aparencia"><span class="ico-item" aria-hidden="true">Aa</span><span>Aparência</span></button>
+              <button class="menu-item" type="button" id="menu-aparencia"><span class="ico-item" aria-hidden="true">✎</span><span>Personalizar tela</span></button>
               <button class="menu-item" type="button" id="menu-regua" aria-pressed="false"><span class="ico-item" aria-hidden="true">◎</span><span>Régua circular</span></button>
               <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar</span></button>
@@ -712,6 +712,7 @@
   <script src="js/ajuda-pedidos.js"></script>
   <script src="js/recursos-equipe.js"></script>
   <script src="js/briefing.js"></script>
+  <script src="js/personalizar.js"></script>
   <script src="js/meteo-core.js"></script>
   <script src="js/meteo-mapa.js"></script>
   <script src="js/meteo.js"></script>

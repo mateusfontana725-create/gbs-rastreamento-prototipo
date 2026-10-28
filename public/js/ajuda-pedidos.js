@@ -271,8 +271,7 @@
     var fechar;
     function desenhar() {
       corpo.innerHTML = '';
-      corpo.appendChild(el('h2', { id: 'modal-titulo', texto: 'Pedidos de ajuda' }));
-      corpo.appendChild(el('p', { classe: 'ajuda', texto: 'Só "Resolver" encerra o pedido. "Lido" ou "ciente" não resolvem.' }));
+      corpo.appendChild(el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Pedidos de ajuda', UI.dica('Só "Resolver" encerra o pedido. "Lido" ou "ciente" não resolvem.')]));
       if (est.ausente) {
         corpo.appendChild(el('p', { classe: 'nota', texto: 'O fluxo de pedidos de ajuda ainda não está no servidor: rode a migração 035_pedidos_ajuda.sql no Supabase.' }));
         corpo.appendChild(UI.rodape([el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));

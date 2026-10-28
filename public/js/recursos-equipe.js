@@ -160,8 +160,7 @@
       } catch (e) { erro.textContent = e.message; erro.hidden = false; btnSalvar.disabled = false; }
     });
     var corpo = el('div', { classe: 'form-recursos' }, [
-      el('h2', { id: 'modal-titulo', texto: 'Recursos da equipe ' + g.nome }),
-      el('p', { classe: 'ajuda', texto: '"Em missão" aparece sozinho quando a equipe está em deslocamento.' }),
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Recursos · ' + g.nome, UI.dica('"Em missão" aparece sozinho quando a equipe está em deslocamento.')]),
       el('div', { classe: 'grupo grupo-2col' }, [
         el('div', null, [el('label', { classe: 'rotulo', for: 'rec-disp', texto: 'Disponibilidade' }), disp]),
         el('div', null, [el('label', { classe: 'rotulo', for: 'rec-volta', texto: 'Volta a ficar disponível às (opcional)' }), volta]),

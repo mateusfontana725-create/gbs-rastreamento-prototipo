@@ -269,71 +269,63 @@
   }
 
   /*
-   * Aparência escolhida por quem usa (guardada neste aparelho): tamanho do texto e botões do topo
-   * que ficam escondidos. Não muda dados nem o que o servidor vê. Elementos com data-pref="<id>" somem
-   * quando o id está em "ocultos".
+   * Tela do jeito de quem usa (guardada neste aparelho; não muda nada para os outros nem no servidor):
+   * tamanho do texto, quais botões ficam no topo e em que ordem (o resto fica em Ferramentas),
+   * e canto do painel de grupos no mapa.
+   * O modo "Personalizar tela" (js/personalizar.js) muda isto arrastando os botões.
    */
   var CHAVE_APARENCIA = 'gbs-aparencia';
   var FONTES = { menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
   var POSICOES_GRUPOS = { topright: 'Canto superior direito', topleft: 'Canto superior esquerdo', bottomright: 'Canto inferior direito', bottomleft: 'Canto inferior esquerdo' };
-  var PADRAO_APARENCIA = { fonte: 'normal', ocultos: [], noMenu: [], ordem: [], gruposPos: 'topright' };
   function listaTexto(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : []; }
   function lerAparencia() {
-    try {
-      var v = JSON.parse(localStorage.getItem(CHAVE_APARENCIA) || 'null') || {};
-      return {
-        fonte: FONTES[v.fonte] ? v.fonte : 'normal',
-        ocultos: listaTexto(v.ocultos), noMenu: listaTexto(v.noMenu), ordem: listaTexto(v.ordem),
-        gruposPos: POSICOES_GRUPOS[v.gruposPos] ? v.gruposPos : 'topright',
-      };
-    } catch (e) { return JSON.parse(JSON.stringify(PADRAO_APARENCIA)); }
+    var v;
+    try { v = JSON.parse(localStorage.getItem(CHAVE_APARENCIA) || 'null') || {}; } catch (e) { v = {}; }
+    if (typeof v !== 'object') v = {};
+    return {
+      fonte: FONTES[v.fonte] ? v.fonte : 'normal',
+      topo: Array.isArray(v.topo) ? listaTexto(v.topo) : null,   // null = o padrão da página
+      gruposPos: POSICOES_GRUPOS[v.gruposPos] ? v.gruposPos : 'topright',
+      // versão anterior (escolhas por botão): convertida em "topo" na primeira leitura
+      ocultos: listaTexto(v.ocultos), noMenu: listaTexto(v.noMenu), ordem: listaTexto(v.ordem),
+    };
   }
+  var ouvintes = [];
   function gravarAparencia(v) {
-    try { localStorage.setItem(CHAVE_APARENCIA, JSON.stringify(v)); } catch (e) { /* sem armazenamento: vale só nesta sessão */ }
-    aplicarAparencia();
+    try {
+      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, topo: v.topo, gruposPos: v.gruposPos }));
+    } catch (e) { /* sem armazenamento: vale só até recarregar */ memoria = v; }
+    aplicarAparencia(v);
   }
-  // Ordem dos botões do topo: os ids da preferência primeiro, o resto na ordem original
-  function ordenarBotoes() {
-    var v = lerAparencia();
-    var topo = document.getElementById('acoes-topo');
-    if (!topo || !v.ordem.length) return;
-    v.ordem.forEach(function (id) {
-      var b = document.getElementById(id);
-      if (b && b.parentNode === topo) topo.appendChild(b);
-    });
-  }
-  function aplicarAparencia() {
-    var v = lerAparencia();
+  var memoria = null;
+  function atual() { return memoria || lerAparencia(); }
+  function aplicarAparencia(v) {
+    v = v || atual();
     document.documentElement.setAttribute('data-fonte', v.fonte);
-    document.querySelectorAll('[data-pref]').forEach(function (e) {
-      var id = e.getAttribute('data-pref');
-      e.hidden = v.ocultos.indexOf(id) !== -1 || v.noMenu.indexOf(id) !== -1;
-    });
-    ordenarBotoes();
+    ouvintes.forEach(function (f) { try { f(v); } catch (e) { /* um ouvinte com erro não para os outros */ } });
   }
+  function mudar(fn) { var v = atual(); fn(v); gravarAparencia(v); }
   var aparencia = {
-    ler: lerAparencia,
+    ler: atual,
     fontes: FONTES,
     posicoesGrupos: POSICOES_GRUPOS,
-    definirFonte: function (f) { var v = lerAparencia(); v.fonte = FONTES[f] ? f : 'normal'; gravarAparencia(v); },
-    // Botão do topo: 'topo' (à vista), 'menu' (vai para Ferramentas) ou 'oculto'
-    definirLocal: function (id, local) {
-      var v = lerAparencia();
-      v.ocultos = v.ocultos.filter(function (x) { return x !== id; });
-      v.noMenu = v.noMenu.filter(function (x) { return x !== id; });
-      if (local === 'oculto') v.ocultos.push(id);
-      if (local === 'menu') v.noMenu.push(id);
-      gravarAparencia(v);
+    definirFonte: function (f) { mudar(function (v) { v.fonte = FONTES[f] ? f : 'normal'; }); },
+    // Botões do topo (ids na ordem). padrao: os ids que a página põe no topo quando não há escolha.
+    topo: function (padrao) {
+      var v = atual();
+      if (v.topo) return v.topo.slice();
+      var fora = (v.ocultos || []).concat(v.noMenu || []);
+      var ordem = (v.ordem || []).filter(function (id) { return padrao.indexOf(id) !== -1; });
+      return ordem.concat(padrao.filter(function (id) { return ordem.indexOf(id) === -1; })).filter(function (id) { return fora.indexOf(id) === -1; });
     },
-    localDe: function (id) { var v = lerAparencia(); return v.ocultos.indexOf(id) !== -1 ? 'oculto' : v.noMenu.indexOf(id) !== -1 ? 'menu' : 'topo'; },
-    // Nova ordem dos botões do topo (lista de ids)
-    definirOrdem: function (ids) { var v = lerAparencia(); v.ordem = listaTexto(ids); gravarAparencia(v); },
-    definirPosicaoGrupos: function (pos) { var v = lerAparencia(); v.gruposPos = POSICOES_GRUPOS[pos] ? pos : 'topright'; gravarAparencia(v); },
-    posicaoGrupos: function () { return lerAparencia().gruposPos; },
-    restaurar: function () { gravarAparencia(JSON.parse(JSON.stringify(PADRAO_APARENCIA))); },
-    aplicar: aplicarAparencia,
+    definirTopo: function (ids) { mudar(function (v) { v.topo = listaTexto(ids); }); },
+    definirPosicaoGrupos: function (pos) { mudar(function (v) { v.gruposPos = POSICOES_GRUPOS[pos] ? pos : 'topright'; }); },
+    posicaoGrupos: function () { return atual().gruposPos; },
+    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', topo: null, gruposPos: 'topright' }); },
+    aoMudar: function (f) { ouvintes.push(f); },
+    aplicar: function () { aplicarAparencia(); },
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aplicarAparencia); else aplicarAparencia();
+  aplicarAparencia();
 
   window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar,
     dica: dica, campo: campo, grade: grade, rodape: rodape, secao: secao, escolhas: escolhas, aparencia: aparencia };

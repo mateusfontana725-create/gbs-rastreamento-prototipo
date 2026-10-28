@@ -2076,3 +2076,14 @@ html[data-fonte="menor"] { font-size: 93.75%; }
 }
 @media (max-width: 380px) { .escolhas { grid-template-columns: 1fr; } }
 }
+
+/* Escolher arquivo: área tracejada com o botão no mesmo estilo dos outros */
+.modal input[type="file"] {
+  width: 100%; min-height: 56px; padding: 10px; cursor: pointer; color: var(--texto-3); font-size: .85rem;
+  border: 1px dashed var(--borda-forte); border-radius: var(--raio); background: var(--superficie-2);
+}
+.modal input[type="file"]:hover { border-color: var(--acento); }
+.modal input[type="file"]::file-selector-button {
+  margin-right: 12px; min-height: 36px; padding: 0 14px; cursor: pointer; font: inherit; font-weight: 700; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--texto); background: var(--superficie-3); border: 1px solid var(--borda-forte); border-radius: var(--raio);
+}

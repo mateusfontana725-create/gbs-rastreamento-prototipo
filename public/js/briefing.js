@@ -256,8 +256,7 @@
       } catch (e) { erro.textContent = e.message; erro.hidden = false; btn.disabled = false; }
     });
     var fechar = UI.abrirModal(el('div', { classe: 'form-briefing' }, [
-      el('h2', { id: 'modal-titulo', texto: 'Textos do briefing' }),
-      el('p', { classe: 'ajuda', texto: 'Vítimas, equipes, hipóteses e decisões vêm do cadastro: só digite o que não existe em outro lugar.' }),
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Textos do briefing', UI.dica('Vítimas, equipes, hipóteses e decisões vêm do cadastro: só digite o que não existe em outro lugar.')]),
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-objetivo', texto: 'Objetivo' }), f.objetivo]),
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-riscos', texto: 'Riscos' }), f.riscos]),
       el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'brief-com', texto: 'Comunicações' }), f.comunicacoes]),

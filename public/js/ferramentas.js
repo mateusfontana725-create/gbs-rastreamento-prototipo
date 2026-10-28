@@ -538,8 +538,7 @@
         [UI.dica('GPX, KML, KMZ, GeoJSON ou CSV com latitude e longitude. A camada fica só neste aparelho. Toque numa linha para editar, registrar como trilha da operação ou enviar como trajeto.')]),
       UI.campo('Arquivo', entrada, { para: 'imp-arquivo', largo: true }),
       erro,
-      UI.el('h3', { texto: 'Camadas importadas' }),
-      lista,
+      UI.secao('Camadas importadas', [lista]),
       UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
   }

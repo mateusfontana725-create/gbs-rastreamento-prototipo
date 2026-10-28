@@ -356,8 +356,7 @@
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
     $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
-    $('menu-aparencia').addEventListener('click', function () { fecharMenu(false); abrirAparencia(); });
-    aplicarAtalhos();
+    $('menu-aparencia').addEventListener('click', function () { fecharMenu(false); if (window.Personalizar) window.Personalizar.iniciar(); });
     $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
     $('btn-regua').addEventListener('click', alternarRegua);
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
@@ -946,7 +945,6 @@
     var caixa = UI.el('details', { classe: 'nova-vitimas', id: 'nova-vitimas' }, [
       UI.el('summary', null, [UI.el('span', { texto: 'Vítimas' }), qtd]),
       UI.el('div', { classe: 'nova-vitimas-corpo' }, [
-        UI.el('p', { classe: 'ajuda', texto: 'Uma ficha por pessoa. Opcional.' }),
         lista,
         UI.el('div', { classe: 'nova-vitimas-acoes' }, [add]),
       ]),
@@ -1976,7 +1974,6 @@
     fecharMenu(false);
     var fechar = UI.abrirModal(UI.el('div', { classe: 'escolha-setor' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Novo setor de busca' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Como você quer marcar a área?' }),
       UI.el('div', { classe: 'opcoes-setor' }, [
         UI.el('button', { classe: 'opcao-setor', type: 'button', id: 'setor-tipo-poligono', onclick: function () { fechar(true); iniciarDesenho('poligono'); } }, [
           UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '⬠' }),
@@ -3940,16 +3937,16 @@
     var OPCOES = [
       ['localizada', 'Vítima localizada', ultimo
         ? 'já registrada' + (regs.length > 1 ? ' (' + regs.length + ' registros)' : '') + ': ' + CONDICAO_VITIMA[ultimo.condicao].toLowerCase() + (ultimo.local_descricao ? ' · ' + ultimo.local_descricao : '')
-        : 'abre o formulário de vítima encontrada (ficha, condição, local e quem encontrou)'],
-      ['nao_localizada', 'Vítima não localizada', 'busca suspensa ou encerrada sem localizar'],
+        : 'em seguida: ficha, condição e local'],
+      ['nao_localizada', 'Vítima não localizada', ''],
       ['outro', 'Outro desfecho', 'descreva abaixo'],
-      ['sem', 'Encerrar sem informar o resultado', 'dá para informar depois em Relatório final'],
+      ['sem', 'Sem informar agora', 'dá para informar no relatório'],
     ];
     var inicial = pre.escolha || (op.resultado === 'nao_localizada' ? 'nao_localizada' : op.resultado === 'outro' ? 'outro' : ultimo || /^localizada/.test(op.resultado || '') ? 'localizada' : null);
     var opcoes = UI.el('div', { classe: 'opcoes-resultado', role: 'radiogroup', 'aria-label': 'Resultado da busca' }, OPCOES.map(function (o) {
       return UI.el('label', { classe: 'opcao-resultado', 'data-resultado': o[0] }, [
         UI.el('input', { type: 'radio', name: 'enc-resultado', value: o[0], checked: inicial === o[0] ? true : null }),
-        UI.el('span', null, [UI.el('strong', { texto: o[1] }), UI.el('small', { classe: 'muted', texto: o[2] })]),
+        UI.el('span', null, [UI.el('strong', { texto: o[1] }), o[2] ? UI.el('small', { classe: 'muted', texto: o[2] }) : null]),
       ]);
     }));
     var outraVitima = UI.el('input', { type: 'checkbox', id: 'enc-outra-vitima' });
@@ -3967,11 +3964,10 @@
       texto.parentNode.hidden = e === 'sem';
     }
     var form = UI.el('form', { classe: 'form-encerrar form-padrao', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Encerrar operação' }),
-      UI.el('p', { classe: 'ajuda', texto: op.codigo }),
-      UI.campo('Resultado da busca', opcoes, { largo: true, dica: 'Os celulares param de enviar localização e os links deixam de funcionar. Nada é apagado: o painel fica só para consulta.' }),
-      blocoOutra,
-      UI.campo('Desfecho', texto, { para: 'enc-texto', largo: true, ajuda: 'Aparece no relatório.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Encerrar operação' },
+        [UI.dica('Os celulares param de enviar localização e os links deixam de funcionar. Nada é apagado: o painel fica só para consulta. O desfecho aparece no relatório.')]),
+      UI.secao('Resultado da busca', [opcoes, blocoOutra]),
+      UI.campo('Desfecho', texto, { para: 'enc-texto', largo: true }),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
@@ -6039,14 +6035,11 @@
           UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-raio-base', texto: 'Na base quando estiver a até (m)' }), raioBase]),
           UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-prazo', texto: 'Voltar em até (min) depois da busca' }), prazo]),
         ]),
-        UI.el('p', { classe: 'ajuda', texto: 'Sem base, não há controle de retorno. O tempo acima começa a contar quando você clicar em "Finalizar busca".' }),
       ]),
       UI.el('fieldset', { classe: 'bloco-form' }, [
         UI.el('legend', { texto: 'Horários combinados (opcional)' }),
         prazosGrupo.el,
       ]),
-      UI.el('p', { classe: 'ajuda', texto: 'Alertas automáticos: no início do deslocamento, na chegada ao ' + (alvo.setor_id ? 'setor' : 'destino') +
-        ', no fim da busca e na volta à base.' }),
     ] : [UI.el('p', { classe: 'muted', texto: 'Nenhum grupo nesta operação. Crie em Ferramentas → Grupos.' })]);
     function mostrarModo() {
       abaPessoas.className = 'btn' + (!modoGrupo ? ' btn-ativo' : '');
@@ -6180,8 +6173,7 @@
     var pontos = Array.from(est.pontosInt.values()).map(function (p) { return p.d; });
     var setores = Array.from(est.setores.values()).map(function (s) { return s.d; });
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Enviar destino' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Escolha um setor, um ponto de interesse ou toque no mapa.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Enviar destino' }, [UI.dica('Escolha um setor, um ponto de interesse ou toque no mapa.')]),
       UI.el('div', { classe: 'acoes-linha' }, [
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'destino-no-mapa', texto: 'Escolher no mapa', onclick: function () {
           fechar(); iniciarDesenho('destino', { participantes: participantes || [], grupo_id: grupoId || null });
@@ -7121,7 +7113,6 @@
         d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterada', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
       ]),
       d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
-      UI.el('p', { classe: 'ajuda', texto: 'Uma linha indica o trajeto, não que toda a área em volta foi vasculhada. A situação dos setores não muda por causa das trilhas.' }),
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verTrilhaNoMapa(d); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-ocultar', texto: oculta ? 'Mostrar no mapa' : 'Ocultar no mapa', onclick: function () { fechar(); alternarTrilhaOculta(d.id); } }),
@@ -8008,8 +7999,7 @@
     });
 
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Responsáveis da operação' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Todos os responsáveis abaixo veem o mapa, os participantes, as posições uns dos outros e as mensagens desta operação, e podem enviar orientações.' + (souCriador ? '' : ' Só quem criou a operação pode remover responsáveis.') }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Responsáveis da operação' }, [UI.dica('Todos os responsáveis abaixo veem o mapa, os participantes, as posições uns dos outros e as mensagens desta operação, e podem enviar orientações.' + (souCriador ? '' : ' Só quem criou a operação pode remover responsáveis.'))]),
       lista,
       podeAlterar() ? form : UI.el('p', { classe: 'muted', texto: 'Operação encerrada: a equipe não pode ser alterada.' }),
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
@@ -8024,87 +8014,6 @@
   /* ------------------------------------------------------------------ */
   /* Minha conta: troca da própria senha                                  */
   /* ------------------------------------------------------------------ */
-  /* ------------------------------------------------------------------ */
-  /* Aparência: tamanho do texto e botões do topo (neste aparelho)        */
-  /* ------------------------------------------------------------------ */
-  var BOTOES_TOPO = [
-    ['menu-ponto', 'Marcar ponto'], ['btn-registrar-foto', 'Foto'], ['menu-setor', 'Setor'], ['menu-trilha', 'Trilha'],
-    ['btn-regua', 'Régua'], ['menu-cenario', 'POA/POD'], ['menu-dashboard', 'Dashboard'],
-  ];
-  // Atalhos no menu Ferramentas para os botões que o usuário mandou para lá: disparam o botão original (mesma ação)
-  function aplicarAtalhos() {
-    var lista = document.querySelector('#menu-ferramentas .menu-lista');
-    if (!lista) return;
-    BOTOES_TOPO.forEach(function (b) {
-      var atalho = document.getElementById('menu-atalho-' + b[0]);
-      if (!atalho) {
-        atalho = UI.el('button', { classe: 'menu-item', type: 'button', id: 'menu-atalho-' + b[0] }, [UI.el('span', { classe: 'ico-item', 'aria-hidden': 'true', texto: '▸' }), UI.el('span', { texto: b[1] })]);
-        atalho.addEventListener('click', function () { fecharMenu(false); var original = document.getElementById(b[0]); if (original) original.click(); });
-        lista.insertBefore(atalho, lista.firstChild);
-      }
-      atalho.hidden = UI.aparencia.localDe(b[0]) !== 'menu';
-    });
-  }
-  function abrirAparencia() {
-    var ap = UI.aparencia;
-    var atual = ap.ler();
-    var fonte = UI.el('div', { classe: 'seg', role: 'radiogroup', 'aria-label': 'Tamanho do texto' }, Object.keys(ap.fontes).map(function (k) {
-      return UI.el('button', { classe: 'seg-opcao', type: 'button', 'aria-pressed': String(atual.fonte === k), texto: ap.fontes[k],
-        onclick: function () { ap.definirFonte(k); fechar(); abrirAparencia(); } });
-    }));
-    // Ordem atual do topo (ids): a preferência primeiro, depois o que sobrou na ordem original
-    function ordemAtual() {
-      var ids = BOTOES_TOPO.map(function (b) { return b[0]; });
-      var pref = atual.ordem.filter(function (id) { return ids.indexOf(id) !== -1; });
-      return pref.concat(ids.filter(function (id) { return pref.indexOf(id) === -1; }));
-    }
-    var ordem = ordemAtual();
-    var lista = UI.el('ul', { classe: 'ap-botoes', id: 'ap-botoes' });
-    function desenhar() {
-      lista.innerHTML = '';
-      ordem.forEach(function (id, i) {
-        var nome = BOTOES_TOPO.filter(function (b) { return b[0] === id; })[0][1];
-        var local = ap.localDe(id);
-        var sel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Onde fica ' + nome, onchange: function (ev) { ap.definirLocal(id, ev.target.value); aplicarAtalhos(); } }, [
-          UI.el('option', { value: 'topo', selected: local === 'topo' ? true : null, texto: 'No topo' }),
-          UI.el('option', { value: 'menu', selected: local === 'menu' ? true : null, texto: 'No menu Ferramentas' }),
-          UI.el('option', { value: 'oculto', selected: local === 'oculto' ? true : null, texto: 'Escondido' }),
-        ]);
-        lista.appendChild(UI.el('li', { classe: 'ap-botao' }, [
-          UI.el('strong', { texto: nome }),
-          sel,
-          UI.el('span', { classe: 'ap-setas' }, [
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Subir ' + nome, disabled: i === 0 ? true : null, texto: '▲',
-              onclick: function () { mover(i, -1); } }),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Descer ' + nome, disabled: i === ordem.length - 1 ? true : null, texto: '▼',
-              onclick: function () { mover(i, 1); } }),
-          ]),
-        ]));
-      });
-    }
-    function mover(i, d) {
-      var j = i + d;
-      if (j < 0 || j >= ordem.length) return;
-      var x = ordem[i]; ordem[i] = ordem[j]; ordem[j] = x;
-      ap.definirOrdem(ordem);
-      desenhar();
-    }
-    desenhar();
-    var posicoes = UI.el('select', { classe: 'campo', id: 'ap-grupos-pos', 'aria-label': 'Posição do painel de grupos',
-      onchange: function (ev) { ap.definirPosicaoGrupos(ev.target.value); if (est.controleGrupos) est.controleGrupos.setPosition(ev.target.value); } },
-      Object.keys(ap.posicoesGrupos).map(function (k) { return UI.el('option', { value: k, selected: atual.gruposPos === k ? true : null, texto: ap.posicoesGrupos[k] }); }));
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Aparência' }, [UI.dica('Neste aparelho. Não muda nada para as outras pessoas.')]),
-      UI.campo('Tamanho do texto', fonte, { largo: true }),
-      UI.campo('Botões do topo', lista, { largo: true, dica: 'Escolha onde fica cada botão e a ordem (▲ ▼). "Ferramentas" fica sempre à vista.' }),
-      UI.campo('Painel de grupos no mapa', posicoes, { para: 'ap-grupos-pos', largo: true }),
-      UI.rodape([
-        UI.el('button', { classe: 'btn', type: 'button', texto: 'Padrão', onclick: function () { ap.restaurar(); if (est.controleGrupos) est.controleGrupos.setPosition(ap.posicaoGrupos()); fechar(); abrirAparencia(); } }),
-        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Pronto', onclick: function () { fechar(); } }),
-      ]),
-    ]));
-  }
-
   function abrirMinhaConta() {
     var s1 = UI.el('input', { classe: 'campo', type: 'password', id: 'conta-senha1', autocomplete: 'new-password', maxlength: '72' });
     var s2 = UI.el('input', { classe: 'campo', type: 'password', id: 'conta-senha2', autocomplete: 'new-password', maxlength: '72' });
@@ -8860,7 +8769,7 @@
         return;
       }
       var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-      if (!grupos.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum grupo ainda. Crie grupos com nome livre (ex.: Polícia Civil, Polícia Militar, Bombeiros).' }));
+      if (!grupos.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum grupo ainda.' }));
       corpo.appendChild(UI.el('ul', { classe: 'lista-grupos' }, grupos.map(function (g) {
         var mem = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; });
         var resp = mem.filter(function (x) { return x.m.papel === 'responsavel'; }).map(function (x) { return x.p.dados.nome; });
@@ -8892,8 +8801,7 @@
     render();
     est.renderGruposAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-grupos' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Grupos da operação' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Grupos' }, [UI.dica('Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.')]),
       corpo,
       UI.rodape([
         editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { fechar(); abrirFormGrupo(null); } }) : null,
@@ -9657,7 +9565,7 @@
     return UI.el('div', { classe: 'painel-prazos' }, [
       UI.el('div', { classe: 'painel-prazos-titulo', texto: 'Horários combinados' }),
       linhas.length ? UI.el('ul', { classe: 'prazos-missao' }, linhas)
-        : UI.el('p', { classe: 'muted', texto: 'Nenhum horário combinado. Sem horário, o painel não avisa atraso de saída nem de volta.' }),
+        : UI.el('p', { classe: 'muted', texto: 'Nenhum horário combinado (sem aviso de atraso).' }),
       UI.el('p', { classe: 'muted regra-prazos', texto: 'Avisa atraso depois de ' + tol + ' min do horário · falta de contato depois de ' + sem + ' min sem sinal' +
         (m.prazos_definidos_por_nome ? ' · definido por ' + m.prazos_definidos_por_nome + ' às ' + C.hora(m.prazos_definidos_em, false) : '') }),
       m.combinado_texto ? UI.el('p', { classe: 'combinado-missao', texto: 'Combinado: ' + m.combinado_texto }) : null,
@@ -9783,7 +9691,7 @@
         return aa - bb || C.paraMs(b.enviada_em) - C.paraMs(a.enviada_em);
       });
       if (!lista.length) {
-        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum deslocamento ainda. Envie um destino a um grupo: Ferramentas → Enviar destino → Grupo (ou "Enviar o centro como destino" num setor).' }));
+        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum deslocamento ainda. Para criar: Enviar destino → Grupo.' }));
         return;
       }
       lista.forEach(function (m) {
@@ -9809,9 +9717,8 @@
     render();
     est.renderMissoesAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-missoes' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Deslocamentos de grupos' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Cada cartão é um deslocamento: horários combinados, onde está cada pessoa e o que falta. ' +
-        'Os alertas de atraso e de falta de contato são verificados pelo servidor, mesmo sem internet.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Deslocamentos de grupos' }, [UI.dica('Cada cartão é um deslocamento: horários combinados, onde está cada pessoa e o que falta. ' +
+        'Os alertas de atraso e de falta de contato são verificados pelo servidor, mesmo sem internet.')]),
       corpo,
       UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (est.renderMissoesAberto === render) est.renderMissoesAberto = null; } });
@@ -9877,6 +9784,8 @@
   /* ------------------------------------------------------------------ */
   window.Painel = {
     mapa: function () { return est.mapa; },
+    controleGrupos: function () { return est.controleGrupos; },
+    fecharMenu: function () { fecharMenu(false); },
     compactarAcoes: compactarAcoes,
     op: function () { return est.op; },
     usuario: function () { return est.usuario; },

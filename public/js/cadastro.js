@@ -571,8 +571,7 @@
     aberta = { op: op, render: render };
     render();
     return UI.el('section', { classe: 'dados-vitimas' }, [
-      UI.el('h3', { texto: 'Vítimas' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Só os responsáveis desta operação veem estas fichas. Civis e militares de campo não têm acesso.' }),
+      UI.el('h3', { classe: 'titulo-com-dica' }, ['Vítimas', UI.dica('Só os responsáveis desta operação veem estas fichas. Civis e militares de campo não têm acesso.')]),
       lista,
       vazio,
       editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vitima-nova', texto: '＋ Nova ficha', onclick: function () { editarFicha(op, null, filhas); } }) : null,

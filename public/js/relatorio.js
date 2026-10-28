@@ -123,14 +123,13 @@
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diario' }, [
       UI.el('div', { classe: 'diario-topo' }, [
         UI.el('div', null, [
-          UI.el('h2', { id: 'modal-titulo', texto: 'Diário da operação' }),
+          UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Diário da operação' }, [UI.dica('Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.')]),
           resumo,
         ]),
         UI.el('div', { classe: 'diario-acoes' }, [btnNova, btnRelatorio]),
       ]),
       filtros,
       lista,
-      UI.el('p', { classe: 'nota diario-nota', texto: 'Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.' }),
       UI.rodape([btnAtualizar, UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { pararDiario(); diario.render = null; diario.fechar = null; } });
     diario.fechar = fechar;

@@ -2106,3 +2106,6 @@ html[data-fonte="menor"] { font-size: 93.75%; }
 .resumo-op-selos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .secao-form > .btn { align-self: flex-start; }
 .dados-op-meta { padding: 0; }
+/* Mapa guardado no aparelho (página do participante) */
+.mapa-offline-estado { margin: -6px 2px 12px; font-size: .82rem; color: var(--texto-3); }
+.mapa-offline-estado.mapa-offline-ruim { color: var(--alerta-texto); }

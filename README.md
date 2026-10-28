@@ -1223,7 +1223,7 @@ rastreamento-sar/
 ├── public/                     ← site publicado pelo Vercel
 │   ├── militar.html            painel do responsável
 │   ├── civil.html              página do participante
-│   ├── sw.js                   service worker mínimo (notificações no Android)
+│   ├── sw.js                   service worker: notificações no Android, página e mapa guardados para abrir sem internet
 │   ├── versao.json             versão publicada (páginas abertas há muito tempo avisam que há versão nova)
 │   ├── css/estilos.css         estilos (alto contraste, botões grandes, responsivo)
 │   └── js/
@@ -1243,6 +1243,7 @@ rastreamento-sar/
 │       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
 │       ├── briefing.js         briefing da operação e passagem de comando com aceite
 │       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
+│       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM, limite da política)
 │       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
 │       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 │   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
@@ -1633,6 +1634,15 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
    - o painel nunca apresenta uma posição antiga como atual: mostra o horário e marca o participante
      como instável ou sem atualização.
 2. **Gravação offline** só acontece enquanto a página estiver aberta e ativa; não há gravação com a página fechada.
+   Mas a página **reabre sem internet**: quem já estava na busca neste aparelho e recarrega (ou fecha e abre de novo o
+   link) sem sinal volta direto ao rastreamento, com a sessão e a fila guardadas; o servidor confere a participação
+   quando o sinal voltar.
+3. **Mapa sem internet** (página do participante): ao ter a primeira posição boa, a página guarda no aparelho o mapa
+   (OpenStreetMap) num raio de ~3 km, em zoom 10 a 16, e guarda outra área quando a pessoa se afasta mais de 1,5 km das
+   já guardadas ou recebe um destino (até 4 áreas; uma nova apaga a mais antiga). Respeita a política de uso do
+   tile.openstreetmap.org: no máximo 250 quadros por área em zoom ≥ 13 (aqui ≤ 240), baixados um por vez. Embaixo do
+   mapa aparece "Mapa guardado no aparelho: N área(s)…" com a conferência de quantas partes estão de fato guardadas.
+   Fora dessas áreas, sem internet, o mapa fica em branco; a posição continua sendo registrada normalmente.
 3. **Mensagens com a página fechada** não chegam. Com a página aberta em segundo plano, o celular
    vibra, toca um alerta e, se o participante tocou em **Ativar alertas de mensagem**, mostra uma
    notificação, desde que o navegador ainda esteja executando a página. Para entrega garantida com a
@@ -1725,6 +1735,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40b | Na ficha de um participante, **📍 Rota até ela** saindo da base, e ele andar 100 m | a rota aparece com a barra embaixo e se refaz sozinha; **Parar** apaga |
 | 40c | **Ferramentas → Personalizar tela**: arrastar **Foto** para fora do topo, arrastar **Grupos** da bandeja para o 2º lugar, arrastar o painel de grupos para o canto inferior esquerdo, texto **Maior**, **Concluir** e recarregar | Foto passa a ficar em Ferramentas e funciona de lá; Grupos aparece no topo e abre a lista de grupos; o painel de grupos fica no canto escolhido; tudo continua igual depois de recarregar; **Padrão** desfaz |
 | 40d | Abrir os modais (Encerrar, Vítima encontrada, Marcar ponto, Enviar destino, Relatório final) no computador e no celular | título com **i** e **×** no topo; ações sempre visíveis embaixo; no celular, folha de baixo sem rolagem lateral |
+| 40e | Civil entra na busca com internet e espera aparecer "Mapa guardado no aparelho"; liga o modo avião, **recarrega a página** e anda 2 min; desliga o modo avião | a página reabre direto no rastreamento, o mapa da área aparece, os pontos ficam na fila e chegam ao painel quando o sinal volta |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

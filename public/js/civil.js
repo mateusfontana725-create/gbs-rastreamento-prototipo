@@ -155,10 +155,14 @@
     if (!estado.token) {
       return mostrarErro('Link incompleto. Abra o link completo enviado pelos bombeiros ou leia o QR Code novamente.');
     }
+    // Guarda a página e o mapa no aparelho já na primeira visita (abre de novo mesmo sem internet)
+    registrarServiceWorker();
 
     try {
       estado.info = await C.rpc('info_operacao', { p_token: estado.token });
     } catch (e) {
+      // Sem internet, mas este aparelho já estava na busca: continua registrando e envia quando o sinal voltar
+      if (e.rede && await retomarSemInternet()) return;
       return mostrarErro(e.rede ? 'Sem conexão com a internet. Conecte-se e toque em TENTAR NOVAMENTE.' : e.message);
     }
     if (!estado.info) {
@@ -249,6 +253,27 @@
   }
 
   // Consulta a situação de quem já participava (sem criar sessão nova).
+  // Página aberta (ou recarregada) sem internet por quem já estava na busca neste aparelho: retoma o registro
+  // com o que ficou guardado (participação, sessão e fila). O servidor confere tudo quando o sinal voltar
+  // (sinal_vida encerra a página se a operação acabou ou a pessoa foi removida).
+  async function retomarSemInternet() {
+    var salvo = C.local.ler(CHAVE_PART, null);
+    if (!salvo || salvo.token !== estado.token || !salvo.participante_id || !salvo.ativo || salvo.removido) return false;
+    var sessao = null;
+    try { sessao = (await C.cliente.auth.getSession()).data.session; } catch (e) { /* sem sessão guardada */ }
+    if (!sessao || !sessao.user) return false;
+    estado.userId = sessao.user.id;
+    estado.info = { operacao: salvo.operacao || 'Operação', grupo: salvo.grupo || null, ativa: true, tipos_permitidos: [], semInternet: true };
+    estado.part = { participante_id: salvo.participante_id, nome: salvo.nome, tipo: salvo.tipo, operacao: estado.info.operacao };
+    estado.cpf = salvo.cpf;
+    estado.telefone = salvo.telefone;
+    estado.finalizado = false;
+    mostrarTela('rastreio');
+    comecarRastreamento(null);
+    UI.aviso('Sem internet: o registro continua neste aparelho e vai para os bombeiros quando o sinal voltar.', 'erro', 8000);
+    return true;
+  }
+
   async function retomarParticipacao(salvo) {
     var sessao = null;
     try { sessao = (await C.cliente.auth.getSession()).data.session; } catch (e) { /* sem sessão */ }
@@ -546,11 +571,76 @@
       participante_id: estado.part.participante_id,
       nome: estado.part.nome,
       tipo: estado.part.tipo,
+      operacao: (estado.info && estado.info.operacao) || estado.part.operacao || '',
+      grupo: (estado.info && estado.info.grupo) || null,
       cpf: estado.cpf || '',
       telefone: estado.telefone || '',
       ativo: Boolean(ativo),
       removido: Boolean(removido),
     });
+  }
+
+  /* ---------- Mapa guardado no aparelho (js/mapa-offline.js) ---------- */
+  // Guarda a área em volta da primeira posição boa, de cada lugar novo (mais de 1,5 km das áreas guardadas)
+  // e do destino recebido. Uma área por vez; sem internet, espera. O estado aparece embaixo do mapa.
+  var CHAVE_MAPA_OFF = 'gbs-mapa-offline';
+  function areasMapa() {
+    var r = C.local.ler(CHAVE_MAPA_OFF, null);
+    return r && estado.part && r.participante_id === estado.part.participante_id ? r.areas || [] : [];
+  }
+  function gravarAreasMapa(areas) {
+    if (estado.part) C.local.gravar(CHAVE_MAPA_OFF, { participante_id: estado.part.participante_id, areas: areas });
+  }
+  function verificarMapaOffline() {
+    var M = window.MapaOffline;
+    if (!M || !M.disponivel() || !estado.part || estado.finalizado || estado.mapaBaixando || navigator.onLine === false) return;
+    var alvo = null, l = estado.ultimaLeitura;
+    if (l && l.prec != null && l.prec <= 150 && M.precisaArea(areasMapa(), l.lat, l.lng)) alvo = { lat: l.lat, lng: l.lng, motivo: 'posição' };
+    else if (estado.destino && estado.destino.lat != null && M.precisaArea(areasMapa(), estado.destino.lat, estado.destino.lng)) alvo = { lat: estado.destino.lat, lng: estado.destino.lng, motivo: 'destino' };
+    if (!alvo || Date.now() - (estado.mapaFalhaEm || 0) < 120000) return;
+    baixarAreaMapa(alvo);
+  }
+  async function baixarAreaMapa(alvo) {
+    var M = window.MapaOffline;
+    estado.mapaBaixando = true;
+    var plano = M.planejarArea(alvo.lat, alvo.lng);
+    mostrarMapaOffline('Guardando o mapa para usar sem internet… 0 de ' + plano.urls.length, false);
+    try {
+      var areas = areasMapa();
+      // limite de áreas: a mais antiga sai (os quadros dela são apagados do aparelho)
+      while (areas.length >= M.AREAS_MAX) {
+        var velha = areas.shift();
+        await M.apagar(M.planejarArea(velha.lat, velha.lng, velha.raioM).urls);
+      }
+      var r = await M.baixar(plano.urls, function (f, t) { mostrarMapaOffline('Guardando o mapa para usar sem internet… ' + f + ' de ' + t, false); });
+      var guardados = await M.contar(plano.urls);
+      if (guardados) areas.push({ lat: alvo.lat, lng: alvo.lng, raioM: plano.raioM, total: plano.urls.length, guardados: guardados, em: Date.now(), motivo: alvo.motivo });
+      gravarAreasMapa(areas);
+      if (r.falhas) estado.mapaFalhaEm = Date.now();
+    } catch (e) {
+      estado.mapaFalhaEm = Date.now();
+    } finally {
+      estado.mapaBaixando = false;
+      resumoMapaOffline();
+    }
+  }
+  function mostrarMapaOffline(texto, ruim) {
+    var el = $('mapa-offline');
+    if (!el) return;
+    el.textContent = texto;
+    el.hidden = !texto;
+    el.classList.toggle('mapa-offline-ruim', Boolean(ruim));
+  }
+  // Resumo (com a conferência de quantos quadros estão de fato no aparelho)
+  function resumoMapaOffline() {
+    var areas = areasMapa();
+    if (!areas.length) { mostrarMapaOffline(window.MapaOffline && window.MapaOffline.disponivel() ? '' : 'Este navegador não guarda o mapa para uso sem internet.', true); return; }
+    var total = 0, ok = 0;
+    areas.forEach(function (a) { total += a.total; ok += a.guardados; });
+    var raioKm = Math.round(areas[areas.length - 1].raioM / 100) / 10;
+    var completo = ok >= total;
+    mostrarMapaOffline('🗺 Mapa guardado no aparelho: ' + areas.length + ' área(s) de ~' + raioKm.toLocaleString('pt-BR') + ' km em volta' +
+      (completo ? '' : ' · ' + ok + ' de ' + total + ' partes (o resto completa com internet)') + '. Sem internet, o mapa mostra só essas áreas.', !completo);
   }
 
   function comecarRastreamento(posInicial) {
@@ -579,6 +669,9 @@
     carregarMinhasFotos();
     renderizarHistorico();
     if (!estado.timerUI) estado.timerUI = setInterval(tique, 2000);
+    if (!estado.timerMapaOff) estado.timerMapaOff = setInterval(verificarMapaOffline, 10000);
+    resumoMapaOffline();
+    setTimeout(verificarMapaOffline, 3000);
     enviarSinal();
     agendarEnvio(0);
     atualizarNotifBotao();
@@ -1113,6 +1206,7 @@
     var mapa = L.map('mapa-civil', { zoomControl: true, attributionControl: true }).setView([-15.79, -47.88], 4);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
+      crossOrigin: true,   // resposta CORS: pode ser guardada para o mapa funcionar sem internet (sw.js)
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(mapa);
     // Se a pessoa arrastar o mapa, ele para de seguir a posição (até tocar em "Onde estou").

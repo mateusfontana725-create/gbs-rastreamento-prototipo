@@ -5420,18 +5420,20 @@
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btnSalvar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'setor-salvar', texto: novo ? 'Criar setor' : 'Salvar' });
     var salvo = false;
-    var form = UI.el('form', { classe: 'form-setor', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo setor de busca' : 'Editar setor' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-nome', texto: 'Nome, número ou código' }), nome]),
-      raio ? UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-raio', texto: 'Raio (metros)' }), raio]) : null,
+    var form = UI.el('form', { classe: 'form-setor form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo setor' : 'Editar setor' }),
+      UI.grade([
+        UI.campo('Nome', nome, { para: 'setor-nome', dica: 'Nome, número ou código que a equipe reconhece no rádio.' }),
+        raio ? UI.campo('Raio (m)', raio, { para: 'setor-raio' }) : null,
+        UI.campo('Responsável', part, { para: 'setor-participante' }),
+        UI.campo('Equipe', equipe, { para: 'setor-equipe', ajuda: 'Opcional' }),
+        UI.campo('Situação', status, { para: 'setor-status' }),
+        UI.campo('Cor', cores, { largo: true }),
+        UI.campo('Observações', obs, { para: 'setor-obs', largo: true, ajuda: 'Opcional' }),
+      ]),
       area,
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor' }), cores]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-participante', texto: 'Responsável pelo setor' }), part]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-equipe', texto: 'Equipe (opcional)' }), equipe]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-status', texto: 'Situação' }), status]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-obs', texto: 'Observações (opcional)' }), obs]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnSalvar]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnSalvar]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -5734,15 +5736,15 @@
     var raio = UI.el('input', { classe: 'campo', id: 'ponto-raio', type: 'number', min: '10', max: '5000', step: '10', inputmode: 'numeric',
       value: d.raio_m ? String(Math.round(d.raio_m)) : String(d.categoria === 'BASE' ? RAIO_BASE_PADRAO : RAIO_ALERTA_PADRAO) });
     var rotRaio = UI.el('label', { classe: 'rotulo', for: 'ponto-raio' });
-    var ajudaRaio = UI.el('small', { classe: 'muted' });
-    var grupoRaio = UI.el('div', { classe: 'grupo' }, [rotRaio, raio, ajudaRaio]);
+    var grupoRaio = UI.el('div', { classe: 'campo-bloco' }, [rotRaio, raio]);
     // Raio: alarme de proximidade (área de risco) ou chegada (base).
     function ajustarRaio(k) {
       grupoRaio.hidden = k !== 'RISCO' && k !== 'BASE';
-      rotRaio.textContent = k === 'BASE' ? 'Raio de chegada à base (m)' : 'Raio do alarme de proximidade (m)';
-      ajudaRaio.textContent = k === 'BASE'
-        ? 'Quem estiver dentro deste círculo (com o GPS preciso o suficiente) conta como "chegou à base" no controle de retorno dos grupos.'
-        : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.';
+      rotRaio.innerHTML = '';
+      rotRaio.appendChild(document.createTextNode(k === 'BASE' ? 'Raio da base (m)' : 'Raio de alerta (m)'));
+      rotRaio.appendChild(UI.dica(k === 'BASE'
+        ? 'Quem estiver dentro deste círculo, com GPS preciso, conta como "chegou à base" no controle de retorno.'
+        : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.'));
     }
     ajustarRaio(d.categoria);
     grade.addEventListener('change', function () {
@@ -5756,20 +5758,23 @@
     });
     if (!d.titulo) titulo.value = CAT_PONTO[d.categoria].rotulo;
     var salvo = false;
-    var form = UI.el('form', { classe: 'form-ponto', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Marcar ponto de interesse' : 'Editar ponto' }),
-      d.relatado_por_nome ? UI.el('p', { classe: 'ajuda', texto: 'A partir do relato de ' + d.relatado_por_nome + '.' }) : null,
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Categoria' }), grade]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-titulo', texto: 'Nome ou título' }), titulo]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-desc', texto: 'Descrição ou observações (opcional)' }), desc]),
-      grupoRaio,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-coord', texto: 'Coordenada em qualquer formato (opcional)' }), coordTxt, coordInfo]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-lat', texto: 'Latitude' }), lat]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-lng', texto: 'Longitude' }), lng]),
+    var form = UI.el('form', { classe: 'form-ponto form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Marcar ponto' : 'Editar ponto' }),
+      d.relatado_por_nome ? UI.el('p', { classe: 'ajuda', texto: 'Relato de ' + d.relatado_por_nome }) : null,
+      UI.campo('Categoria', grade, { largo: true }),
+      UI.grade([
+        UI.campo('Nome', titulo, { para: 'ponto-titulo' }),
+        grupoRaio,
+        UI.campo('Observações', desc, { para: 'ponto-desc', largo: true, ajuda: 'Opcional' }),
+      ]),
+      UI.campo('Coordenada', coordTxt, { para: 'ponto-coord', largo: true, dica: 'Pode colar em qualquer formato: decimal, UTM, MGRS ou graus. A latitude e a longitude são preenchidas sozinhas.' }),
+      coordInfo,
+      UI.grade([
+        UI.campo('Latitude', lat, { para: 'ponto-lat' }),
+        UI.campo('Longitude', lng, { para: 'ponto-lng' }),
       ]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

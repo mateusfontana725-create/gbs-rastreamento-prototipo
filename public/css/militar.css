@@ -1979,3 +1979,35 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
 .poa-ia-insuficiente { color: var(--texto-2); font-style: italic; }
 .poa-ia-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 4px 0; }
 .poa-ia-linha:empty { display: none; }
+
+/* Passagem de comando (js/briefing.js): poucos textos, campos lado a lado */
+.modal:has(.passagem-form, .passagem-recebimento) { width: min(720px, 100%); }
+.passagem-titulo { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; }
+.passagem-grade { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+.passagem-fluxo { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+.passagem-fluxo-leitura { align-items: center; margin-bottom: 12px; }
+.passagem-grade .passagem-fluxo { flex-wrap: nowrap; }
+.passagem-grade .passagem-pessoa:first-child { flex: 0 1 auto; }
+.passagem-pessoa-sel { flex: 1 1 0; }
+.passagem-pessoa strong { overflow-wrap: anywhere; }
+.passagem-pessoa { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); min-width: 0; }
+.passagem-pessoa-sel { border-color: var(--responsavel); background: var(--responsavel-claro); }
+.passagem-pessoa .campo { width: 100%; min-height: 40px; }
+.passagem-rotulo { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-3); }
+.passagem-seta { align-self: center; font-size: 1.3rem; color: var(--responsavel-texto); }
+.passagem-recado { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.passagem-recado .rotulo { margin: 0; }
+.passagem-recado .campo { width: 100%; min-height: 96px; resize: vertical; }
+.passagem-rodape { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 18px; }
+.passagem-aviso { font-size: .84rem; }
+.passagem-botoes { display: flex; gap: 8px; margin-left: auto; }
+.passagem-nota { margin: 0 0 12px; padding: 10px 14px; border-left: 4px solid var(--responsavel); background: var(--superficie-2); border-radius: 0 var(--raio) var(--raio) 0; }
+.passagem-briefing { margin: 0 0 4px; border: 1px solid var(--borda); border-radius: var(--raio); padding: 10px 14px; }
+.passagem-briefing summary { cursor: pointer; }
+.passagem-briefing[open] summary { margin-bottom: 8px; }
+.passagem-recebimento .modal-acoes { margin-top: 16px; }
+@media (max-width: 600px) {
+  .passagem-grade { grid-template-columns: 1fr; }
+  .passagem-botoes { width: 100%; }
+  .passagem-botoes .btn { flex: 1 1 0; }
+}

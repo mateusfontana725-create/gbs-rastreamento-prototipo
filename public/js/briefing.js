@@ -292,24 +292,47 @@
     if (aposSalvar) aposSalvar();
   }
 
+  // Explicação curta atrás de um (i): passa o mouse (title) ou toca para abrir embaixo
+  function dica(texto) {
+    var tip = el('span', { classe: 'dica-texto', role: 'note', hidden: true, texto: texto });
+    var b = el('button', { classe: 'dica', type: 'button', 'aria-label': 'Explicação', title: texto, texto: 'i' });
+    b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); tip.hidden = !tip.hidden; });
+    return el('span', { classe: 'dica-caixa' }, [b, tip]);
+  }
+  function pessoa(rotulo, conteudo, extra) {
+    return el('div', { classe: 'passagem-pessoa' + (extra ? ' ' + extra : '') }, [el('small', { classe: 'passagem-rotulo', texto: rotulo }), conteudo]);
+  }
+
   async function abrirPassagem(aposSalvar) {
-    var sel = el('select', { classe: 'campo', id: 'pas-para' }, [el('option', { value: '', texto: 'Carregando…' })]);
-    var nota = el('textarea', { classe: 'campo', id: 'pas-nota', rows: '3', maxlength: '1000', placeholder: 'O que o próximo comandante precisa saber agora (o briefing completo vai junto)' });
+    var sel = el('select', { classe: 'campo', id: 'pas-para', 'aria-label': 'Passar o comando para' }, [el('option', { value: '', texto: 'Carregando…' })]);
+    var nota = el('textarea', { classe: 'campo', id: 'pas-nota', rows: '3', maxlength: '1000', placeholder: 'O que quem assume precisa saber agora' });
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = el('button', { classe: 'btn btn-escuro', type: 'button', id: 'pas-enviar', texto: 'Passar o comando', disabled: true });
-    var fechar = UI.abrirModal(el('div', { classe: 'form-passagem' }, [
-      el('h2', { id: 'modal-titulo', texto: 'Passar o comando' }),
-      el('p', { classe: 'ajuda', texto: 'O servidor guarda uma foto do briefing de agora. O comando só muda quando a outra pessoa ACEITAR, com a hora do aceite. Até lá você continua no comando.' }),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'pas-para', texto: 'Passar para' }), sel]),
-      el('div', { classe: 'grupo' }, [el('label', { classe: 'rotulo', for: 'pas-nota', texto: 'Recado' }), nota]),
+    var atual = est.comando && est.comando.comando_nome || '—';
+    var fechar = UI.abrirModal(el('div', { classe: 'passagem-form' }, [
+      el('h2', { id: 'modal-titulo', classe: 'passagem-titulo' }, ['Passar o comando', dica('O servidor guarda uma foto do briefing de agora e a outra pessoa a lê. O comando só muda quando ela ACEITAR (com a hora do aceite). Até lá, você continua no comando.')]),
+      el('div', { classe: 'passagem-grade' }, [
+        el('div', { classe: 'passagem-fluxo' }, [
+          pessoa('Agora', el('strong', { texto: atual })),
+          el('span', { classe: 'passagem-seta', 'aria-hidden': 'true', texto: '→' }),
+          pessoa('Passa para', sel, 'passagem-pessoa-sel'),
+        ]),
+        el('div', { classe: 'passagem-recado' }, [
+          el('label', { classe: 'rotulo', for: 'pas-nota' }, ['Recado', dica('Opcional. O briefing completo já vai junto, sem precisar digitar de novo.')]),
+          nota,
+        ]),
+      ]),
       erro,
-      el('div', { classe: 'modal-acoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      el('div', { classe: 'passagem-rodape' }, [
+        el('span', { classe: 'muted passagem-aviso', texto: 'Você segue no comando até o aceite.' }),
+        el('div', { classe: 'passagem-botoes' }, [el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      ]),
     ]), { fecharNoFundo: false, empilhar: true });
     try {
       var rs = await C.rpc('listar_responsaveis', { p_operacao: P.op().id });
       var outros = (rs || []).filter(function (r) { return r.user_id !== eu(); });
       sel.innerHTML = '';
-      sel.appendChild(el('option', { value: '', texto: outros.length ? 'Escolha…' : 'Nenhum outro responsável na operação' }));
+      sel.appendChild(el('option', { value: '', texto: outros.length ? 'Escolha…' : 'Nenhum outro responsável' }));
       outros.forEach(function (r) { sel.appendChild(el('option', { value: r.user_id, texto: r.nome })); });
       btn.disabled = !outros.length;
     } catch (e) { erro.textContent = e.message; erro.hidden = false; }
@@ -328,10 +351,25 @@
   function abrirRecebimento(pas) {
     var corpo = el('div', { classe: 'passagem-recebimento' });
     var fechar;
-    corpo.appendChild(el('h2', { id: 'modal-titulo', texto: 'Receber o comando' }));
-    corpo.appendChild(el('p', { classe: 'nota', texto: pas.de_nome + ' quer passar o comando da operação para você (' + C.hora(pas.criada_em, false) + '). Leia o briefing abaixo: ele é a foto do momento da passagem. O comando só muda quando você aceitar.' }));
-    if (pas.nota) corpo.appendChild(el('p', { classe: 'passagem-nota' }, [el('strong', { texto: 'Recado de ' + pas.de_nome + ': ' }), pas.nota]));
-    corpo.appendChild(renderizar(pas.resumo, null, true));
+    var pendente = pas.estado === 'pendente' && pas.para_user_id === eu();
+    var r = pas.resumo || {};
+    var contagem = [
+      (r.vitimas || []).length + ' vítima(s)', (r.equipes || []).length + ' equipe(s)',
+      ((r.decisoes_pendentes || []).length + (r.decisoes_automaticas || []).length) + ' decisão(ões) pendente(s)',
+      r.riscos && r.riscos.pedidos_ajuda_abertos ? r.riscos.pedidos_ajuda_abertos + ' pedido(s) de ajuda aberto(s)' : null,
+    ].filter(Boolean);
+    corpo.appendChild(el('h2', { id: 'modal-titulo', classe: 'passagem-titulo' }, [pendente ? 'Receber o comando' : 'Passagem de comando',
+      pendente ? dica('O comando só muda quando você aceitar, e o horário do aceite fica registrado. Se recusar, quem passou continua no comando e vê o seu motivo.') : null]));
+    corpo.appendChild(el('div', { classe: 'passagem-fluxo passagem-fluxo-leitura' }, [
+      pessoa('De', el('strong', { texto: pas.de_nome || '—' })), el('span', { classe: 'passagem-seta', 'aria-hidden': 'true', texto: '→' }),
+      pessoa(pendente ? 'Para você' : 'Para', el('strong', { texto: pas.para_nome || '—' })),
+      el('span', { classe: 'selo selo-neutro', texto: C.hora(pas.criada_em, false) }),
+    ]));
+    if (pas.nota) corpo.appendChild(el('blockquote', { classe: 'passagem-nota' }, [el('strong', { texto: 'Recado de ' + pas.de_nome + ': ' }), pas.nota]));
+    corpo.appendChild(el('details', { classe: 'passagem-briefing' }, [
+      el('summary', null, [el('strong', { texto: 'Briefing do momento' }), el('span', { classe: 'muted', texto: ' · ' + contagem.join(' · ') })]),
+      renderizar(pas.resumo, null, true),
+    ]));
     var acoes = [el('button', { classe: 'btn', type: 'button', texto: 'Ler depois', onclick: function () { fechar(); } })];
     if (podeAlterar() && pas.estado === 'pendente' && pas.para_user_id === eu()) {
       acoes.push(el('button', { classe: 'btn btn-perigo', type: 'button', id: 'pas-recusar', texto: 'Recusar…', onclick: async function () {
@@ -339,7 +377,7 @@
         if (!r) return;
         if (await rpc('passagem_responder', { p_passagem: pas.id, p_aceitar: false, p_nota: r.texto }, 'Passagem recusada.')) fechar(true);
       } }));
-      acoes.push(el('button', { classe: 'btn btn-escuro', type: 'button', id: 'pas-aceitar', texto: 'Li o briefing e ACEITO o comando', onclick: async function () {
+      acoes.push(el('button', { classe: 'btn btn-escuro', type: 'button', id: 'pas-aceitar', texto: 'Aceitar o comando', onclick: async function () {
         if (await rpc('passagem_responder', { p_passagem: pas.id, p_aceitar: true, p_nota: '' }, 'Você está no comando.')) fechar(true);
       } }));
     }

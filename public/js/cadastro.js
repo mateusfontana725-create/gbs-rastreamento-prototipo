@@ -149,7 +149,7 @@
     var coordTxt = UI.el('input', { classe: 'campo mono', id: id('ponto-txt'), placeholder: 'ou digite: -22.4508, -42.9762 · 23K 708263 7515869' });
     var coordAviso = UI.el('small', { classe: 'muted' });
     var miniMapaEl = UI.el('div', { classe: 'mini-mapa', id: id('mini-mapa'), role: 'img', 'aria-label': 'Mapa com o ponto da operação' });
-    var miniVazio = UI.el('p', { classe: 'mini-mapa-vazio muted', texto: 'Nenhum ponto marcado ainda. Escolha no mapa, use sua posição ou digite as coordenadas.' });
+    var miniVazio = UI.el('p', { classe: 'mini-mapa-vazio muted', texto: 'Nenhum ponto marcado.' });
     var mapaMini = null, marcadorMini = null;
 
     function atualizarMiniMapa() {
@@ -212,8 +212,7 @@
     var endereco = UI.el('input', { classe: 'campo', id: id('endereco'), maxlength: '300', autocomplete: 'off',
       placeholder: 'Rua, número, bairro, cidade ou referência', value: op.local_endereco || '' });
     var painelEndereco = UI.el('div', { classe: 'cad-local-endereco' }, [
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('endereco'), texto: 'Endereço' }), endereco]),
-      UI.el('p', { classe: 'ajuda', texto: 'Sem ponto no mapa, a operação não aparece no mapa e não entra nos cálculos de distância (ULV).' }),
+      UI.campo('Endereço', endereco, { para: id('endereco'), dica: 'Sem ponto no mapa, a operação não aparece no mapa nem entra nos cálculos de distância.' }),
     ]);
     var radiosModo = UI.el('div', { classe: 'cad-modo', role: 'radiogroup', 'aria-label': 'Como informar o local' }, [
       ['mapa', 'Marcar no mapa'], ['endereco', 'Só endereço (sem ponto)'],
@@ -297,7 +296,7 @@
       ipo.imagens_anexas === true ? 'sim' : ipo.imagens_anexas === false ? 'nao' : '');
 
     // Na criação, o início é automático (a hora em que a operação for criada)
-    var inicioAuto = UI.el('p', { classe: 'ajuda', id: id('inicio-auto'), texto: 'Início das operações: automático, a data e a hora em que a operação for criada.' });
+    var inicioAuto = UI.el('p', { classe: 'ajuda', id: id('inicio-auto'), texto: 'Automático: data e hora da criação.' });
 
     // (cada campo é um nó do DOM: aparece em uma única seção)
     var secoes = inicial
@@ -661,31 +660,23 @@
       window.Ipo.PERFIS_VITIMA.map(function (x) {
         return UI.el('option', { value: x[0], selected: (v.perfil || [])[0] === x[0] ? true : null, texto: x[1] });
       })));
-    var perfil = UI.el('div', { classe: 'grupo' }, [
-      UI.el('label', { classe: 'rotulo', for: prefixo + '-perfil', texto: 'Perfil da vítima (para estudos)' }), perfilSel,
-      UI.el('small', { classe: 'muted', texto: 'Idoso: 60 anos ou mais · Criança: até 12 anos · Adolescente: 13 a 17 anos.' }),
-    ]);
+    var perfil = UI.campo('Perfil', perfilSel, { para: prefixo + '-perfil', dica: 'Idoso: 60 anos ou mais · Criança: até 12 anos · Adolescente: 13 a 17 anos. Usado nos estudos da operação.' });
     // Foto da vítima (opcional): tirada agora ou escolhida; é enviada quando a ficha é salva
     var foto = UI.el('input', { classe: 'campo', type: 'file', accept: 'image/*', id: prefixo + '-foto' });
-    var grupoFoto = UI.el('div', { classe: 'grupo' }, [
-      UI.el('label', { classe: 'rotulo', for: prefixo + '-foto', texto: 'Foto da vítima' }), foto,
-      v.foto_caminho ? UI.el('small', { classe: 'muted', texto: 'Já tem foto: escolher outra substitui a atual.' }) : null,
-    ]);
+    var grupoFoto = UI.campo('Foto', foto, { para: prefixo + '-foto', ajuda: v.foto_caminho ? 'Já tem foto: escolher outra substitui a atual.' : null });
     var elementos = [
-      UI.el('div', { classe: 'grupo-duplo grupo-duplo-largo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nome', texto: 'Nome *' }), nome]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-idade', texto: 'Idade (anos)' }), idade]),
+      UI.grade([
+        UI.campo('Nome *', nome, { para: prefixo + '-nome', largo: true }),
+        UI.campo('Idade', idade, { para: prefixo + '-idade' }),
+        UI.campo('Nascimento', nasc, { para: prefixo + '-nascimento', dica: 'Formato dd/mm/aaaa. Vai para o IPO.' }),
+        UI.campo('Sexo', sexo, { para: prefixo + '-sexo' }),
+        UI.campo('Origem', origem, { para: prefixo + '-origem', dica: 'Cidade ou bairro de onde a pessoa é.' }),
+        perfil,
+        grupoFoto,
+        UI.campo('Características', carac, { para: prefixo + '-caracteristicas', largo: true, dica: 'Altura, porte, cabelo, sinais, tatuagens, cicatrizes.' }),
+        UI.campo('Roupas', roupas, { para: prefixo + '-roupas', largo: true, dica: 'Cores e tipo de roupa, calçado, acessórios, mochila.' }),
+        UI.campo('Observações', obs, { para: prefixo + '-observacoes', largo: true, dica: 'Saúde, medicamentos, último contato, hábitos, para onde iria.' }),
       ]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nascimento', texto: 'Nascimento' }), nasc]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-sexo', texto: 'Sexo' }), sexo]),
-      ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-origem', texto: 'Origem (cidade/bairro)' }), origem]),
-      perfil,
-      grupoFoto,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-caracteristicas', texto: 'Características físicas' }), carac]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-roupas', texto: 'Roupas' }), roupas]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-observacoes', texto: 'Observações' }), obs]),
     ];
     function ler() {
       return {
@@ -724,11 +715,11 @@
     var campos = camposVitima(v, 'vitima');
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'vitima-salvar', texto: nova ? 'Criar ficha' : 'Salvar' });
-    var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova ficha de vítima' : 'Editar ficha' }),
+    var form = UI.el('form', { classe: 'form-vitima form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova vítima' : 'Editar vítima' }),
     ].concat(campos.elementos, [
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
     ]));
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

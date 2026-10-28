@@ -904,19 +904,17 @@
     var cancelar = UI.el('button', { classe: 'btn', type: 'button', id: 'nova-cancelar', texto: 'Cancelar', onclick: function () { fechar(); } });
     var dadosOp = UI.el('fieldset', { classe: 'nova-op-dados', id: 'nova-op-dados' }, [
       UI.el('div', { classe: 'nova-op-linha' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'nova-codigo', texto: 'Nome ou código da operação *' }), codigo]),
-        UI.el('p', { classe: 'muted nova-op-guarda', texto: 'Os dados ficam guardados depois de encerrar (o painel abre só para consulta). Só saem se a operação for excluída.' }),
+        UI.campo('Nome ou código *', codigo, { para: 'nova-codigo', largo: true, dica: 'Só o nome é obrigatório. O resto do cadastro vai depois, em Dados da operação. Os dados ficam guardados até a exclusão da operação.' }),
       ]),
       campos.elemento,
     ]);
-    var form = UI.el('form', { classe: 'form-nova-op', id: 'form-nova', novalidate: true }, [
+    var form = UI.el('form', { classe: 'form-nova-op form-padrao', id: 'form-nova', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),
-      UI.el('p', { classe: 'muted', texto: 'Só o nome é obrigatório. O restante do cadastro é preenchido depois, no painel da operação (Dados da operação → Editar).' }),
       vitimas.elemento,
       dadosOp,
       status,
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [cancelar, btn]),
+      UI.rodape([cancelar, btn]),
     ]);
     // ctx.op: a operação já criada (a partir daí o formulário só tenta salvar as vítimas que faltam)
     var ctx = { op: null, foi: false };
@@ -944,9 +942,9 @@
     var qtd = UI.el('span', { classe: 'nova-vitimas-qtd', id: 'nova-vitimas-qtd' });
     var add = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'nova-add-vitima', texto: '+ Adicionar vítima' });
     var caixa = UI.el('details', { classe: 'nova-vitimas', id: 'nova-vitimas' }, [
-      UI.el('summary', null, [UI.el('span', { texto: 'Vítimas (opcional)' }), qtd]),
+      UI.el('summary', null, [UI.el('span', { texto: 'Vítimas' }), qtd]),
       UI.el('div', { classe: 'nova-vitimas-corpo' }, [
-        UI.el('p', { classe: 'ajuda', texto: 'Quem está sendo procurado: uma ficha por pessoa, com a foto se houver. A ficha completa também pode ser preenchida depois, em Dados da operação → Editar.' }),
+        UI.el('p', { classe: 'ajuda', texto: 'Uma ficha por pessoa. Opcional.' }),
         lista,
         UI.el('div', { classe: 'nova-vitimas-acoes' }, [add]),
       ]),

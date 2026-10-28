@@ -1434,9 +1434,9 @@ rastreamento-sar/
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
    | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
-   | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-2.5-flash` |
+   | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-3.8-flash` |
    | `POA_IA_PROVEDOR` | (opcional) `anthropic` ou `gemini`. Sem ela, usa o provedor que tiver chave (Anthropic primeiro) |
-   | `POA_IA_MODELO` | (opcional) troca o modelo do provedor escolhido. Padrões: `claude-haiku-5-5` (Anthropic, o mais barato) e `gemini-2.5-flash` |
+   | `POA_IA_MODELO` | (opcional) troca o modelo do provedor escolhido. Padrões: `claude-haiku-5-5` (Anthropic, o mais barato) e `gemini-3.8-flash` |
 
 4. Clique em **Deploy**.
 

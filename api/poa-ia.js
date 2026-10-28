@@ -5,7 +5,7 @@
 //
 // A chave da API de IA fica SÓ no servidor; o navegador nunca a vê. Dois provedores:
 //   - Anthropic: ANTHROPIC_API_KEY (modelo padrão claude-haiku-5-5);
-//   - Google Gemini: GEMINI_API_KEY (modelo padrão gemini-2.5-flash).
+//   - Google Gemini: GEMINI_API_KEY (modelo padrão gemini-3.8-flash).
 // POA_IA_PROVEDOR ("anthropic" ou "gemini") escolhe o provedor; sem ela, usa o que tiver chave (Anthropic primeiro).
 // POA_IA_MODELO troca o modelo. Sem chave, responde 503 e a tela segue manual.
 //
@@ -196,8 +196,8 @@ async function perguntar(prov, chave, modelo, p) {
           systemInstruction: { parts: [{ text: p.system }] },
           contents: [{ role: 'user', parts: [{ text: p.user }] }],
           generationConfig: Object.assign({ responseMimeType: 'application/json', maxOutputTokens: 4096, temperature: 0 },
-            // os modelos "flash" do Gemini 2.5 gastam o limite de saída "pensando" e podem devolver texto vazio: desliga o raciocínio
-            /flash/i.test(modelo) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+            // o Gemini 2.5 flash gasta o limite de saída "pensando" e podem devolver texto vazio: desliga o raciocínio
+            /gemini-2\.5-flash/i.test(modelo) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
         }),
         signal: ctrl.signal,
       });
@@ -227,7 +227,7 @@ function configurarIa() {
   let prov = (env.POA_IA_PROVEDOR || '').trim().toLowerCase();
   if (prov !== 'anthropic' && prov !== 'gemini') prov = chaveAnthropic ? 'anthropic' : chaveGemini ? 'gemini' : 'anthropic';
   const chave = prov === 'gemini' ? chaveGemini : chaveAnthropic;
-  const modelo = (env.POA_IA_MODELO || (prov === 'gemini' ? 'gemini-2.5-flash' : 'claude-haiku-5-5')).trim();
+  const modelo = (env.POA_IA_MODELO || (prov === 'gemini' ? 'gemini-3.8-flash' : 'claude-haiku-5-5')).trim();
   return { prov, chave, modelo, variavel: prov === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY' };
 }
 

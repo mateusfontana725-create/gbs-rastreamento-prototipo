@@ -128,9 +128,9 @@ async function chamar(corpo, rotas, token) {
     ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'chave-gemini-teste' }); const ch = [];
     global.fetch = rede(Object.assign({}, AUTORIZADO, { 'generativelanguage.googleapis.com': gem('{"setores":[{"setor_id":"s1","poa":0.6,"justificativa":"Perto da casa."},{"setor_id":"s2","poa":null,"insuficiente":true}],"fora":{"poa":0.1,"justificativa":"Pode ter saído."}}') }), ch);
     const r = resposta(); await carregar()(req({ modo: 'poa', operacao_id: OP, contexto: CTX }), r);
-    assert.strictEqual(r.code, 200); assert.strictEqual(r.body.setores[0].poa, 0.6); assert.strictEqual(r.body.setores[1].poa, null); assert.strictEqual(r.body.modelo, 'gemini-2.5-flash');
+    assert.strictEqual(r.code, 200); assert.strictEqual(r.body.setores[0].poa, 0.6); assert.strictEqual(r.body.setores[1].poa, null); assert.strictEqual(r.body.modelo, 'gemini-3.8-flash');
     const c = ch.find((x) => x.url.includes('generativelanguage'));
-    assert.ok(c.url.includes('/models/gemini-2.5-flash:generateContent')); assert.strictEqual(c.init.headers['x-goog-api-key'], 'chave-gemini-teste');
+    assert.ok(c.url.includes('/models/gemini-3.8-flash:generateContent')); assert.strictEqual(c.init.headers['x-goog-api-key'], 'chave-gemini-teste');
     assert.ok(!c.url.includes('chave-gemini-teste'), 'a chave não vai na URL'); assert.strictEqual(JSON.parse(c.init.body).generationConfig.responseMimeType, 'application/json');
     assert.ok(!/Antônio|52998224725|21998765432/.test(c.init.body), 'dados pessoais vazaram'); assert.ok(!ch.some((x) => x.url.includes('anthropic')));
     assert.ok(!JSON.stringify(r.body).includes('chave-gemini-teste'));
@@ -154,12 +154,12 @@ async function chamar(corpo, rotas, token) {
     r = await g(() => json({ candidates: [] })); assert.strictEqual(r.body.erro, 'ia_resposta_invalida');
   });
 
-  await teste('Gemini: o erro devolvido mostra o status e o motivo (sem a chave); o raciocínio é desligado no flash', async () => {
+  await teste('Gemini: o erro devolvido mostra o status e o motivo (sem a chave); modelo atual sem configuração de raciocínio', async () => {
     ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'segredo-g' }); const ch = [];
     global.fetch = rede(Object.assign({}, AUTORIZADO, { 'generativelanguage.googleapis.com': () => json({ error: { message: 'models/xyz is not found for API version v1beta' } }, 404) }), ch);
     const r = resposta(); await carregar()(req({ modo: 'poa', operacao_id: OP, contexto: CTX }), r);
     assert.strictEqual(r.code, 502); assert.ok(/gemini-2\.5-flash/.test(r.body.mensagem) && /404/.test(r.body.mensagem) && /not found/.test(r.body.mensagem), r.body.mensagem); assert.ok(!r.body.mensagem.includes('segredo-g'));
-    assert.strictEqual(JSON.parse(ch[ch.length - 1].init.body).generationConfig.thinkingConfig.thinkingBudget, 0);
+    assert.strictEqual(JSON.parse(ch[ch.length - 1].init.body).generationConfig.thinkingConfig, undefined);   // modelo 3.x: sem configuração de raciocínio (evita 400)
   });
   await teste('Gemini: resposta vazia por limite de saída explica o motivo', async () => {
     ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' });

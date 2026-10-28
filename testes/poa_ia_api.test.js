@@ -154,6 +154,19 @@ async function chamar(corpo, rotas, token) {
     r = await g(() => json({ candidates: [] })); assert.strictEqual(r.body.erro, 'ia_resposta_invalida');
   });
 
+  await teste('Gemini: o erro devolvido mostra o status e o motivo (sem a chave); o raciocínio é desligado no flash', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'segredo-g' }); const ch = [];
+    global.fetch = rede(Object.assign({}, AUTORIZADO, { 'generativelanguage.googleapis.com': () => json({ error: { message: 'models/xyz is not found for API version v1beta' } }, 404) }), ch);
+    const r = resposta(); await carregar()(req({ modo: 'poa', operacao_id: OP, contexto: CTX }), r);
+    assert.strictEqual(r.code, 502); assert.ok(/gemini-2\.5-flash/.test(r.body.mensagem) && /404/.test(r.body.mensagem) && /not found/.test(r.body.mensagem), r.body.mensagem); assert.ok(!r.body.mensagem.includes('segredo-g'));
+    assert.strictEqual(JSON.parse(ch[ch.length - 1].init.body).generationConfig.thinkingConfig.thinkingBudget, 0);
+  });
+  await teste('Gemini: resposta vazia por limite de saída explica o motivo', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' });
+    const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => json({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }] }) });
+    assert.strictEqual(r.body.erro, 'ia_resposta_invalida'); assert.ok(/MAX_TOKENS/.test(r.body.mensagem));
+  });
+
   console.log('Limite de uso');
   await teste('7º pedido no mesmo minuto: 429', async () => {
     ambiente(); global.fetch = rede(Object.assign({}, AUTORIZADO, { 'api.anthropic.com': ia('{"pod":0.5,"justificativa":"ok"}') }));

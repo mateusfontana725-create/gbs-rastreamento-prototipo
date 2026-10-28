@@ -195,7 +195,9 @@ async function perguntar(prov, chave, modelo, p) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: p.system }] },
           contents: [{ role: 'user', parts: [{ text: p.user }] }],
-          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2000, temperature: 0 },
+          generationConfig: Object.assign({ responseMimeType: 'application/json', maxOutputTokens: 4096, temperature: 0 },
+            // os modelos "flash" do Gemini 2.5 gastam o limite de saída "pensando" e podem devolver texto vazio: desliga o raciocínio
+            /flash/i.test(modelo) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
         }),
         signal: ctrl.signal,
       });
@@ -203,7 +205,8 @@ async function perguntar(prov, chave, modelo, p) {
       const partes = corpo && corpo.candidates && corpo.candidates[0] && corpo.candidates[0].content && corpo.candidates[0].content.parts;
       // chave inválida no Gemini volta como 400 ("API key not valid")
       const chaveRuim = r.status === 400 && /api key/i.test(JSON.stringify(corpo && corpo.error || ''));
-      return { ok: r.ok, status: chaveRuim ? 401 : r.status, texto: Array.isArray(partes) ? partes.map((c) => c.text || '').join('') : '' };
+      const motivo = (corpo && corpo.error && corpo.error.message) || (corpo && corpo.promptFeedback && corpo.promptFeedback.blockReason) || (corpo && corpo.candidates && corpo.candidates[0] && corpo.candidates[0].finishReason !== 'STOP' ? corpo.candidates[0].finishReason : '') || '';
+      return { ok: r.ok, status: chaveRuim ? 401 : r.status, texto: Array.isArray(partes) ? partes.map((c) => c.text || '').join('') : '', motivo: String(motivo).slice(0, 160) };
     }
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -212,7 +215,7 @@ async function perguntar(prov, chave, modelo, p) {
       signal: ctrl.signal,
     });
     const corpo = await r.json().catch(() => null);
-    return { ok: r.ok, status: r.status, texto: corpo && Array.isArray(corpo.content) ? corpo.content.map((c) => c.text || '').join('') : '' };
+    return { ok: r.ok, status: r.status, texto: corpo && Array.isArray(corpo.content) ? corpo.content.map((c) => c.text || '').join('') : '', motivo: String((corpo && corpo.error && corpo.error.message) || '').slice(0, 160) };
   } finally { clearTimeout(t); }
 }
 
@@ -269,20 +272,20 @@ module.exports = async (req, res) => {
     const r = await perguntar(prov, chaveIa, modelo, prompt);
     if (r.status === 429) return res.status(503).json({ erro: 'ia_cota', mensagem: `A IA (${prov}) atingiu o limite de uso agora. Tente em alguns minutos ou preencha manualmente.` });
     if (r.status === 401 || r.status === 403) return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: `A chave da IA (${variavel}) foi recusada pelo provedor ${prov}. Confira a chave. O preenchimento manual continua funcionando.` });
-    if (!r.ok) return res.status(502).json({ erro: 'ia_indisponivel', mensagem: 'A IA não respondeu agora. Preencha manualmente ou tente de novo.' });
+    if (!r.ok) return res.status(502).json({ erro: 'ia_indisponivel', mensagem: `A IA (${prov}, ${modelo}) respondeu com erro ${r.status}${r.motivo ? ': ' + r.motivo : ''}. Preencha manualmente ou tente de novo.` });
 
     const bruto = extrairJson(r.texto);
     if (modo === 'poa') {
       const n = normalizarPoa(bruto, ctx.setores);
-      if (!n) return res.status(502).json({ erro: 'ia_resposta_invalida', mensagem: 'A IA devolveu uma resposta que não dá para usar. Preencha manualmente ou tente de novo.' });
+      if (!n) return res.status(502).json({ erro: 'ia_resposta_invalida', mensagem: `A IA (${prov}, ${modelo}) devolveu uma resposta que não dá para usar${r.motivo ? ' (' + r.motivo + ')' : ''}. Preencha manualmente ou tente de novo.` });
       return res.status(200).json({ modelo, setores: n.setores, fora: n.fora, aviso: n.aviso });
     }
     const n = normalizarPod(bruto);
-    if (!n) return res.status(502).json({ erro: 'ia_resposta_invalida', mensagem: 'A IA devolveu uma resposta que não dá para usar. Preencha manualmente ou tente de novo.' });
+    if (!n) return res.status(502).json({ erro: 'ia_resposta_invalida', mensagem: `A IA (${prov}, ${modelo}) devolveu uma resposta que não dá para usar${r.motivo ? ' (' + r.motivo + ')' : ''}. Preencha manualmente ou tente de novo.` });
     return res.status(200).json(Object.assign({ modelo }, n));
   } catch (e) {
     const abortou = e && (e.name === 'AbortError' || /abort/i.test(String(e.message)));
-    return res.status(502).json({ erro: 'ia_indisponivel', mensagem: abortou ? 'A IA demorou demais. Preencha manualmente ou tente de novo.' : 'A IA não respondeu agora. Preencha manualmente ou tente de novo.' });
+    return res.status(502).json({ erro: 'ia_indisponivel', mensagem: abortou ? 'A IA demorou demais. Preencha manualmente ou tente de novo.' : `A IA não respondeu agora (${String(e && e.message || e).replace(/key=[^&\s]+/gi, '').slice(0, 100)}). Preencha manualmente ou tente de novo.` });
   }
 };
 

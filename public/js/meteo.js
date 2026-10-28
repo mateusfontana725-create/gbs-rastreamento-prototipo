@@ -30,7 +30,7 @@
     vento: Boolean(lerLocal(CHAVE_VENTO, false)),
     temp: Boolean(lerLocal(CHAVE_TEMP, false)),
     som: lerLocal(CHAVE_SOM, true) !== false,
-    opId: null, alertas: [], estados: [], historico: [], previsao: null,
+    opId: null, alertas: [], estados: [], historico: [], chuvaHist: [], previsao: null,
     quadros: [], host: null, quadro: 0, tocando: null,
     atualizadoEm: null, fontes: null, erro: null, buscando: false,
     grade: null, gradeEm: null, gradeErro: null,
@@ -166,7 +166,7 @@
     var o = op(), id = o ? o.id : null;
     if (id === est.opId) return;
     est.opId = id;
-    est.alertas = []; est.estados = []; est.previsao = null; est.quadros = []; est.atualizadoEm = null; est.grade = null;
+    est.alertas = []; est.estados = []; est.chuvaHist = []; est.previsao = null; est.quadros = []; est.atualizadoEm = null; est.grade = null;
     est.historico = id ? (lerLocal(CHAVE_HIST + id, []) || []) : [];
     est.ultimoSom = {};
   }
@@ -236,7 +236,13 @@
     var agora = Date.now();
     var novos = Core.analisar(est.previsao, est.oficiais || [], agora);
     var chuvaArea = est.grade ? Core.chuvaMaisProxima(est.grade.pontos, op().local_lat, op().local_lng) : null;
-    if (chuvaArea) novos.push(Core.alertaChuvaProxima(chuvaArea));
+    // Histórico da chuva mais próxima (uma entrada por leitura nova da grade), para estimar se ela se aproxima
+    var tLeitura = est.gradeEm ? Date.parse(est.gradeEm) : NaN;
+    if (est.grade && isFinite(tLeitura) && (!est.chuvaHist.length || est.chuvaHist[est.chuvaHist.length - 1].t !== tLeitura)) {
+      est.chuvaHist.push({ t: tLeitura, distanciaM: chuvaArea ? chuvaArea.distanciaM : null });
+      est.chuvaHist = est.chuvaHist.slice(-12);
+    }
+    if (chuvaArea) novos.push(Core.alertaChuvaProxima(chuvaArea, Core.tendenciaChuva(est.chuvaHist, agora)));
     var antigos = est.alertas;
     var mudancas = Core.compararLeituras(antigos, novos);
     est.alertas = novos;

@@ -612,8 +612,12 @@ e o mapa e o rastreamento continuam funcionando.
   Vêm de uma grade de 49 pontos (7 × 7, MET Norway; 169 pontos com o Open-Meteo pago), atualizada junto com a previsão. Mostram a **previsão de modelo** (vento e temperatura
   atuais), não observação. Ligue em **Vento** e **Temperatura** dentro da camada Meteorologia.
 - **Chuva na região**: a grade mostra a chuva em cada ponto. O alerta indica a distância e a direção (cardeal) do ponto
-  molhado mais próximo do centro, para ajudar a decidir se dá tempo de sair. Não há direção de deslocamento: é só a
-  posição atual segundo o modelo.
+  molhado mais próximo do centro. **Se aproximando**: a cada leitura nova da grade (a cada ~15 min) o painel guarda essa
+  distância; com duas ou mais leituras (≥ 10 min entre a 1ª e a última, queda de pelo menos 5 km, velocidade entre 3 e
+  100 km/h) estima a velocidade de avanço e a **chegada** ("Chuva se aproximando: ~40 km O, chega em ~43 min"), e o nível
+  sobe (alerta se chega em até 1 h, atenção em até 3 h, para chuva moderada ou intensa). Um "sem chuva" na grade zera a
+  série. É **estimativa grosseira** pela mudança entre leituras do modelo (pontos a ~40 km), **não é radar**; o texto do
+  alerta diz isso. A série fica só na memória: some ao recarregar a página e leva ~15 min para a 1ª estimativa.
 - **Previsão** (MET Norway; Open-Meteo se houver chave) para o centro da operação: temperatura, vento e chuva agora, e a
   chegada prevista da chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). A fonte MET não informa rajadas nem
   probabilidade de chuva: esses campos ficam em branco e não geram alerta de rajada. É previsão de modelo, não extrapolação do radar.

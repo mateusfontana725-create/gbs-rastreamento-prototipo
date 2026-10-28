@@ -176,5 +176,41 @@ teste('vento fora da janela de alerta (muito à frente) não conta', () => {
   assert.ok(!M.analisar({ atual: { precipitacao: 0, vento: 10 }, horas }, [], agora).some((a) => a.chave === 'beaufort'));
 });
 
+teste('chuva se aproximando: velocidade e chegada pela queda da distância entre leituras', () => {
+  const min = 60e3;
+  const hist = [{ t: agora - 30 * min, distanciaM: 70000 }, { t: agora - 15 * min, distanciaM: 55000 }, { t: agora, distanciaM: 40000 }];
+  const t = M.tendenciaChuva(hist, agora);
+  assert.ok(Math.abs(t.velKmh - 60) < 0.5, 'velocidade ' + t.velKmh);       // 30 km em 30 min
+  assert.ok(Math.abs(t.etaMin - 40) <= 1, 'chegada ' + t.etaMin);            // 40 km a 60 km/h
+  assert.strictEqual(t.distanciaM, 40000);
+});
+teste('tendência: sem leituras suficientes, distância estável, afastando ou ruído absurdo não geram aproximação', () => {
+  const min = 60e3;
+  assert.strictEqual(M.tendenciaChuva([], agora), null);
+  assert.strictEqual(M.tendenciaChuva([{ t: agora, distanciaM: 30000 }], agora), null);
+  assert.strictEqual(M.tendenciaChuva([{ t: agora - 5 * min, distanciaM: 50000 }, { t: agora, distanciaM: 30000 }], agora), null, 'intervalo curto');
+  assert.strictEqual(M.tendenciaChuva([{ t: agora - 30 * min, distanciaM: 40000 }, { t: agora, distanciaM: 39000 }], agora), null, 'queda pequena');
+  assert.strictEqual(M.tendenciaChuva([{ t: agora - 30 * min, distanciaM: 30000 }, { t: agora, distanciaM: 50000 }], agora), null, 'afastando');
+  assert.strictEqual(M.tendenciaChuva([{ t: agora - 20 * min, distanciaM: 90000 }, { t: agora, distanciaM: 20000 }], agora), null, '210 km/h é ruído');
+  assert.strictEqual(M.tendenciaChuva([{ t: agora - 120 * min, distanciaM: 80000 }, { t: agora, distanciaM: 30000 }], agora), null, 'leitura velha demais');
+});
+teste('tendência: um "sem chuva" no meio zera a série', () => {
+  const min = 60e3;
+  const hist = [{ t: agora - 45 * min, distanciaM: 80000 }, { t: agora - 30 * min, distanciaM: null }, { t: agora - 15 * min, distanciaM: 50000 }, { t: agora, distanciaM: 48000 }];   // só 2 km depois do zerar; os 30 km antes do "sem chuva" não contam
+  assert.strictEqual(M.tendenciaChuva(hist, agora), null);
+});
+teste('alerta de chuva se aproximando: título com a chegada, nível sobe com o tempo restante e o aviso de que não é radar', () => {
+  const chuva = { distanciaM: 40000, precipitacao: 4, rumo: 270, lat: 0, lng: 0 };
+  const perto = M.alertaChuvaProxima(chuva, { velKmh: 60, etaMin: 40, distanciaM: 40000 });
+  assert.strictEqual(perto.nivel, 'alerta');
+  assert.ok(/se aproximando: ~40 km O, chega em ~40 min/.test(perto.titulo), perto.titulo);
+  assert.ok(/60 km\/h/.test(perto.detalhe) && /não é radar/.test(perto.detalhe), perto.detalhe);
+  assert.strictEqual(perto.eta.tipo, 'estimativa_tendencia');
+  assert.strictEqual(M.alertaChuvaProxima(chuva, { velKmh: 20, etaMin: 120, distanciaM: 40000 }).nivel, 'atencao');
+  assert.strictEqual(M.alertaChuvaProxima(chuva, { velKmh: 8, etaMin: 300, distanciaM: 40000 }).nivel, 'informativo');
+  assert.strictEqual(M.alertaChuvaProxima({ distanciaM: 40000, precipitacao: 0.8, rumo: 0 }, { velKmh: 60, etaMin: 40 }).nivel, 'informativo', 'chuva fraca não escala');
+  assert.ok(/h/.test(M.alertaChuvaProxima(chuva, { velKmh: 8, etaMin: 300, distanciaM: 40000 }).titulo));
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes de meteorologia passaram.');

@@ -17,6 +17,12 @@
     horizonteHoras: 3,       // janela da previsão usada para os alertas
     mmParaChegada: 0.5,      // mm/h que caracteriza a chegada da chuva
     probParaChegada: 60,     // % de probabilidade que também caracteriza a chegada
+    aproxMinKmh: 3,          // km/h: abaixo disso a chuva não é considerada em aproximação
+    aproxMaxKmh: 100,        // km/h: acima disso a estimativa é inconsistente (ruído da grade) e é descartada
+    aproxMinQuedaM: 5000,    // m: a distância precisa cair ao menos isto entre a 1ª e a última leitura
+    aproxMinSpanMin: 10,     // min entre a 1ª e a última leitura
+    aproxJanelaMin: 90,      // min: leituras mais antigas que isso são descartadas
+    aproxEtaMaxMin: 360,     // min: chegada além de 6 h não vira alerta de aproximação
     incertezaDentroHora: 30, // ± min quando a chegada cai na 1ª hora
     incertezaDepois: 60      // ± min para horários mais distantes
   };
@@ -269,22 +275,63 @@
     return melhor;
   }
 
+  // Tendência da chuva mais próxima: compara as leituras sucessivas da grade (distância ao ponto molhado mais
+  // próximo). hist: [{ t: ms, distanciaM: número ou null }] em ordem; null = sem chuva na grade (zera a série).
+  // Retorna { velKmh, etaMin, distanciaM } se a chuva vem em direção à operação, senão null. É ESTIMATIVA grosseira
+  // (a grade tem ~40 km entre pontos) e não vem de radar.
+  function tendenciaChuva(hist, agoraMs) {
+    var serie = [];
+    for (var i = (hist || []).length - 1; i >= 0; i--) {
+      var h = hist[i];
+      if (h.distanciaM == null) break;
+      if (agoraMs - h.t > LIMIARES.aproxJanelaMin * 60e3) break;
+      serie.unshift(h);
+    }
+    if (serie.length < 2) return null;
+    var t0 = serie[0].t, n = serie.length;
+    if ((serie[n - 1].t - t0) < LIMIARES.aproxMinSpanMin * 60e3) return null;
+    if ((serie[0].distanciaM - serie[n - 1].distanciaM) < LIMIARES.aproxMinQuedaM) return null;
+    // mínimos quadrados: distância (m) × tempo (s)
+    var sx = 0, sy = 0, sxx = 0, sxy = 0;
+    serie.forEach(function (h) { var x = (h.t - t0) / 1000, y = h.distanciaM; sx += x; sy += y; sxx += x * x; sxy += x * y; });
+    var den = n * sxx - sx * sx;
+    if (!den) return null;
+    var inclinacao = (n * sxy - sx * sy) / den;           // m/s (negativa = aproximando)
+    var velKmh = -inclinacao * 3.6;
+    if (!(velKmh >= LIMIARES.aproxMinKmh) || velKmh > LIMIARES.aproxMaxKmh) return null;
+    var atual = serie[n - 1].distanciaM;
+    var etaMin = Math.round((atual / 1000) / velKmh * 60);
+    if (etaMin > LIMIARES.aproxEtaMaxMin) return null;
+    return { velKmh: velKmh, etaMin: etaMin, distanciaM: atual };
+  }
+
   // Alerta de chuva na área: a distância e a direção ajudam a decidir se dá tempo de sair.
   // Não há direção de deslocamento: só a posição atual (modelo), sem extrapolação.
-  function alertaChuvaProxima(chuva) {
+  function alertaChuvaProxima(chuva, tendencia) {
     if (!chuva) return null;
     var km = chuva.distanciaM / 1000;
     var forte = intensidadeChuva(chuva.precipitacao);
     var nivel = km <= 10 && forte === 'intensa' ? 'alerta' : km <= 25 && forte !== 'fraca' ? 'atencao' : 'informativo';
+    if (!tendencia) {
+      return { chave: 'chuva-proxima', tipo: 'chuva', nivel: nivel,
+        titulo: 'Chuva a ~' + Math.round(km) + ' km ' + direcaoCardeal(chuva.rumo) + ' da operação',
+        detalhe: chuva.precipitacao.toFixed(1) + ' mm/h no ponto mais próximo (modelo, sem direção de deslocamento)',
+        fonte: 'Modelo de previsão', eta: null };
+    }
+    // Se aproximando: o nível sobe conforme o tempo estimado para chegar e a intensidade
+    if (forte !== 'fraca' && tendencia.etaMin <= 60) nivel = maior(nivel, 'alerta');
+    else if (forte !== 'fraca' && tendencia.etaMin <= 180) nivel = maior(nivel, 'atencao');
+    var etaTxt = tendencia.etaMin < 60 ? tendencia.etaMin + ' min' : (Math.round(tendencia.etaMin / 6) / 10).toLocaleString('pt-BR') + ' h';
     return { chave: 'chuva-proxima', tipo: 'chuva', nivel: nivel,
-      titulo: 'Chuva a ~' + Math.round(km) + ' km ' + direcaoCardeal(chuva.rumo) + ' da operação',
-      detalhe: chuva.precipitacao.toFixed(1) + ' mm/h no ponto mais próximo (modelo, sem direção de deslocamento)',
-      fonte: 'Modelo de previsão', eta: null };
+      titulo: 'Chuva se aproximando: ~' + Math.round(km) + ' km ' + direcaoCardeal(chuva.rumo) + ', chega em ~' + etaTxt,
+      detalhe: chuva.precipitacao.toFixed(1) + ' mm/h no ponto mais próximo; avança a ~' + Math.round(tendencia.velKmh) + ' km/h. Estimativa pela variação entre leituras da grade (~40 km entre pontos), não é radar.',
+      fonte: 'Modelo de previsão',
+      eta: { t: new Date(Date.now() + tendencia.etaMin * 60e3).toISOString(), incertezaMin: Math.max(30, Math.round(tendencia.etaMin / 2)), tipo: 'estimativa_tendencia' } };
   }
 
   var API = {
     beaufort: beaufort, alertaBeaufort: alertaBeaufort, BEAUFORT: BEAUFORT,
-    direcaoCardeal: direcaoCardeal, chuvaMaisProxima: chuvaMaisProxima, alertaChuvaProxima: alertaChuvaProxima,
+    direcaoCardeal: direcaoCardeal, chuvaMaisProxima: chuvaMaisProxima, alertaChuvaProxima: alertaChuvaProxima, tendenciaChuva: tendenciaChuva,
     componentesVento: componentesVento, interpolar: interpolar, corTemperatura: corTemperatura, corVento: corVento,
     PARADAS_TEMP: PARADAS_TEMP, PARADAS_VENTO: PARADAS_VENTO,
     LIMIARES: LIMIARES, intensidadeChuva: intensidadeChuva, distanciaM: distanciaM, rumoGraus: rumoGraus,

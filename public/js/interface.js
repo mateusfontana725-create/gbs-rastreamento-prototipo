@@ -213,6 +213,46 @@
     return el('div', { classe: 'form-rodape' }, botoes);
   }
 
+  /*
+   * Aparência escolhida por quem usa (guardada neste aparelho): tamanho do texto e botões do topo
+   * que ficam escondidos. Não muda dados nem o que o servidor vê. Elementos com data-pref="<id>" somem
+   * quando o id está em "ocultos".
+   */
+  var CHAVE_APARENCIA = 'gbs-aparencia';
+  var FONTES = { menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
+  var PADRAO_APARENCIA = { fonte: 'normal', ocultos: [] };
+  function lerAparencia() {
+    try {
+      var v = JSON.parse(localStorage.getItem(CHAVE_APARENCIA) || 'null') || {};
+      return { fonte: FONTES[v.fonte] ? v.fonte : 'normal', ocultos: Array.isArray(v.ocultos) ? v.ocultos.filter(function (x) { return typeof x === 'string'; }) : [] };
+    } catch (e) { return { fonte: 'normal', ocultos: [] }; }
+  }
+  function gravarAparencia(v) {
+    try { localStorage.setItem(CHAVE_APARENCIA, JSON.stringify(v)); } catch (e) { /* sem armazenamento: vale só nesta sessão */ }
+    aplicarAparencia();
+  }
+  function aplicarAparencia() {
+    var v = lerAparencia();
+    document.documentElement.setAttribute('data-fonte', v.fonte);
+    document.querySelectorAll('[data-pref]').forEach(function (e) {
+      e.hidden = v.ocultos.indexOf(e.getAttribute('data-pref')) !== -1;
+    });
+  }
+  var aparencia = {
+    ler: lerAparencia,
+    fontes: FONTES,
+    definirFonte: function (f) { var v = lerAparencia(); v.fonte = FONTES[f] ? f : 'normal'; gravarAparencia(v); },
+    alternarOculto: function (id, oculto) {
+      var v = lerAparencia();
+      v.ocultos = v.ocultos.filter(function (x) { return x !== id; });
+      if (oculto) v.ocultos.push(id);
+      gravarAparencia(v);
+    },
+    restaurar: function () { gravarAparencia(JSON.parse(JSON.stringify(PADRAO_APARENCIA))); },
+    aplicar: aplicarAparencia,
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aplicarAparencia); else aplicarAparencia();
+
   window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar,
-    dica: dica, campo: campo, grade: grade, rodape: rodape };
+    dica: dica, campo: campo, grade: grade, rodape: rodape, aparencia: aparencia };
 })();

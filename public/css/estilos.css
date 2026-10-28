@@ -64,7 +64,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: var(--fonte);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.4;
   color: var(--texto);
   background-color: var(--fundo);
@@ -308,7 +308,7 @@ body.no-painel { overflow: hidden; }
 /* símbolo (lista e mapa) — forma além da cor: militar = quadrado vermelho, civil = círculo verde */
 .simbolo {
   width: 26px; height: 26px; display: grid; place-items: center;
-  color: #fff; font-weight: 900; font-size: 13px; border: 2px solid #fff;
+  color: #fff; font-weight: 900; font-size: 0.8125rem; border: 2px solid #fff;
   box-shadow: 0 0 0 1.5px #000, 0 2px 6px rgba(0, 0, 0, .7);
 }
 .simbolo-militar { border-radius: 4px; background: var(--militar); }
@@ -338,7 +338,7 @@ body.no-painel { overflow: hidden; }
 .mk-rotulo {
   position: absolute; left: 16px; top: -12px; white-space: nowrap;
   background: rgba(6, 8, 10, .92); color: #fff; border: 1px solid #3d4a57;
-  border-radius: 3px; padding: 1px 6px; font-size: 12px; font-weight: 800; line-height: 18px;
+  border-radius: 3px; padding: 1px 6px; font-size: 0.75rem; font-weight: 800; line-height: 18px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .6); pointer-events: auto;
 }
 .mk-rotulo small { font-family: var(--mono); font-weight: 600; color: var(--texto-3); margin-left: 4px; }
@@ -375,23 +375,23 @@ path.circulo-precisao { stroke: #e8edf2; fill: #e8edf2; }
   box-shadow: var(--sombra) !important;
 }
 .leaflet-control-layers-toggle { filter: invert(1) brightness(1.2); }
-.leaflet-control-layers-expanded { font-size: 14px; }
+.leaflet-control-layers-expanded { font-size: 0.875rem; }
 .leaflet-control-layers-separator { border-top-color: var(--borda) !important; }
 .leaflet-control-attribution { background: rgba(6, 8, 10, .8) !important; color: var(--texto-3) !important; }
 .leaflet-control-attribution a { color: #7dd3fc !important; }
 .leaflet-control-scale-line { background: rgba(6, 8, 10, .8); color: var(--texto); border-color: var(--texto-2); }
-.btn-mapa { font-size: 18px; font-weight: 900; cursor: pointer; }
+.btn-mapa { font-size: 1.125rem; font-weight: 900; cursor: pointer; }
 
 /* legenda */
 .legenda {
   background: rgba(18, 23, 28, .95); color: var(--texto); padding: 8px 10px; border-radius: 6px;
-  border: 1px solid var(--borda-forte); font-size: 12px; line-height: 1.6; box-shadow: var(--sombra);
+  border: 1px solid var(--borda-forte); font-size: 0.75rem; line-height: 1.6; box-shadow: var(--sombra);
 }
 .legenda div { display: flex; align-items: center; gap: 6px; }
 .legenda summary { cursor: pointer; font-family: var(--fonte-titulo); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .legenda details[open] summary { margin-bottom: 2px; }
-.legenda .simbolo { width: 16px; height: 16px; font-size: 9px; border-width: 1.5px; }
-.legenda .simbolo-responsavel { width: 12px; height: 12px; margin: 0 2px; font-size: 8px; }
+.legenda .simbolo { width: 16px; height: 16px; font-size: 0.5625rem; border-width: 1.5px; }
+.legenda .simbolo-responsavel { width: 12px; height: 12px; margin: 0 2px; font-size: 0.5rem; }
 .legenda .linha-trilha { width: 22px; height: 0; border-top: 3px solid; }
 
 /* ---------- Ficha do participante -------------------------------------- */
@@ -949,7 +949,7 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
 .feed-item.nova { box-shadow: inset 0 0 0 1px var(--responsavel); background: #10222a; }
 .feed-topo { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
 .feed-topo strong { overflow-wrap: anywhere; }
-.feed-simbolo .simbolo { width: 20px; height: 20px; font-size: 10px; border-width: 1.5px; }
+.feed-simbolo .simbolo { width: 20px; height: 20px; font-size: 0.625rem; border-width: 1.5px; }
 .feed-simbolo .simbolo-responsavel { width: 16px; height: 16px; margin: 0 2px; }
 .feed-hora { margin-left: auto; font-size: .8rem; }
 .feed-texto { margin: 6px 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1044,28 +1044,28 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
 .mk-relato {
   width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
   background: #f97316; border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000, 0 2px 8px rgba(0, 0, 0, .7);
-  display: grid; place-items: center; color: #0a0d10; font-weight: 900; font-size: 13px;
+  display: grid; place-items: center; color: #0a0d10; font-weight: 900; font-size: 0.8125rem;
 }
 .mk-relato > span { transform: rotate(45deg); line-height: 1; }
 .mk-relato.cat-MENSAGEM { background: #e2e8f0; }
 .mk-relato.cat-OBSTACULO { background: #fbbf24; }
-.mk-relato.cat-VITIMA { background: #d946ef; color: #fff; width: 34px; height: 34px; font-size: 16px; }
+.mk-relato.cat-VITIMA { background: #d946ef; color: #fff; width: 34px; height: 34px; font-size: 1rem; }
 .leaflet-marker-icon.destaque .mk-foto, .leaflet-marker-icon.destaque .mk-relato { animation: destaque-mk .7s ease-in-out 5; }
 @keyframes destaque-mk { 50% { box-shadow: 0 0 0 6px var(--acento), 0 0 22px 8px rgba(245, 158, 11, .8); } }
 .cluster {
   width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; align-content: center; gap: 1px;
   color: #fff; border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000, 0 2px 10px rgba(0, 0, 0, .8); font-family: var(--mono);
 }
-.cluster b { font-size: 12px; line-height: 1; }
+.cluster b { font-size: 0.75rem; line-height: 1; }
 .cluster-fotos { background: #9333ea; }
 .cluster-fotos .ico-camera { width: 12px; height: 8px; border-width: 1.5px; margin-top: 2px; }
 .cluster-fotos .ico-camera::before { display: none; }
 .cluster-fotos .ico-camera::after { width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-width: 1px; }
 .cluster-relatos { background: #f97316; color: #0a0d10; border-color: #fff; }
-.cl-letra { font-weight: 900; font-size: 11px; line-height: 1; }
+.cl-letra { font-weight: 900; font-size: 0.6875rem; line-height: 1; }
 .legenda .mk-foto-legenda { width: 18px; height: 18px; border-width: 1.5px; }
 .legenda .mk-foto-legenda .ico-camera { transform: scale(.65); margin: 0; }
-.legenda .mk-relato-legenda { width: 16px; height: 16px; font-size: 9px; border-width: 1.5px; margin: 0 1px; }
+.legenda .mk-relato-legenda { width: 16px; height: 16px; font-size: 0.5625rem; border-width: 1.5px; margin: 0 1px; }
 .mk.msg-nova .mk-rotulo::after { content: "✉"; margin-left: 5px; color: var(--responsavel-texto); }
 .marker-cluster-anim .leaflet-marker-icon, .marker-cluster-anim .leaflet-marker-shadow { transition: transform .25s ease-out, opacity .25s ease-in; }
 .leaflet-cluster-spider-leg { stroke: #e8edf2; }
@@ -1278,7 +1278,7 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
   pointer-events: none;
 }
 .legenda-civil span { display: inline-flex; align-items: center; gap: 5px; }
-.legenda-civil .simbolo { width: 14px; height: 14px; font-size: 8px; border-width: 1.5px; font-style: normal; }
+.legenda-civil .simbolo { width: 14px; height: 14px; font-size: 0.5rem; border-width: 1.5px; font-style: normal; }
 .legenda-civil .simbolo-responsavel { width: 11px; height: 11px; margin: 0 2px; }
 .lg-eu { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #3b82f6; border: 2px solid #fff; }
 .mapa-civil-nota { margin: -6px 2px 12px; font-size: .88rem; color: var(--texto-3); }
@@ -1290,10 +1290,10 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
 }
 .mk-eu-rotulo {
   position: absolute; left: 14px; top: -11px; white-space: nowrap; padding: 1px 6px; border-radius: 3px;
-  background: #1d4ed8; color: #fff; font-size: 12px; font-weight: 800; line-height: 18px;
+  background: #1d4ed8; color: #fff; font-size: 0.75rem; font-weight: 800; line-height: 18px;
 }
 .mk-equipe.antigo .simbolo { opacity: .45; border-style: dashed; filter: grayscale(.6); }
-.mk-equipe .mk-rotulo { font-size: 11px; }
+.mk-equipe .mk-rotulo { font-size: 0.6875rem; }
 
 /* Botão "Falar com os bombeiros" (mesmo padrão do "Tirar foto") */
 .acao-falar { grid-column: 1 / -1; min-height: 72px; flex-direction: row; gap: 12px; background: #0f2229; border-color: var(--responsavel); color: #cffafe; }
@@ -1329,7 +1329,7 @@ body.conversa-aberta { overflow: hidden; }
 /* Rótulo do setor no centro da área */
 .leaflet-tooltip.rotulo-setor {
   background: rgba(6, 8, 10, .82); color: #fff; border: 1px solid rgba(255, 255, 255, .35); border-radius: 4px;
-  box-shadow: none; padding: 1px 6px; font-size: 11.5px; font-weight: 800; letter-spacing: .02em; white-space: nowrap;
+  box-shadow: none; padding: 1px 6px; font-size: 0.7188rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap;
 }
 .leaflet-tooltip.rotulo-setor::before { display: none; }
 .setor-legenda { display: inline-block; width: 18px; height: 12px; border: 2px dashed #3b82f6; background: rgba(59, 130, 246, .15); border-radius: 2px; }
@@ -1347,7 +1347,7 @@ body.conversa-aberta { overflow: hidden; }
 }
 .mk-poi-rotulo {
   position: absolute; left: 16px; top: -30px; white-space: nowrap; background: rgba(6, 8, 10, .9); color: #fff;
-  border: 1px solid #3d4a57; border-radius: 3px; padding: 0 5px; font-size: 11px; font-weight: 700; line-height: 18px; pointer-events: none;
+  border: 1px solid #3d4a57; border-radius: 3px; padding: 0 5px; font-size: 0.6875rem; font-weight: 700; line-height: 18px; pointer-events: none;
 }
 .poi-ULTIMA_LOCALIZACAO { background: #f8fafc; color: #0a0d10; }
 .poi-POSSIVEL_LOCALIZACAO { background: #fbbf24; color: #0a0d10; }
@@ -1357,7 +1357,7 @@ body.conversa-aberta { overflow: hidden; }
 .poi-VITIMA_ENCONTRADA { background: #10b981; color: #052e16; }
 .poi-OUTRO { background: #64748b; }
 .leaflet-marker-icon.destaque .mk-poi { animation: destaque-mk .7s ease-in-out 5; }
-.legenda .mk-poi-legenda { min-width: 18px; height: 15px; font-size: 9px; border-width: 1.5px; padding: 0 3px; }
+.legenda .mk-poi-legenda { min-width: 18px; height: 15px; font-size: 0.5625rem; border-width: 1.5px; padding: 0 3px; }
 
 /* Barra do modo de desenho */
 .barra-desenho {
@@ -1434,7 +1434,7 @@ body.conversa-aberta { overflow: hidden; }
 /* Ficha: destino ativo do participante */
 .ficha-destino { margin: 0 0 10px; padding: 6px 10px; border-radius: 6px; background: rgba(250, 204, 21, .12); border-left: 4px solid #facc15; color: #fef9c3; font-size: .9rem; }
 .mk-destino-wrap { background: none; border: 0; }
-.mk-destino { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #facc15; border: 2px solid #000; font-size: 16px; }
+.mk-destino { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #facc15; border: 2px solid #000; font-size: 1rem; }
 
 /* Relevo em 3D */
 .visao-3d { position: fixed; inset: 0; z-index: 2300; display: flex; flex-direction: column; background: var(--fundo); }
@@ -1444,12 +1444,12 @@ body.conversa-aberta { overflow: hidden; }
 .visao-3d-mapa { flex: 1; min-height: 0; background: #0e1318; }
 .visao-3d-nota { flex: none; margin: 0; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); font-size: .82rem; color: var(--texto-2); background: var(--superficie); border-top: 1px solid var(--borda); }
 .mk3d { cursor: default; }
-.mk3d .simbolo { width: 22px; height: 22px; font-size: 11px; }
+.mk3d .simbolo { width: 22px; height: 22px; font-size: 0.6875rem; }
 .mk3d.antigo .simbolo { opacity: .5; filter: grayscale(.7); }
 .mk3d-poi .mk-poi { position: relative; }
 .popup-3d .maplibregl-popup-content { background: var(--superficie); color: var(--texto); font-weight: 700; border: 1px solid var(--borda-forte); }
 .popup-3d .maplibregl-popup-tip { border-top-color: var(--superficie) !important; border-bottom-color: var(--superficie) !important; }
-.popup-3d .maplibregl-popup-close-button { color: var(--texto); font-size: 18px; padding: 0 6px; }
+.popup-3d .maplibregl-popup-close-button { color: var(--texto); font-size: 1.125rem; padding: 0 6px; }
 @media (max-width: 599px) {
   .barra-desenho { left: 8px; right: 8px; transform: none; width: auto; top: 8px; }
   .barra-apoio { left: 8px; right: 8px; transform: none; width: auto; bottom: 8px; }
@@ -1593,7 +1593,7 @@ body.conversa-aberta { overflow: hidden; }
 .mk-import { width: 12px; height: 12px; transform: translate(-50%, -50%) rotate(45deg); background: #84cc16; border: 2px solid #1a2e05; }
 .mk-import-rotulo { position: absolute; left: 10px; top: -8px; white-space: nowrap; font: 600 .72rem/1.2 var(--fonte); color: #ecfccb; text-shadow: 0 0 3px #000, 0 0 3px #000; }
 .esconder-rotulos .mk-import-rotulo { display: none; }
-.mk-alvo { transform: translate(-50%, -50%); font-size: 30px; color: #facc15; text-shadow: 0 0 4px #000; line-height: 1; }
+.mk-alvo { transform: translate(-50%, -50%); font-size: 1.875rem; color: #facc15; text-shadow: 0 0 4px #000; line-height: 1; }
 .lista-importados { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .item-importado { border: 1px solid var(--borda); border-radius: 8px; padding: 8px; display: grid; gap: 4px; }
 .modal-estatisticas { max-width: 700px; }
@@ -1634,7 +1634,7 @@ body.conversa-aberta { overflow: hidden; }
 }
 .item-vitima:hover, .item-vitima:focus-visible { border-color: var(--acento); }
 .vitima-mini { flex: none; width: 48px; height: 48px; border-radius: 6px; object-fit: cover; border: 1px solid var(--borda-forte); }
-.vitima-sem-foto { display: grid; place-items: center; background: var(--superficie-3); font-size: 22px; }
+.vitima-sem-foto { display: grid; place-items: center; background: var(--superficie-3); font-size: 1.375rem; }
 .vitima-foto { margin: 8px 0 12px; }
 .vitima-foto img { display: block; max-width: 100%; max-height: 50vh; border-radius: var(--raio); border: 1px solid var(--borda-forte); }
 .grupo-duplo-largo { grid-template-columns: 1fr 140px; }
@@ -1645,15 +1645,15 @@ body.conversa-aberta { overflow: hidden; }
 .mk-local-wrap { background: none; border: 0; }
 .mk-local {
   position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; display: grid; place-items: center;
-  border-radius: 50%; background: #0b1220; color: #f97316; border: 3px solid #f97316; font-size: 18px; font-weight: 900;
+  border-radius: 50%; background: #0b1220; color: #f97316; border: 3px solid #f97316; font-size: 1.125rem; font-weight: 900;
   box-shadow: 0 0 0 1.5px #000, 0 2px 6px rgba(0, 0, 0, .7);
 }
 .mk-local-rotulo {
   position: absolute; left: 18px; top: -10px; white-space: nowrap; background: rgba(6, 8, 10, .92); color: #fdba74;
-  border: 1px solid #f97316; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 800;
+  border: 1px solid #f97316; border-radius: 4px; padding: 1px 6px; font-size: 0.6875rem; font-weight: 800;
 }
 .esconder-rotulos .mk-local-rotulo { display: none; }
-.legenda .mk-local-legenda { position: static; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #f97316; color: #f97316; font-size: 10px; }
+.legenda .mk-local-legenda { position: static; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #f97316; color: #f97316; font-size: 0.625rem; }
 .poi-BASE { background: #0369a1; border-color: #7dd3fc !important; }
 
 /* Falha na trilha: tracejado com início (○) e fim (●) */
@@ -1665,19 +1665,19 @@ body.conversa-aberta { overflow: hidden; }
  * ===================================================================== */
 .controle-grupos {
   background: rgba(18, 23, 28, .95); color: var(--texto); padding: 6px 8px; border-radius: 6px; max-width: 260px;
-  border: 1px solid var(--borda-forte); font-size: 12px; box-shadow: var(--sombra); max-height: 50vh; overflow: auto;
+  border: 1px solid var(--borda-forte); font-size: 0.75rem; box-shadow: var(--sombra); max-height: 50vh; overflow: auto;
 }
 .controle-grupos summary { cursor: pointer; font-family: var(--fonte-titulo); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .lista-grupos-mapa { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .lista-grupos-mapa li { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 4px; }
 .lista-grupos-mapa li.ativo { background: var(--alerta-claro); outline: 1px solid var(--acento); }
 .grupo-mapa-nome { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.btn-olho { min-height: 32px; min-width: 40px; padding: 2px 6px; font-size: 14px; }
+.btn-olho { min-height: 32px; min-width: 40px; padding: 2px 6px; font-size: 0.875rem; }
 .selo-grupo { color: var(--texto); background: var(--superficie-3); border: 1px solid var(--cor-grupo, var(--borda-forte)); box-shadow: inset 4px 0 0 var(--cor-grupo, transparent); }
 /* Responsável do grupo: distintivo branco com estrela (a forma não depende da cor do grupo) */
 .mk.resp-grupo .simbolo::after {
   content: "★"; position: absolute; right: -11px; top: -12px; width: 17px; height: 17px; border-radius: 50%;
-  display: grid; place-items: center; background: #fff; color: #000; font-size: 11px; line-height: 1;
+  display: grid; place-items: center; background: #fff; color: #000; font-size: 0.6875rem; line-height: 1;
   box-shadow: 0 0 0 1.5px #000;
 }
 .linha-grupo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--borda); }
@@ -1972,3 +1972,8 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 /* Rodapé dos formulários fica sempre à vista ao rolar um modal alto */
 .modal .form-rodape { position: sticky; bottom: -20px; margin: 18px -20px -20px; padding: 12px 20px; background: var(--superficie); border-top: 1px solid var(--borda); z-index: 1; }
 .modal .form-rodape:empty { display: none; }
+
+/* Tamanho do texto escolhido pelo usuário (Aparência). Tudo está em rem: o tamanho base do html muda a página inteira. */
+html[data-fonte="maior"] { font-size: 112.5%; }
+html[data-fonte="grande"] { font-size: 125%; }
+html[data-fonte="menor"] { font-size: 93.75%; }

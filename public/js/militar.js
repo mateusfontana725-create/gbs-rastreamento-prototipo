@@ -356,6 +356,7 @@
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
     $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
+    $('menu-aparencia').addEventListener('click', function () { fecharMenu(false); abrirAparencia(); });
     $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
     $('btn-regua').addEventListener('click', alternarRegua);
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
@@ -8024,6 +8025,38 @@
   /* ------------------------------------------------------------------ */
   /* Minha conta: troca da própria senha                                  */
   /* ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------ */
+  /* Aparência: tamanho do texto e botões do topo (neste aparelho)        */
+  /* ------------------------------------------------------------------ */
+  var BOTOES_TOPO = [
+    ['menu-ponto', 'Marcar ponto'], ['btn-registrar-foto', 'Foto'], ['menu-setor', 'Setor'], ['menu-trilha', 'Trilha'],
+    ['btn-regua', 'Régua'], ['menu-cenario', 'POA/POD'], ['menu-dashboard', 'Dashboard'],
+  ];
+  function abrirAparencia() {
+    var ap = UI.aparencia;
+    var atual = ap.ler();
+    var fonte = UI.el('div', { classe: 'seg', role: 'radiogroup', 'aria-label': 'Tamanho do texto' }, Object.keys(ap.fontes).map(function (k) {
+      return UI.el('button', { classe: 'seg-opcao', type: 'button', 'aria-pressed': String(atual.fonte === k), 'data-fonte': k, texto: ap.fontes[k],
+        onclick: function () { ap.definirFonte(k); fechar(); abrirAparencia(); } });
+    }));
+    var caixas = BOTOES_TOPO.map(function (b) {
+      var oculto = atual.ocultos.indexOf(b[0]) !== -1;
+      return UI.el('label', { classe: 'linha-opcao' }, [
+        UI.el('input', { type: 'checkbox', id: 'ap-' + b[0], checked: !oculto ? true : null, onchange: function (ev) { ap.alternarOculto(b[0], !ev.target.checked); } }),
+        ' ' + b[1],
+      ]);
+    });
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Aparência' }, [UI.dica('Fica neste aparelho. Não muda nada para as outras pessoas.')]),
+      UI.campo('Tamanho do texto', fonte, { largo: true }),
+      UI.campo('Botões no topo', UI.el('div', { classe: 'caixas-coluna' }, caixas), { largo: true, dica: 'Desmarque para esconder. "Ferramentas" fica sempre à vista.' }),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Padrão', onclick: function () { ap.restaurar(); fechar(); abrirAparencia(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Pronto', onclick: function () { fechar(); } }),
+      ]),
+    ]));
+  }
+
   function abrirMinhaConta() {
     var s1 = UI.el('input', { classe: 'campo', type: 'password', id: 'conta-senha1', autocomplete: 'new-password', maxlength: '72' });
     var s2 = UI.el('input', { classe: 'campo', type: 'password', id: 'conta-senha2', autocomplete: 'new-password', maxlength: '72' });

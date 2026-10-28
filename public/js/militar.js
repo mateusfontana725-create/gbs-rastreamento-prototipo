@@ -6062,12 +6062,11 @@
 
     var traj = window.Rotas.temTrajeto(alvo);
     var rotaTraj = traj ? window.Rotas.deTracado(alvo.trajeto, { modo: 'a_pe' }) : null;
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: traj ? 'Enviar trajeto desenhado' : 'Enviar destino' }),
-      UI.el('p', { classe: 'ajuda', texto: traj
-        ? 'O celular mostra a linha que você desenhou (' + window.Rotas.formatarDistancia(rotaTraj.distancia_m) + ', ' + rotaTraj.passos.filter(function (x) { return x.tipo === 'curva'; }).length +
-          ' curva(s)) e guia a pessoa por ela, do início (verde) ao fim. O destino é o fim da linha.'
-        : 'O celular de cada participante escolhido mostra o destino no mapa, a distância em linha reta e a direção. Coordenadas: ' + C.coord(alvo.lat) + ', ' + C.coord(alvo.lng) + '.' }),
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: traj ? 'Enviar trajeto' : 'Enviar destino' },
+        [UI.dica(traj
+          ? 'O celular mostra a linha desenhada (' + window.Rotas.formatarDistancia(rotaTraj.distancia_m) + ', ' + rotaTraj.passos.filter(function (x) { return x.tipo === 'curva'; }).length + ' curva(s)) e guia a pessoa do início ao fim.'
+          : 'O celular mostra o destino no mapa, a distância em linha reta e a direção. ' + C.coord(alvo.lat) + ', ' + C.coord(alvo.lng) + '.')]),
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-nome', texto: traj ? 'Nome do trajeto (o participante vê este nome)' : 'Nome do destino (o participante vê este nome)' }), nome]),
       UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: traj ? 'Como vão percorrer (para estimar o tempo)' : 'Rota até lá (o celular calcula por ruas, caminhos e trilhas)' }), modos]),
       UI.el('div', { classe: 'abas', role: 'group', 'aria-label': 'Enviar para' }, [abaPessoas, abaGrupo]),
@@ -6316,12 +6315,12 @@
         ]);
       }));
     var idade = Date.now() - pos.t;
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Rota até ' + nomeExibido(p) }),
-      UI.el('p', { classe: 'ajuda', texto: 'Última posição às ' + C.hora(p.dados.ultima_posicao_em, false) + ' (' + C.idade(p.dados.ultima_posicao_em) + ')' +
-        (idade > 5 * 60000 ? '. ATENÇÃO: posição antiga — a pessoa pode estar sem sinal; a rota vai até onde ela foi vista por último.' : '. A rota acompanha a pessoa enquanto ela anda.') }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rota-ate-origem', texto: 'Saindo de' }), sel]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Como vai até lá' }), modos]),
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Rota até ' + nomeExibido(p) },
+        [UI.dica('Última posição às ' + C.hora(p.dados.ultima_posicao_em, false) + ' (' + C.idade(p.dados.ultima_posicao_em) + ').' +
+          (idade > 5 * 60000 ? ' Posição antiga: a pessoa pode estar sem sinal; a rota vai até onde foi vista por último.' : ' A rota acompanha a pessoa enquanto ela anda.'))]),
+      UI.campo('Saindo de', sel, { para: 'rota-ate-origem', largo: true }),
+      UI.campo('Como vai', modos, { largo: true }),
       UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', id: 'rota-ate-enviar', texto: 'Mandar alguém até ela',
@@ -8959,8 +8958,8 @@
     render();
     est.renderGruposAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-membros' }, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' Membros — ' + g.nome]),
-      UI.el('p', { classe: 'ajuda', texto: 'O responsável do grupo (★) pode receber o destino pelo grupo e avisar pelo celular que a busca no setor terminou.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+        UI.dica('O responsável (★) pode receber o destino pelo grupo e avisar que a busca no setor terminou.')]),
       corpo,
       UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
@@ -9534,13 +9533,11 @@
         ]),
       ]),
       UI.el('details', { classe: 'grupo detalhes-prazos', open: personalizado ? true : null }, [
-        UI.el('summary', { texto: 'Alertas e combinados (padrão: 10 min e 10 min)' }),
+        UI.el('summary', null, ['Alertas e combinados (padrão: 10 min)', UI.dica('Atraso: o horário passou e a condição não foi cumprida, além da tolerância. Falta de contato: alguém ficou sem notícia por esse tempo. Sem internet, o celular guarda as posições e envia depois.')]),
         UI.el('div', { classe: 'grupo-duplo' }, [
           UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-tolerancia', texto: 'Avisar atraso depois de (min)' }), tol]),
           UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-sem-sinal', texto: 'Avisar falta de contato depois de (min sem sinal)' }), sem]),
         ]),
-        UI.el('p', { classe: 'ajuda', texto: 'Atraso: o horário passou e a condição não foi cumprida, além da tolerância. Falta de contato: alguém ficou sem nenhuma notícia por esse tempo. ' +
-          'Sem internet, o celular guarda as posições e envia quando o sinal volta.' }),
         UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-combinado', texto: 'O que foi combinado com o grupo (opcional)' }), comb]),
       ]),
     ]);
@@ -9632,8 +9629,8 @@
     var campos = camposPrazos(m);
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'prazos-salvar', texto: 'Salvar horários' });
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Horários do deslocamento' }),
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Horários' }),
       UI.el('p', { classe: 'ajuda', texto: m.grupo_nome + ' → ' + m.nome + (m.base_nome ? ' · base: ' + m.base_nome : ' · sem base') }),
       campos.el, erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),

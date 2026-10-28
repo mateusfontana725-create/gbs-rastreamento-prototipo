@@ -28,6 +28,14 @@ function ambiente(extra) { Object.assign(process.env, ENV, extra || {}); }
 const req = (query, token) => ({ method: 'GET', query: query, headers: token ? { authorization: 'Bearer ' + token } : {} });
 const RESP_OK = { 'rpc/eh_responsavel': ok(true) };
 const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
+// Resposta no formato do MET Norway (Locationforecast 2.0, compact): vento em m/s, direção de onde vem
+function metResp(temp, ventoMs, dir, precip, sim) {
+  const bloco = { time: new Date().toISOString(), data: {
+    instant: { details: { air_temperature: temp, wind_speed: ventoMs, wind_from_direction: dir } },
+    next_1_hours: { summary: { symbol_code: sim || 'clearsky_day' }, details: { precipitation_amount: precip } } } };
+  return { properties: { timeseries: Array.from({ length: 13 }, () => bloco) } };
+}
+const MET = (fn) => (url) => json(fn(url));
 
 (async () => {
   console.log('Meteorologia: endpoint /api/meteo');
@@ -55,24 +63,33 @@ const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
     ambiente({ METEO_ALERTAS_URL: '' });
     global.fetch = fetchFalso({
       'rpc/eh_responsavel': ok(true),
-      'rainviewer.com': () => json({}, 503),
-      'open-meteo.com': ok({ current: { time: AGORA_GMT.slice(0, 16), temperature_2m: 21, precipitation: 0, weather_code: 3, wind_speed_10m: 12, wind_gusts_10m: 30 },
-        hourly: { time: [AGORA_GMT.slice(0, 16)], precipitation: [0.2], precipitation_probability: [20], weather_code: [3], wind_gusts_10m: [30] } }),
+      'api.met.no/weatherapi/locationforecast': MET(() => metResp(21, 3.3, 90, 0.2, 'lightrain_day')),
     });
     const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
     assert.strictEqual(r.code, 200);
     assert.strictEqual(r.body.fontes.radar.ok, false);
+    assert.strictEqual(r.body.fontes.radar.status, 'desligado');
     assert.strictEqual(r.body.fontes.previsao.ok, true);
+    assert.strictEqual(r.body.fontes.previsao.nome, 'MET Norway');
     assert.strictEqual(r.body.radar, null);
-    assert.ok(r.body.previsao.atual.temperatura === 21);
+    assert.strictEqual(r.body.previsao.atual.temperatura, 21);
     assert.strictEqual(r.body.fontes.alertas.status, 'nao_configurado');
   });
-  await teste('radar: quadros com horário e caminho para os tiles', async () => {
-    ambiente({ METEO_ALERTAS_URL: '' });
+  await teste('radar desligado por padrão: não consulta o RainViewer', async () => {
+    ambiente({ METEO_ALERTAS_URL: '' }); delete process.env.METEO_RADAR;
+    let chamouRainViewer = false;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'api.met.no/weatherapi/locationforecast': MET(() => metResp(20, 1, 0, 0)),
+      'rainviewer.com': () => { chamouRainViewer = true; return json({}, 503); } });
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
+    assert.strictEqual(chamouRainViewer, false);
+    assert.strictEqual(r.body.radar, null);
+  });
+  await teste('radar: quadros com horário e caminho para os tiles (quando ligado)', async () => {
+    ambiente({ METEO_ALERTAS_URL: '', METEO_RADAR: 'rainviewer' });
     global.fetch = fetchFalso({
       'rpc/eh_responsavel': ok(true),
       'rainviewer.com/public': ok({ host: 'https://tilecache.rainviewer.com', generated: 1700000000, radar: { past: [{ time: 1700000000 - 600, path: '/v2/radar/a' }, { time: 1700000000, path: '/v2/radar/b' }] } }),
-      'open-meteo.com': () => json({}, 500),
+      'api.met.no/weatherapi/locationforecast': () => json({}, 500),
     });
     const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
     assert.strictEqual(r.body.radar.host, 'https://tilecache.rainviewer.com');
@@ -80,6 +97,7 @@ const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
     assert.strictEqual(r.body.radar.quadros[1].path, '/v2/radar/b');
     assert.ok(!Number.isNaN(Date.parse(r.body.radar.quadros[1].t)));
     assert.strictEqual(r.body.fontes.previsao.ok, false);
+    delete process.env.METEO_RADAR;
   });
   await teste('alertas oficiais: só os do Paraná, com severidade e validade', async () => {
     ambiente({ METEO_ALERTAS_URL: 'https://alertas.exemplo.test/cap.json' });
@@ -109,11 +127,48 @@ const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
     assert.strictEqual(r.body.fontes.alertas.status, 'erro');
     assert.deepStrictEqual(r.body.alertas, []);
   });
-  await teste('avisos de licença aparecem junto com os dados', async () => {
-    ambiente({ METEO_ALERTAS_URL: '' });
-    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'rainviewer.com/public': ok({ host: 'https://h', radar: { past: [{ time: 1, path: '/p' }] } }), 'open-meteo.com': () => json({}, 503) });
+  await teste('avisos de licença aparecem junto com os dados (radar ligado e MET Norway)', async () => {
+    ambiente({ METEO_ALERTAS_URL: '', METEO_RADAR: 'rainviewer' }); delete process.env.OPEN_METEO_API_KEY;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'rainviewer.com/public': ok({ host: 'https://h', radar: { past: [{ time: 1, path: '/p' }] } }),
+      'api.met.no/weatherapi/locationforecast': MET(() => metResp(20, 1, 0, 0)) });
     const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
     assert.ok(r.body.avisos.some((t) => /RainViewer/.test(t) && /licença/i.test(t)));
+    assert.ok(r.body.avisos.some((t) => /MET Norway/.test(t) && /atribuição/i.test(t)));
+    delete process.env.METEO_RADAR;
+  });
+  await teste('MET Norway: vento convertido de m/s para km/h, direção e chuva da hora', async () => {
+    ambiente({ METEO_ALERTAS_URL: '' }); delete process.env.OPEN_METEO_API_KEY;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'api.met.no/weatherapi/locationforecast': MET(() => metResp(18.5, 5, 225, 1.4, 'rain_night')) });
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
+    assert.strictEqual(r.body.previsao.atual.vento, 18);
+    assert.strictEqual(r.body.previsao.atual.direcao, 225);
+    assert.strictEqual(r.body.previsao.atual.precipitacao, 1.4);
+    assert.strictEqual(r.body.previsao.atual.codigo, 61);
+    assert.strictEqual(r.body.previsao.atual.rajada, null);
+    assert.strictEqual(r.body.previsao.horas.length, 12);
+  });
+  await teste('identifica o aplicativo na consulta à MET Norway (User-Agent)', async () => {
+    ambiente({ METEO_ALERTAS_URL: '' }); delete process.env.OPEN_METEO_API_KEY; process.env.METEO_USER_AGENT = 'GBS-Teste/9.9 (contato@exemplo.test)';
+    let cabecalho = null;
+    global.fetch = async (url, opcoes) => {
+      if (url.includes('rpc/eh_responsavel')) return ok(true)();
+      if (url.includes('api.met.no')) { cabecalho = opcoes.headers['user-agent']; return json(metResp(20, 1, 0, 0)); }
+      throw new Error('rede indisponível (teste): ' + url);
+    };
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
+    assert.strictEqual(cabecalho, 'GBS-Teste/9.9 (contato@exemplo.test)');
+    delete process.env.METEO_USER_AGENT;
+  });
+  await teste('com chave do Open-Meteo, usa o plano comercial no lugar do MET Norway', async () => {
+    ambiente({ METEO_ALERTAS_URL: '', OPEN_METEO_API_KEY: 'chave-teste' });
+    let usouCustomer = false;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true),
+      'customer-api.open-meteo.com': () => { usouCustomer = true; return json({ current: { time: AGORA_GMT.slice(0, 16), temperature_2m: 21, precipitation: 0, weather_code: 3, wind_speed_10m: 12 }, hourly: { time: [] } }); },
+      'api.met.no': () => { throw new Error('não deveria chamar o MET Norway'); } });
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
+    assert.ok(usouCustomer);
+    assert.strictEqual(r.body.fontes.previsao.nome, 'Open-Meteo');
+    delete process.env.OPEN_METEO_API_KEY;
   });
 
   await teste('grade: n × n em ordem de linhas, cobrindo 2 × meia-largura ao redor do centro', async () => {
@@ -124,28 +179,47 @@ const AGORA_GMT = new Date().toISOString().slice(0, 13) + ':00';
     const km = (g.pontos[8].lng - g.pontos[0].lng) * 111.32 * Math.cos(-25.4 * Math.PI / 180);
     assert.ok(Math.abs(km - 30) < 0.5, 'largura ' + km);
   });
-  await teste('endpoint de grade: vento e temperatura da grade inteira, sem chave no retorno', async () => {
+  await teste('endpoint de grade (MET Norway): 7 × 7 pontos com vento em km/h, sem chave no retorno', async () => {
     ambiente({}); delete process.env.OPEN_METEO_API_KEY;
+    let consultas = 0;
     global.fetch = fetchFalso({
       'rpc/eh_responsavel': ok(true),
-      'open-meteo.com': (url) => {
-        const n = url.split('latitude=')[1].split('&')[0].split(',').length;
-        return json(Array.from({ length: n }, (_, i) => ({ current: { temperature_2m: 15 + i, wind_speed_10m: 8, wind_direction_10m: 270 } })));
-      },
+      'api.met.no/weatherapi/locationforecast': () => { consultas++; return json(metResp(15, 2, 270, 0)); },
     });
-    const r = resposta(); await carregar()(Object.assign(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade' }, 't')), r);
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade' }, 't'), r);
     assert.strictEqual(r.code, 200);
     assert.strictEqual(r.body.ok, true);
-    assert.strictEqual(r.body.grade.pontos.length, 169);   // 13 × 13 (padrão: 50 km de cada lado)
-    assert.strictEqual(r.body.grade.pontos[0].temperatura, 15);
-    assert.strictEqual(r.body.grade.pontos[168].temperatura, 183);
+    assert.strictEqual(r.body.fonte, 'MET Norway');
+    assert.strictEqual(r.body.grade.pontos.length, 49);
+    assert.strictEqual(consultas, 49);
+    assert.strictEqual(r.body.grade.pontos[0].vento, 7.2);
+    assert.strictEqual(r.body.grade.pontos[0].direcao, 270);
+    assert.strictEqual(r.body.grade.nLin, 7);
     assert.ok(!JSON.stringify(r.body).includes('apikey'));
   });
-  await teste('grade com resposta incompleta da fonte: falha sem inventar pontos', async () => {
-    ambiente({}); global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'open-meteo.com': ok([{ current: { temperature_2m: 1 } }]) });
+  await teste('grade com um ponto sem resposta da fonte: falha sem inventar pontos', async () => {
+    ambiente({}); delete process.env.OPEN_METEO_API_KEY;
+    let n = 0;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true),
+      'api.met.no/weatherapi/locationforecast': () => { n++; return n === 5 ? json({}, 503) : json(metResp(1, 1, 0, 0)); } });
     const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade' }, 't'), r);
     assert.strictEqual(r.body.ok, false);
     assert.strictEqual(r.body.grade, null);
+  });
+  await teste('grade com Open-Meteo (chave): usa o endpoint comercial', async () => {
+    ambiente({ OPEN_METEO_API_KEY: 'chave-teste' });
+    let usou = false;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true),
+      'customer-api.open-meteo.com': (url) => {
+        usou = true;
+        const n = url.split('latitude=')[1].split('&')[0].split(',').length;
+        return json(Array.from({ length: n }, (_, i) => ({ current: { temperature_2m: i, wind_speed_10m: 8, wind_direction_10m: 270 } })));
+      } });
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2', tipo: 'grade' }, 't'), r);
+    assert.ok(usou);
+    assert.strictEqual(r.body.fonte, 'Open-Meteo');
+    assert.strictEqual(r.body.grade.pontos.length, 169);
+    delete process.env.OPEN_METEO_API_KEY;
   });
 
   if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }

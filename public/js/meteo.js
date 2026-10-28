@@ -1,7 +1,7 @@
 /* =====================================================================
  * meteo.js — painel "Meteorologia" do responsável.
  *   - alertas: chuva na área (distância e direção), previsão e alertas oficiais
- *   - camadas no mapa: Radar (RainViewer, observado), Vento e Temperatura (Open-Meteo, previsão de modelo)
+ *   - camadas no mapa: Radar (RainViewer, desligado por padrão), Vento e Temperatura (previsão de modelo: MET Norway)
  *   - aviso no mapa que pode ser ocultado sem parar o monitoramento; som só para Alerta e Crítico
  * Dados sempre de /api/meteo (servidor). Se uma fonte falhar, o painel diz qual; o mapa e o GPS seguem.
  * ===================================================================== */
@@ -306,6 +306,8 @@
     desenharAlertas();
     desenharLegenda();
     $('meteo-radar-bloco').hidden = !(est.radar && est.quadros.length);
+    // Sem radar no servidor (desligado por padrão), o botão Radar não aparece
+    $('meteo-radar').hidden = !est.quadros.length;
     desenharPrevisao();
     desenharFontes();
     desenharGradeEstado();
@@ -398,7 +400,7 @@
     if (f) {
       Object.keys(f).forEach(function (k) {
         var x = f[k];
-        var txt = x.nome + ': ' + (x.ok ? 'ok' + (x.obtidoEm ? ' às ' + hora(x.obtidoEm) : '') : (x.status === 'nao_configurado' ? 'não configurado' : 'indisponível'));
+        var txt = x.nome + ': ' + (x.ok ? 'ok' + (x.obtidoEm ? ' às ' + hora(x.obtidoEm) : '') : (x.status === 'nao_configurado' ? 'não configurado' : x.status === 'desligado' ? 'desligado' : 'indisponível'));
         linhas.push(txt);
       });
     }
@@ -410,7 +412,7 @@
     var el = $('meteo-grade-estado');
     if (est.gradeErro) el.textContent = 'Vento, temperatura e chuva na região indisponíveis: ' + est.gradeErro;
     else if (!est.grade) el.textContent = '';
-    else el.textContent = 'Vento, temperatura e chuva por ponto da região (Open-Meteo' + (est.gradeEm ? ', ' + hora(est.gradeEm) : '') + ').';
+    else el.textContent = 'Vento, temperatura e chuva por ponto da região (previsão de modelo' + (est.gradeEm ? ', ' + hora(est.gradeEm) : '') + '). Previsão: MET Norway, com atribuição.';
     el.className = 'meteo-detalhe' + (est.gradeErro ? ' meteo-desat' : '');
   }
 

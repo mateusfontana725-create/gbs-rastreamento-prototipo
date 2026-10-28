@@ -1,10 +1,14 @@
 // GET /api/meteo?lat=-25.4&lng=-49.2  → dados meteorológicos da área da operação (só responsáveis).
 //
 // Fontes (cada uma independente: a falha de uma não derruba as outras):
-//   radar     RainViewer  https://api.rainviewer.com/public/weather-maps.json (sem chave).
-//             Uso gratuito restrito a fins pessoais e educacionais: confirmar licença antes do uso operacional.
-//   previsao  Open-Meteo  sem chave no uso não comercial; OPEN_METEO_API_KEY (opcional) usa o plano comercial.
+//   previsao  MET Norway (Meteorologisk institutt), Locationforecast 2.0: sem chave, cobre o Brasil e
+//             é de uso gratuito com atribuição e identificação do aplicativo (User-Agent). Padrão.
+//             Se OPEN_METEO_API_KEY estiver definida, usa o Open-Meteo do plano comercial no lugar.
+//   radar     RainViewer, SÓ se METEO_RADAR=rainviewer. A licença é apenas pessoal e educacional
+//             (não usar em operação); por isso fica desligado por padrão. Sem radar gratuito com
+//             licença comercial que cubra o Brasil.
 //   alertas   INMET (CAP) URL em METEO_ALERTAS_URL. Sem a variável, o serviço informa "não configurado".
+//   METEO_USER_AGENT (opcional): identificação do aplicativo exigida pela MET Norway (ex.: nome + contato).
 //
 // Segurança: chamada exige o login de um responsável (eh_responsavel, com o token da própria pessoa).
 // As chaves ficam só no servidor (variáveis da Vercel). Cache em memória por instância para não repetir consultas.
@@ -70,6 +74,78 @@ async function previsaoOpenMeteo(lat, lng) {
         codigo: h.weather_code ? h.weather_code[i] : null, rajada: h.wind_gusts_10m ? h.wind_gusts_10m[i] : null };
     }),
   };
+}
+
+// MET Norway: uma consulta por ponto. Vento vem em m/s (convertido para km/h, como o resto do painel);
+// não há rajadas nem probabilidade de chuva nesta fonte, então esses campos ficam vazios.
+const METNO_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
+function agenteUsuario() {
+  return (process.env.METEO_USER_AGENT || '').trim() || 'GBS-Rastreamento/1.0 (https://github.com/mateusfontana725-create/gbs-rastreamento-prototipo)';
+}
+async function getJsonMet(url) {
+  const r = await fetch(url, { headers: { accept: 'application/json', 'user-agent': agenteUsuario() }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+// Símbolo da MET (ex.: "rain_day", "heavyrainandthunder") → código WMO usado pelos alertas do painel.
+function codigoMet(sim) {
+  if (!sim) return null;
+  const base = String(sim).replace(/_(day|night|polartwilight)$/, '');
+  if (/thunder/.test(base)) return 95;
+  if (/^heavyrain/.test(base)) return 65;
+  if (/^rain(showers)?$/.test(base) || base === 'rainshowers') return 61;
+  if (/^lightrain/.test(base)) return 51;
+  if (/sleet/.test(base)) return 66;
+  if (/snow/.test(base)) return 71;
+  if (base === 'fog') return 45;
+  if (base === 'cloudy') return 3;
+  if (base === 'partlycloudy') return 2;
+  if (base === 'fair') return 1;
+  if (base === 'clearsky') return 0;
+  return null;
+}
+function linhaMet(bloco) {
+  const d = bloco.data || {};
+  const inst = (d.instant && d.instant.details) || {};
+  const n1 = d.next_1_hours || {};
+  return {
+    t: new Date(bloco.time).toISOString(),
+    temperatura: inst.air_temperature != null ? inst.air_temperature : null,
+    vento: inst.wind_speed != null ? Math.round(inst.wind_speed * 3.6 * 10) / 10 : null,
+    direcao: inst.wind_from_direction != null ? inst.wind_from_direction : null,
+    precip: n1.details && n1.details.precipitation_amount != null ? n1.details.precipitation_amount : null,
+    codigo: codigoMet(n1.summary && n1.summary.symbol_code),
+  };
+}
+function seriesMet(j) {
+  const serie = (j && j.properties && j.properties.timeseries) || [];
+  if (!serie.length) throw new Error('resposta sem previsão');
+  return serie.map(linhaMet);
+}
+async function previsaoMetNorway(lat, lng) {
+  const linhas = seriesMet(await getJsonMet(METNO_URL + '?lat=' + lat + '&lon=' + lng)).slice(0, 12);
+  const a = linhas[0];
+  return {
+    atual: { t: a.t, temperatura: a.temperatura, precipitacao: a.precip, codigo: a.codigo, vento: a.vento, rajada: null, direcao: a.direcao },
+    horas: linhas.map(function (l) { return { t: l.t, precip: l.precip, prob: null, codigo: l.codigo, rajada: null }; }),
+  };
+}
+// Grade mais leve que a do Open-Meteo (uma consulta por ponto): 7 × 7, em lotes de 6 consultas simultâneas.
+const GRADE_N_METNO = 7;
+async function gradeMetNorway(lat, lng, meiaKm) {
+  const g = montarGrade(lat, lng, meiaKm, GRADE_N_METNO);
+  const pontos = [];
+  for (let i = 0; i < g.pontos.length; i += 6) {
+    const lote = g.pontos.slice(i, i + 6);
+    const res = await Promise.all(lote.map(function (p) {
+      return getJsonMet(METNO_URL + '?lat=' + p.lat + '&lon=' + p.lng).then(function (j) { return seriesMet(j)[0]; }).catch(function () { return null; });
+    }));
+    res.forEach(function (x, k) {
+      if (!x) throw new Error('grade incompleta: a fonte não respondeu para um dos pontos');
+      pontos.push({ lat: lote[k].lat, lng: lote[k].lng, temperatura: x.temperatura, vento: x.vento, direcao: x.direcao, precipitacao: x.precip });
+    });
+  }
+  return { lat0: g.lat0, lng0: g.lng0, dlat: g.dlat, dlng: g.dlng, nLin: g.nLin, nCol: g.nCol, pontos: pontos };
 }
 
 // Alertas no formato CAP (campos com nomes de CAP). A estrutura exata do feed do INMET não foi
@@ -174,32 +250,43 @@ module.exports = async (req, res) => {
   // Arredonda para agrupar consultas parecidas no cache (≈ 1 km).
   const latR = Math.round(lat * 100) / 100, lngR = Math.round(lng * 100) / 100;
 
+  // Previsão: Open-Meteo só com chave (plano comercial); sem chave, MET Norway (gratuito).
+  const openMeteo = Boolean((process.env.OPEN_METEO_API_KEY || '').trim());
+  const nomePrevisao = openMeteo ? 'Open-Meteo' : 'MET Norway';
+  // Radar: desligado por padrão (licença só pessoal/educacional); ligue com METEO_RADAR=rainviewer.
+  const radarLigado = (process.env.METEO_RADAR || '').trim() === 'rainviewer';
+
   if (grade) {
-    const chaveG = 'grade:' + latR + ',' + lngR;
-    const r = await comCache(chaveG, TTL.previsao, function () { return gradeOpenMeteo(latR, lngR, GRADE_MEIA_KM); });
+    const chaveG = 'grade:' + nomePrevisao + ':' + latR + ',' + lngR;
+    const r = await comCache(chaveG, TTL.previsao, function () {
+      return openMeteo ? gradeOpenMeteo(latR, lngR, GRADE_MEIA_KM) : gradeMetNorway(latR, lngR, GRADE_MEIA_KM);
+    });
     return res.status(200).json({
       atualizadoEm: new Date().toISOString(),
-      fonte: 'Open-Meteo',
+      fonte: nomePrevisao,
       ok: r.ok, obtidoEm: r.obtidoEm, erro: r.erro || null,
       grade: r.ok ? r.dados : null,
     });
   }
 
   const [radar, previsao, inmet] = await Promise.all([
-    comCache('radar', TTL.radar, radarRainViewer),
-    comCache('previsao:' + latR + ',' + lngR, TTL.previsao, function () { return previsaoOpenMeteo(latR, lngR); }),
+    radarLigado ? comCache('radar', TTL.radar, radarRainViewer) : Promise.resolve({ ok: false, obtidoEm: null, erro: null, dados: null }),
+    comCache('previsao:' + nomePrevisao + ':' + latR + ',' + lngR, TTL.previsao, function () {
+      return openMeteo ? previsaoOpenMeteo(latR, lngR) : previsaoMetNorway(latR, lngR);
+    }),
     comCache('alertas', TTL.alertas, alertasInmet),
   ]);
 
   const avisos = [];
-  if (radar.ok) avisos.push('Radar RainViewer: uso gratuito restrito a fins pessoais e educacionais. Confirme a licença antes do uso operacional.');
-  if (previsao.ok && (process.env.OPEN_METEO_API_KEY || '').trim() === '') avisos.push('Previsão Open-Meteo: uso gratuito não comercial; confirme a licença para este uso.');
+  if (radarLigado && radar.ok) avisos.push('Radar RainViewer: uso gratuito restrito a fins pessoais e educacionais. Confirme a licença antes do uso operacional.');
+  if (previsao.ok && !openMeteo) avisos.push('Previsão MET Norway: exige atribuição ("MET Norway") e identificação do aplicativo. Confira os termos de uso.');
+  if (previsao.ok && openMeteo) avisos.push('Previsão Open-Meteo: plano comercial com chave.');
 
   return res.status(200).json({
     atualizadoEm: new Date().toISOString(),
     fontes: {
-      radar: { nome: 'RainViewer', ok: radar.ok, obtidoEm: radar.obtidoEm, erro: radar.erro || null },
-      previsao: { nome: 'Open-Meteo', ok: previsao.ok, obtidoEm: previsao.obtidoEm, erro: previsao.erro || null },
+      radar: { nome: 'RainViewer', ok: radar.ok, status: radarLigado ? (radar.ok ? 'ok' : 'erro') : 'desligado', obtidoEm: radar.obtidoEm, erro: radar.erro || (radarLigado ? null : 'Desligado: sem radar gratuito com licença comercial para o Brasil.') },
+      previsao: { nome: nomePrevisao, ok: previsao.ok, obtidoEm: previsao.obtidoEm, erro: previsao.erro || null },
       alertas: inmet.ok && inmet.dados && !inmet.dados.configurado
         ? { nome: 'INMET (CAP)', ok: false, status: 'nao_configurado', erro: 'Defina METEO_ALERTAS_URL na Vercel para ver os alertas oficiais.' }
         : { nome: 'INMET (CAP)', ok: inmet.ok, obtidoEm: inmet.obtidoEm, status: inmet.ok ? 'ok' : 'erro', erro: inmet.erro || null },

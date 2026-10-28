@@ -601,17 +601,19 @@ e o mapa e o rastreamento continuam funcionando.
 > **não foi verificado contra as APIs reais** (o ambiente de desenvolvimento não tinha acesso a elas). Confirme a
 > resposta real de cada fonte depois de publicar, em Preview, antes de usar em operação.
 
-- **Radar de precipitação** (RainViewer): quadros recentes com horário, linha do tempo e animação (▶). Cada quadro
-  é **observado** pelo radar. Não há extrapolação do radar nesta versão.
+- **Radar de precipitação** (RainViewer): **desligado por padrão**, porque a licença do RainViewer é só pessoal e
+  educacional. Liga-se com `METEO_RADAR=rainviewer` (só para testes). Não há radar gratuito com licença comercial que cubra
+  o Brasil; a alternativa profissional é um provedor pago (ver a seção de licenças).
 - **Vento e temperatura no mapa** (estilo dos mapas de vento): partículas animadas seguindo a direção e a velocidade
   do vento, e um campo colorido de temperatura, sobre uma região de 240 km (120 km para cada lado da operação). Não há seletor de área: afaste o mapa para ver o radar de regiões maiores.
-  Vêm de uma grade de 169 pontos (Open-Meteo), atualizada junto com a previsão. Mostram a **previsão de modelo** (vento e temperatura
+  Vêm de uma grade de 49 pontos (7 × 7, MET Norway; 169 pontos com o Open-Meteo pago), atualizada junto com a previsão. Mostram a **previsão de modelo** (vento e temperatura
   atuais), não observação. Ligue em **Vento** e **Temperatura** dentro da camada Meteorologia.
 - **Chuva na região**: a grade mostra a chuva em cada ponto. O alerta indica a distância e a direção (cardeal) do ponto
   molhado mais próximo do centro, para ajudar a decidir se dá tempo de sair. Não há direção de deslocamento: é só a
   posição atual segundo o modelo.
-- **Previsão** (Open-Meteo) para o centro da operação: temperatura, vento e rajadas agora, e a chegada prevista da
-  chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). É previsão de modelo, não extrapolação do radar.
+- **Previsão** (MET Norway; Open-Meteo se houver chave) para o centro da operação: temperatura, vento e chuva agora, e a
+  chegada prevista da chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). A fonte MET não informa rajadas nem
+  probabilidade de chuva: esses campos ficam em branco e não geram alerta de rajada. É previsão de modelo, não extrapolação do radar.
 - **Alertas**: níveis Informativo, Atenção, Alerta e Crítico, com fonte, horário, validade e estado (novo, atualizado,
   ativo, expirado). Alertas oficiais do INMET (formato CAP) têm prioridade. Os indicativos calculados (chuva, rajada,
   tempestade e granizo a partir do código do modelo) são rotulados como tal. O som toca só para Alerta e Crítico,
@@ -621,17 +623,21 @@ e o mapa e o rastreamento continuam funcionando.
 - **Monitoramento**: a leitura acontece ao abrir a operação e a cada 5 min, só com a aba visível. Ocultar o aviso
   não para o monitoramento. O endpoint exige o login de um responsável e tem cache de 5 a 15 min por fonte.
 
-**Licenças (confirme antes do uso operacional):** RainViewer é gratuito só para fins pessoais e educacionais; Open-Meteo
-é gratuito só para uso não comercial e exige plano (chave) para produção. O endpoint inclui esses avisos na resposta.
+**Licenças (confirme antes do uso operacional):** a previsão padrão vem do **MET Norway** (Meteorologisk institutt): sem chave,
+cobre o Brasil e exige atribuição ("MET Norway") e identificação do aplicativo (`METEO_USER_AGENT`). O Open-Meteo gratuito é
+apenas não comercial; com `OPEN_METEO_API_KEY` ele passa a usar o plano comercial. O RainViewer, quando ligado, é só pessoal
+e educacional. Confira os termos do MET Norway antes da operação real. O endpoint inclui esses avisos na resposta.
 
 **Variáveis de ambiente (Vercel → Settings → Environment Variables, em Production e Preview):**
 
 | Nome | Obrigatória? | Para quê |
 |---|---|---|
 | `METEO_ALERTAS_URL` | não | URL do feed de alertas do INMET no formato CAP (JSON). Sem ela, o painel mostra "alertas oficiais não configurados". O endereço ainda não foi verificado: confirme no catálogo WIS2 do INMET antes de definir |
-| `OPEN_METEO_API_KEY` | não | chave do plano comercial do Open-Meteo, para uso em produção. Sem ela, usa o endpoint gratuito não comercial |
+| `OPEN_METEO_API_KEY` | não | chave do plano comercial do Open-Meteo. Se definida, a previsão passa a vir dele (no lugar do MET Norway) |
+| `METEO_USER_AGENT` | não | identificação do aplicativo enviada ao MET Norway (nome e contato). Há um valor padrão |
+| `METEO_RADAR` | não | `rainviewer` liga o radar (uso pessoal e educacional apenas). Sem a variável, o radar fica desligado |
 
-O radar (RainViewer) não exige chave. Nada disso aparece no navegador: as chaves ficam só no servidor.
+O MET Norway não exige chave. Nada disso aparece no navegador: as chaves ficam só no servidor.
 A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainviewer.com`.
 
 ### Rota por caminhos (serviço de roteamento)

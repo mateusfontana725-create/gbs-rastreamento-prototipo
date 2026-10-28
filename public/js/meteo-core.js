@@ -93,7 +93,7 @@
       var forca = intensidadeChuva(atual.precipitacao);
       out.push({ chave: 'chuva-agora', tipo: 'chuva', nivel: forca === 'intensa' ? 'alerta' : forca === 'moderada' ? 'atencao' : 'informativo',
         titulo: 'Chuva ' + forca + ' agora na operação', detalhe: atual.precipitacao.toFixed(1) + ' mm/h (previsão de modelo, não radar)',
-        fonte: 'Open-Meteo', eta: null });
+        fonte: 'Modelo de previsão', eta: null });
     }
 
     var pMax = 0, rMax = 0, tempestade = null, granizo = null;
@@ -107,23 +107,23 @@
     var chegada = previsaoChegada(prev.horas, agoraMs);
     if (pMax >= LIMIARES.chuvaIntensa) {
       out.push({ chave: 'chuva-intensa', tipo: 'chuva', nivel: 'alerta', titulo: 'Chuva intensa prevista nas próximas ' + LIMIARES.horizonteHoras + ' h',
-        detalhe: 'Até ' + pMax.toFixed(1) + ' mm/h (modelo)', fonte: 'Open-Meteo', eta: chegada });
+        detalhe: 'Até ' + pMax.toFixed(1) + ' mm/h (modelo)', fonte: 'Modelo de previsão', eta: chegada });
     } else if (pMax >= LIMIARES.chuvaModerada) {
       out.push({ chave: 'chuva-moderada', tipo: 'chuva', nivel: 'atencao', titulo: 'Chuva moderada prevista nas próximas ' + LIMIARES.horizonteHoras + ' h',
-        detalhe: 'Até ' + pMax.toFixed(1) + ' mm/h (modelo)', fonte: 'Open-Meteo', eta: chegada });
+        detalhe: 'Até ' + pMax.toFixed(1) + ' mm/h (modelo)', fonte: 'Modelo de previsão', eta: chegada });
     }
     if (rMax >= LIMIARES.rajadaAlerta) {
-      out.push({ chave: 'rajadas', tipo: 'vento', nivel: 'alerta', titulo: 'Rajadas fortes previstas', detalhe: 'Até ' + Math.round(rMax) + ' km/h (modelo)', fonte: 'Open-Meteo', eta: null });
+      out.push({ chave: 'rajadas', tipo: 'vento', nivel: 'alerta', titulo: 'Rajadas fortes previstas', detalhe: 'Até ' + Math.round(rMax) + ' km/h (modelo)', fonte: 'Modelo de previsão', eta: null });
     } else if (rMax >= LIMIARES.rajadaAtencao) {
-      out.push({ chave: 'rajadas', tipo: 'vento', nivel: 'atencao', titulo: 'Rajadas de vento moderadas previstas', detalhe: 'Até ' + Math.round(rMax) + ' km/h (modelo)', fonte: 'Open-Meteo', eta: null });
+      out.push({ chave: 'rajadas', tipo: 'vento', nivel: 'atencao', titulo: 'Rajadas de vento moderadas previstas', detalhe: 'Até ' + Math.round(rMax) + ' km/h (modelo)', fonte: 'Modelo de previsão', eta: null });
     }
     if (tempestade) {
       out.push({ chave: 'tempestade', tipo: 'tempestade', nivel: 'alerta', titulo: 'Condição favorável a tempestade', detalhe: 'Modelo indica trovoadas nas próximas horas. Raios não são medidos por esta fonte.',
-        fonte: 'Open-Meteo', eta: { t: tempestade.t, incertezaMin: LIMIARES.incertezaDepois, tipo: 'previsao_modelo' } });
+        fonte: 'Modelo de previsão', eta: { t: tempestade.t, incertezaMin: LIMIARES.incertezaDepois, tipo: 'previsao_modelo' } });
     }
     if (granizo) {
       out.push({ chave: 'granizo', tipo: 'granizo', nivel: 'alerta', titulo: 'Risco de granizo (indicativo)', detalhe: 'Código de granizo no modelo. Não é medição de granizo.',
-        fonte: 'Open-Meteo', eta: { t: granizo.t, incertezaMin: LIMIARES.incertezaDepois, tipo: 'previsao_modelo' } });
+        fonte: 'Modelo de previsão', eta: { t: granizo.t, incertezaMin: LIMIARES.incertezaDepois, tipo: 'previsao_modelo' } });
     }
 
     (oficiais || []).forEach(function (a) {
@@ -238,7 +238,7 @@
     return { chave: 'chuva-proxima', tipo: 'chuva', nivel: nivel,
       titulo: 'Chuva a ~' + Math.round(km) + ' km ' + direcaoCardeal(chuva.rumo) + ' da operação',
       detalhe: chuva.precipitacao.toFixed(1) + ' mm/h no ponto mais próximo (modelo, sem direção de deslocamento)',
-      fonte: 'Open-Meteo', eta: null };
+      fonte: 'Modelo de previsão', eta: null };
   }
 
   var API = {

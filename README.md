@@ -633,7 +633,15 @@ e o mapa e o rastreamento continuam funcionando.
   com no máximo um toque a cada 10 min por alerta, e precisa de um toque da pessoa (regra do navegador).
 - **Não são usados**: raios (a política da rede Blitzortung proíbe usar os dados para sistemas de aviso) e medições
   de granizo ou frente fria. Estas fontes não medem isso.
-- **Monitoramento**: a leitura acontece ao abrir a operação e a cada 5 min, só com a aba visível. Ocultar o aviso
+- **Quando consulta**: assim que a operação carrega, sempre que a operação ou o local dela mudam, e a cada 5 min (só com a
+  aba visível). Se uma consulta falha, tenta de novo em 30 s, sem esperar o ciclo. "Defina o local da operação" só aparece
+  quando a operação realmente não tem coordenada.
+- **Legendas**: cada camada tem a sua, com título e unidade (Radar · intensidade da chuva; Vento · velocidade em km/h;
+  Temperatura em °C). A lista de **fontes** mostra, para cada uma, o horário do dado e a idade (ex.: "Previsão · MET
+  Norway: dado de 19:53 (há 4 min)"); se uma fonte falhar, mostra o último dado bom e quando foi obtido.
+- **Chuva prevista**: a previsão é por hora. Se a hora com chuva já começou, o painel diz "chuva prevista desde 19:00
+  (período já iniciado)"; só uma hora futura aparece como "chegada prevista por volta de…". Os avisos de incerteza foram mantidos.
+- **Monitoramento**: Ocultar o aviso
   não para o monitoramento. O endpoint exige o login de um responsável e tem cache de 5 a 15 min por fonte.
 
 **Licenças (confirme antes do uso operacional):** a previsão padrão vem do **MET Norway** (Meteorologisk institutt): sem chave,

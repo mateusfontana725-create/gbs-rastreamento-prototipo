@@ -2173,3 +2173,8 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
 @media (min-width: 861px) and (max-width: 1280px) {
   #btn-convite .rotulo-acao { display: inline; }
 }
+
+/* Meteorologia: legendas por camada e fontes com horário */
+.meteo-legenda-bloco { display: grid; gap: 2px; }
+.meteo-legenda-bloco > strong { font-size: .72rem; color: var(--texto-2); }
+.meteo-fonte-linha { display: block; }

@@ -177,10 +177,27 @@
     return sessao.access_token;
   }
 
+  function chaveOperacao() {
+    var o = op();
+    return o ? o.id + ':' + o.local_lat + ',' + o.local_lng : '';
+  }
+  function vigiarOperacao() {
+    var chave = chaveOperacao(), o = op();
+    if (chave !== est.chaveConsulta) {
+      est.chaveConsulta = chave;
+      est.ultimaTentativa = 0;
+      if (o && o.local_lat != null) consultar(); else desenharSituacao();
+    } else if (est.erro && o && o.local_lat != null && !est.buscando && document.visibilityState === 'visible' && Date.now() - (est.ultimaTentativa || 0) > 30000) {
+      consultar();
+    }
+  }
+
   async function consultar() {
     trocarOperacao();
     var o = op();
+    if (o && o.local_lat != null && est.buscando) { est.refazer = true; return; }   // chegou outra operação/local durante a consulta
     if (!o || o.local_lat == null || est.buscando) { desenharSituacao(); return; }
+    est.ultimaTentativa = Date.now();
     est.buscando = true;
     try {
       var token = await sessaoToken();
@@ -194,6 +211,7 @@
     } finally {
       est.buscando = false;
       desenharSituacao();
+      if (est.refazer) { est.refazer = false; consultar(); }
     }
   }
 
@@ -349,7 +367,7 @@
     var det = document.createElement('p'); det.className = 'meteo-detalhe'; det.textContent = a.detalhe || '';
     var fonte = document.createElement('p'); fonte.className = 'meteo-fonte';
     var txt = a.fonte;
-    if (a.eta) txt += ' · chegada prevista ~' + hora(a.eta.t) + ' (±' + a.eta.incertezaMin + ' min)';
+    if (a.eta) txt += a.eta.iniciada ? ' · previsão para o período iniciado às ' + hora(a.eta.t) : ' · chegada prevista ~' + hora(a.eta.t) + ' (±' + a.eta.incertezaMin + ' min)';
     if (a.inicio || a.fim) txt += ' · válido ' + (a.inicio ? hora(a.inicio) : '') + (a.fim ? ' até ' + hora(a.fim) : '');
     if (a.tipo === 'oficial') txt += ' · confira o alerta oficial';
     fonte.textContent = txt;
@@ -357,13 +375,13 @@
     return div;
   }
 
-  // Legenda só da camada ligada, com a escala que realmente está no mapa.
+  // Legenda só da camada ligada, cada uma com o seu título e a sua unidade.
   function desenharLegenda() {
     var bloco = $('meteo-legenda');
     var partes = [];
-    if (est.ligada && est.radar && est.quadros.length) partes.push('<p class="meteo-legenda-linha"><span class="meteo-swatch meteo-swatch-radar"></span>Radar: tons claros = chuva fraca; escuros e vermelhos = intensa</p>');
-    if (est.ligada && est.temp) partes.push('<div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-temp"></div><div class="meteo-escala-rotulos"><span>-5 °C</span><span>38 °C</span></div></div>');
-    if (est.ligada && est.vento) partes.push('<div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-vento"></div><div class="meteo-escala-rotulos"><span>0 km/h</span><span>50+ km/h</span></div></div>');
+    if (est.ligada && est.radar && est.quadros.length) partes.push('<div class="meteo-legenda-bloco"><strong>Radar · intensidade da chuva</strong><p class="meteo-legenda-linha"><span class="meteo-swatch meteo-swatch-radar"></span>tons claros = fraca; escuros e vermelhos = intensa</p></div>');
+    if (est.ligada && est.vento) partes.push('<div class="meteo-legenda-bloco"><strong>Vento · velocidade (km/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-vento"></div><div class="meteo-escala-rotulos"><span>0</span><span>25</span><span>50+ km/h</span></div></div></div>');
+    if (est.ligada && est.temp) partes.push('<div class="meteo-legenda-bloco"><strong>Temperatura (°C)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-temp"></div><div class="meteo-escala-rotulos"><span>-5 °C</span><span>16 °C</span><span>38 °C</span></div></div></div>');
     bloco.innerHTML = partes.join('');
     bloco.hidden = !partes.length;
     var barraT = bloco.querySelector('#meteo-barra-temp'), barraV = bloco.querySelector('#meteo-barra-vento');
@@ -397,21 +415,34 @@
     });
     var chegada = Core.previsaoChegada(pv.horas, Date.now());
     $('meteo-previsao').textContent = chegada
-      ? 'Chuva prevista por volta de ' + hora(chegada.t) + ' (±' + chegada.incertezaMin + ' min), segundo o modelo.'
+      ? (chegada.iniciada
+        ? 'Chuva prevista desde ' + hora(chegada.t) + ' (período já iniciado), segundo o modelo.'
+        : 'Chegada da chuva prevista por volta de ' + hora(chegada.t) + ' (±' + chegada.incertezaMin + ' min), segundo o modelo.')
       : 'Sem chuva prevista nas próximas horas, segundo o modelo.';
   }
 
+  // Cada fonte com o papel, o horário do dado e a idade (o servidor guarda o dado até 15 min; mostra quando foi obtido)
+  var PAPEL_FONTE = { radar: 'Radar', previsao: 'Previsão', alertas: 'Alertas oficiais' };
   function desenharFontes() {
-    var f = est.fontes, linhas = [];
+    var f = est.fontes, linhas = [], caixa = $('meteo-fontes');
     if (f) {
       Object.keys(f).forEach(function (k) {
-        var x = f[k];
-        var txt = x.nome + ': ' + (x.ok ? 'ok' + (x.obtidoEm ? ' às ' + hora(x.obtidoEm) : '') : (x.status === 'nao_configurado' ? 'não configurado' : x.status === 'desligado' ? 'desligado' : 'indisponível'));
-        linhas.push(txt);
+        var x = f[k], papel = PAPEL_FONTE[k] || k, quando = x.obtidoEm ? hora(x.obtidoEm) + ' (' + C.idade(x.obtidoEm) + ')' : null;
+        var txt = papel + ' · ' + x.nome + ': ' + (x.ok ? 'dado de ' + (quando || 'horário não informado')
+          : x.status === 'nao_configurado' ? 'não configurado' : x.status === 'desligado' ? 'desligado'
+          : 'indisponível' + (quando ? ' (último dado bom de ' + quando + ')' : ''));
+        linhas.push({ txt: txt, ruim: !x.ok && x.status !== 'desligado' && x.status !== 'nao_configurado' });
       });
     }
-    $('meteo-fontes').textContent = linhas.join(' · ');
-    $('meteo-fontes').hidden = !linhas.length;
+    if (est.grade && est.gradeEm) linhas.push({ txt: 'Grade de vento, temperatura e chuva · dado de ' + hora(est.gradeEm) + ' (' + C.idade(est.gradeEm) + ')', ruim: false });
+    caixa.innerHTML = '';
+    linhas.forEach(function (l) {
+      var d = document.createElement('span');
+      d.className = 'meteo-fonte-linha' + (l.ruim ? ' meteo-desat' : '');
+      d.textContent = l.txt;
+      caixa.appendChild(d);
+    });
+    caixa.hidden = !linhas.length;
   }
 
   function desenharGradeEstado() {
@@ -458,7 +489,9 @@
     $('meteo-atualizar').addEventListener('click', function () { consultar(); });
 
     if (est.ligada) { $('meteo-painel').hidden = false; var posTent = setInterval(function () { if ($('opt-meteo')) { clearInterval(posTent); posicionarPainel(); } }, 500); }
-    setTimeout(consultar, 2500);
+    // A consulta inicial pode acontecer antes de a operação carregar: vigia a operação (id e local) e consulta de novo
+    // assim que ela carrega ou muda; depois de um erro tenta outra vez em 30 s, sem esperar o ciclo de 5 min.
+    setInterval(vigiarOperacao, 1000);
     setInterval(function () { if (document.visibilityState === 'visible') consultar(); }, INTERVALO_MS);
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') consultar(); });
     var tent = setInterval(function () { if (mapa()) { clearInterval(tent); aplicarCamadas(); } }, 500);

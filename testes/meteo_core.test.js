@@ -212,5 +212,18 @@ teste('alerta de chuva se aproximando: título com a chegada, nível sobe com o 
   assert.ok(/h/.test(M.alertaChuvaProxima(chuva, { velKmh: 8, etaMin: 300, distanciaM: 40000 }).titulo));
 });
 
+teste('chuva prevista: período já iniciado é diferente de chegada futura', () => {
+  const h = (n, precip) => Object.assign(hora(n), { precip });
+  const iniciada = M.previsaoChegada([h(-1, 1.2), h(0, 0), h(1, 0)], agora);
+  assert.strictEqual(iniciada.iniciada, true);
+  const futura = M.previsaoChegada([h(-1, 0), h(0, 0), h(2, 1.2)], agora);
+  assert.strictEqual(futura.iniciada, false);
+  assert.strictEqual(futura.t, h(2, 0).t);
+  // 19h53 com chuva prevista a partir das 19h: a hora das 19h já começou
+  const as1953 = Date.parse('2026-10-15T19:53:00Z');
+  const r = M.previsaoChegada([{ t: '2026-10-15T19:00:00Z', precip: 1, prob: 80 }, { t: '2026-10-15T20:00:00Z', precip: 0, prob: 10 }], as1953);
+  assert.strictEqual(r.iniciada, true);
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes de meteorologia passaram.');

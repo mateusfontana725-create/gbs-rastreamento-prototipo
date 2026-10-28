@@ -97,7 +97,7 @@
     return (horas || []).filter(function (h) { var t = Date.parse(h.t); return t >= ini && t <= fim; });
   }
 
-  // Previsão de chegada da chuva ao ponto da operação: primeira hora (a partir de agora) com chuva
+  // Previsão de chegada da chuva ao ponto da operação: primeira hora (a partir de 1 h atrás) com chuva
   // prevista pelo modelo. NÃO é extrapolação do radar. Retorna null se o modelo não prevê chuva.
   function previsaoChegada(horas, agoraMs) {
     var proximas = (horas || []).filter(function (h) { return Date.parse(h.t) >= agoraMs - 3600e3; });
@@ -106,7 +106,8 @@
       if ((h.precip != null && h.precip >= LIMIARES.mmParaChegada) || (h.prob != null && h.prob >= LIMIARES.probParaChegada)) {
         var t = Date.parse(h.t);
         var dentro = t <= agoraMs + 3600e3;
-        return { t: h.t, incertezaMin: dentro ? LIMIARES.incertezaDentroHora : LIMIARES.incertezaDepois, tipo: 'previsao_modelo' };
+        // iniciada: a hora prevista com chuva já começou (a previsão por hora vale para o intervalo que começa em t)
+        return { t: h.t, incertezaMin: dentro ? LIMIARES.incertezaDentroHora : LIMIARES.incertezaDepois, tipo: 'previsao_modelo', iniciada: t <= agoraMs };
       }
     }
     return null;

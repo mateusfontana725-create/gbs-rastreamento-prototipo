@@ -450,26 +450,24 @@
     var lacuna = UI.el('input', { classe: 'campo', id: 'dados-gps-lacuna', type: 'number', min: '30', max: '3600', step: '5', inputmode: 'numeric', value: String(op.gps_lacuna_s || 60) });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'dados-salvar', texto: 'Salvar' });
-    var form = UI.el('form', { classe: 'form-dados', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Editar dados da operação' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-nome', texto: 'Nome ou código da operação' }), nome]),
+    var form = UI.el('form', { classe: 'form-dados form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Editar operação' }),
+      UI.campo('Nome ou código', nome, { para: 'dados-nome' }),
       campos.elemento,
       secaoFichas(op, opcoes),
       temGps ? UI.el('fieldset', { classe: 'grupo-gps' }, [
-        UI.el('legend', { texto: 'Trilha GPS' }),
-        UI.el('div', { classe: 'grupo-duplo' }, [
-          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-gps-intervalo', texto: 'Ponto pelo menos a cada (s)' }), intervalo]),
-          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-gps-lacuna', texto: 'Falha acima de (s sem ponto)' }), lacuna]),
+        UI.el('legend', null, ['Trilha GPS', UI.dica('Andando ou de carro os pontos continuam mais frequentes. Intervalos maiores que o limite aparecem tracejados no mapa.')]),
+        UI.grade([
+          UI.campo('Ponto a cada (s)', intervalo, { para: 'dados-gps-intervalo' }),
+          UI.campo('Falha após (s)', lacuna, { para: 'dados-gps-lacuna' }),
         ]),
-        UI.el('small', { classe: 'muted', texto: 'Andando ou de carro os pontos continuam mais frequentes. Intervalos maiores que o limite aparecem tracejados no mapa, com início e fim marcados.' }),
       ]) : null,
       temPerm ? UI.el('fieldset', { classe: 'grupo-gps' }, [
-        UI.el('legend', { texto: 'Tempo de permanência em setor' }),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-permanencia', texto: 'Alertar quando uma pessoa ou grupo estiver no mesmo setor' }), perm]),
-        UI.el('small', { classe: 'muted', texto: 'Calculado pela trilha GPS: conta da entrada à saída do setor. Um alerta por limite atingido (1×, 2×…), para avaliar a troca da equipe.' }),
+        UI.el('legend', null, ['Permanência em setor', UI.dica('Conta da entrada à saída do setor pela trilha GPS. Um alerta por limite atingido (1×, 2×…), para avaliar a troca da equipe.')]),
+        UI.campo('Alertar depois de', perm, { para: 'dados-permanencia' }),
       ]) : null,
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

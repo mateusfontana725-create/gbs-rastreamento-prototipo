@@ -9196,7 +9196,7 @@
         UI.el('span', null, [UI.el('span', { texto: texto }), UI.el('small', { classe: 'muted', texto: extra || '' })]),
       ]);
     }
-    var btnMapa = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vit-escolher-mapa', texto: temPonto ? 'Escolher outro ponto' : 'Escolher no mapa' });
+    var btnMapa = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vit-escolher-mapa', texto: temPonto ? 'Trocar' : 'Escolher' });
     var optMapa = opcaoOnde('mapa', 'Ponto no mapa', temPonto ? window.Coords.formatar(pre.lat, pre.lng, est.prefsMapa.coord || 'dec') : 'ainda não escolhido');
     optMapa.appendChild(btnMapa);
     var optQuem = opcaoOnde('quem', 'Posição de quem encontrou', '');
@@ -9204,7 +9204,7 @@
       optMapa,
       opcaoOnde('gps', 'Minha localização', 'GPS deste aparelho'),
       optQuem,
-      opcaoOnde('nenhum', 'Sem localização', 'registrar agora e marcar o local depois'),
+      opcaoOnde('nenhum', 'Sem localização', 'marcar depois'),
     ]);
     function marcarOnde(v) { var r = onde.querySelector('input[value="' + v + '"]'); if (r && !r.disabled) r.checked = true; }
     function posDeQuem() {
@@ -9216,7 +9216,7 @@
       var r = optQuem.querySelector('input');
       r.disabled = !pos;
       optQuem.classList.toggle('desativada', !pos);
-      optQuem.querySelector('small').textContent = !participanteQuem() ? 'escolha quem encontrou (participante)' : pos ? 'última posição ' + C.idade(pos.t) + ' · ± ' + Math.round(pos.prec || 0) + ' m' : 'essa pessoa ainda não tem posição';
+      optQuem.querySelector('small').textContent = !participanteQuem() ? 'escolha quem encontrou' : pos ? 'última posição ' + C.idade(pos.t) + ' · ± ' + Math.round(pos.prec || 0) + ' m' : 'essa pessoa ainda não tem posição';
       if (r.disabled && r.checked) marcarOnde(temPonto ? 'mapa' : 'gps');
     }
     function participanteQuem() { return quem.value && quem.value !== '__outra' ? quem.value : null; }
@@ -9227,26 +9227,27 @@
 
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var noEncerramento = typeof pre.aoRegistrar === 'function';
-    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: noEncerramento ? 'Registrar e continuar o encerramento' : 'Registrar vítima encontrada' });
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: noEncerramento ? 'Registrar e continuar' : 'Registrar' });
+    quemTexto.placeholder = 'Quem? Ex.: morador, PM, SAMU';
+    localDesc.placeholder = 'Descrição do local (opcional)';
+    obs.placeholder = 'Ex.: consciente, hipotermia leve; levada pelo SAMU ao HU';
     var form = UI.el('form', { classe: 'form-vitima form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: noEncerramento ? 'Vítima encontrada (antes de encerrar)' : 'Vítima encontrada' },
         [UI.dica(noEncerramento
           ? 'Entra no diário, no relatório e no resultado da operação. A condição só os responsáveis veem.'
           : 'Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.')]),
-      UI.grade([
-        UI.campo('Vítima', ficha, { para: 'vit-ficha', largo: true }),
-        fichaNome,
-        UI.campo('Condição', cond, { largo: true }),
-        UI.campo('Quem encontrou', quem, { para: 'vit-quem', ajuda: 'Opcional' }),
-        quemTexto,
-        UI.campo('Onde', onde, { largo: true }),
-        UI.campo('Descrição do local', localDesc, { para: 'vit-local', largo: true, ajuda: 'Opcional' }),
-        UI.campo('Estado e encaminhamento', obs, { para: 'vit-obs', largo: true, ajuda: 'Opcional' }),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.el('div', null, [
+          UI.secao('Vítima', [ficha, fichaNome, cond]),
+          UI.secao('Quem encontrou', [quem, quemTexto], { dica: 'Opcional. Escolhendo um participante, dá para usar a posição dele como local.' }),
+        ]),
+        UI.secao('Onde', [onde, localDesc]),
       ]),
+      UI.secao('Estado e encaminhamento', [obs]),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); } }), btn]),
     ]);
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo' });
 
     // Tudo o que foi preenchido (para voltar ao formulário depois de escolher o ponto no mapa).
     function estadoAtual() {

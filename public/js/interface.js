@@ -64,26 +64,63 @@
   var pilha = [];
 
   // Abre um modal genérico. "conteudo" é um nó DOM. Devolve função para fechar.
+  // Estrutura igual em todo o app: cabeçalho fixo (título, "i" e ×), corpo que rola e rodapé
+  // (.form-rodape) sempre à vista. O título (#modal-titulo) é levado para o cabeçalho, mesmo
+  // quando o conteúdo é redesenhado. No celular o modal vira uma folha que sobe de baixo.
+  // opcoes.tamanho: 'estreito' | 'largo' | 'cheio' (padrão: médio).
   function abrirModal(conteudo, opcoes) {
     opcoes = opcoes || {};
     if (!opcoes.empilhar) fecharTodos();
     var anterior = document.activeElement;
-    var caixa = el('div', { classe: 'modal form-padrao', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [conteudo]);
+    var btnX = el('button', { classe: 'modal-x', type: 'button', 'aria-label': 'Fechar', title: 'Fechar', texto: '×' });
+    var cabeca = el('div', { classe: 'modal-cabeca' }, [btnX]);
+    var corpo = el('div', { classe: 'modal-corpo' }, [conteudo]);
+    var caixa = el('div', { classe: 'modal form-padrao' + (opcoes.tamanho ? ' modal-' + opcoes.tamanho : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [cabeca, corpo]);
     var fundo = el('div', { classe: 'modal-fundo' }, [caixa]);
     fundo.addEventListener('click', function (ev) {
       if (ev.target === fundo && opcoes.fecharNoFundo !== false) fechar(null);
     });
+    // × faz o mesmo que o "Fechar"/"Cancelar" do rodapé (quando há), senão só fecha
+    btnX.addEventListener('click', function () {
+      var b = botaoDeSaida();
+      if (b) b.click(); else fechar(null);
+    });
+    function botaoDeSaida() {
+      var bs = corpo.querySelectorAll('.form-rodape > button, .modal-acoes > button');
+      for (var i = 0; i < bs.length; i++) if (/^(fechar|cancelar)$/i.test(bs[i].textContent.trim())) return bs[i];
+      return null;
+    }
+    // Título para o cabeçalho; "Fechar" sozinho no rodapé some (o × faz o mesmo)
+    function arrumar() {
+      var t = corpo.querySelector('#modal-titulo');
+      if (t) {
+        Array.prototype.forEach.call(cabeca.querySelectorAll('#modal-titulo'), function (v) { if (v !== t) v.remove(); });
+        cabeca.insertBefore(t, btnX);
+      }
+      cabeca.classList.toggle('sem-titulo', !cabeca.querySelector('#modal-titulo'));
+      Array.prototype.forEach.call(corpo.querySelectorAll('.form-rodape, .modal-acoes'), function (r) {
+        Array.prototype.forEach.call(r.children, function (b) {
+          if (b.tagName === 'BUTTON' && /^fechar$/i.test(b.textContent.trim())) b.classList.add('so-x');
+        });
+        var visiveis = Array.prototype.filter.call(r.children, function (b) { return !b.hidden && !b.classList.contains('so-x'); });
+        r.classList.toggle('rodape-vazio', visiveis.length === 0);
+      });
+    }
+    arrumar();
+    var obs = window.MutationObserver ? new MutationObserver(function () { obs.disconnect(); arrumar(); obs.observe(corpo, { childList: true, subtree: true }); }) : null;
+    if (obs) obs.observe(corpo, { childList: true, subtree: true });
     function tecla(ev) {
       // Esc fecha só o modal de cima
       if (ev.key === 'Escape' && pilha.length && pilha[pilha.length - 1].fechar === fechar) { ev.preventDefault(); fechar(null); }
     }
     document.addEventListener('keydown', tecla);
     document.body.appendChild(fundo);
-    var foco = caixa.querySelector('[autofocus]') || caixa.querySelector('textarea, input, button');
+    var foco = corpo.querySelector('[autofocus]') || corpo.querySelector('textarea, input:not([type=hidden]), select, button:not(.dica)') || btnX;
     if (foco) setTimeout(function () { foco.focus(); }, 30);
 
     function fechar(valor) {
       if (!fundo.parentNode) return;
+      if (obs) obs.disconnect();
       document.removeEventListener('keydown', tecla);
       fundo.parentNode.removeChild(fundo);
       pilha = pilha.filter(function (m) { return m.fechar !== fechar; });
@@ -132,6 +169,7 @@
       filhos.push(rodape([btnCancelar, btnOk]));
       var resolvido = false;
       var fechar = abrirModal(el('div', null, filhos), {
+        tamanho: o.campo || o.detalhe ? null : 'estreito',
         empilhar: Boolean(o.empilhar),   // abre por cima do que está aberto (ex.: confirmar dentro de um formulário)
         aoFechar: function (v) { if (!resolvido) { resolvido = true; resolve(v || null); } },
       });
@@ -208,6 +246,23 @@
     return el('div', { classe: 'form-grade' + (o && o.tres ? ' form-grade-3' : '') }, filhos);
   }
 
+  // Seção em cartão com título pequeno (como as linhas do POA/POD). o.dica: explicação no "i"
+  function secao(titulo, filhos, o) {
+    o = o || {};
+    return el('div', { classe: 'secao-form' + (o.classe ? ' ' + o.classe : ''), hidden: o.oculto ? true : null }, [
+      titulo ? el('div', { classe: 'secao-titulo' }, [titulo, o.dica ? dica(o.dica) : null]) : null,
+    ].concat(filhos));
+  }
+
+  // Escolha única em cartões lado a lado. opcoes: [{ valor, rotulo, sub, marcado, desabilitado }]
+  function escolhas(nome, opcoes, aoMudar) {
+    return el('div', { classe: 'escolhas', role: 'radiogroup' }, opcoes.map(function (op) {
+      var r = el('input', { type: 'radio', name: nome, value: op.valor, checked: op.marcado ? true : null, disabled: op.desabilitado ? true : null });
+      if (aoMudar) r.addEventListener('change', function () { if (r.checked) aoMudar(op.valor); });
+      return el('label', { classe: 'escolha' }, [r, el('span', null, [op.rotulo, op.sub ? el('small', { texto: op.sub }) : null])]);
+    }));
+  }
+
   // Rodapé: botões à direita, o secundário à esquerda. Recebe os botões já criados, na ordem visual.
   function rodape(botoes) {
     return el('div', { classe: 'form-rodape' }, botoes);
@@ -281,5 +336,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aplicarAparencia); else aplicarAparencia();
 
   window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar,
-    dica: dica, campo: campo, grade: grade, rodape: rodape, aparencia: aparencia };
+    dica: dica, campo: campo, grade: grade, rodape: rodape, secao: secao, escolhas: escolhas, aparencia: aparencia };
 })();

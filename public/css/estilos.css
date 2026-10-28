@@ -1969,29 +1969,110 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 .titulo-com-dica .dica-caixa { display: inline-flex; }
 .titulo-com-dica .dica-texto { font-size: .82rem; }
 
-/* Rodapé dos formulários fica sempre à vista ao rolar um modal alto */
-.modal .form-rodape { position: sticky; bottom: -20px; margin: 18px -20px -20px; padding: 12px 20px; background: var(--superficie); border-top: 1px solid var(--borda); z-index: 1; }
-.modal .form-rodape:empty { display: none; }
-
 /* Tamanho do texto escolhido pelo usuário (Aparência). Tudo está em rem: o tamanho base do html muda a página inteira. */
 html[data-fonte="maior"] { font-size: 112.5%; }
 html[data-fonte="grande"] { font-size: 125%; }
 html[data-fonte="menor"] { font-size: 93.75%; }
 
-/* ---------- Visual padrão de todos os modais (o mesmo do POA/POD) ---------- */
-.modal.form-padrao { padding: 22px 24px; }
-.modal.form-padrao > h2, .modal.form-padrao form > h2 { margin: 0 0 14px; font-size: 1.1rem; letter-spacing: .02em; }
+/* =====================================================================
+ * Modais: uma estrutura só em todo o app (js/interface.js → abrirModal)
+ *   cabeçalho fixo (título, "i", ×) · corpo que rola · rodapé sempre à vista.
+ *   Computador: janela central, larga o bastante para os campos ficarem lado a lado.
+ *   Celular: folha que sobe de baixo, com altura até quase a tela toda.
+ * ===================================================================== */
+.modal-fundo { padding: 24px; }
+.modal-fundo > .modal {
+  display: flex; flex-direction: column; padding: 0; overflow: hidden;
+  width: min(680px, 100%); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
+}
+.modal-fundo > .modal.modal-estreito { width: min(460px, 100%); }
+.modal-fundo > .modal.modal-largo { width: min(940px, 100%); }
+.modal-fundo > .modal.modal-cheio { width: min(1240px, 100%); }
+.modal-cabeca {
+  flex: none; display: flex; align-items: center; gap: 10px; min-height: 56px;
+  padding: 10px 10px 10px 22px; border-bottom: 1px solid var(--borda); background: var(--superficie);
+}
+.modal-cabeca > h2, .modal.form-padrao .modal-cabeca > h2 {
+  flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1.05rem; letter-spacing: .04em; line-height: 1.25;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px;
+}
+.modal-cabeca > h2 .dica-texto { flex-basis: 100%; margin-top: 6px; }
+.modal-cabeca.sem-titulo { min-height: 0; padding: 6px 6px 0; border-bottom: 0; justify-content: flex-end; }
+.modal-x {
+  flex: none; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; cursor: pointer;
+  border: 1px solid transparent; border-radius: var(--raio); background: transparent; color: var(--texto-3);
+  font-size: 1.6rem; line-height: 1;
+}
+.modal-x:hover { background: var(--superficie-2); color: var(--texto); border-color: var(--borda); }
+.modal-x:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+.modal-corpo { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 22px 20px; }
+.modal-corpo > :first-child > :first-child, .modal-corpo > :first-child { margin-top: 0; }
+
+/* Rodapé: preso embaixo enquanto o corpo rola */
+.modal .form-rodape, .modal .modal-acoes {
+  position: sticky; bottom: -20px; z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px;
+  margin: 20px -22px -20px; padding: 12px 22px; background: var(--superficie); border-top: 1px solid var(--borda);
+}
+.modal .form-rodape .btn, .modal .modal-acoes .btn { flex: 0 0 auto; min-width: 128px; }
+.modal .form-rodape > .so-x, .modal .modal-acoes > .so-x, .modal .rodape-vazio { display: none !important; }
+.modal .form-rodape:empty { display: none; }
+/* Rodapé dentro de algo que não ocupa a largura toda (lista, cartão): sem a faixa presa */
+.modal :is(li, .cartao, .poa-cartao, details) .form-rodape { position: static; margin: 12px 0 0; padding: 0; border: 0; background: none; }
+
+/* Campos: rótulo curto em cima, controle com a mesma altura em todo lugar */
 .modal.form-padrao .grupo { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; min-width: 0; }
-.modal.form-padrao .grupo > .rotulo { margin: 0; min-height: 22px; display: flex; align-items: center; }
-.modal.form-padrao .grupo-duplo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 0 0 14px; }
+.modal.form-padrao .grupo > .rotulo { margin: 0; min-height: 20px; display: flex; align-items: center; }
+.modal.form-padrao .grupo-duplo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; margin: 0 0 14px; }
 .modal.form-padrao .grupo-duplo > .grupo { margin: 0; }
 .modal.form-padrao .campo { width: 100%; min-width: 0; min-height: 44px; }
-.modal.form-padrao textarea.campo { min-height: 84px; }
+.modal.form-padrao textarea.campo { min-height: 80px; resize: vertical; }
 .modal.form-padrao .ajuda, .modal.form-padrao .nota { margin: 0 0 12px; }
 .modal.form-padrao .linha-opcao { min-height: 40px; }
-.modal.form-padrao .form-rodape, .modal.form-padrao .modal-acoes { margin-top: 18px; }
+.modal .form-grade { margin: 0 0 14px; }
+
+/* Seção: cartão com título pequeno (UI.secao), igual às linhas do POA/POD */
+.secao-form { display: flex; flex-direction: column; gap: 10px; margin: 0 0 14px; padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); min-width: 0; }
+.secao-form > .secao-titulo { display: flex; align-items: center; gap: 4px; margin: 0; font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--texto-3); }
+.secao-form > .secao-titulo .dica-texto { flex-basis: 100%; }
+.secao-form > .secao-titulo { flex-wrap: wrap; }
+.secao-form > *, .secao-form .form-grade { margin: 0; }
+.secao-form > .campo-bloco > .rotulo, .secao-form .grupo > .rotulo { font-size: .7rem; }
+.secao-form :is(.vit-onde, .escolha, .linha-cartao) { background: var(--superficie); }
+/* Duas colunas de seções no computador; uma no celular */
+.form-colunas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 0 0 14px; }
+.form-colunas > *, .form-colunas > * > .secao-form:last-child { margin-bottom: 0; }
+.form-colunas > div > .secao-form + .secao-form { margin-top: 14px; }
+.secao-form .campo { background: var(--fundo); }
+.modal fieldset { min-width: 0; }
+
+/* Escolhas (rádio) em cartões lado a lado */
+.escolhas { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin: 0; padding: 0; border: 0; }
+.escolha { position: relative; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--borda-forte); border-radius: var(--raio); background: var(--superficie-2); font-weight: 600; }
+.escolha input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--acento); }
+.escolha small { display: block; font-weight: 400; color: var(--texto-3); font-size: .78rem; }
+.escolha:hover { border-color: var(--texto-3); }
+.escolha:has(input:checked) { border-color: var(--acento); background: rgba(245, 158, 11, .1); box-shadow: inset 0 0 0 1px var(--acento); }
+.escolha:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.escolha:has(input:focus-visible) { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+/* Linha "rótulo à esquerda, valor à direita" (dados de leitura) */
+.modal dl.dados { margin: 0; }
+
 @media (max-width: 600px) {
-  .modal.form-padrao { padding: 18px 16px; }
-  .modal .form-rodape { margin: 16px -16px -16px; padding: 12px 16px; }
+  .modal-fundo { padding: 0; align-items: flex-end; }
+  .modal-fundo > .modal, .modal-fundo > .modal.modal-largo, .modal-fundo > .modal.modal-cheio, .modal-fundo > .modal.modal-estreito {
+    width: 100%; margin: auto 0 0; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px);
+    border-radius: 14px 14px 0 0; border-left: 0; border-right: 0; border-bottom: 0;
+  }
+  .modal-cabeca { padding-left: 16px; min-height: 52px; }
+  .modal-corpo { padding: 14px 16px 16px; }
+  .modal .form-rodape, .modal .modal-acoes { bottom: -16px; margin: 16px -16px -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .modal .form-rodape .btn, .modal .modal-acoes .btn { flex: 1 1 0; min-width: 0; }
   .modal.form-padrao .grupo-duplo { grid-template-columns: 1fr; }
+  .escolhas { grid-template-columns: 1fr 1fr; }
+  .form-colunas { grid-template-columns: 1fr; }
+  .secao-form { padding: 12px; }
+}
+@media (max-width: 380px) { .escolhas { grid-template-columns: 1fr; } }
 }

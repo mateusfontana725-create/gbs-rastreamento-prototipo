@@ -6069,9 +6069,8 @@ create policy gbs_relatorios_ver on storage.objects
   using (bucket_id = 'relatorios' and public.pode_ver_relatorio(name));
 
 -- ---------------------------------------------------------------------
--- Exclusão da operação: só sem atividade registrada (criada por engano).
--- Com atividade, a operação e o diário ficam; os dados pessoais saem pela retenção.
--- Administrador: exclui qualquer operação da equipe, com diário e relatórios (migração 020).
+-- Exclusão da operação: quem criou (ou um administrador) apaga a operação e TUDO o que é dela,
+-- com ou sem atividade no diário e relatórios (migração 041; antes só o administrador podia).
 -- ---------------------------------------------------------------------
 create or replace function public.excluir_operacao(p_operacao uuid)
 returns json
@@ -6089,13 +6088,6 @@ begin
   select codigo into v_codigo from public.operacoes where id = p_operacao for update;
   if v_codigo is null then
     raise exception 'sem_permissao';
-  end if;
-  if not public.eh_admin()
-     and (exists (select 1 from public.diario where operacao_id = p_operacao
-                   and tipo not in ('operacao_criada', 'acionamento', 'responsavel_adicionado', 'ficha_vitima', 'grupo_criado', 'setor_criado',
-                                    'operacao_encerrada', 'operacao_reaberta', 'dados_apagados'))
-          or exists (select 1 from public.relatorios where operacao_id = p_operacao)) then
-    raise exception 'operacao_com_registros';
   end if;
   insert into public.arquivos_pendentes (caminho, bucket, operacao_id, excluido_por)
   select caminho, 'relatorios', p_operacao, null from public.relatorios where operacao_id = p_operacao

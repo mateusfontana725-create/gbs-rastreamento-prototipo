@@ -1241,78 +1241,38 @@
     return { apagados: apagados, falhas: itens.length - apagados };
   }
 
-  function excluirOperacao(op) {
+  // Excluir: uma confirmação simples. Apaga a operação e tudo o que é dela (migração 041).
+  async function excluirOperacao(op) {
     if (!op || !podeExcluir(op)) return;
-    var nFotos = est.op && est.op.id === op.id ? est.fotos.size : null;
-    var entrada = UI.el('input', { classe: 'campo', id: 'excluir-codigo', autocomplete: 'off', spellcheck: 'false', 'aria-describedby': 'excluir-ajuda' });
-    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btnOk = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'excluir-confirmar', texto: 'Excluir definitivamente', disabled: true });
-    var btnCancelar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } });
-    function confere() { return entrada.value.trim().toUpperCase() === String(op.codigo).trim().toUpperCase(); }
-    entrada.addEventListener('input', function () { btnOk.disabled = !confere(); erro.hidden = true; });
-
-    var form = UI.el('form', { classe: 'form-excluir', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Excluir a operação "' + op.codigo + '"?' }),
-      UI.el('p', { classe: 'nota nota-perigo', texto: 'A exclusão é DEFINITIVA e não pode ser desfeita. Serão apagados a operação e todos os dados vinculados a ela:' }),
-      UI.el('ul', { classe: 'lista-exclusao' }, [
-        UI.el('li', { texto: 'participantes civis e militares cadastrados na operação;' }),
-        UI.el('li', { texto: 'todo o histórico de localizações e as trilhas GPS;' }),
-        UI.el('li', { texto: 'mensagens trocadas e relatos de campo (objetos, vestígios, pistas, obstáculos);' }),
-        UI.el('li', { texto: 'fotografias registradas no mapa' + (nFotos ? ' (' + nFotos + ')' : '') + ' e os arquivos armazenados;' }),
-        UI.el('li', { texto: 'fichas das vítimas e as fotos delas;' }),
-        UI.el('li', { texto: 'grupos, deslocamentos de grupos e alertas;' }),
-        UI.el('li', { texto: 'diário da operação e relatórios gerados (PDF);' }),
-        UI.el('li', { texto: 'equipe de responsáveis da operação e os links/QR Codes de convite (inclusive os dos grupos), que deixam de funcionar na hora.' }),
-      ]),
-      UI.el('p', { classe: 'ajuda', texto: 'Quem ainda estiver com o link aberto deixa de enviar localização, mensagens e fotos. Outras operações não são afetadas.' }),
-      UI.el('p', { classe: 'ajuda', texto: est.responsavel.admin
-        ? 'Como administrador, a exclusão vale para qualquer operação da equipe, mesmo com atividade no diário ou relatórios gerados.'
-        : 'Só operações sem atividade (criadas por engano) podem ser excluídas. Com atividade no diário, a exclusão é recusada: o diário e os relatórios são o documento da operação.' }),
-      UI.el('div', { classe: 'grupo' }, [
-        UI.el('label', { classe: 'rotulo', for: 'excluir-codigo', texto: 'Para confirmar, digite o nome da operação' }),
-        UI.el('p', { classe: 'ajuda mono', id: 'excluir-ajuda', texto: op.codigo }),
-        entrada,
-      ]),
-      erro,
-      UI.rodape([btnCancelar, btnOk]),
-    ]);
-    form.addEventListener('submit', async function (ev) {
-      ev.preventDefault();
-      if (!confere()) {
-        erro.textContent = 'O nome digitado não confere com o da operação.';
-        erro.hidden = false;
-        return;
-      }
-      btnOk.disabled = true;
-      btnCancelar.disabled = true;
-      btnOk.textContent = 'EXCLUINDO…';
-      var r;
-      try {
-        r = await C.rpc('excluir_operacao', { p_operacao: op.id }, 30000);
-      } catch (e) {
-        erro.textContent = 'Não foi possível excluir: ' + e.message + (e.rede ? ' Nada foi apagado; tente de novo quando a conexão voltar.' : '');
-        erro.hidden = false;
-        btnOk.disabled = false;
-        btnCancelar.disabled = false;
-        btnOk.textContent = 'Excluir definitivamente';
-        return;
-      }
-      btnOk.textContent = 'APAGANDO FOTOS…';
-      var arq = await limparArquivosPendentes();
-      fechar(true);
-      var resumo = 'Operação "' + (r && r.operacao || op.codigo) + '" excluída' +
-        (r ? ' (' + r.participantes + ' participante(s), ' + r.fotos + ' foto(s)' + (r.vitimas != null ? ', ' + r.vitimas + ' ficha(s) de vítima' : '') + ')' : '') + '.';
-      if (arq.falhas) UI.aviso(resumo + ' ' + textoFalhaArquivos(arq.falhas), 'erro', 15000);
-      else UI.aviso(resumo + ' Todos os dados foram apagados.', 'ok', 8000);
-      if (est.op && est.op.id === op.id) {
-        fecharPainel();
-        if (location.hash) location.hash = '';
-        else mostrarOperacoes();
-      } else {
-        mostrarOperacoes();
-      }
+    var r = await UI.confirmar({
+      titulo: 'Excluir "' + op.codigo + '"?',
+      texto: 'Apaga a operação e todos os dados dela: participantes, trilhas, mensagens, fotos, fichas, grupos, diário e relatórios. Os links deixam de funcionar. Não dá para desfazer.',
+      ok: 'Excluir',
+      perigo: true,
     });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    if (!r) return;
+    var aviso = UI.aviso('Excluindo a operação…', null, 'fixo');
+    var res;
+    try {
+      res = await C.rpc('excluir_operacao', { p_operacao: op.id }, 30000);
+    } catch (e) {
+      if (aviso && aviso.parentNode) aviso.remove();
+      UI.aviso('Não foi possível excluir: ' + e.message + (e.rede ? ' Nada foi apagado; tente de novo quando a conexão voltar.' : ''), 'erro', 8000);
+      return;
+    }
+    var arq = await limparArquivosPendentes();
+    if (aviso && aviso.parentNode) aviso.remove();
+    var resumo = 'Operação "' + (res && res.operacao || op.codigo) + '" excluída' +
+      (res ? ' (' + res.participantes + ' participante(s), ' + res.fotos + ' foto(s)' + (res.vitimas != null ? ', ' + res.vitimas + ' ficha(s) de vítima' : '') + ')' : '') + '.';
+    if (arq.falhas) UI.aviso(resumo + ' ' + textoFalhaArquivos(arq.falhas), 'erro', 'fixo');
+    else UI.aviso(resumo, 'ok', 5000);
+    if (est.op && est.op.id === op.id) {
+      fecharPainel();
+      if (location.hash) location.hash = '';
+      else mostrarOperacoes();
+    } else {
+      mostrarOperacoes();
+    }
   }
 
   /* ------------------------------------------------------------------ */

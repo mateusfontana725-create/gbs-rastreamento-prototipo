@@ -1156,16 +1156,14 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
 
 ### Excluir uma operação
 
-- **Criador da operação** (ou responsável adicionado, que não é administrador) só pode excluir operação **sem atividade
-  registrada** (criadas por engano). Com atividade no diário (pessoas, setores iniciados, deslocamentos, relatos,
-  observações, resultado ou relatório), o banco recusa: o diário e os relatórios são o documento da operação, e os
-  dados pessoais saem pela retenção.
-- **Administrador** exclui **qualquer** operação da equipe, sem essa restrição: diário, observações e relatórios
-  gerados também são apagados (migração 020). Os PDFs saem do Storage pela fila de limpeza diária.
+- **Quem criou a operação** e **administradores** excluem a operação com tudo o que é dela, **com ou sem atividade**
+  (diário, observações, deslocamentos, relatórios gerados…) — migração 041. Antes, quem não era administrador só
+  conseguia excluir operação sem atividade (erro "operacao_com_registros"). Os PDFs e as fotos saem do Storage pela
+  fila de limpeza.
 - Disponível para **quem criou a operação** e para **administradores** (que alcançam **todas** as operações, inclusive para excluir): na lista de
   operações (botão **Excluir operação**) e em **Ferramentas → Excluir operação**. Os demais nem veem o
   botão, e o banco recusa a exclusão se alguém tentar por fora. Participantes nunca podem excluir.
-- A janela de confirmação lista tudo o que será apagado e exige **digitar o nome da operação**.
+- Uma **confirmação simples** (Excluir / Cancelar) diz o que será apagado; não é preciso digitar o nome.
 - Numa **única transação** no banco são apagados a operação, participantes, posições/trilhas,
   mensagens e relatos, registros de fotos, equipe de responsáveis e os **tokens dos links** (o QR Code
   deixa de funcionar na hora). Os arquivos das fotos entram numa fila (`arquivos_pendentes`) e o painel
@@ -1679,7 +1677,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 25 | Trocar para **Topográfico** e abrir **Relevo em 3D** numa região com morros | curvas de nível visíveis com trilhas e setores por cima; o 3D mostra os morros e a altitude ao tocar |
 | 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** vermelhoo; outros civis não aparecem |
 | 22b | No civil, tocar **FALAR COM OS BOMBEIROS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
-| 22 | Criar uma operação de teste, registrar dados e **Excluir operação** (digitando o nome) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
+| 22 | Criar uma operação de teste, registrar dados (diário, relatório) e **Excluir operação** (confirmar) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
 | 26 | Celular parado sobre uma mesa por 5 min | a trilha não vira um "novelo"; no diagnóstico (`&diag=1`) aparecem leituras descartadas como "oscilação parado" |
 | 27 | Enviar um destino a um civil com a página dele aberta | o cartão **IR ATÉ** aparece em poucos segundos, sem recarregar; a ficha mostra "✓ recebido no celular" |
 | 28 | Remover um civil e depois tocar em **Reincluir** | o celular dele mostra "Os bombeiros chamaram você de volta"; ao tocar, volta ao mesmo registro e a trilha continua |

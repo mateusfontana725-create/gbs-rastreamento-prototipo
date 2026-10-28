@@ -78,7 +78,7 @@
     diario_somente_funcao: 'O diário só pode ser alterado pelo próprio painel.',
     relatorio_nao_apaga: 'Relatórios gerados não podem ser apagados.',
     arquivo_nao_enviado: 'O PDF não chegou ao servidor. Tente gerar de novo.',
-    operacao_com_registros: 'Esta operação já tem atividade registrada no diário e não pode ser excluída: o diário e os relatórios são o documento da operação. Os dados pessoais são apagados pela retenção.',
+    operacao_com_registros: 'O servidor ainda recusa excluir operação com atividade: falta executar a migração 041 no Supabase.',
     foto_invalida: 'Dados da foto inválidos. Tire a foto de novo.',
     foto_nao_encontrada: 'A foto ainda não chegou ao servidor.',
     local_fora_do_prazo: 'A localização chegou tarde demais para esta foto (mais de 10 min depois da captura).',

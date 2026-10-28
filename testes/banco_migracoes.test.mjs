@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -606,8 +606,16 @@ chk(/relatorio_nao_apaga/.test(await erroDe(db.query(`delete from public.relator
 const opComAtividade = await rpc(resp2, 'criar_operacao', { p_codigo: 'OP COM ATIVIDADE', p_retencao_horas: 0 });
 const pdfAtividade = opComAtividade.id + '/55555555-5555-4555-8555-555555555555.pdf';
 await db.query(`insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por_nome) values ($1, $2, 1, 10, $3, 'Sgt Dois')`, [opComAtividade.id, pdfAtividade, 'b'.repeat(64)]);
-chk(/operacao_com_registros/.test(await erroDe(rpc(resp2, 'excluir_operacao', { p_operacao: opComAtividade.id }))), 'criador que não é administrador NÃO exclui operação com relatório');
-chk((await db.query(`select count(*)::int n from public.operacoes where id = $1`, [opComAtividade.id])).rows[0].n === 1, 'operação recusada continua no banco');
+// Migração 041: quem criou exclui mesmo com atividade (antes: "operacao_com_registros")
+const opCriador = await rpc(resp2, 'criar_operacao', { p_codigo: 'OP DO CRIADOR', p_retencao_horas: 0 });
+const pdfCriador = opCriador.id + '/77777777-7777-4777-8777-777777777777.pdf';
+await db.query(`insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por_nome) values ($1, $2, 1, 10, $3, 'Sgt Dois')`, [opCriador.id, pdfCriador, 'd'.repeat(64)]);
+await rpc(resp2, 'diario_adicionar', { p_operacao: opCriador.id, p_ocorrido_em: new Date(Date.now() - 60e3).toISOString(), p_texto: 'Busca na encosta.' });
+chk(/sem_permissao/.test(await erroDe(rpc(anA, 'excluir_operacao', { p_operacao: opCriador.id })) || ''), 'participante não exclui a operação');
+const excCriador = await rpc(resp2, 'excluir_operacao', { p_operacao: opCriador.id });
+chk(excCriador.operacao === 'OP DO CRIADOR', 'criador que não é administrador exclui operação com relatório e diário', excCriador);
+chk((await db.query(`select (select count(*) from public.operacoes where id = $1)::int o, (select count(*) from public.diario where operacao_id = $1)::int d, (select count(*) from public.relatorios where operacao_id = $1)::int r`, [opCriador.id])).rows[0].o === 0, 'a operação do criador sai do banco com diário e relatórios');
+chk((await db.query(`select bucket from public.arquivos_pendentes where caminho = $1`, [pdfCriador])).rows[0]?.bucket === 'relatorios', 'o PDF da operação excluída pelo criador entra na fila do Storage');
 
 console.log('Administrador exclui relatório (migração 024)');
 const caminhoRel = opSoR1.id + '/66666666-6666-4666-8666-666666666666.pdf';
@@ -1699,5 +1707,5 @@ console.log('\nMissão de busca e cálculo pós-busca — migração 039');
   chk(['busca_missoes', 'busca_missao_efeitos'].every((x) => pubM.includes(x)), 'missões e efeitos publicados no Realtime');
 }
 
-console.log('\nMigrações 007–040 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–041 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

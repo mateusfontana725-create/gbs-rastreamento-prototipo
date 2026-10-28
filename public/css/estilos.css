@@ -1026,8 +1026,6 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
 
 /* Exclusão de operação */
 .nota-perigo { background: var(--perigo-claro); border-left-color: var(--perigo); color: var(--perigo-texto); font-weight: 700; }
-.lista-exclusao { margin: 8px 0 10px; padding-left: 20px; color: var(--texto-2); font-size: .92rem; }
-.lista-exclusao li { margin-bottom: 3px; }
 #excluir-ajuda { color: #fff; font-weight: 700; margin: 0 0 6px; }
 
 /* =====================================================================

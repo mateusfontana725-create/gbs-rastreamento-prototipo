@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR" data-pagina="militar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#06080a">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Dashboard · GBS</title>
+  <link rel="icon" type="image/png" sizes="256x256" href="img/brasao-cbmpr.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="css/estilos.css">
+  <link rel="stylesheet" href="css/militar.css">
+  <script src="js/tema.js"></script>
+</head>
+<body class="janela-dashboard">
+
+  <!-- Janela própria do dashboard (aberta pelo botão "Abrir em outra janela"): só o dashboard, sem o mapa do painel -->
+  <header class="janela-dash-topo">
+    <strong id="janela-titulo">Dashboard</strong>
+    <span class="muted" id="janela-sub">Números sem dados pessoais</span>
+  </header>
+  <main class="janela-dash-corpo">
+    <p class="nota" id="janela-aviso" role="alert" hidden></p>
+    <div id="janela-corpo"></div>
+  </main>
+  <div id="avisos" aria-live="polite"></div>
+
+  <script src="/api/config"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="js/comunicacao.js"></script>
+  <script src="js/interface.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/dashboard-janela.js"></script>
+</body>
+</html>

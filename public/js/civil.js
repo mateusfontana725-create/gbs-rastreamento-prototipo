@@ -35,7 +35,6 @@
     reinclusaoMs: 20000,         // removido: verifica a cada 20 s se foi chamado de volta
     destinoMs: 15000,            // recuperação do destino (além do tempo real)
     loteMaximo: 200,
-    filaMaxima: 5000,
   };
 
   var estado = {
@@ -49,7 +48,7 @@
     ultimoAceito: null,       // { lat, lng, t }
     trilha: null,             // fila offline dos pontos (trilha-local.js: IndexedDB)
     trilhaAbrindo: null,
-    bufferPontos: [],         // pontos capturados enquanto a fila abre
+    bufferPontos: [],         // pontos capturados enquanto a fila abre (NÃO gravados no aparelho ainda; nunca descartados)
     filaLegada: null,         // fila da versão anterior (localStorage), migrada ao abrir
     userId: null,
     grupos: [],               // grupos deste participante (nome, cor, papel)
@@ -156,10 +155,14 @@
     if (!estado.token) {
       return mostrarErro('Link incompleto. Abra o link completo enviado pelos bombeiros ou leia o QR Code novamente.');
     }
+    // Guarda a página e o mapa no aparelho já na primeira visita (abre de novo mesmo sem internet)
+    registrarServiceWorker();
 
     try {
       estado.info = await C.rpc('info_operacao', { p_token: estado.token });
     } catch (e) {
+      // Sem internet, mas este aparelho já estava na busca: continua registrando e envia quando o sinal voltar
+      if (e.rede && await retomarSemInternet()) return;
       return mostrarErro(e.rede ? 'Sem conexão com a internet. Conecte-se e toque em TENTAR NOVAMENTE.' : e.message);
     }
     if (!estado.info) {
@@ -250,6 +253,27 @@
   }
 
   // Consulta a situação de quem já participava (sem criar sessão nova).
+  // Página aberta (ou recarregada) sem internet por quem já estava na busca neste aparelho: retoma o registro
+  // com o que ficou guardado (participação, sessão e fila). O servidor confere tudo quando o sinal voltar
+  // (sinal_vida encerra a página se a operação acabou ou a pessoa foi removida).
+  async function retomarSemInternet() {
+    var salvo = C.local.ler(CHAVE_PART, null);
+    if (!salvo || salvo.token !== estado.token || !salvo.participante_id || !salvo.ativo || salvo.removido) return false;
+    var sessao = null;
+    try { sessao = (await C.cliente.auth.getSession()).data.session; } catch (e) { /* sem sessão guardada */ }
+    if (!sessao || !sessao.user) return false;
+    estado.userId = sessao.user.id;
+    estado.info = { operacao: salvo.operacao || 'Operação', grupo: salvo.grupo || null, ativa: true, tipos_permitidos: [], semInternet: true };
+    estado.part = { participante_id: salvo.participante_id, nome: salvo.nome, tipo: salvo.tipo, operacao: estado.info.operacao };
+    estado.cpf = salvo.cpf;
+    estado.telefone = salvo.telefone;
+    estado.finalizado = false;
+    mostrarTela('rastreio');
+    comecarRastreamento(null);
+    UI.aviso('Sem internet: o registro continua neste aparelho e vai para os bombeiros quando o sinal voltar.', 'erro', 8000);
+    return true;
+  }
+
   async function retomarParticipacao(salvo) {
     var sessao = null;
     try { sessao = (await C.cliente.auth.getSession()).data.session; } catch (e) { /* sem sessão */ }
@@ -350,7 +374,7 @@
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: inst.titulo }),
       ol,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Verificar de novo', onclick: function () { fechar(); religarGps(true); } }),
       ]),
@@ -547,11 +571,76 @@
       participante_id: estado.part.participante_id,
       nome: estado.part.nome,
       tipo: estado.part.tipo,
+      operacao: (estado.info && estado.info.operacao) || estado.part.operacao || '',
+      grupo: (estado.info && estado.info.grupo) || null,
       cpf: estado.cpf || '',
       telefone: estado.telefone || '',
       ativo: Boolean(ativo),
       removido: Boolean(removido),
     });
+  }
+
+  /* ---------- Mapa guardado no aparelho (js/mapa-offline.js) ---------- */
+  // Guarda a área em volta da primeira posição boa, de cada lugar novo (mais de 1,5 km das áreas guardadas)
+  // e do destino recebido. Uma área por vez; sem internet, espera. O estado aparece embaixo do mapa.
+  var CHAVE_MAPA_OFF = 'gbs-mapa-offline';
+  function areasMapa() {
+    var r = C.local.ler(CHAVE_MAPA_OFF, null);
+    return r && estado.part && r.participante_id === estado.part.participante_id ? r.areas || [] : [];
+  }
+  function gravarAreasMapa(areas) {
+    if (estado.part) C.local.gravar(CHAVE_MAPA_OFF, { participante_id: estado.part.participante_id, areas: areas });
+  }
+  function verificarMapaOffline() {
+    var M = window.MapaOffline;
+    if (!M || !M.disponivel() || !estado.part || estado.finalizado || estado.mapaBaixando || navigator.onLine === false) return;
+    var alvo = null, l = estado.ultimaLeitura;
+    if (l && l.prec != null && l.prec <= 150 && M.precisaArea(areasMapa(), l.lat, l.lng)) alvo = { lat: l.lat, lng: l.lng, motivo: 'posição' };
+    else if (estado.destino && estado.destino.lat != null && M.precisaArea(areasMapa(), estado.destino.lat, estado.destino.lng)) alvo = { lat: estado.destino.lat, lng: estado.destino.lng, motivo: 'destino' };
+    if (!alvo || Date.now() - (estado.mapaFalhaEm || 0) < 120000) return;
+    baixarAreaMapa(alvo);
+  }
+  async function baixarAreaMapa(alvo) {
+    var M = window.MapaOffline;
+    estado.mapaBaixando = true;
+    var plano = M.planejarArea(alvo.lat, alvo.lng);
+    mostrarMapaOffline('Guardando o mapa para usar sem internet… 0 de ' + plano.urls.length, false);
+    try {
+      var areas = areasMapa();
+      // limite de áreas: a mais antiga sai (os quadros dela são apagados do aparelho)
+      while (areas.length >= M.AREAS_MAX) {
+        var velha = areas.shift();
+        await M.apagar(M.planejarArea(velha.lat, velha.lng, velha.raioM).urls);
+      }
+      var r = await M.baixar(plano.urls, function (f, t) { mostrarMapaOffline('Guardando o mapa para usar sem internet… ' + f + ' de ' + t, false); });
+      var guardados = await M.contar(plano.urls);
+      if (guardados) areas.push({ lat: alvo.lat, lng: alvo.lng, raioM: plano.raioM, total: plano.urls.length, guardados: guardados, em: Date.now(), motivo: alvo.motivo });
+      gravarAreasMapa(areas);
+      if (r.falhas) estado.mapaFalhaEm = Date.now();
+    } catch (e) {
+      estado.mapaFalhaEm = Date.now();
+    } finally {
+      estado.mapaBaixando = false;
+      resumoMapaOffline();
+    }
+  }
+  function mostrarMapaOffline(texto, ruim) {
+    var el = $('mapa-offline');
+    if (!el) return;
+    el.textContent = texto;
+    el.hidden = !texto;
+    el.classList.toggle('mapa-offline-ruim', Boolean(ruim));
+  }
+  // Resumo (com a conferência de quantos quadros estão de fato no aparelho)
+  function resumoMapaOffline() {
+    var areas = areasMapa();
+    if (!areas.length) { mostrarMapaOffline(window.MapaOffline && window.MapaOffline.disponivel() ? '' : 'Este navegador não guarda o mapa para uso sem internet.', true); return; }
+    var total = 0, ok = 0;
+    areas.forEach(function (a) { total += a.total; ok += a.guardados; });
+    var raioKm = Math.round(areas[areas.length - 1].raioM / 100) / 10;
+    var completo = ok >= total;
+    mostrarMapaOffline('🗺 Mapa guardado no aparelho: ' + areas.length + ' área(s) de ~' + raioKm.toLocaleString('pt-BR') + ' km em volta' +
+      (completo ? '' : ' · ' + ok + ' de ' + total + ' partes (o resto completa com internet)') + '. Sem internet, o mapa mostra só essas áreas.', !completo);
   }
 
   function comecarRastreamento(posInicial) {
@@ -580,6 +669,9 @@
     carregarMinhasFotos();
     renderizarHistorico();
     if (!estado.timerUI) estado.timerUI = setInterval(tique, 2000);
+    if (!estado.timerMapaOff) estado.timerMapaOff = setInterval(verificarMapaOffline, 10000);
+    resumoMapaOffline();
+    setTimeout(verificarMapaOffline, 3000);
     enviarSinal();
     agendarEnvio(0);
     atualizarNotifBotao();
@@ -689,7 +781,7 @@
       if (legado) { C.local.apagar(CHAVE_FILA); estado.filaLegada = null; }
       var buf = estado.bufferPontos;
       estado.bufferPontos = [];
-      return (buf.length ? f.adicionar(buf) : Promise.resolve()).then(function () {
+      return (buf.length ? f.adicionar(buf).then(avaliarGravacao) : Promise.resolve()).then(function () {
         agendarEnvio(0);
         atualizarUI();
         return f;
@@ -702,17 +794,39 @@
     return promessa;
   }
 
+  // Ponto só é "salvo" quando o aparelho confirma a gravação. Se não confirmou, o usuário é avisado
+  // (no máximo uma vez por minuto) e o ponto continua na memória, sendo regravado a cada tentativa.
+  function avaliarGravacao(res) {
+    if (res && res.duraveis === false && Date.now() - (estado.ultimoAvisoGravacao || 0) > 60000) {
+      estado.ultimoAvisoGravacao = Date.now();
+      UI.aviso('Atenção: não foi possível gravar a sua localização no aparelho (pode estar sem espaço). Os pontos estão só na memória: não feche esta página.', 'erro', 12000);
+    }
+    return res;
+  }
+
   function guardarPontos(pontos) {
     if (estado.trilha && estado.part && estado.trilha.ids.participanteId === estado.part.participante_id) {
-      return estado.trilha.adicionar(pontos);
+      return estado.trilha.adicionar(pontos).then(avaliarGravacao);
     }
+    // a fila ainda está abrindo: os pontos esperam aqui, sem limite (nenhum é descartado)
     Array.prototype.push.apply(estado.bufferPontos, pontos);
-    if (estado.bufferPontos.length > CFG.filaMaxima) estado.bufferPontos.splice(0, estado.bufferPontos.length - CFG.filaMaxima);
     return abrirTrilha();
   }
 
   function qtdPendentes() {
     return (estado.trilha ? estado.trilha.qtdPendentes() : 0) + estado.bufferPontos.length;
+  }
+
+  // o que ainda precisa ser enviado agora (com servidor antigo, o já entregue sem confirmação espera)
+  function qtdParaEnviar() {
+    return (estado.trilha ? estado.trilha.qtdParaEnviar() : 0) + estado.bufferPontos.length;
+  }
+
+  // O GPS que parou e voltou também é registrado no aparelho (só a mudança, não cada leitura)
+  function registrarGpsNaFila() {
+    if (!estado.trilha || !estado.rastreando) return;
+    var ruim = estado.gps === 'negado' || estado.gps === 'indisponivel' || estado.gps === 'sem_sinal';
+    estado.trilha.transicao('gps', ruim, { motivo: estado.gps });
   }
 
   function fecharTrilha() {
@@ -744,7 +858,7 @@
   // depois que o servidor confirma que ele está gravado (enviar_posicoes_lote).
   async function enviarFila() {
     var fila = estado.trilha;
-    if (estado.enviando || !estado.part || estado.finalizado || !fila || !fila.qtdPendentes()) return;
+    if (estado.enviando || !estado.part || estado.finalizado || !fila || !fila.qtdParaEnviar()) return;
     estado.enviando = true;
     try {
       var r = await window.TrilhaLocal.enviarLote(fila, C.rpc, {
@@ -754,9 +868,11 @@
       });
       if (r.recusados) estado.filtro.registrar(null, false, 'servidor_recusou');
       if (r.resp && r.resp.gps_intervalo_s) aplicarIntervaloGps(r.resp.gps_intervalo_s);
+      if (r.resp && r.resp.gps_lacuna_s > 0) fila.lacunaMs = r.resp.gps_lacuna_s * 1000;
       if (r.ultimoT != null && (!estado.ultimoEnviadoT || r.ultimoT > estado.ultimoEnviadoT)) estado.ultimoEnviadoT = r.ultimoT;
       marcarSucesso();
-      if (fila.qtdPendentes()) agendarEnvio(300);
+      fila.persistirPendentes();   // o que não conseguiu ser gravado no aparelho é tentado de novo
+      if (fila.qtdParaEnviar()) agendarEnvio(300);
     } catch (e) {
       if (!tratarErroFatal(e)) {
         if (e.codigo === 'lote_invalido') {
@@ -769,7 +885,7 @@
       }
     } finally {
       estado.enviando = false;
-      if (qtdPendentes() && !estado.envioAgendadoPara && !estado.finalizado) agendarEnvio(CFG.envioPeMs);
+      if (qtdParaEnviar() && !estado.envioAgendadoPara && !estado.finalizado) agendarEnvio(CFG.envioPeMs);
       atualizarUI();
     }
   }
@@ -793,7 +909,7 @@
       estado.saidaSolicitadaEm = r.saida_solicitada_em || null;
       if (r.gps_intervalo_s) aplicarIntervaloGps(r.gps_intervalo_s);
       marcarSucesso();
-      if (qtdPendentes()) agendarEnvio(0);
+      if (qtdParaEnviar()) agendarEnvio(0);
       await buscarMensagens();
       await reenviarConfirmacoes();
       await reenviarMensagens();
@@ -1090,6 +1206,7 @@
     var mapa = L.map('mapa-civil', { zoomControl: true, attributionControl: true }).setView([-15.79, -47.88], 4);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
+      crossOrigin: true,   // resposta CORS: pode ser guardada para o mapa funcionar sem internet (sw.js)
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(mapa);
     // Se a pessoa arrastar o mapa, ele para de seguir a posição (até tocar em "Onde estou").
@@ -1143,16 +1260,38 @@
     var pastilha = el && el.querySelector('.mk-eu');
     if (pastilha) pastilha.style.background = cor;
     if (estado.linhaMinha) estado.linhaMinha.setStyle({ color: cor });
+    if (estado.linhaFalhaMinha) estado.linhaFalhaMinha.setStyle({ color: cor });
   }
 
+  // A linha da trilha é desenhada em segmentos: se o GPS ficou sem registrar por mais que o limite de falha, os dois
+  // lados NÃO são ligados como se o percurso tivesse sido contínuo; o trecho sem registro aparece tracejado.
   function atualizarMinhaTrilha(pontos) {
     if (!estado.mapa || !pontos || !pontos.length) return;
-    estado.trilhaMinha = (estado.trilhaMinha || []).concat(pontos.map(function (p) { return [p.lat, p.lng]; }));
-    if (estado.trilhaMinha.length > MAX_TRILHA_TELA) estado.trilhaMinha = estado.trilhaMinha.slice(-MAX_TRILHA_TELA);
+    var lacunaMs = (estado.trilha && estado.trilha.lacunaMs) || 60000;
+    var segs = estado.trilhaMinha = estado.trilhaMinha || [];
+    var falhas = estado.falhasMinha = estado.falhasMinha || [];
+    pontos.forEach(function (p) {
+      var seg = segs[segs.length - 1];
+      if (seg && estado.ultimoTMinha != null && p.t - estado.ultimoTMinha > lacunaMs) {
+        falhas.push([seg[seg.length - 1], [p.lat, p.lng]]);
+        seg = null;
+      }
+      if (!seg) { seg = []; segs.push(seg); }
+      seg.push([p.lat, p.lng]);
+      estado.ultimoTMinha = p.t;
+    });
+    var total = segs.reduce(function (n, s) { return n + s.length; }, 0);
+    while (total > MAX_TRILHA_TELA && segs.length) {   // só limita o que é desenhado na tela (os pontos continuam na fila)
+      var sobra = total - MAX_TRILHA_TELA;
+      if (segs[0].length <= sobra) { total -= segs[0].length; segs.shift(); falhas.shift(); }
+      else { segs[0] = segs[0].slice(sobra); total = MAX_TRILHA_TELA; }
+    }
     if (!estado.linhaMinha) {
-      estado.linhaMinha = L.polyline(estado.trilhaMinha, { color: corMinha(), weight: 4, opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
+      estado.linhaMinha = L.polyline(segs, { color: corMinha(), weight: 4, opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
+      estado.linhaFalhaMinha = L.polyline(falhas, { color: corMinha(), weight: 2, opacity: 0.55, dashArray: '4 8', interactive: false }).addTo(estado.mapa);
     } else {
-      estado.linhaMinha.setLatLngs(estado.trilhaMinha);
+      estado.linhaMinha.setLatLngs(segs);
+      estado.linhaFalhaMinha.setLatLngs(falhas);
     }
   }
 
@@ -1820,7 +1959,7 @@
         UI.el('strong', { texto: 'Encontrei a vítima' }), UI.el('span', { texto: 'a pessoa que está sendo procurada' }),
       ]),
       grade,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
     opcoes.forEach(function (o) {
       grade.appendChild(UI.el('button', { classe: 'opcao-encontrei', type: 'button', 'data-cat': o[0], onclick: function () { fechar(); detalharEncontrei(o); } }, [
@@ -1836,10 +1975,9 @@
     var comFoto = UI.el('label', { classe: 'btn btn-escuro btn-gigante' }, [UI.el('span', { 'aria-hidden': 'true', texto: '📷 ' }), 'ENVIAR E TIRAR FOTO', inFoto]);
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: o[1] }),
-      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Se quiser, explique em poucas palavras:' }),
-      area,
+      UI.campo('Explique (opcional)', area, { para: 'encontrei-texto', dica: 'Sua localização vai junto com o aviso.' }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar, comFoto]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
     ]), { fecharNoFundo: false });
     var enviado = false;
     async function enviar() {
@@ -1869,7 +2007,7 @@
     if (!estado.part || estado.finalizado) return;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'encontrei' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Encontrei a vítima' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Como a vítima está? Só os bombeiros responsáveis vão ver esta informação.' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Só os bombeiros responsáveis veem.' }),
       UI.el('div', { classe: 'encontrei-opcoes' }, [
         UI.el('button', { classe: 'opcao-encontrei opcao-condicao', type: 'button', id: 'vitima-viva', onclick: function () { fechar(); confirmarVitima('viva', 'Viva'); } }, [
           UI.el('strong', { texto: 'Viva' }),
@@ -1878,7 +2016,7 @@
           UI.el('strong', { texto: 'Morta' }),
         ]),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
     ]), { fecharNoFundo: false });
   }
 
@@ -1887,9 +2025,9 @@
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Confirmar envio?' }),
       UI.el('p', { classe: 'confirma-condicao', texto: 'Vítima: ' + rotulo }),
-      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Depois de enviado, este celular mostra apenas "' + TEXTO_VITIMA + '".' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Depois, este celular mostra só "' + TEXTO_VITIMA + '".' }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
     ]), { fecharNoFundo: false });
     var enviado = false;
     btnEnviar.addEventListener('click', async function () {
@@ -2356,6 +2494,7 @@
     atualizarUI();
   });
   window.addEventListener('offline', function () { atualizarUI(); });
+  window.addEventListener('pagehide', function () { if (estado.trilha) estado.trilha.persistirPendentes(); });
   window.addEventListener('beforeunload', function (ev) {
     if (estado.rastreando && !window.GBS_RECARREGANDO) {
       ev.preventDefault();
@@ -2512,16 +2651,13 @@
     render();
     var resumo = f.resumo().map(function (x) { return x.texto + ': ' + x.qtd; }).join(' · ');
     var timer = setInterval(render, 2000);
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Diagnóstico do GPS' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Fica só neste aparelho; não é enviado. Permissão: ' + estado.permissao + ' · estado: ' + estado.gps +
-        ' · na fila: ' + qtdPendentes() + ' ponto(s)' +
-        (estado.trilha ? ' · guardados em: ' + estado.trilha.tipo + ' · enviados: ' + estado.trilha.qtdEnviados() +
-          ' · recusados pelo servidor: ' + estado.trilha.recusados().length + (estado.trilha.falhaGravacao ? ' · falha ao gravar: ' + estado.trilha.falhaGravacao : '') : '') +
-        ' · intervalo máximo: ' + Math.round(f.cfg.intervaloParadoMs / 1000) + ' s.' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Diagnóstico do GPS' },
+        [UI.dica('Fica só neste aparelho; não é enviado. Permissão: ' + estado.permissao + ' · estado: ' + estado.gps + ' · na fila: ' + qtdPendentes() + ' ponto(s) · intervalo máximo: ' + Math.round(f.cfg.intervaloParadoMs / 1000) + ' s.' +
+          (estado.trilha ? ' · guardados em ' + estado.trilha.tipo + ' · enviados ' + estado.trilha.qtdEnviados() + ' · recusados ' + estado.trilha.recusados().length + (estado.trilha.falhaGravacao ? ' · falha ao gravar: ' + estado.trilha.falhaGravacao : '') : ''))]),
       UI.el('p', { classe: 'ajuda', texto: resumo || 'Sem leituras ainda.' }),
       caixa,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { clearInterval(timer); } });
   }
 
@@ -2534,6 +2670,15 @@
     var quem = [estado.part.nome, estado.part.operacao].concat(grupos).join(' · ');
     if ($('st-nome').textContent !== quem) $('st-nome').textContent = quem;
 
+    registrarGpsNaFila();
+    if (!estado.filaUI && $('fila-estado') && window.FilaEstado) {
+      estado.filaUI = window.FilaEstado.montar($('fila-estado'), {
+        fila: function () { return estado.trilha; },
+        extra: function () { return { pendentes: estado.bufferPontos.length, naoDuraveis: estado.bufferPontos.length }; },
+        ativo: function () { return Boolean(estado.part && !estado.finalizado); },
+      });
+    }
+    if (estado.filaUI) estado.filaUI.atualizar();
     var net = estadoInternet();
     var pend = qtdPendentes();
     var cod, titulo, sub;

@@ -5,6 +5,9 @@
   "redirects": [
     { "source": "/", "destination": "/militar.html", "permanent": false }
   ],
+  "functions": {
+    "api/poa-ia.js": { "maxDuration": 60 }
+  },
   "crons": [
     { "path": "/api/limpeza", "schedule": "0 7 * * *" }
   ],

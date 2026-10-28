@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–014) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–033) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -71,6 +71,14 @@ async function como(uid, sql, params, role) {
   finally { await db.exec('reset role'); await db.query(`select set_config('request.jwt.claim.sub', '', false)`); }
 }
 async function rpc(uid, fn, args) {
+  // Desde a 038 o rascunho guarda "Fora da área". Os testes antigos (033/034) montam só os setores: aqui o "fora" é completado
+  // com o que sobra, como a tela faz. Os testes da 038 usam "__sem_fora" para enviar sem esse campo.
+  if (fn === 'cenario_salvar_rascunho' && typeof args.p_dados === 'string') {
+    const d = JSON.parse(args.p_dados);
+    if (d.__sem_fora) delete d.__sem_fora;
+    else if (d.poa_fora === undefined) d.poa_fora = Math.max(0, Math.round((1 - (d.setores || []).reduce((a, x) => a + Number(x.poa), 0)) * 1e6) / 1e6);
+    args = Object.assign({}, args, { p_dados: JSON.stringify(d) });
+  }
   const nomes = Object.keys(args || {});
   const sql = `select public.${fn}(${nomes.map((k, i) => k + ' => $' + (i + 1)).join(', ')}) as r`;
   const r = await como(uid, sql, nomes.map((k) => args[k]));
@@ -84,6 +92,10 @@ let op = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TESTE', p_retencao_h
   tipo: 'outras', tipo_outro: 'Deslizamento', acionado_em: new Date(agora - 3600e3).toISOString(),
   local_endereco: 'Rua A, 1', local_lat: -22.9, local_lng: -43.2, descricao: 'Pessoa desaparecida' }) });
 chk(op.tipo === 'outras' && op.tipo_outro === 'Deslizamento' && op.local_lat === -22.9 && op.gps_intervalo_s === 15, 'cria com tipo, acionamento, local e descrição', op);
+// Migração 040: o painel envia 2160 h (90 dias, dados guardados até a exclusão); antes era recusado
+const ret90 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RETENCAO 90', p_retencao_horas: 2160, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+chk(ret90.retencao_horas === 2160, 'criar operação com retenção de 90 dias (2160 h) funciona', ret90.retencao_horas);
+chk(/retencao_invalida/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'OP RET X', p_retencao_horas: 100 }))), 'retenção fora da lista continua recusada');
 const antiga = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ANTIGA', p_retencao_horas: 0 });
 chk(antiga.tipo === null && antiga.descricao === '', 'chamada antiga (só nome) continua funcionando e a operação fica válida');
 const cadInicial = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CADASTRO INICIAL', p_retencao_horas: 0, p_dados: JSON.stringify({ natureza_x: 1, ipo: { natureza: 'BUSCA', solicitante_nome: 'Israel' }, descricao: 'Breve' }) });
@@ -594,8 +606,16 @@ chk(/relatorio_nao_apaga/.test(await erroDe(db.query(`delete from public.relator
 const opComAtividade = await rpc(resp2, 'criar_operacao', { p_codigo: 'OP COM ATIVIDADE', p_retencao_horas: 0 });
 const pdfAtividade = opComAtividade.id + '/55555555-5555-4555-8555-555555555555.pdf';
 await db.query(`insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por_nome) values ($1, $2, 1, 10, $3, 'Sgt Dois')`, [opComAtividade.id, pdfAtividade, 'b'.repeat(64)]);
-chk(/operacao_com_registros/.test(await erroDe(rpc(resp2, 'excluir_operacao', { p_operacao: opComAtividade.id }))), 'criador que não é administrador NÃO exclui operação com relatório');
-chk((await db.query(`select count(*)::int n from public.operacoes where id = $1`, [opComAtividade.id])).rows[0].n === 1, 'operação recusada continua no banco');
+// Migração 041: quem criou exclui mesmo com atividade (antes: "operacao_com_registros")
+const opCriador = await rpc(resp2, 'criar_operacao', { p_codigo: 'OP DO CRIADOR', p_retencao_horas: 0 });
+const pdfCriador = opCriador.id + '/77777777-7777-4777-8777-777777777777.pdf';
+await db.query(`insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por_nome) values ($1, $2, 1, 10, $3, 'Sgt Dois')`, [opCriador.id, pdfCriador, 'd'.repeat(64)]);
+await rpc(resp2, 'diario_adicionar', { p_operacao: opCriador.id, p_ocorrido_em: new Date(Date.now() - 60e3).toISOString(), p_texto: 'Busca na encosta.' });
+chk(/sem_permissao/.test(await erroDe(rpc(anA, 'excluir_operacao', { p_operacao: opCriador.id })) || ''), 'participante não exclui a operação');
+const excCriador = await rpc(resp2, 'excluir_operacao', { p_operacao: opCriador.id });
+chk(excCriador.operacao === 'OP DO CRIADOR', 'criador que não é administrador exclui operação com relatório e diário', excCriador);
+chk((await db.query(`select (select count(*) from public.operacoes where id = $1)::int o, (select count(*) from public.diario where operacao_id = $1)::int d, (select count(*) from public.relatorios where operacao_id = $1)::int r`, [opCriador.id])).rows[0].o === 0, 'a operação do criador sai do banco com diário e relatórios');
+chk((await db.query(`select bucket from public.arquivos_pendentes where caminho = $1`, [pdfCriador])).rows[0]?.bucket === 'relatorios', 'o PDF da operação excluída pelo criador entra na fila do Storage');
 
 console.log('Administrador exclui relatório (migração 024)');
 const caminhoRel = opSoR1.id + '/66666666-6666-4666-8666-666666666666.pdf';
@@ -986,5 +1006,706 @@ console.log('Controle de tempo: horários combinados, atrasos e falhas de comuni
   chk((await db.query(`select verificar_retornos() n`)).rows[0].n === 0, 'operação encerrada: o agendador ignora');
 }
 
-console.log('\nMigrações 007–032 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 033: cenário por vítima (POA, versões imutáveis) e registro manual de busca (POD) ----------
+console.log('\nCenário de busca (POA) e registro manual da busca (POD) — migração 033');
+{
+  const pubB = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['busca_cenarios', 'busca_cenario_setores', 'busca_registros'].every((x) => pubB.includes(x)), 'cenários e registros de busca publicados no Realtime', pubB);
+
+  const opB = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CENARIO', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const vAna = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Ana' }) });
+  const vBeto = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Beto' }) });
+  const mkSetor = (nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 300 }) });
+  const sN = await mkSetor('Norte', -25.40), sS = await mkSetor('Sul', -25.42), sL = await mkSetor('Leste', -25.44);
+  const dados = (itens, just, extra) => JSON.stringify(Object.assign({ justificativa: just == null ? '' : just, setores: itens }, extra || {}));
+  const it = (s, poa, j) => ({ setor_id: s.id, poa, justificativa: j || '' });
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+
+  // --- cenário: rascunho ---
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.5)]) }))), 'responsável de outra operação não cria cenário');
+  chk(/vitima_nao_encontrada/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: '00000000-0000-0000-0000-000000000000', p_dados: dados([]) }))), 'vítima inexistente: recusada');
+  chk(/cenario_poa_acima_de_100/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.7), it(sS, 0.4)]) }))), 'soma dos POA acima de 100%: recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 1.2)]) }))), 'POA fora de 0 a 1: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.3), it(sN, 0.2)]) }))), 'mesmo setor duas vezes: recusado');
+  chk(/setor_nao_encontrado/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(setor, 0.3)]) }))), 'setor de outra operação: recusado');
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vAna.id])).rows[0].n === 0, 'pedido recusado não deixa rascunho pela metade');
+
+  const r1 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.5, 'última vez vista ao norte'), it(sS, 0.3)], 'Trilha do norte é a mais provável') });
+  chk(r1.cenario.numero === 1 && r1.cenario.estado === 'rascunho' && r1.setores.length === 2 && r1.cenario.base_numero === null, 'rascunho vira a versão 1 com os POA por setor', r1);
+  chk(Math.abs(r1.setores.reduce((a, s) => a + Number(s.poa), 0) - 0.8) < 1e-9 && r1.setores.find((s) => s.setor_nome === 'Norte').justificativa === 'última vez vista ao norte', 'guarda POA e justificativa por setor (os 20% restantes ficam fora dos setores)');
+  const r1b = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.4), it(sS, 0.3), it(sL, 0.2)], 'Revisado', { atualizado_em: r1.cenario.atualizado_em }) });
+  chk(r1b.cenario.id === r1.cenario.id && r1b.cenario.numero === 1 && r1b.setores.length === 3, 'salvar de novo edita o mesmo rascunho (continua a versão 1)', r1b);
+  chk(/cenario_versao_desatualizada/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.1)], 'x', { atualizado_em: r1.cenario.atualizado_em }) }))), 'rascunho mudou por outro responsável: recusa gravar por cima');
+  chk((await q(anA, `select count(*)::int n from public.busca_cenarios`))[0].n === 0 && (await q(anA, `select count(*)::int n from public.busca_registros`))[0].n === 0, 'participante não lê cenários nem registros');
+  chk((await q(resp2, `select count(*)::int n from public.busca_cenarios`))[0].n === 0, 'responsável de outra operação não lê os cenários');
+  chk((await q(resp1, `select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vAna.id]))[0].n === 1, 'responsável da operação lê o cenário');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `update public.busca_cenarios set justificativa = 'x' where id = $1`, [r1.cenario.id]))), 'sem escrita direta nas tabelas (só pelas funções)');
+
+  // --- aprovar ---
+  chk(/cenario_sem_justificativa/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: (await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.4), it(sS, 0.3), it(sL, 0.2)], 'curta') })).cenario.id }))), 'aprovar sem justificativa de verdade (mín. 10 caracteres): recusado');
+  const rasc = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.4, 'trilha'), it(sS, 0.3), it(sL, 0.2)], 'Última posição ao norte; cão de trilha indicou o norte') });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'cenario_aprovar', { p_cenario: rasc.cenario.id }))), 'outro responsável não aprova');
+  const ap1 = await rpc(resp1, 'cenario_aprovar', { p_cenario: rasc.cenario.id });
+  chk(ap1.cenario.estado === 'aprovada' && ap1.cenario.aprovada_por_nome === 'Sgt Um' && ap1.cenario.aprovada_em, 'versão aprovada: guarda quem e quando', ap1.cenario);
+  const dia1 = (await db.query(`select titulo, detalhe, categoria from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado'`, [opB.id])).rows;
+  chk(dia1.length === 1 && /Ana \(versão 1\)/.test(dia1[0].titulo) && /Norte: 40%/.test(dia1[0].detalhe) && /cão de trilha/.test(dia1[0].detalhe), 'aprovação entra no diário com POA e justificativa', dia1);
+
+  // --- versão aprovada não muda ---
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: ap1.cenario.id }))), 'aprovar de novo a mesma versão: recusado');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(rpc(resp1, 'cenario_descartar_rascunho', { p_cenario: ap1.cenario.id }))), 'versão aprovada não pode ser descartada');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set justificativa = 'adulterada' where id = $1`, [ap1.cenario.id]))), 'gatilho: nem o banco altera a versão aprovada');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set estado = 'rascunho', aprovada_em = null where id = $1`, [ap1.cenario.id]))), 'gatilho: aprovada não volta a rascunho');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`delete from public.busca_cenarios where id = $1`, [ap1.cenario.id]))), 'gatilho: versão aprovada não é apagada');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenario_setores set poa = 0.9 where cenario_id = $1`, [ap1.cenario.id]))), 'gatilho: POA da versão aprovada não muda');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`delete from public.busca_cenario_setores where cenario_id = $1`, [ap1.cenario.id]))), 'gatilho: setores da versão aprovada não somem');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`insert into public.busca_cenario_setores (cenario_id, operacao_id, setor_id, setor_nome, poa) values ($1, $2, $3, 'X', 0.1)`, [ap1.cenario.id, opB.id, sL.id]))), 'gatilho: não entra setor novo na versão aprovada');
+
+  // --- nova versão: o histórico fica ---
+  const r2 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.1), it(sS, 0.6)], 'Buscas no norte sem vestígios; deslocando a probabilidade para o sul') });
+  chk(r2.cenario.numero === 2 && r2.cenario.base_numero === 1 && r2.cenario.estado === 'rascunho', 'depois de aprovada, salvar cria a versão 2 (parte da 1)', r2.cenario);
+  const ap2 = await rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id });
+  const hist = (await q(resp1, `select numero, estado, justificativa from public.busca_cenarios where vitima_id = $1 order by numero`, [vAna.id]));
+  chk(hist.length === 2 && hist.every((h) => h.estado === 'aprovada') && /cão de trilha/.test(hist[0].justificativa) && /sul/.test(hist[1].justificativa), 'histórico guarda as duas versões aprovadas, a primeira intacta', hist);
+  const p1 = (await q(resp1, `select s.setor_nome, s.poa from public.busca_cenario_setores s join public.busca_cenarios c on c.id = s.cenario_id where c.id = $1 order by 1`, [ap1.cenario.id]));
+  chk(p1.length === 3 && Number(p1.find((x) => x.setor_nome === 'Norte').poa) === 0.4, 'POA da versão 1 continua os mesmos depois da versão 2', p1);
+  const rb = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vBeto.id, p_dados: dados([it(sL, 0.7)], 'Beto saiu pelo leste') });
+  chk(rb.cenario.numero === 1, 'cada vítima tem o seu próprio cenário (Beto começa na versão 1)', rb.cenario);
+  const rbDesc = await rpc(resp1, 'cenario_descartar_rascunho', { p_cenario: rb.cenario.id });
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vBeto.id])).rows[0].n === 0, 'rascunho pode ser descartado');
+  const rb2 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vBeto.id, p_dados: dados([it(sL, 0.7)], 'Beto saiu pelo leste (rascunho aberto ao encerrar)') });
+
+  // --- registro manual da busca (POD) ---
+  const reg = (extra) => rpc(resp1, 'busca_registrar', { p_operacao: opB.id, p_dados: JSON.stringify(Object.assign({ setor_id: sN.id, pod: 0.6, base_estimativa: 'Varredura em linha, 5 m entre buscadores, mata média', equipe: 'Equipe Alfa' }, extra || {})) });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'busca_registrar', { p_operacao: opB.id, p_dados: JSON.stringify({ setor_id: sN.id, pod: 0.5, base_estimativa: 'qualquer coisa' }) }))), 'outro responsável não registra busca');
+  chk(/busca_pod_invalido/.test(await erroDe(reg({ pod: 1.5 }))) && /busca_pod_invalido/.test(await erroDe(reg({ pod: -0.1 }))), 'POD fora de 0 a 100%: recusado');
+  chk(/busca_sem_base_estimativa/.test(await erroDe(reg({ base_estimativa: '' }))), 'sem dizer em que o POD se baseia: recusado');
+  chk(/setor_nao_encontrado/.test(await erroDe(reg({ setor_id: setor.id }))), 'setor de outra operação: recusado');
+  chk(/vitima_nao_encontrada/.test(await erroDe(reg({ vitima_id: v.id }))), 'vítima de outra operação: recusada');
+  chk(/dados_invalidos/.test(await erroDe(reg({ inicio: '2026-01-02T10:00:00Z', fim: '2026-01-02T09:00:00Z' }))), 'fim antes do início: recusado');
+  const b1 = await reg({ inicio: '2026-01-02T08:00:00Z', fim: '2026-01-02T10:00:00Z', condicoes: 'Chuva fraca, visibilidade média' });
+  chk(Number(b1.pod) === 0.6 && b1.setor_nome === 'Norte' && b1.equipe === 'Equipe Alfa' && b1.vitima_id === null && b1.registrado_por_nome === 'Sgt Um' && !b1.anulado_em, 'registro guarda POD, setor, equipe, base e quem registrou (vale para todas as vítimas)', b1);
+  const b2 = await reg({ pod: 0.35, vitima_id: vAna.id, equipe: '' });
+  chk(b2.vitima_id === vAna.id, 'registro pode valer só para uma vítima', b2);
+  chk(/busca_registrada/.test((await db.query(`select string_agg(tipo, ',') t from public.diario where operacao_id = $1`, [opB.id])).rows[0].t), 'registro entra no diário');
+  chk(/busca_registro_imutavel/.test(await erroDe(db.query(`update public.busca_registros set pod = 0.99 where id = $1`, [b1.id]))), 'gatilho: o POD registrado não é editado');
+  chk(/busca_registro_imutavel/.test(await erroDe(db.query(`delete from public.busca_registros where id = $1`, [b1.id]))), 'gatilho: registro não é apagado');
+  chk(/busca_anulacao_sem_motivo/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: b1.id, p_motivo: ' ' }))), 'anular exige motivo');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'busca_anular', { p_registro: b1.id, p_motivo: 'teste de permissão' }))), 'outro responsável não anula');
+  const an = await rpc(resp1, 'busca_anular', { p_registro: b1.id, p_motivo: 'Setor errado no lançamento' });
+  chk(an.anulado_em && an.anulado_motivo === 'Setor errado no lançamento' && an.anulado_por_nome === 'Sgt Um' && Number(an.pod) === 0.6, 'anulado: fica no histórico com motivo e quem anulou', an);
+  chk(/busca_registro_ja_anulado/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: b1.id, p_motivo: 'de novo' }))), 'anular duas vezes: recusado');
+  chk(/busca_registro_imutavel/.test(await erroDe(db.query(`update public.busca_registros set anulado_em = null, anulado_motivo = null where id = $1`, [b1.id]))), 'gatilho: anulação não se desfaz');
+  chk(/busca_registro_inexistente/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: '00000000-0000-0000-0000-000000000000', p_motivo: 'não existe' }))), 'registro inexistente: recusado');
+  chk(/busca_anulada/.test((await db.query(`select string_agg(tipo, ',') t from public.diario where operacao_id = $1`, [opB.id])).rows[0].t), 'anulação entra no diário');
+
+  // --- exclusões em cascata não esbarram na proteção ---
+  await rpc(resp1, 'excluir_setor', { p_id: sL.id });
+  const orf = (await db.query(`select setor_id, setor_nome, poa from public.busca_cenario_setores s join public.busca_cenarios c on c.id = s.cenario_id where c.id = $1 and s.setor_nome = 'Leste'`, [ap1.cenario.id])).rows;
+  chk(orf.length === 1 && orf[0].setor_id === null && Number(orf[0].poa) === 0.2, 'setor excluído: a versão aprovada guarda o nome e o POA (sem o vínculo)', orf);
+
+  // --- operação encerrada: somente leitura ---
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opB.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: rb2.cenario.id }))), 'operação encerrada: não aprova cenário');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vAna.id, p_dados: dados([it(sN, 0.2)], 'depois de encerrar') }))), 'operação encerrada: não cria versão');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'cenario_descartar_rascunho', { p_cenario: rb2.cenario.id }))), 'operação encerrada: não descarta rascunho');
+  chk(/operacao_encerrada/.test(await erroDe(reg())), 'operação encerrada: não registra busca');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'busca_anular', { p_registro: b2.id, p_motivo: 'depois de encerrar' }))), 'operação encerrada: não anula registro');
+  chk((await q(resp1, `select count(*)::int n from public.busca_cenarios where operacao_id = $1`, [opB.id]))[0].n === 3 && (await q(resp1, `select count(*)::int n from public.busca_registros where operacao_id = $1`, [opB.id]))[0].n === 2, 'operação encerrada: continua aberta para consulta');
+
+  // excluir a operação leva tudo junto (inclusive versões aprovadas)
+  await db.query(`select set_config('gbs.excluindo_operacao', $1, false)`, [opB.id]);
+  await db.query(`delete from public.operacoes where id = $1`, [opB.id]);
+  await db.query(`select set_config('gbs.excluindo_operacao', '', false)`);
+  chk((await db.query(`select (select count(*) from public.busca_cenarios where operacao_id = $1) + (select count(*) from public.busca_cenario_setores where operacao_id = $1) + (select count(*) from public.busca_registros where operacao_id = $1) as n`, [opB.id])).rows[0].n == 0, 'excluir a operação apaga cenários e registros (cascata passa pela proteção)');
+}
+
+// ---------- Migração 034: POA/POD conforme o guia (geometria, hipóteses, idempotência, POD planejada/não estimada) ----------
+console.log('\nPOA e POD conforme o guia — migração 034');
+{
+  const opG = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP GUIA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const vA = await rpc(resp1, 'salvar_vitima', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Clara' }) });
+  const vB = await rpc(resp1, 'salvar_vitima', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Davi' }) });
+  const d = (m) => m / 111194.93;
+  const circ = (nome, lat, r) => rpc(resp1, 'salvar_setor', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: r }) });
+  const sA = await circ('Alfa', -25.40, 300), sB = await circ('Bravo', -25.40 + d(400), 300), sC = await circ('Charlie', -25.40 + d(700), 300), sD = await circ('Delta', -25.40 + d(1500), 300);
+  const ponto = await rpc(resp1, 'salvar_ponto', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ categoria: 'ULTIMA_LOCALIZACAO', titulo: 'Última vez vista', lat: -25.401, lng: -49.2 }) });
+  const relato = await rpc(resp1, 'salvar_ponto', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ categoria: 'VESTIGIO', titulo: 'Pegada', lat: -25.402, lng: -49.2 }) });
+  const dados = (itens, extra) => JSON.stringify(Object.assign({ justificativa: 'Hipótese principal: seguiu a trilha do rio', setores: itens }, extra || {}));
+  const it = (s, poa) => ({ setor_id: s.id, poa, justificativa: '' });
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+
+  console.log('  geometria e sobreposição');
+  const fr = (await db.query(`select public.busca_sobreposicao_fracao(public.busca_poligono('circulo', -25.40, -49.2, 300, null), public.busca_poligono('circulo', $1, -49.2, 300, null)) f`, [-25.40 + d(400)])).rows[0].f;
+  chk(Math.abs(fr - 0.22033898305084745) < 1e-9, 'o banco mede a sobreposição como o app (22% de dois círculos a 400 m)', fr);
+  const frQuad = (await db.query(`select public.busca_sobreposicao_fracao(public.busca_poligono('circulo', -25.40, -49.2, 300, null), $1::jsonb) f`,
+    [JSON.stringify([[-25.40179864315756, -49.199100678421225], [-25.40179864315756, -49.1955033921061], [-25.39820135684244, -49.1955033921061], [-25.39820135684244, -49.199100678421225]])])).rows[0].f;
+  chk(Math.abs(frQuad - 0.5088888888888888) < 1e-9, 'o banco mede círculo × polígono como o app (50,9%)', frQuad);
+  chk((await db.query(`select public.busca_sobreposicao_fracao(public.busca_poligono('circulo', -25.40, -49.2, 300, null), public.busca_poligono('circulo', -25.40, -49.2, 100, null)) f`)).rows[0].f === 1, 'setor dentro de outro: 100%');
+  const area = (await db.query(`select public.busca_area_m2('circulo', -25.4, -49.2, 100, null) a, public.busca_area_m2('poligono', null, null, null, $1::jsonb) b`,
+    [JSON.stringify([[-25.40179864315756, -49.199100678421225], [-25.40179864315756, -49.1955033921061], [-25.39820135684244, -49.1955033921061], [-25.39820135684244, -49.199100678421225]])])).rows[0];
+  chk(Math.abs(area.a - Math.PI * 1e4) < 1e-6 && area.b > 140000 && area.b < 175000, 'área em m² (círculo e polígono)', area);
+
+  console.log('  cenário: hipóteses, ponto confiável, evidências e geometria na versão');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vA.id, p_dados: dados([it(sA, 0.5)], { confianca: 'certeza' }) }))), 'confiança fora de baixa/média/alta: recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vA.id, p_dados: dados([it(sA, 0.5)], { origem_poa: 'modelo_validado' }) }))), 'origem "modelo validado" recusada: ainda não há catálogo de modelos');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vA.id, p_dados: dados([it(sA, 0.5)], { ponto_confiavel_id: setor.id }) }))), 'ponto confiável que não é desta operação: recusado');
+  const r1 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vA.id, p_dados: dados([it(sA, 0.4), it(sB, 0.3)], {
+    horario_referencia: '2026-10-20T08:00:00Z', hipoteses: 'Permaneceu perto da trilha', limitacoes: 'Sem testemunha do último avistamento', confianca: 'media',
+    origem_poa: 'consenso_documentado', ponto_confiavel_id: ponto.id,
+    evidencias: [{ ponto_id: relato.id, confirmada: false }, { descricao: 'Relato do vizinho (não confirmado)', confirmada: false }] }) });
+  chk(r1.cenario.hipoteses === 'Permaneceu perto da trilha' && r1.cenario.limitacoes && r1.cenario.confianca === 'media' && r1.cenario.origem_poa === 'consenso_documentado' && new Date(r1.cenario.horario_referencia).toISOString() === '2026-10-20T08:00:00.000Z', 'versão guarda horário de referência, hipóteses, limitações, confiança e origem do POA', r1.cenario);
+  chk(r1.cenario.ponto_confiavel_id === ponto.id && r1.cenario.ponto_confiavel.titulo === 'Última vez vista' && r1.cenario.ponto_confiavel.lat === -25.401, 'último ponto confiável: referência e cópia dos dados');
+  chk(r1.evidencias.length === 2 && r1.evidencias.some((e) => /VESTIGIO — Pegada/.test(e.descricao) && e.confirmada === false && e.ponto_id === relato.id), 'evidências com situação de confirmação (a do ponto leva categoria e título)', r1.evidencias);
+  const gA = r1.setores.find((s) => s.setor_nome === 'Alfa');
+  chk(gA.forma === 'circulo' && gA.raio_m === 300 && gA.centro_lat === -25.40 && Math.abs(gA.area_m2 - Math.PI * 9e4) < 1e-6, 'geometria e área do setor copiadas para a versão', gA);
+  const r1b = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vA.id, p_dados: dados([it(sA, 0.4), it(sB, 0.3)], { atualizado_em: r1.cenario.atualizado_em, evidencias: [{ descricao: 'Nova pista', confirmada: true }] }) });
+  chk(r1b.evidencias.length === 1 && r1b.evidencias[0].confirmada === true && r1b.cenario.ponto_confiavel_id === null, 'salvar de novo substitui as evidências do rascunho');
+
+  console.log('  aprovação: sobreposição, revisão esperada e idempotência');
+  chk(/cenario_setores_sobrepostos/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r1.cenario.id }))), 'aprovar com setores sobrepostos (Alfa × Bravo): recusado; o rascunho pode existir');
+  const r2 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vA.id, p_dados: dados([it(sA, 0.4), it(sC, 0.3), { setor_id: sB.id, poa: 0, justificativa: 'já vistoriado' }], { atualizado_em: r1b.cenario.atualizado_em, hipoteses: 'H', evidencias: [{ ponto_id: relato.id, confirmada: true }] }) });
+  chk(/cenario_versao_desatualizada/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id, p_revisao: r1b.cenario.atualizado_em }))), 'revisão esperada diferente da vigente: aprovação recusada');
+  const ap = await rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id, p_revisao: r2.cenario.atualizado_em, p_chave: 'chave-1' });
+  chk(ap.cenario.estado === 'aprovada' && ap.cenario.aprovacao_chave === 'chave-1' && !ap.repetida, 'setores com POA zero não contam na sobreposição; aprovada com a revisão certa', ap.cenario);
+  const antes = (await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado'`, [opG.id])).rows[0].n;
+  const again = await rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id, p_chave: 'chave-1' });
+  const depois = (await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado'`, [opG.id])).rows[0].n;
+  chk(again.repetida === true && again.cenario.id === ap.cenario.id && antes === 1 && depois === 1, 'mesma chave de idempotência repetida: mesmo resultado, sem duplicar o diário');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id, p_chave: 'outra' }))), 'outra chave para versão já aprovada: recusada');
+
+  console.log('  a versão aprovada não depende do setor nem do ponto');
+  await rpc(resp1, 'salvar_setor', { p_operacao: opG.id, p_id: sA.id, p_dados: JSON.stringify({ nome: 'Alfa editado', forma: 'circulo', centro_lat: -25.5, centro_lng: -49.0, raio_m: 50 }) });
+  await rpc(resp1, 'excluir_setor', { p_id: sC.id });
+  await rpc(resp1, 'excluir_ponto', { p_id: relato.id }).catch(() => db.query(`delete from public.pontos_interesse where id = $1`, [relato.id]));
+  const hist = (await db.query(`select setor_nome, setor_id, raio_m, centro_lat, area_m2 from public.busca_cenario_setores where cenario_id = $1 order by setor_nome`, [ap.cenario.id])).rows;
+  chk(hist.find((h) => h.setor_nome === 'Alfa').raio_m === 300 && hist.find((h) => h.setor_nome === 'Alfa').centro_lat === -25.40, 'setor editado depois: a geometria da versão aprovada continua a original', hist);
+  chk(hist.find((h) => h.setor_nome === 'Charlie').setor_id === null && hist.find((h) => h.setor_nome === 'Charlie').raio_m === 300, 'setor excluído: a versão guarda nome, POA e geometria');
+  const ev = (await db.query(`select descricao, ponto_id, confirmada from public.busca_cenario_evidencias where cenario_id = $1`, [ap.cenario.id])).rows;
+  chk(ev.length === 1 && ev[0].ponto_id === null && /Pegada/.test(ev[0].descricao) && ev[0].confirmada === true, 'ponto excluído: a evidência da versão aprovada continua legível', ev);
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenario_evidencias set confirmada = false where cenario_id = $1`, [ap.cenario.id]))) && /cenario_imutavel_aprovado/.test(await erroDe(db.query(`delete from public.busca_cenario_evidencias where cenario_id = $1`, [ap.cenario.id]))), 'evidências de versão aprovada não mudam nem somem');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set hipoteses = 'trocada' where id = $1`, [ap.cenario.id]))), 'hipóteses da versão aprovada não mudam');
+  chk((await q(resp2, `select count(*)::int n from public.busca_cenario_evidencias`))[0].n === 0 && (await q(anA, `select count(*)::int n from public.busca_cenario_evidencias`))[0].n === 0, 'evidências só para os responsáveis da operação');
+
+  console.log('  registro de busca: planejada, não estimada, parcial, método e idempotência');
+  const reg = (extra) => rpc(resp1, 'busca_registrar', { p_operacao: opG.id, p_dados: JSON.stringify(Object.assign({ setor_id: sA.id, pod: 0.5, base_estimativa: 'Varredura em linha, 5 m entre buscadores' }, extra || {})) });
+  chk(/busca_planejada_sem_pod/.test(await erroDe(reg({ finalidade: 'planejada', pod: null }))), 'busca planejada exige POD prevista');
+  chk(/busca_cobertura_invalida/.test(await erroDe(reg({ alcance: 'parcial' }))) && /busca_cobertura_invalida/.test(await erroDe(reg({ alcance: 'parcial', cobertura_fracao: 1.2 }))) && /busca_cobertura_invalida/.test(await erroDe(reg({ cobertura_fracao: 0.4 }))), 'busca parcial exige a fração coberta (entre 0 e 1) e só ela');
+  chk(/dados_invalidos/.test(await erroDe(reg({ origem_pod: 'modelo_validado' }))), 'POD por modelo validado recusado: não há catálogo de modelos');
+  chk(/dados_invalidos/.test(await erroDe(reg({ missao_id: '00000000-0000-0000-0000-000000000000' }))), 'deslocamento (missão) inexistente: recusado');
+  const bn = await reg({ pod: null, base_estimativa: 'Equipe sem GPS e sem observador treinado; não há base para estimar' });
+  chk(bn.pod === null && bn.finalidade === 'pos_execucao', 'POD não estimada: registrada como nula (não vira zero)', bn);
+  const bp = await reg({ finalidade: 'planejada', pod: 0.7 });
+  chk(bp.finalidade === 'planejada' && Number(bp.pod) === 0.7, 'POD planejada registrada separada da pós-execução');
+  const bc = await reg({ alcance: 'parcial', cobertura_fracao: 0.4, pod: 0.8, metodo: 'A pé, em linha', observadores: 6, impedimentos: 'Córrego cheio', areas_nao_observadas: 'Grota ao sul', origem_pod: 'consenso_documentado', condicoes: 'Visibilidade ruim' });
+  chk(bc.alcance === 'parcial' && Number(bc.cobertura_fracao) === 0.4 && bc.metodo === 'A pé, em linha' && bc.observadores === 6 && bc.impedimentos === 'Córrego cheio' && bc.areas_nao_observadas === 'Grota ao sul' && bc.origem_pod === 'consenso_documentado', 'busca parcial com método, observadores, impedimentos e áreas não observadas', bc);
+  const k1 = await reg({ chave_cliente: 'envio-1', pod: 0.3 });
+  const k2 = await reg({ chave_cliente: 'envio-1', pod: 0.3 });
+  chk(k1.id === k2.id && (await db.query(`select count(*)::int n from public.busca_registros where chave_cliente = 'envio-1'`)).rows[0].n === 1, 'reenviar o mesmo registro (mesma chave) não duplica');
+  chk(/busca_chave_reutilizada/.test(await erroDe(reg({ chave_cliente: 'envio-1', pod: 0.9 }))), 'mesma chave com outro conteúdo: recusada');
+  const tipos = (await db.query(`select tipo, titulo from public.diario where operacao_id = $1 and tipo like 'busca%'`, [opG.id])).rows;
+  chk(tipos.some((x) => x.tipo === 'busca_planejada' && /Busca planejada em/.test(x.titulo)) && tipos.some((x) => /POD não estimada/.test(x.titulo)) && tipos.some((x) => /em 40% do setor/.test(x.titulo)), 'diário distingue planejada, não estimada e busca em parte do setor', tipos);
+  chk(/busca_registro_imutavel/.test(await erroDe(db.query(`update public.busca_registros set cobertura_fracao = 0.9 where id = $1`, [bc.id]))), 'registro continua sem edição (nem nos campos novos)');
+
+  console.log('  vítima localizada encerra o cenário dela');
+  const rbDavi = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vB.id, p_dados: dados([it(sD, 0.6)]) });
+  await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opG.id, p_dados: JSON.stringify({ condicao: 'viva', vitima_id: vB.id, local_descricao: 'Margem do rio' }) });
+  chk(/cenario_vitima_localizada/.test(await erroDe(rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vB.id, p_dados: dados([it(sD, 0.5)]) }))), 'vítima localizada: não cria nem altera versões');
+  chk(/cenario_vitima_localizada/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: rbDavi.cenario.id }))), 'vítima localizada: o rascunho que sobrou não pode ser aprovado');
+  const r3 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vA.id, p_dados: dados([it(sD, 0.5)], { atualizado_em: null }) });
+  chk(r3.cenario.numero === 2 && r3.cenario.base_numero === 1, 'as outras vítimas seguem com os cenários (Clara: nova versão 2)', r3.cenario);
+
+  console.log('  operação encerrada: somente leitura');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opG.id });
+  chk(/operacao_encerrada/.test(await erroDe(reg())) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r3.cenario.id }))), 'encerrada: sem registrar busca nem aprovar');
+  chk((await q(resp1, `select count(*)::int n from public.busca_cenario_evidencias where operacao_id = $1`, [opG.id]))[0].n >= 1, 'encerrada: evidências continuam legíveis');
+  await db.query(`select set_config('gbs.excluindo_operacao', $1, false)`, [opG.id]);
+  await db.query(`delete from public.operacoes where id = $1`, [opG.id]);
+  await db.query(`select set_config('gbs.excluindo_operacao', '', false)`);
+  chk((await db.query(`select (select count(*) from public.busca_cenario_evidencias where operacao_id = $1) + (select count(*) from public.busca_cenarios where operacao_id = $1) as n`, [opG.id])).rows[0].n == 0, 'excluir a operação apaga tudo (cascata passa pela proteção)');
+}
+
+// ---------- Migração 035: pedidos de ajuda com fluxo completo ----------
+console.log('\nPedidos de ajuda: estados, prioridade, histórico e escalação — migração 035');
+{
+  const opH = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP AJUDA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const uBeto = await usuario(null, true), uAna = await usuario(null, true);
+  const beto = await rpc(uBeto, 'ingressar', { p_token: opH.token_civil, p_nome: 'Beto', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const ana = await rpc(uAna, 'ingressar', { p_token: opH.token_militar, p_nome: 'Cb Ana', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const gH = await rpc(resp1, 'salvar_grupo', { p_operacao: opH.id, p_id: null, p_dados: JSON.stringify({ nome: 'Resgate' }) });
+  const opOutra = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP OUTRA AJUDA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const gOutra = await rpc(resp1, 'salvar_grupo', { p_operacao: opOutra.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo de outra operação' }) });
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+
+  console.log('  criação do pedido');
+  await rpc(uBeto, 'participante_enviar_mensagem', { p_participante: beto.participante_id, p_categoria: 'AJUDA', p_texto: 'Torci o pé', p_lat: -22.9, p_lng: -43.2 });
+  let ped = (await db.query(`select * from public.pedidos_ajuda where operacao_id = $1`, [opH.id])).rows;
+  chk(ped.length === 1 && ped[0].estado === 'recebido' && ped[0].origem === 'botao' && ped[0].prioridade === 'alta' && ped[0].participante_nome === 'Beto' && ped[0].lat === -22.9 && /Torci o pé/.test(ped[0].texto), 'botão "Preciso de ajuda" cria o pedido: recebido, prioridade alta, com localização', ped[0]);
+  const P1 = ped[0].id;
+  chk((await db.query(`select tipo from public.pedido_ajuda_eventos where pedido_id = $1`, [P1])).rows.map((r) => r.tipo).join() === 'recebido', 'o histórico começa com "recebido"');
+  // resposta "preciso de ajuda" a um comando
+  const cmd = await rpc(resp1, 'enviar_mensagem', { p_participante: ana.participante_id, p_tipo: 'CONFIRME', p_texto: 'Tudo bem?' });
+  await rpc(uAna, 'confirmar_mensagem', { p_mensagem: cmd.id, p_resposta: 'PRECISO_AJUDA' });
+  ped = (await db.query(`select * from public.pedidos_ajuda where operacao_id = $1 order by recebido_em`, [opH.id])).rows;
+  chk(ped.length === 2 && ped[1].origem === 'resposta' && ped[1].participante_nome === 'Cb Ana' && ped[1].estado === 'recebido', 'resposta "PRECISO DE AJUDA" a um comando também cria um pedido', ped[1]);
+  const P2 = ped[1].id;
+  await rpc(uAna, 'confirmar_mensagem', { p_mensagem: cmd.id, p_resposta: 'PRECISO_AJUDA' });
+  chk((await db.query(`select count(*)::int n from public.pedidos_ajuda where operacao_id = $1`, [opH.id])).rows[0].n === 2, 'repetir a resposta não duplica o pedido');
+
+  console.log('  permissões');
+  chk((await q(uBeto, `select count(*)::int n from public.pedidos_ajuda`))[0].n === 0, 'participante não lê pedidos nem histórico');
+  chk((await q(resp2, `select count(*)::int n from public.pedidos_ajuda where operacao_id = $1`, [opH.id]))[0].n === 0, 'responsável de outra operação não lê');
+  chk((await q(resp1, `select count(*)::int n from public.pedidos_ajuda where operacao_id = $1`, [opH.id]))[0].n === 2, 'responsável da operação lê os pedidos');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'pedido_ajuda_assumir', { p_pedido: P1 }))) && /sem_permissao/.test(await erroDe(rpc(uBeto, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'atendido', p_texto: 'forjado pelo próprio' }))), 'quem não é responsável da operação (outra operação ou participante) não altera o pedido');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `update public.pedidos_ajuda set estado = 'resolvido' where id = $1`, [P1]))), 'sem escrita direta: só pelas funções');
+  chk(/pedido_inexistente/.test(await erroDe(rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: '00000000-0000-0000-0000-000000000000' }))), 'pedido inexistente: recusado');
+
+  console.log('  "ciente" não resolve');
+  await db.query(`update public.mensagens set lida_em = now(), lida_por_nome = 'Sgt Um' where operacao_id = $1`, [opH.id]);
+  chk((await db.query(`select estado from public.pedidos_ajuda where id = $1`, [P1])).rows[0].estado === 'recebido', 'mensagem lida/ciente não muda o estado do pedido (continua "recebido")');
+
+  console.log('  fluxo: assumir, prioridade, equipe, atendimento, resolução');
+  const a1 = await rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P1 });
+  chk(a1.estado === 'assumido' && a1.assumido_por_nome === 'Sgt Um' && a1.assumido_em, 'assumir: estado "assumido" por quem assumiu', a1);
+  const a2 = await rpc(resp2, 'pedido_ajuda_assumir', { p_pedido: P1 }).catch((e) => e.message);
+  chk(/sem_permissao/.test(String(a2)), 'outro responsável de fora não assume');
+  chk(/pedido_prioridade_invalida/.test(await erroDe(rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'urgentissima' }))), 'prioridade inválida: recusada');
+  const pr1 = await rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'critica' });
+  chk(pr1.prioridade === 'critica', 'subir a prioridade não exige justificativa');
+  chk(/pedido_justificativa_obrigatoria/.test(await erroDe(rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'baixa' }))), 'baixar a prioridade exige justificativa');
+  const pr2 = await rpc(resp1, 'pedido_ajuda_prioridade', { p_pedido: P1, p_prioridade: 'media', p_justificativa: 'Só torceu o pé, caminha com apoio' });
+  chk(pr2.prioridade === 'media', 'baixar com justificativa funciona');
+  chk(/pedido_equipe_invalida/.test(await erroDe(rpc(resp1, 'pedido_ajuda_enviar_equipe', { p_pedido: P1, p_grupo: gOutra.id }))), 'equipe de outra operação: recusada');
+  const eq = await rpc(resp1, 'pedido_ajuda_enviar_equipe', { p_pedido: P1, p_grupo: gH.id, p_nota: 'Saindo da base' });
+  chk(eq.estado === 'equipe_enviada' && eq.equipe_nome === 'Resgate' && eq.equipe_enviada_em, 'enviar equipe: estado "equipe_enviada" com a equipe e a hora', eq);
+  const at = await rpc(resp1, 'pedido_ajuda_iniciar_atendimento', { p_pedido: P1, p_nota: 'Equipe chegou' });
+  chk(at.estado === 'em_atendimento' && at.atendimento_iniciado_em, 'iniciar atendimento: "em_atendimento"');
+  await rpc(resp1, 'pedido_ajuda_nota', { p_pedido: P1, p_texto: 'Imobilizado; aguardando maca' });
+  chk(/pedido_resolucao_invalida/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'resolvido', p_texto: 'texto qualquer' }))), 'tipo de resolução inválido: recusado');
+  chk(/pedido_resolucao_sem_texto/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'atendido', p_texto: 'ok' }))), 'resolver exige justificativa (mín. 5 caracteres)');
+  chk((await db.query(`select estado from public.pedidos_ajuda where id = $1`, [P1])).rows[0].estado === 'em_atendimento', 'resolução recusada não muda o estado');
+  const rs = await rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'atendido', p_texto: 'Levado à base e entregue ao SAMU' });
+  chk(rs.estado === 'resolvido' && rs.resolucao === 'atendido' && rs.resolvido_por_nome === 'Sgt Um' && rs.resolvido_em, 'resolvido: guarda tipo, justificativa, quem e quando', rs);
+  chk(/pedido_ja_resolvido/.test(await erroDe(rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P1 }))) && /pedido_ja_resolvido/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P1, p_resolucao: 'outro', p_texto: 'de novo, de novo' }))), 'pedido resolvido não é alterado nem resolvido de novo');
+  chk(/pedido_nao_resolvido/.test(await erroDe(rpc(resp1, 'pedido_ajuda_reabrir', { p_pedido: P2, p_motivo: 'não está resolvido' }))), 'só se reabre pedido resolvido');
+  const reab = await rpc(resp1, 'pedido_ajuda_reabrir', { p_pedido: P1, p_motivo: 'Dor voltou, precisa de novo atendimento' });
+  chk(reab.estado === 'assumido' && reab.resolvido_em === null && reab.resolucao === null, 'reabrir volta para "assumido" e limpa a resolução atual');
+  const hist = (await db.query(`select tipo, por_nome, detalhe, dados from public.pedido_ajuda_eventos where pedido_id = $1 order by id`, [P1])).rows;
+  chk(hist.map((h) => h.tipo).join() === 'recebido,assumido,prioridade,prioridade,equipe_enviada,em_atendimento,nota,resolvido,reaberto', 'histórico completo, na ordem, sem apagar nada', hist.map((h) => h.tipo));
+  chk(hist.find((h) => h.tipo === 'reaberto').dados.resolucao_anterior.resolucao === 'atendido' && /SAMU/.test(hist.find((h) => h.tipo === 'reaberto').dados.resolucao_anterior.texto), 'reabrir preserva a resolução anterior no histórico');
+  chk(hist.find((h) => h.tipo === 'prioridade' && /baixa|media/.test(h.detalhe)).dados.justificativa === 'Só torceu o pé, caminha com apoio', 'a justificativa de baixar a prioridade fica no histórico');
+  chk(/pedido_historico_imutavel/.test(await erroDe(db.query(`update public.pedido_ajuda_eventos set detalhe = 'forjado' where pedido_id = $1`, [P1]))) && /pedido_historico_imutavel/.test(await erroDe(db.query(`delete from public.pedido_ajuda_eventos where pedido_id = $1`, [P1]))), 'gatilho: o histórico não é editado nem apagado');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo like 'pedido_ajuda_%'`, [opH.id])).rows[0].n >= 9, 'cada passo entra no diário');
+
+  console.log('  escalação e tempo sem atendimento');
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '10 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 1, 'pedido recebido há 10 min (prioridade alta: prazo de 3 min) sem ninguém assumir: escala');
+  const alE = (await db.query(`select tipo, nivel, titulo, texto, participante_id from public.alertas where operacao_id = $1 and tipo = 'ajuda_sem_atendimento'`, [opH.id])).rows;
+  chk(alE.length === 1 && alE[0].nivel === 'critico' && /SEM ATENDIMENTO — Cb Ana/.test(alE[0].titulo) && /Ninguém assumiu/.test(alE[0].texto) && alE[0].participante_id === ana.participante_id, 'alerta crítico com o tempo sem atendimento e o nome', alE);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'o mesmo prazo não repete o alerta');
+  chk((await db.query(`select escalonamentos from public.pedidos_ajuda where id = $1`, [P2])).rows[0].escalonamentos === 1, 'o pedido conta as escalações');
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '20 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 1, 'passou outro prazo: escala de novo (nunca "esquece")');
+  chk((await db.query(`select count(*)::int n from public.pedido_ajuda_eventos where pedido_id = $1 and tipo = 'escalado'`, [P2])).rows[0].n === 2, 'cada escalação fica no histórico');
+  await rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P2 });
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '5 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'assumido há 5 min (prazo de 9 min sem equipe): ainda não escala');
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '10 minutes' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 1 && /PARADO — Cb Ana/.test((await db.query(`select titulo from public.alertas where chave like $1 || '%' order by id desc limit 1`, ['ajuda:' + P2])).rows[0].titulo), 'assumido mas sem equipe enviada além do prazo: escala como "parado"');
+  await rpc(resp1, 'pedido_ajuda_iniciar_atendimento', { p_pedido: P2 });
+  await db.query(`update public.pedidos_ajuda set estado_em = now() - interval '2 hours' where id = $1`, [P2]);
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'em atendimento não escala');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'verificar_pedidos_ajuda', { p_operacao: opH.id }))), 'só responsável da operação (ou o agendador) verifica');
+  chk((await db.query(`select public.verificar_pedidos_ajuda() n`)).rows[0].n === 0, 'o agendador (sem usuário) também pode verificar');
+
+  console.log('  o participante vê só o estado do próprio pedido');
+  const mp = await rpc(uBeto, 'meu_pedido_ajuda', { p_participante: beto.participante_id });
+  chk(mp.estado === 'assumido' && mp.assumido === true && !('assumido_por_nome' in mp) && !('resolucao_texto' in mp), 'participante vê o estado, sem nomes de quem atende nem anotações', mp);
+  chk(/participante_invalido/.test(await erroDe(rpc(uBeto, 'meu_pedido_ajuda', { p_participante: ana.participante_id }))), 'participante não consulta o pedido de outro');
+
+  console.log('  pedidos anteriores ao fluxo (carga inicial) e reexecução');
+  const msgVelha = await db.query(`insert into public.mensagens (operacao_id, participante_id, remetente_id, remetente_nome, tipo, texto, direcao, categoria, criada_em)
+    values ($1, $2, $3, 'Beto', 'PARTICIPANTE', 'socorro antigo', 'entrada', 'AJUDA', now() - interval '3 days') returning id`, [opH.id, beto.participante_id, uBeto]);
+  await db.query(`delete from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id]);
+  await db.exec(ler('supabase/migracoes/035_pedidos_ajuda.sql'));
+  const legado = (await db.query(`select estado, resolucao, resolucao_texto from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows;
+  chk(legado.length === 1 && legado[0].estado === 'resolvido' && /anterior ao fluxo/.test(legado[0].resolucao_texto), 'pedido antigo (mais de 24 h) entra resolvido, marcado como registro anterior ao fluxo', legado);
+  chk((await db.query(`select count(*)::int n from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows[0].n === 1, 'reexecutar a migração não duplica');
+
+  console.log('  operação encerrada: somente leitura');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opH.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'pedido_ajuda_assumir', { p_pedido: P2 }))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'pedido_ajuda_resolver', { p_pedido: P2, p_resolucao: 'outro', p_texto: 'depois de encerrar' }))), 'encerrada: pedidos não mudam');
+  chk((await q(resp1, `select count(*)::int n from public.pedido_ajuda_eventos where operacao_id = $1`, [opH.id]))[0].n > 10, 'encerrada: o histórico continua legível');
+  chk((await rpc(resp1, 'verificar_pedidos_ajuda', { p_operacao: opH.id })) === 0, 'encerrada: não escala');
+  const pubA = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(pubA.includes('pedidos_ajuda') && pubA.includes('pedido_ajuda_eventos'), 'pedidos e histórico publicados no Realtime');
+}
+
+// ---------- Migração 036: recursos e disponibilidade das equipes ----------
+console.log('\nRecursos e disponibilidade das equipes — migração 036');
+{
+  const opR = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RECURSOS', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'aquatica' }) });
+  const gR = await rpc(resp1, 'salvar_grupo', { p_operacao: opR.id, p_id: null, p_dados: JSON.stringify({ nome: 'Aquático' }) });
+  const uCiv = await usuario(null, true);
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+  const def = await db.query(`select disponibilidade, disponibilidade_obs, capacidades, disponivel_em from public.grupos where id = $1`, [gR.id]);
+  chk(def.rows[0].disponibilidade === 'disponivel' && def.rows[0].capacidades === '' && def.rows[0].disponivel_em === null, 'grupo novo: disponível, sem capacidades nem recursos');
+
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ disponibilidade: 'indisponivel' }) }))) && /sem_permissao/.test(await erroDe(rpc(uCiv, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({}) }))), 'quem não é responsável da operação não altera recursos');
+  chk(/grupo_inexistente/.test(await erroDe(rpc(resp1, 'salvar_recursos_grupo', { p_grupo: '00000000-0000-0000-0000-000000000000', p_dados: '{}' }))), 'grupo inexistente: recusado');
+  const ruim = (r) => rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify(r) });
+  chk(/dados_invalidos/.test(await erroDe(ruim({ disponibilidade: 'dormindo' }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'foguete' }] }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'drone', quantidade: 0 }] })))
+    && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'drone', quantidade: 100 }] }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: [{ tipo: 'drone', situacao: 'quebrado' }] }))) && /dados_invalidos/.test(await erroDe(ruim({ recursos: 'tudo' }))), 'disponibilidade, tipo, quantidade e situação inválidos: recusados');
+  chk(/dados_invalidos/.test(await erroDe(ruim({ recursos: Array.from({ length: 31 }, () => ({ tipo: 'outro' })) }))), 'mais de 30 recursos: recusado');
+  chk((await db.query(`select count(*)::int n from public.grupo_recursos where grupo_id = $1`, [gR.id])).rows[0].n === 0, 'pedido recusado não grava nada pela metade');
+
+  const r1 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({
+    disponibilidade: 'em_descanso', disponibilidade_obs: 'Turno de 12 h terminado', disponivel_em: '2026-10-28T20:00:00Z', capacidades: 'Mergulho autônomo; resgate aquático',
+    recursos: [
+      { tipo: 'embarcacao', identificacao: 'Bote ABT-3', quantidade: 1, situacao: 'operacional' },
+      { tipo: 'viatura', identificacao: 'VTR ABT-12', quantidade: 2 },
+      { tipo: 'drone', identificacao: 'Mavic 3T', situacao: 'limitado', observacao: 'Bateria reserva única' },
+      { tipo: 'cao_busca', identificacao: 'Thor', quantidade: 1 },
+      { tipo: 'comunicacao', identificacao: 'HT UHF', quantidade: 6 },
+      { tipo: 'primeiros_socorros', identificacao: 'Mochila APH', quantidade: 1 },
+    ] }) });
+  chk(r1.grupo.disponibilidade === 'em_descanso' && r1.grupo.capacidades === 'Mergulho autônomo; resgate aquático' && r1.grupo.recursos_atualizado_por_nome === 'Sgt Um' && r1.recursos.length === 6, 'salva disponibilidade, capacidades e os seis tipos de recurso', r1.grupo);
+  const rec = (await q(resp1, `select tipo, identificacao, quantidade, situacao, observacao from public.grupo_recursos where grupo_id = $1 order by tipo`, [gR.id]));
+  chk(rec.find((x) => x.tipo === 'viatura').quantidade === 2 && rec.find((x) => x.tipo === 'drone').situacao === 'limitado' && rec.find((x) => x.tipo === 'drone').observacao === 'Bateria reserva única' && rec.find((x) => x.tipo === 'embarcacao').situacao === 'operacional', 'quantidade, situação e observação por recurso', rec);
+  chk((await q(resp2, `select count(*)::int n from public.grupo_recursos`))[0].n === 0 && (await q(uCiv, `select count(*)::int n from public.grupo_recursos`))[0].n === 0, 'recursos só para os responsáveis da operação');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `delete from public.grupo_recursos where grupo_id = $1`, [gR.id]))), 'sem escrita direta nos recursos');
+  const dia = (await db.query(`select titulo, detalhe from public.diario where operacao_id = $1 and tipo = 'equipe_recursos'`, [opR.id])).rows;
+  chk(dia.length === 1 && /Equipe Aquático: disponibilidade em descanso/.test(dia[0].titulo) && /Bote ABT-3/.test(dia[0].detalhe) && /viatura ×2 \(VTR ABT-12\)/.test(dia[0].detalhe) && /Mergulho/.test(dia[0].detalhe) && /Volta a ficar disponível: 28\/10 17:00/.test(dia[0].detalhe), 'mudança entra no diário com recursos, capacidades e hora de retorno', dia);
+
+  // só as chaves enviadas mudam; "recursos" substitui a lista inteira
+  const r2 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ disponibilidade: 'disponivel', disponivel_em: null }) });
+  chk(r2.grupo.disponibilidade === 'disponivel' && r2.grupo.capacidades === 'Mergulho autônomo; resgate aquático' && r2.recursos.length === 6 && r2.grupo.disponivel_em === null, 'sem "recursos" na chamada, a lista continua; as capacidades também');
+  const r3 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ recursos: [{ tipo: 'viatura', identificacao: 'VTR nova' }] }) });
+  chk(r3.recursos.length === 1 && r3.recursos[0].identificacao === 'VTR nova' && r3.grupo.disponibilidade === 'disponivel', 'com "recursos", a lista é substituída');
+  const r4 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ recursos: [] }) });
+  chk(r4.recursos.length === 0, 'lista vazia limpa os recursos');
+  const dia2 = (await db.query(`select titulo from public.diario where operacao_id = $1 and tipo = 'equipe_recursos' order by id`, [opR.id])).rows.map((x) => x.titulo);
+  chk(dia2.length === 4 && /recursos atualizados/.test(dia2[2]) && /disponibilidade disponível/.test(dia2[1]), 'o diário distingue mudança de disponibilidade de mudança de recursos', dia2);
+
+  console.log('  excluir equipe e operação encerrada');
+  await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ recursos: [{ tipo: 'drone' }] }) });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opR.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR.id, p_dados: JSON.stringify({ disponibilidade: 'indisponivel' }) }))), 'operação encerrada: recursos e disponibilidade não mudam');
+  chk((await q(resp1, `select count(*)::int n from public.grupo_recursos where grupo_id = $1`, [gR.id]))[0].n === 1, 'encerrada: continua legível');
+  const opR2 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP RECURSOS 2', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const gR2 = await rpc(resp1, 'salvar_grupo', { p_operacao: opR2.id, p_id: null, p_dados: JSON.stringify({ nome: 'Terrestre' }) });
+  await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gR2.id, p_dados: JSON.stringify({ recursos: [{ tipo: 'cao_busca', identificacao: 'Rex' }] }) });
+  await rpc(resp1, 'excluir_grupo', { p_id: gR2.id });
+  chk((await db.query(`select count(*)::int n from public.grupo_recursos where grupo_id = $1`, [gR2.id])).rows[0].n === 0, 'excluir a equipe apaga os recursos dela');
+  const pubR = (await db.query(`select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'grupo_recursos'`)).rows;
+  chk(pubR.length === 1, 'recursos publicados no Realtime');
+}
+
+// ---------- Migração 037: briefing da operação e passagem de comando ----------
+console.log('\nBriefing e passagem de comando — migração 037');
+{
+  const resp3 = await usuario('r3@cbm', false), resp4 = await usuario('r4@cbm', false), resp5 = await usuario('r5@cbm', false);
+  await db.query(`insert into public.responsaveis (user_id, nome) values ($1, 'Cap Três'), ($2, 'Ten Quatro'), ($3, 'Sd Cinco')`, [resp3, resp4, resp5]);
+  await db.query(`update public.responsaveis set ativo = false where user_id = $1`, [resp5]);
+  const q = async (uid, sql, params) => (await como(uid, sql, params)).rows;
+  const opB = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP BRIEFING', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre', descricao: 'Busca de idoso com demência desaparecido na mata' }) });
+  await db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2), ($1, $3), ($1, $4)`, [opB.id, resp2, resp3, resp5]);
+  const uBeto = await usuario(null, true);
+
+  console.log('  comando inicial');
+  const c0 = (await db.query(`select comando_user_id, comando_nome, comando_desde, criada_em from public.operacoes where id = $1`, [opB.id])).rows[0];
+  chk(c0.comando_user_id === resp1 && c0.comando_nome === 'Sgt Um' && +c0.comando_desde === +c0.criada_em, 'operação nova: o comando começa com quem criou');
+  chk((await db.query(`select count(*)::int n from public.operacoes where comando_user_id is null`)).rows[0].n === 0, 'operações que já existiam também ficaram com um comandante (o criador)');
+
+  // dados para o briefing: vítima, último local visto, risco, equipe sem comunicação, cenário aprovado, pedido de ajuda, decisão
+  const vit = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Seu Antônio', idade: 78, caracteristicas: 'Usa bengala', roupas: 'Camisa xadrez', perfil: ['idoso', 'demencia'] }) });
+  const vit2 = await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Dona Maria' }) });
+  const setB = await rpc(resp1, 'salvar_setor', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Mata Norte', forma: 'circulo', centro_lat: -25.4, centro_lng: -49.2, raio_m: 300 }) });
+  await rpc(resp1, 'salvar_setor', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Rio Sul', forma: 'circulo', centro_lat: -25.45, centro_lng: -49.2, raio_m: 300 }) });
+  await rpc(resp1, 'salvar_ponto', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ categoria: 'ULTIMA_LOCALIZACAO', titulo: 'Casa do filho', lat: -25.401, lng: -49.2, descricao: 'Saiu às 14h' }) });
+  await rpc(resp1, 'salvar_ponto', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ categoria: 'RISCO', titulo: 'Barranco instável', lat: -25.402, lng: -49.2, descricao: 'Queda de 8 m' }) });
+  const gB = await rpc(resp1, 'salvar_grupo', { p_operacao: opB.id, p_id: null, p_dados: JSON.stringify({ nome: 'Alfa' }) });
+  await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: gB.id, p_dados: JSON.stringify({ disponibilidade: 'em_descanso', capacidades: 'Busca em mata', recursos: [{ tipo: 'drone', identificacao: 'Mavic' }, { tipo: 'primeiros_socorros', identificacao: 'Mochila' }] }) });
+  const rasc = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vit.id, p_dados: JSON.stringify({ justificativa: 'Perto da casa do filho, trilha conhecida', hipoteses: 'Seguiu a trilha da mata', limitacoes: 'Sem testemunha', confianca: 'media',
+    setores: [{ setor_id: setB.id, poa: 0.7, justificativa: '' }] }) });
+  await rpc(resp1, 'cenario_aprovar', { p_cenario: rasc.cenario.id });
+  const beto = await rpc(uBeto, 'ingressar', { p_token: opB.token_civil, p_nome: 'Beto', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  await rpc(uBeto, 'participante_enviar_mensagem', { p_participante: beto.participante_id, p_categoria: 'AJUDA', p_texto: 'Machuquei a perna' });
+  await rpc(resp1, 'decisao_criar', { p_operacao: opB.id, p_dados: JSON.stringify({ texto: 'Pedir apoio aéreo ao CBMPR?', responsavel: 'Cmt Geral', prazo: '2026-10-28T22:00:00Z' }) });
+
+  console.log('  o briefing é montado com o que já existe');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp4, 'briefing_operacao_dados', { p_operacao: opB.id }))) && /sem_permissao/.test(await erroDe(rpc(uBeto, 'briefing_operacao_dados', { p_operacao: opB.id }))), 'só os responsáveis da operação leem o briefing');
+  const b = await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id });
+  chk(b.operacao.codigo === 'OP BRIEFING' && b.comando.nome === 'Sgt Um' && b.objetivo.texto === '' && /idoso com demência/.test(b.objetivo.sugerido), 'objetivo: sugerido pela descrição da operação (sem digitar de novo) e comando atual', b.objetivo);
+  chk(b.vitimas.length === 2 && b.vitimas[0].nome === 'Seu Antônio' && b.vitimas[0].perfil.includes('demencia') && b.vitimas[0].idade === 78, 'vítimas vêm da ficha');
+  chk(b.ultimo_local_visto.length === 1 && b.ultimo_local_visto[0].titulo === 'Casa do filho' && b.ultimo_local_visto[0].lat === -25.401, 'último local visto vem dos pontos de interesse');
+  chk(b.hipoteses.length === 1 && b.hipoteses[0].vitima === 'Seu Antônio' && b.hipoteses[0].hipoteses === 'Seguiu a trilha da mata' && b.hipoteses[0].setores[0].nome === 'Mata Norte' && Number(b.hipoteses[0].setores[0].poa) === 0.7, 'hipóteses vêm do cenário aprovado (versão, hipóteses, limitações e setores com POA)', b.hipoteses);
+  chk(b.riscos.pontos.length === 1 && b.riscos.pontos[0].titulo === 'Barranco instável' && b.riscos.pedidos_ajuda_abertos === 1, 'riscos: pontos de risco e pedidos de ajuda abertos');
+  const alfa = b.equipes.find((e) => e.nome === 'Alfa');
+  chk(alfa.disponibilidade_efetiva === 'em_descanso' && alfa.capacidades === 'Busca em mata' && alfa.recursos.length === 2 && alfa.sem_comunicacao === true && alfa.sem_primeiros_socorros === false, 'equipes: disponibilidade, recursos e alerta de "sem equipamento de comunicação"', alfa);
+  chk(b.tarefas.setores.total === 2 && b.tarefas.setores.pendente === 2 && b.tarefas.setores.pendentes.length === 2 && b.tarefas.deslocamentos.length === 0, 'tarefas: setores por situação e deslocamentos ativos');
+  chk(b.comunicacoes.dados.ultimas.length === 1 && /Machuquei a perna/.test(b.comunicacoes.dados.ultimas[0].texto) && b.comunicacoes.dados.ultimas[0].de === 'Beto', 'comunicações: últimas mensagens recebidas do campo');
+  chk(b.decisoes_pendentes.length === 1 && b.decisoes_pendentes[0].texto === 'Pedir apoio aéreo ao CBMPR?' && b.decisoes_pendentes[0].responsavel === 'Cmt Geral', 'decisões pendentes escritas pelo comando');
+  const auto = b.decisoes_automaticas.map((x) => x.texto);
+  chk(auto.some((x) => /Pedido de ajuda de Beto \(recebido, prioridade alta\)/.test(x)) && auto.some((x) => /Vítima Dona Maria sem cenário/.test(x)) && !auto.some((x) => /Seu Antônio sem cenário/.test(x)), 'decisões que o sistema vê esperando: pedido de ajuda aberto, vítima sem cenário aprovado', auto);
+
+  console.log('  textos do comando e decisões');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_briefing', { p_operacao: opB.id, p_dados: JSON.stringify({ objetivo: 'x'.repeat(1001) }) }))) && /sem_permissao/.test(await erroDe(rpc(resp4, 'salvar_briefing', { p_operacao: opB.id, p_dados: '{}' }))), 'texto acima de 1000 caracteres e quem não é responsável: recusados');
+  await rpc(resp1, 'salvar_briefing', { p_operacao: opB.id, p_dados: JSON.stringify({ objetivo: 'Localizar o Sr. Antônio com vida', comunicacoes: 'Canal 3 UHF; QG 41 99999-0000' }) });
+  await rpc(resp2, 'salvar_briefing', { p_operacao: opB.id, p_dados: JSON.stringify({ riscos: 'Chuva forte prevista às 18h' }) });
+  const b2 = await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id });
+  chk(b2.objetivo.texto === 'Localizar o Sr. Antônio com vida' && b2.comunicacoes.texto === 'Canal 3 UHF; QG 41 99999-0000' && b2.riscos.texto === 'Chuva forte prevista às 18h', 'só as chaves enviadas mudam; qualquer responsável da operação edita');
+  chk(/decisao_texto_invalido/.test(await erroDe(rpc(resp1, 'decisao_criar', { p_operacao: opB.id, p_dados: JSON.stringify({ texto: 'oi' }) }))), 'decisão com texto curto: recusada');
+  const dec = b2.decisoes_pendentes[0];
+  chk(/decisao_sem_texto/.test(await erroDe(rpc(resp1, 'decisao_resolver', { p_decisao: dec.id, p_estado: 'decidida', p_texto: '' }))), 'decidir exige o texto da decisão');
+  const dd = await rpc(resp2, 'decisao_resolver', { p_decisao: dec.id, p_estado: 'decidida', p_texto: 'Apoio aéreo solicitado às 16h10' });
+  chk(dd.estado === 'decidida' && dd.decidida_por_nome === 'Sgt Dois', 'decisão tomada: guarda a decisão, quem e quando');
+  chk(/decisao_ja_resolvida/.test(await erroDe(rpc(resp1, 'decisao_resolver', { p_decisao: dec.id, p_estado: 'cancelada', p_texto: 'x' }))), 'decisão já resolvida não muda');
+  chk((await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id })).decisoes_pendentes.length === 0, 'decidida sai da lista de pendentes');
+  const dec2 = await rpc(resp1, 'decisao_criar', { p_operacao: opB.id, p_dados: JSON.stringify({ texto: 'Trocar o turno das 18h?' }) });
+  await rpc(resp1, 'decisao_resolver', { p_decisao: dec2.id, p_estado: 'cancelada', p_texto: 'Não será necessário' });
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo in ('decisao_pendente', 'decisao_decidida', 'decisao_cancelada', 'briefing_atualizado')`, [opB.id])).rows[0].n === 6, 'briefing e decisões entram no diário');
+
+  console.log('  passagem de comando: foto, aceite e horário');
+  chk(/passagem_so_do_comandante/.test(await erroDe(rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 }))), 'só quem está no comando passa o comando');
+  chk(/passagem_destino_invalido/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp1 }))) && /passagem_destino_invalido/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp4 })))
+    && /passagem_destino_invalido/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp5 }))), 'destino inválido: a própria pessoa, quem não é da operação e responsável suspenso');
+  const p1 = await rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp2, p_nota: 'Vou para o QG; atenção à chuva às 18h' });
+  chk(p1.estado === 'pendente' && p1.para_nome === 'Sgt Dois' && p1.de_nome === 'Sgt Um' && p1.respondida_em === null && p1.resumo.vitimas.length === 2 && p1.resumo.hipoteses[0].hipoteses === 'Seguiu a trilha da mata' && p1.resumo.objetivo.texto === 'Localizar o Sr. Antônio com vida', 'passagem pendente guarda a foto do briefing (objetivo, vítimas, hipóteses…) e a nota', { e: p1.estado, para: p1.para_nome });
+  chk((await db.query(`select comando_nome from public.operacoes where id = $1`, [opB.id])).rows[0].comando_nome === 'Sgt Um', 'o comando NÃO muda enquanto não houver aceite');
+  chk(/passagem_pendente_existente/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 }))), 'só uma passagem pendente por vez');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp3, 'passagem_responder', { p_passagem: p1.id, p_aceitar: true }))) && /sem_permissao/.test(await erroDe(rpc(resp1, 'passagem_responder', { p_passagem: p1.id, p_aceitar: true }))), 'só quem recebe responde (nem o outro responsável, nem quem passou)');
+  // a situação muda depois da foto
+  await rpc(resp1, 'salvar_vitima', { p_operacao: opB.id, p_id: vit2.id, p_dados: JSON.stringify({ nome: 'Dona Maria Silva' }) });
+  const ac = await rpc(resp2, 'passagem_responder', { p_passagem: p1.id, p_aceitar: true, p_nota: 'Recebido' });
+  chk(ac.estado === 'aceita' && ac.respondida_em && ac.resposta_nota === 'Recebido', 'aceite: guarda o estado, a hora e a nota');
+  const cmd = (await db.query(`select comando_user_id, comando_nome, comando_desde from public.operacoes where id = $1`, [opB.id])).rows[0];
+  chk(cmd.comando_user_id === resp2 && cmd.comando_nome === 'Sgt Dois' && +cmd.comando_desde === +new Date(ac.respondida_em), 'no aceite o comando passa para quem recebeu, com a hora do aceite', cmd);
+  chk((await q(resp1, `select resumo from public.passagens_comando where id = $1`, [p1.id]))[0].resumo.vitimas.map((x) => x.nome).includes('Dona Maria'), 'a foto guardada continua a de quando o comando foi passado (não muda com o que mudou depois)');
+  chk(/passagem_nao_pendente/.test(await erroDe(rpc(resp2, 'passagem_responder', { p_passagem: p1.id, p_aceitar: false, p_nota: 'mudei de ideia' }))), 'passagem já respondida não se responde de novo');
+  chk(/passagem_imutavel/.test(await erroDe(db.query(`update public.passagens_comando set resumo = '{}'::jsonb where id = $1`, [p1.id]))) && /passagem_imutavel/.test(await erroDe(db.query(`update public.passagens_comando set estado = 'recusada' where id = $1`, [p1.id])))
+    && /passagem_imutavel/.test(await erroDe(db.query(`delete from public.passagens_comando where id = $1`, [p1.id]))), 'gatilho: foto, quem passou/recebeu e resposta não mudam nem se apagam');
+  const diaC = (await db.query(`select titulo, nivel from public.diario where operacao_id = $1 and tipo = 'comando_assumido'`, [opB.id])).rows;
+  chk(diaC.length === 1 && /Sgt Um passou o comando a Sgt Dois/.test(diaC[0].titulo) && diaC[0].nivel === 'critico', 'o aceite entra no diário como evento de destaque', diaC);
+
+  console.log('  recusa e cancelamento');
+  const p2 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 });
+  chk(/passagem_recusa_sem_motivo/.test(await erroDe(rpc(resp3, 'passagem_responder', { p_passagem: p2.id, p_aceitar: false, p_nota: '' }))), 'recusar exige motivo');
+  const rf = await rpc(resp3, 'passagem_responder', { p_passagem: p2.id, p_aceitar: false, p_nota: 'Estou de saída, passe a outro' });
+  chk(rf.estado === 'recusada' && (await db.query(`select comando_nome from public.operacoes where id = $1`, [opB.id])).rows[0].comando_nome === 'Sgt Dois', 'recusada: o comando continua com quem já estava');
+  const p3 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp3, 'passagem_cancelar', { p_passagem: p3.id }))), 'quem recebe não cancela a passagem de outro');
+  const cn = await rpc(resp2, 'passagem_cancelar', { p_passagem: p3.id });
+  chk(cn.estado === 'cancelada' && /passagem_nao_pendente/.test(await erroDe(rpc(resp2, 'passagem_cancelar', { p_passagem: p3.id }))), 'quem passou cancela enquanto está pendente');
+
+  console.log('  comandante ausente: assumir com motivo');
+  const p4 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp3 });
+  chk(/comando_ja_seu/.test(await erroDe(rpc(resp2, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'já estou no comando' }))), 'quem já comanda não precisa assumir');
+  chk(/comando_motivo_obrigatorio/.test(await erroDe(rpc(resp3, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'curto' }))), 'assumir exige motivo (mín. 10 caracteres)');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp4, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'não sou da operação, mas quero' }))), 'só responsável da operação assume');
+  const as = await rpc(resp1, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'Dr Dois sem rádio há 40 minutos; assumindo para manter a busca' });
+  chk(as.tipo === 'assuncao' && as.estado === 'assumida' && as.de_nome === 'Sgt Dois' && as.para_nome === 'Sgt Um' && /sem rádio/.test(as.motivo) && as.resumo.operacao.codigo === 'OP BRIEFING', 'assumir: registra de quem, para quem, o motivo e a foto do briefing', as);
+  chk((await db.query(`select estado from public.passagens_comando where id = $1`, [p4.id])).rows[0].estado === 'cancelada' && (await db.query(`select comando_nome from public.operacoes where id = $1`, [opB.id])).rows[0].comando_nome === 'Sgt Um', 'a passagem pendente é cancelada e o comando muda');
+  const diaA = (await db.query(`select titulo, nivel, detalhe from public.diario where operacao_id = $1 and tipo = 'comando_assumido_sem_aceite'`, [opB.id])).rows;
+  chk(diaA.length === 1 && diaA[0].nivel === 'critico' && /sem aceite/.test(diaA[0].titulo) && /Dr Dois sem rádio/.test(diaA[0].detalhe), 'assumir sem aceite fica no diário em destaque, com o motivo');
+  const hist = (await q(resp1, `select tipo, estado from public.passagens_comando where operacao_id = $1 order by criada_em, id`, [opB.id]));
+  chk(hist.map((h) => h.estado).join() === 'aceita,recusada,cancelada,cancelada,assumida', 'histórico completo das passagens', hist);
+  chk((await q(uBeto, `select count(*)::int n from public.passagens_comando`))[0].n === 0 && (await q(resp4, `select count(*)::int n from public.decisoes_pendentes`))[0].n === 0 && (await q(resp4, `select count(*)::int n from public.briefing_operacao`))[0].n === 0, 'participante e responsável de fora não leem passagens, decisões nem briefing');
+  chk(/permission denied/i.test(await erroDe(como(resp1, `update public.operacoes set comando_nome = 'forjado' where id = $1`, [opB.id]))), 'o comando não muda por escrita direta');
+
+  console.log('  operação encerrada: somente leitura');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opB.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'passagem_iniciar', { p_operacao: opB.id, p_para: resp2 }))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_briefing', { p_operacao: opB.id, p_dados: '{"objetivo":"x"}' })))
+    && /operacao_encerrada/.test(await erroDe(rpc(resp2, 'comando_assumir', { p_operacao: opB.id, p_motivo: 'depois de encerrar a operação' }))), 'encerrada: sem passagem, briefing nem assumir comando');
+  chk((await rpc(resp1, 'briefing_operacao_dados', { p_operacao: opB.id })).operacao.status === 'encerrada', 'encerrada: o briefing continua legível');
+  const pubB = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['briefing_operacao', 'decisoes_pendentes', 'passagens_comando'].every((x) => pubB.includes(x)), 'briefing, decisões e passagens publicados no Realtime');
+}
+
+// ---------- Migração 038: "Fora da área" guardado, soma exata de 100%, origem de cada valor ----------
+console.log('\nPOA: Fora da área e origem dos valores — migração 038');
+{
+  const opF = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP FORA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const vE = await rpc(resp1, 'salvar_vitima', { p_operacao: opF.id, p_id: null, p_dados: JSON.stringify({ nome: 'Eva' }) });
+  const d = (m) => m / 111194.93;
+  const circ = (nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: opF.id, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 200 }) });
+  const sA = await circ('Alfa', -25.40), sB = await circ('Bravo', -25.40 + d(2000)), sC = await circ('Charlie', -25.40 + d(4000));
+  const it = (s, poa, extra) => Object.assign({ setor_id: s.id, poa, justificativa: '' }, extra || {});
+  const dados = (itens, extra) => JSON.stringify(Object.assign({ justificativa: 'Seguiu a trilha do rio ao norte', setores: itens }, extra || {}));
+  const salvar = (itens, extra, uid) => rpc(uid || resp1, 'cenario_salvar_rascunho', { p_vitima: vE.id, p_dados: dados(itens, extra) });
+
+  console.log('  soma exata de 100% com "Fora da área"');
+  const r0 = await salvar([it(sA, 0.5), it(sB, 0.3)], { __sem_fora: true });
+  chk(r0.cenario.poa_fora === null, 'rascunho sem "Fora da área": o campo fica nulo (não é completado pelo servidor)', r0.cenario.poa_fora);
+  chk(/cenario_fora_obrigatorio/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r0.cenario.id }))), 'publicar sem informar "Fora da área": recusado no servidor');
+  const r1 = await salvar([it(sA, 0.5), it(sB, 0.2)], { poa_fora: 0.2 });
+  chk(Number(r1.cenario.poa_fora) === 0.2, 'o servidor guarda "Fora da área" (0,2)');
+  chk(/cenario_soma_diferente_de_100/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: r1.cenario.id }))), '50 + 20 + 20 = 90%: publicar recusado (soma diferente de 100%)');
+  chk(/cenario_poa_acima_de_100/.test(await erroDe(salvar([it(sA, 0.5), it(sB, 0.4)], { poa_fora: 0.2 }))), 'setores + fora acima de 100%: nem rascunho');
+  chk(/dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: 1.5 }))) && /dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: -0.1 }))), '"Fora da área" fora de 0 a 1: recusado');
+  const r2 = await salvar([it(sA, 0.5), it(sB, 0.3)], { poa_fora: 0.2 });
+  chk(/sem_permissao/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: 0.5 }, resp2))), 'outro responsável não grava');
+  const ap = await rpc(resp1, 'cenario_aprovar', { p_cenario: r2.cenario.id });
+  chk(ap.cenario.estado === 'aprovada' && Number(ap.cenario.poa_fora) === 0.2, '50 + 30 + 20 = 100%: publicada, com "Fora da área" guardado');
+  const diario = (await db.query(`select detalhe from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado'`, [opF.id])).rows;
+  chk(diario.length === 1 && /fora dos setores: 20%/.test(diario[0].detalhe), 'o diário usa o "fora" guardado (20%)', diario);
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set poa_fora = 0.1 where id = $1`, [ap.cenario.id]))), 'versão publicada: "Fora da área" não muda');
+
+  console.log('  tolerância só do arredondamento de uma casa');
+  const t1 = await salvar([it(sA, 0.3333), it(sB, 0.3333)], { poa_fora: 0.3334 });
+  const apT = await rpc(resp1, 'cenario_aprovar', { p_cenario: t1.cenario.id });
+  chk(apT.cenario.numero === 2, '33,33 + 33,33 + 33,34 = 100%: publica (versão 2)');
+  const t2 = await salvar([it(sA, 0.333), it(sB, 0.333)], { poa_fora: 0.333 });
+  chk(/cenario_soma_diferente_de_100/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: t2.cenario.id }))), '33,3 × 3 = 99,9%: recusado (a tolerância não cobre 0,1 ponto)');
+
+  console.log('  origem de cada valor');
+  chk(/dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5, { origem: 'chute' })], { poa_fora: 0.5 }))) && /dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5)], { poa_fora: 0.5, poa_fora_origem: 'x' }))), 'origem desconhecida: recusada');
+  chk(/dados_invalidos/.test(await erroDe(salvar([it(sA, 0.5, { origem: 'calculo' })], { poa_fora: 0.5 }))), 'o cliente não pode declarar origem "calculo" (só o cálculo pós-busca)');
+  const o1 = await salvar([it(sA, 0.6, { origem: 'ia' }), it(sB, 0.1), it(sC, 0.1, { origem: 'ia' })], { poa_fora: 0.2, poa_fora_origem: 'ia', ia_modelo: 'modelo-x' });
+  const itens = (await db.query(`select setor_nome, origem, ia_revisado_por_nome from public.busca_cenario_setores where cenario_id = $1 order by setor_nome`, [o1.cenario.id])).rows;
+  chk(itens.find((x) => x.setor_nome === 'Alfa').origem === 'ia' && itens.find((x) => x.setor_nome === 'Alfa').ia_revisado_por_nome === 'Sgt Um' && itens.find((x) => x.setor_nome === 'Bravo').origem === 'manual' && itens.find((x) => x.setor_nome === 'Bravo').ia_revisado_por_nome === null,
+    'valor de IA guarda quem o revisou; valor manual não', itens);
+  await rpc(resp1, 'cenario_aprovar', { p_cenario: o1.cenario.id });
+  const dIa = (await db.query(`select detalhe from public.diario where operacao_id = $1 and tipo = 'cenario_aprovado' order by id desc limit 1`, [opF.id])).rows[0].detalhe;
+  chk(/sugeridos por IA \(modelo-x\) e revisados por Sgt Um/.test(dIa), 'o diário registra "sugerido por IA, revisado por <nome>"', dIa);
+
+  console.log('  a ordem das versões e a proteção');
+  const vigente = (await db.query(`select max(numero) n from public.busca_cenarios where vitima_id = $1 and estado = 'aprovada'`, [vE.id])).rows[0].n;
+  chk(vigente === 3, 'três versões publicadas (1, 2, 3)', vigente);
+  const rr = await salvar([it(sA, 0.4)], { poa_fora: 0.6 });
+  chk(/dados_invalidos/.test(await erroDe(db.query(`update public.busca_cenarios set numero = 9 where id = $1`, [rr.cenario.id]))), 'o número da versão não muda por fora da função de publicação');
+  chk(rr.cenario.base_numero === 3, 'o rascunho guarda a versão vigente de que partiu (3)', rr.cenario.base_numero);
+  const aprFim = await rpc(resp1, 'cenario_aprovar', { p_cenario: rr.cenario.id });
+  chk(aprFim.cenario.numero === 4, 'publicar o rascunho mantém a numeração em ordem (4)');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opF.id });
+  chk(/operacao_encerrada/.test(await erroDe(salvar([it(sA, 0.4)], { poa_fora: 0.6 }))), 'encerrada: sem novo rascunho');
+}
+
+// ---------- Migração 039: missão de busca (POD por missão) e cálculo pós-busca por versão ----------
+console.log('\nMissão de busca e cálculo pós-busca — migração 039');
+{
+  const opM = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP MISSAO BUSCA', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const outraOp = await rpc(resp1, 'criar_operacao', { p_codigo: 'OUTRA OP', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const vit = (n) => rpc(resp1, 'salvar_vitima', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: n }) });
+  const vEva = await vit('Eva'), vFred = await vit('Fred'), vGil = await vit('Gil');
+  const d = (m) => m / 111194.93;
+  const circ = (op, nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: op, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 200 }) });
+  const sA = await circ(opM.id, 'Alfa', -25.40), sB = await circ(opM.id, 'Bravo', -25.40 + d(2000)), sC = await circ(opM.id, 'Charlie', -25.40 + d(4000));
+  const sOutro = await circ(outraOp.id, 'Outro', -25.40);
+  const gM = await rpc(resp1, 'salvar_grupo', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: 'Equipe A' }) });
+  const publicar = async (vitima, itens, fora) => {
+    const r = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vitima.id, p_dados: JSON.stringify({ justificativa: 'Seguiu a trilha do rio ao norte', poa_fora: fora, setores: itens.map(([s, poa]) => ({ setor_id: s.id, poa, justificativa: '' })) }) });
+    return (await rpc(resp1, 'cenario_aprovar', { p_cenario: r.cenario.id })).cenario;
+  };
+  const eva1 = await publicar(vEva, [[sA, 0.5], [sB, 0.3]], 0.2);
+  await publicar(vFred, [[sA, 0.2], [sB, 0.2]], 0.6);
+  await publicar(vGil, [[sA, 1]], 0);
+  const versoes = async (vitima) => (await db.query(`select numero, estado, origem_poa, poa_fora, base_numero, missao_id from public.busca_cenarios where vitima_id = $1 order by numero`, [vitima.id])).rows;
+  const poas = async (cen) => Object.fromEntries((await db.query(`select setor_nome, poa, origem from public.busca_cenario_setores where cenario_id = $1`, [cen]) ).rows.map((r) => [r.setor_nome, Number(r.poa)]));
+  const criar = (extra, uid) => rpc(uid || resp1, 'busca_missao_criar', { p_operacao: opM.id, p_dados: JSON.stringify(Object.assign({ setor_id: sA.id, vitima_id: vEva.id, grupo_id: gM.id, equipe: 'Equipe A', metodo: 'A pé, em linha', area_fracao: 1 }, extra || {})) });
+
+  console.log('  criar a missão');
+  chk(/busca_missao_equipe_obrigatoria/.test(await erroDe(criar({ grupo_id: null, equipe: '' }))), 'sem equipe: recusado');
+  chk(/busca_missao_metodo_obrigatorio/.test(await erroDe(criar({ metodo: '' }))), 'sem método: recusado');
+  chk(/busca_pod_sem_base/.test(await erroDe(criar({ pod: 0.6 }))), 'POD informada sem dizer em que se baseia: recusado');
+  chk(/dados_invalidos/.test(await erroDe(criar({ pod: 1.2, pod_base: 'varredura em linha' }))) && /busca_cobertura_invalida/.test(await erroDe(criar({ area_fracao: 0 }))) && /busca_cobertura_invalida/.test(await erroDe(criar({ area_fracao: 1.5 }))), 'POD fora de 0 a 1 e área fora de 0 a 100%: recusados');
+  chk(/sem_permissao/.test(await erroDe(criar({}, resp2))), 'outro responsável não cria missão');
+  chk(/setor_nao_encontrado/.test(await erroDe(criar({ setor_id: sOutro.id }))), 'setor de outra operação: recusado');
+  const m1r = await criar({ pod: 0.6, pod_base: 'Varredura em linha, 5 m entre buscadores', chave_cliente: 'k1' });
+  const m1 = m1r.missao;
+  chk(m1.estado === 'planejada' && Number(m1.pod_planejada) === 0.6 && m1.setor_nome === 'Alfa' && m1.calculo_estado === 'nao_aplicavel' && m1r.repetida === false, 'missão planejada com equipe, método, área e POD estimada');
+  chk((await criar({ pod: 0.6, pod_base: 'Varredura em linha, 5 m entre buscadores', chave_cliente: 'k1' })).repetida === true, 'reenviar a mesma missão (mesma chave) não duplica');
+  chk(/busca_chave_reutilizada/.test(await erroDe(criar({ pod: 0.7, pod_base: 'Varredura em linha, 5 m entre buscadores', chave_cliente: 'k1' }))), 'mesma chave com outro conteúdo: recusada');
+  const m2 = (await criar({ setor_id: sB.id })).missao;
+  chk(m2.pod_planejada === null, '"POD não estimada" fica nula, nunca zero', m2.pod_planejada);
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'busca_missao_criada'`, [opM.id])).rows[0].n === 2, 'a criação entra no diário');
+  chk(/permission denied/.test(await erroDe(como(resp1, `insert into public.busca_missoes (operacao_id, setor_nome, equipe, metodo, criada_por_nome) values ($1, 'X', 'Y', 'Z', 'W')`, [opM.id]))), 'escrita direta na tabela é recusada');
+  chk((await como(resp2, `select id from public.busca_missoes`)).rows.length === 0, 'outro responsável (sem acesso à operação) não lê as missões');
+
+  console.log('  resultado negativo: r = p × (1 − q), Z = Σr, p\' = r/Z');
+  chk(/busca_missao_resultado_invalido/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'talvez' }) }))), 'resultado inválido: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))), 'outro responsável não registra o resultado');
+  const r1 = await rpc(resp1, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'nao_localizado', observacao: 'Mata fechada' }) });
+  chk(r1.missao.estado === 'concluida' && r1.missao.calculo_estado === 'aplicado' && Number(r1.missao.cobertura_real_fracao) === 1, 'negativa: concluída, cobertura = área atribuída, cálculo aplicado');
+  const vEvaDepois = await versoes(vEva);
+  chk(vEvaDepois.length === 2 && vEvaDepois[1].origem_poa === 'calculo_pos_busca' && vEvaDepois[1].estado === 'aprovada' && vEvaDepois[1].base_numero === 1 && vEvaDepois[1].missao_id === m1.id, 'gerou a versão 2 aprovada (origem: cálculo pós-busca), a partir da 1');
+  const p2 = await poas((await db.query(`select id from public.busca_cenarios where vitima_id = $1 and numero = 2`, [vEva.id])).rows[0].id);
+  const esperado = { Alfa: 0.2 / 0.7, Bravo: 0.3 / 0.7 };
+  chk(Math.abs(p2.Alfa - esperado.Alfa) < 1e-6 && Math.abs(p2.Bravo - esperado.Bravo) < 1e-6, 'Alfa 28,57% e Bravo 42,86%: 0,5×0,4÷0,7 e 0,3÷0,7', p2);
+  chk(Math.abs(Number(vEvaDepois[1].poa_fora) - 0.2 / 0.7) < 1e-6 && Math.abs(p2.Alfa + p2.Bravo + Number(vEvaDepois[1].poa_fora) - 1) < 1e-9, '"Fora da área" 28,57% e a soma fecha em exatamente 100%');
+  const eva1Itens = await poas(eva1.id);
+  chk(eva1Itens.Alfa === 0.5 && eva1Itens.Bravo === 0.3 && (await versoes(vEva))[0].estado === 'aprovada' && Number((await versoes(vEva))[0].poa_fora) === 0.2, 'a versão 1 continua intacta');
+  const ef = (await db.query(`select poa_setor_antes, poa_setor_depois, q, pos, z from public.busca_missao_efeitos where missao_id = $1`, [m1.id])).rows;
+  chk(ef.length === 1 && Number(ef[0].pos) === 0.3 && Number(ef[0].q) === 0.6 && Math.abs(Number(ef[0].z) - 0.7) < 1e-6, 'POS da missão = POA do setor × POD = 50% × 60% = 30% ("chance de localizar nesta busca")', ef);
+  chk((await db.query(`select count(*)::int n from public.busca_cenario_setores where cenario_id = (select id from public.busca_cenarios where vitima_id = $1 and numero = 2) and origem = 'calculo'`, [vEva.id])).rows[0].n === 2, 'os valores da versão calculada têm origem "calculo"');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'cenario_pos_busca'`, [opM.id])).rows[0].n === 1, 'a atualização entra no diário');
+  chk(/busca_missao_nao_planejada/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: m1.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))), 'o resultado entra uma vez só');
+  chk(/busca_missao_imutavel/.test(await erroDe(db.query(`update public.busca_missoes set equipe = 'Outra' where id = $1`, [m1.id]))) && /busca_missao_imutavel/.test(await erroDe(db.query(`delete from public.busca_missoes where id = $1`, [m1.id]))), 'missão concluída não muda nem some');
+  chk(/busca_missao_imutavel/.test(await erroDe(db.query(`update public.busca_missao_efeitos set pos = 0`))), 'o efeito calculado não muda');
+
+  console.log('  POD desconhecido: pendência, sem recalcular');
+  const antes = (await versoes(vEva)).length;
+  const r2 = await rpc(resp1, 'busca_missao_resultado', { p_missao: m2.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(r2.missao.calculo_estado === 'pendente_pod' && r2.missao.pod_final === null && (await versoes(vEva)).length === antes, 'POD não estimada: não recalcula e fica "pendente de POD" (não vira zero)');
+  chk(/busca_pod_sem_base/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 0.5, p_base: '' }))) && /dados_invalidos/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 2, p_base: 'Estimativa da equipe' }))), 'informar o POD exige a base e valor entre 0 e 1');
+  chk(/busca_missao_pod_nao_pendente/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m1.id, p_pod: 0.5, p_base: 'Estimativa da equipe' }))), 'missão sem pendência não aceita POD novo');
+  const dp = await rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 0.5, p_base: 'Estimativa da equipe', p_origem: 'ia' });
+  chk(dp.missao.calculo_estado === 'aplicado' && dp.missao.pod_final_origem === 'ia' && dp.missao.pod_final_revisor === 'Sgt Um', 'POD informado depois: recalcula; origem "ia" guarda quem revisou');
+  const v3 = (await versoes(vEva))[2];
+  const p3 = await poas((await db.query(`select id from public.busca_cenarios where vitima_id = $1 and numero = 3`, [vEva.id])).rows[0].id);
+  const rA = (0.2 / 0.7), rB = (0.3 / 0.7) * 0.5, rF = 0.2 / 0.7, Z = rA + rB + rF;
+  chk(v3 && v3.base_numero === 2 && Math.abs(p3.Alfa - rA / Z) < 1e-6 && Math.abs(p3.Bravo - rB / Z) < 1e-6 && Math.abs(Number(v3.poa_fora) - rF / Z) < 1e-6, 'versão 3 parte da versão vigente (2): as missões se aplicam em sequência, sem somar PODs', p3);
+  chk(/busca_missao_pod_nao_pendente/.test(await erroDe(rpc(resp1, 'busca_missao_definir_pod', { p_missao: m2.id, p_pod: 0.9, p_base: 'Outra estimativa' }))), 'o POD informado depois não se troca');
+
+  console.log('  casos que não recalculam');
+  const nVer = (await versoes(vEva)).length;
+  const mC = (await criar({ setor_id: sC.id, pod: 0.8, pod_base: 'Estimativa da equipe' })).missao;
+  const rC = await rpc(resp1, 'busca_missao_resultado', { p_missao: mC.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(rC.missao.calculo_estado === 'nao_aplicavel' && (await versoes(vEva)).length === nVer, 'setor que não está no cenário (POA zero): nada a atualizar');
+  const mL = (await criar({ pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rL = await rpc(resp1, 'busca_missao_resultado', { p_missao: mL.id, p_dados: JSON.stringify({ resultado: 'localizado' }) });
+  chk(rL.missao.calculo_estado === 'nao_aplicavel' && (await versoes(vEva)).length === nVer, 'localizado: não recalcula o POA');
+  const mN = (await criar({ pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rN = await rpc(resp1, 'busca_missao_resultado', { p_missao: mN.id, p_dados: JSON.stringify({ resultado: 'nao_concluido' }) });
+  chk(rN.missao.calculo_estado === 'nao_aplicavel' && rN.missao.cobertura_real_fracao === null && (await versoes(vEva)).length === nVer, 'não concluído sem cobertura informada: não recalcula');
+  const mN2 = (await criar({ pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rN2 = await rpc(resp1, 'busca_missao_resultado', { p_missao: mN2.id, p_dados: JSON.stringify({ resultado: 'nao_concluido', cobertura: 0.4 }) });
+  chk(rN2.missao.calculo_estado === 'aplicado' && Number(rN2.efeitos[0].q) === 0.2, 'não concluído com cobertura real (40%): recalcula com q = POD × cobertura = 20%', rN2.efeitos);
+  chk(/busca_cobertura_invalida/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: (await criar({})).missao.id, p_dados: JSON.stringify({ resultado: 'nao_localizado', cobertura: 1.5 }) }))), 'cobertura real fora de 0 a 100%: recusada');
+
+  console.log('  várias vítimas e inconsistência');
+  const mT = (await criar({ setor_id: sB.id, vitima_id: null, pod: 0.5, pod_base: 'Estimativa da equipe' })).missao;
+  const rT = await rpc(resp1, 'busca_missao_resultado', { p_missao: mT.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(rT.efeitos.length === 2 && rT.efeitos.every((e) => e.vitima_id !== vGil.id), 'missão para todas as vítimas atualiza cada uma que tem o setor no cenário (Gil não tem Bravo: intacto)');
+  chk((await versoes(vGil)).length === 1, 'a vítima sem o setor não ganha versão');
+  const mZ = (await criar({ vitima_id: vGil.id, pod: 1, pod_base: 'Cobertura total confirmada' })).missao;
+  const rZ = await rpc(resp1, 'busca_missao_resultado', { p_missao: mZ.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(rZ.missao.estado === 'concluida' && rZ.missao.calculo_estado === 'inconsistente' && /Z = Σ r = 0/.test(rZ.missao.calculo_detalhe), 'Z = 0 (tudo no setor e POD 100%): resultado registrado, cálculo INCONSISTENTE com o motivo');
+  chk((await versoes(vGil)).length === 1 && Number((await versoes(vGil))[0].poa_fora) === 0, 'na inconsistência a versão anterior não é alterada');
+
+  console.log('  rascunho em aberto e ordem das versões');
+  const rascEva = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vEva.id, p_dados: JSON.stringify({ justificativa: 'Revisão do comando após as buscas', poa_fora: 0.5, setores: [{ setor_id: sA.id, poa: 0.3 }, { setor_id: sB.id, poa: 0.2 }] }) });
+  const baseRasc = rascEva.cenario.base_numero;
+  const mR = (await criar({ pod: 0.3, pod_base: 'Estimativa da equipe' })).missao;
+  await rpc(resp1, 'busca_missao_resultado', { p_missao: mR.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(/cenario_base_desatualizada/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: rascEva.cenario.id }))), 'rascunho de antes de uma busca negativa: publicar é recusado (a vigente mudou)');
+  const rasc2 = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vEva.id, p_dados: JSON.stringify({ justificativa: 'Revisão do comando após as buscas', poa_fora: 0.5, setores: [{ setor_id: sA.id, poa: 0.3 }, { setor_id: sB.id, poa: 0.2 }] }) });
+  const maxAprov = (await db.query(`select max(numero) n from public.busca_cenarios where vitima_id = $1 and estado = 'aprovada'`, [vEva.id])).rows[0].n;
+  chk(rasc2.cenario.base_numero === maxAprov && baseRasc < maxAprov, 'salvar o rascunho de novo atualiza a base para a versão vigente', [baseRasc, maxAprov]);
+  const apFinal = await rpc(resp1, 'cenario_aprovar', { p_cenario: rasc2.cenario.id });
+  chk(apFinal.cenario.numero === maxAprov + 1, 'o rascunho publicado fica depois da versão calculada (numeração em ordem)', apFinal.cenario.numero);
+
+  console.log('  cancelar, encerrada e Realtime');
+  const mK = (await criar({})).missao;
+  chk(/busca_missao_cancelamento_sem_motivo/.test(await erroDe(rpc(resp1, 'busca_missao_cancelar', { p_missao: mK.id, p_motivo: '' }))), 'cancelar exige o motivo');
+  const kc = await rpc(resp1, 'busca_missao_cancelar', { p_missao: mK.id, p_motivo: 'Equipe remanejada' });
+  chk(kc.missao.estado === 'cancelada' && /busca_missao_nao_planejada/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: mK.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))), 'cancelada fica no histórico e não recebe resultado');
+  chk(/busca_missao_nao_planejada/.test(await erroDe(rpc(resp1, 'busca_missao_cancelar', { p_missao: m1.id, p_motivo: 'Tarde demais' }))), 'missão concluída não se cancela');
+  const mE = (await criar({})).missao;
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opM.id });
+  chk(/operacao_encerrada/.test(await erroDe(criar({}))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'busca_missao_resultado', { p_missao: mE.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) }))) && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'busca_missao_cancelar', { p_missao: mE.id, p_motivo: 'Encerrada a operação' }))), 'encerrada: sem criar, concluir nem cancelar missão');
+  const pubM = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['busca_missoes', 'busca_missao_efeitos'].every((x) => pubM.includes(x)), 'missões e efeitos publicados no Realtime');
+}
+
+console.log('\nMigrações 007–041 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

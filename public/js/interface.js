@@ -64,26 +64,65 @@
   var pilha = [];
 
   // Abre um modal genérico. "conteudo" é um nó DOM. Devolve função para fechar.
+  // Estrutura igual em todo o app: cabeçalho fixo (título, "i" e ×), corpo que rola e rodapé
+  // (.form-rodape) sempre à vista. O título (#modal-titulo) é levado para o cabeçalho, mesmo
+  // quando o conteúdo é redesenhado. No celular o modal vira uma folha que sobe de baixo.
+  // opcoes.tamanho: 'estreito' | 'largo' | 'cheio' (padrão: médio).
   function abrirModal(conteudo, opcoes) {
     opcoes = opcoes || {};
     if (!opcoes.empilhar) fecharTodos();
     var anterior = document.activeElement;
-    var caixa = el('div', { classe: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [conteudo]);
+    var btnX = el('button', { classe: 'modal-x', type: 'button', 'aria-label': 'Fechar', title: 'Fechar', texto: '×' });
+    var cabeca = el('div', { classe: 'modal-cabeca' }, [btnX]);
+    var corpo = el('div', { classe: 'modal-corpo' }, [conteudo]);
+    var caixa = el('div', { classe: 'modal form-padrao' + (opcoes.tamanho ? ' modal-' + opcoes.tamanho : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [cabeca, corpo]);
     var fundo = el('div', { classe: 'modal-fundo' }, [caixa]);
     fundo.addEventListener('click', function (ev) {
       if (ev.target === fundo && opcoes.fecharNoFundo !== false) fechar(null);
     });
+    // × faz o mesmo que o "Fechar"/"Cancelar" do rodapé (quando há), senão só fecha
+    btnX.addEventListener('click', function () {
+      var b = botaoDeSaida();
+      if (b) b.click(); else fechar(null);
+    });
+    function botaoDeSaida() {
+      var f = corpo.querySelector('button.so-x');
+      if (f) return f;
+      var bs = corpo.querySelectorAll('.form-rodape > button, .modal-acoes > button');
+      for (var i = 0; i < bs.length; i++) if (/^cancelar$/i.test(bs[i].textContent.trim())) return bs[i];
+      return null;
+    }
+    // Título para o cabeçalho; botões "Fechar" somem (o × faz o mesmo, chamando o próprio botão)
+    function arrumar() {
+      var t = corpo.querySelector('#modal-titulo');
+      if (t) {
+        Array.prototype.forEach.call(cabeca.querySelectorAll('#modal-titulo'), function (v) { if (v !== t) v.remove(); });
+        cabeca.insertBefore(t, btnX);
+      }
+      cabeca.classList.toggle('sem-titulo', !cabeca.querySelector('#modal-titulo'));
+      Array.prototype.forEach.call(corpo.querySelectorAll('button'), function (b) {
+        if (/^fechar$/i.test(b.textContent.trim())) b.classList.add('so-x');
+      });
+      Array.prototype.forEach.call(corpo.querySelectorAll('.form-rodape, .modal-acoes'), function (r) {
+        var visiveis = Array.prototype.filter.call(r.children, function (b) { return !b.hidden && !b.classList.contains('so-x'); });
+        r.classList.toggle('rodape-vazio', visiveis.length === 0);
+      });
+    }
+    arrumar();
+    var obs = window.MutationObserver ? new MutationObserver(function () { obs.disconnect(); arrumar(); obs.observe(corpo, { childList: true, subtree: true }); }) : null;
+    if (obs) obs.observe(corpo, { childList: true, subtree: true });
     function tecla(ev) {
       // Esc fecha só o modal de cima
       if (ev.key === 'Escape' && pilha.length && pilha[pilha.length - 1].fechar === fechar) { ev.preventDefault(); fechar(null); }
     }
     document.addEventListener('keydown', tecla);
     document.body.appendChild(fundo);
-    var foco = caixa.querySelector('[autofocus]') || caixa.querySelector('textarea, input, button');
+    var foco = corpo.querySelector('[autofocus]') || corpo.querySelector('textarea, input:not([type=hidden]), select, button:not(.dica)') || btnX;
     if (foco) setTimeout(function () { foco.focus(); }, 30);
 
     function fechar(valor) {
       if (!fundo.parentNode) return;
+      if (obs) obs.disconnect();
       document.removeEventListener('keydown', tecla);
       fundo.parentNode.removeChild(fundo);
       pilha = pilha.filter(function (m) { return m.fechar !== fechar; });
@@ -108,7 +147,7 @@
   }
 
   /*
-   * confirmar({ titulo, texto, detalhe, ok, cancelar, perigo, campo: { rotulo, valor, max, obrigatorio } })
+   * confirmar({ titulo, texto, detalhe, ok, cancelar, perigo, empilhar, campo: { rotulo, valor, max, obrigatorio } })
    * → Promise que resolve { texto } se confirmado, ou null se cancelado.
    */
   function confirmar(o) {
@@ -129,9 +168,11 @@
       filhos.push(erro);
       var btnOk = el('button', { classe: 'btn ' + (o.perigo ? 'btn-primario' : 'btn-escuro'), type: 'button', texto: o.ok || 'Confirmar' });
       var btnCancelar = el('button', { classe: 'btn', type: 'button', texto: o.cancelar || 'Cancelar', autofocus: !area });
-      filhos.push(el('div', { classe: 'modal-acoes' }, [btnCancelar, btnOk]));
+      filhos.push(rodape([btnCancelar, btnOk]));
       var resolvido = false;
       var fechar = abrirModal(el('div', null, filhos), {
+        tamanho: o.campo || o.detalhe ? null : 'estreito',
+        empilhar: Boolean(o.empilhar),   // abre por cima do que está aberto (ex.: confirmar dentro de um formulário)
         aoFechar: function (v) { if (!resolvido) { resolvido = true; resolve(v || null); } },
       });
       btnCancelar.addEventListener('click', function () { fechar(null); });
@@ -179,5 +220,115 @@
   }
   verificarVersao();
 
-  window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar };
+  /*
+   * Padrão dos formulários e modais (usado em todo o app):
+   *   - rótulo curto; a explicação vai para um ícone "i" ao lado (UI.dica), não para parágrafos;
+   *   - campos em grade (UI.grade) e um rodapé com no máximo uma ação primária (UI.rodape).
+   */
+  // Ícone "i" com a explicação: toque ou clique abre embaixo do rótulo; o mouse mostra no título.
+  function dica(texto) {
+    var tip = el('span', { classe: 'dica-texto', role: 'note', hidden: true, texto: texto });
+    var b = el('button', { classe: 'dica', type: 'button', 'aria-label': 'Explicação', title: texto, texto: 'i' });
+    b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); tip.hidden = !tip.hidden; });
+    return el('span', { classe: 'dica-caixa' }, [b, tip]);
+  }
+
+  // Campo com rótulo (opcionalmente com "i") e controle. Opções: para (id do controle), dica, ajuda (linha curta), opcional, largo, oculto
+  function campo(rotulo, controle, o) {
+    o = o || {};
+    return el('div', { classe: 'campo-bloco' + (o.largo ? ' campo-largo' : ''), hidden: o.oculto ? true : null }, [
+      el('label', { classe: 'rotulo', for: o.para || null }, [rotulo, o.opcional ? el('span', { classe: 'rotulo-opcional', texto: 'opcional' }) : null, o.dica ? dica(o.dica) : null]),
+      controle,
+      o.ajuda ? el('small', { classe: 'muted', texto: o.ajuda }) : null,
+    ]);
+  }
+
+  // Grade de campos: 2 colunas no computador, 1 no celular (ver estilos.css)
+  function grade(filhos, o) {
+    return el('div', { classe: 'form-grade' + (o && o.tres ? ' form-grade-3' : '') }, filhos);
+  }
+
+  // Seção em cartão com título pequeno (como as linhas do POA/POD). o.dica: explicação no "i"
+  function secao(titulo, filhos, o) {
+    o = o || {};
+    return el('div', { classe: 'secao-form' + (o.classe ? ' ' + o.classe : ''), hidden: o.oculto ? true : null }, [
+      titulo ? el('div', { classe: 'secao-titulo' }, [titulo, o.dica ? dica(o.dica) : null]) : null,
+    ].concat(filhos));
+  }
+
+  // Escolha única em cartões lado a lado. opcoes: [{ valor, rotulo, sub, marcado, desabilitado }]
+  function escolhas(nome, opcoes, aoMudar) {
+    return el('div', { classe: 'escolhas', role: 'radiogroup' }, opcoes.map(function (op) {
+      var r = el('input', { type: 'radio', name: nome, value: op.valor, checked: op.marcado ? true : null, disabled: op.desabilitado ? true : null });
+      if (aoMudar) r.addEventListener('change', function () { if (r.checked) aoMudar(op.valor); });
+      return el('label', { classe: 'escolha' }, [r, el('span', null, [op.rotulo, op.sub ? el('small', { texto: op.sub }) : null])]);
+    }));
+  }
+
+  // Rodapé: botões à direita, o secundário à esquerda. Recebe os botões já criados, na ordem visual.
+  function rodape(botoes) {
+    return el('div', { classe: 'form-rodape' }, botoes);
+  }
+
+  /*
+   * Tela do jeito de quem usa (guardada neste aparelho; não muda nada para os outros nem no servidor):
+   * tamanho do texto, quais botões ficam no topo e em que ordem (o resto fica em Ferramentas),
+   * e canto do painel de grupos no mapa.
+   * O modo "Personalizar tela" (js/personalizar.js) muda isto arrastando os botões.
+   */
+  var CHAVE_APARENCIA = 'gbs-aparencia';
+  var FONTES = { menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
+  var POSICOES_GRUPOS = { topright: 'Canto superior direito', topleft: 'Canto superior esquerdo', bottomright: 'Canto inferior direito', bottomleft: 'Canto inferior esquerdo' };
+  function listaTexto(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : []; }
+  function lerAparencia() {
+    var v;
+    try { v = JSON.parse(localStorage.getItem(CHAVE_APARENCIA) || 'null') || {}; } catch (e) { v = {}; }
+    if (typeof v !== 'object') v = {};
+    return {
+      fonte: FONTES[v.fonte] ? v.fonte : 'normal',
+      topo: Array.isArray(v.topo) ? listaTexto(v.topo) : null,   // null = o padrão da página
+      gruposPos: POSICOES_GRUPOS[v.gruposPos] ? v.gruposPos : 'topright',
+      // versão anterior (escolhas por botão): convertida em "topo" na primeira leitura
+      ocultos: listaTexto(v.ocultos), noMenu: listaTexto(v.noMenu), ordem: listaTexto(v.ordem),
+    };
+  }
+  var ouvintes = [];
+  function gravarAparencia(v) {
+    try {
+      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, topo: v.topo, gruposPos: v.gruposPos }));
+    } catch (e) { /* sem armazenamento: vale só até recarregar */ memoria = v; }
+    aplicarAparencia(v);
+  }
+  var memoria = null;
+  function atual() { return memoria || lerAparencia(); }
+  function aplicarAparencia(v) {
+    v = v || atual();
+    document.documentElement.setAttribute('data-fonte', v.fonte);
+    ouvintes.forEach(function (f) { try { f(v); } catch (e) { /* um ouvinte com erro não para os outros */ } });
+  }
+  function mudar(fn) { var v = atual(); fn(v); gravarAparencia(v); }
+  var aparencia = {
+    ler: atual,
+    fontes: FONTES,
+    posicoesGrupos: POSICOES_GRUPOS,
+    definirFonte: function (f) { mudar(function (v) { v.fonte = FONTES[f] ? f : 'normal'; }); },
+    // Botões do topo (ids na ordem). padrao: os ids que a página põe no topo quando não há escolha.
+    topo: function (padrao) {
+      var v = atual();
+      if (v.topo) return v.topo.slice();
+      var fora = (v.ocultos || []).concat(v.noMenu || []);
+      var ordem = (v.ordem || []).filter(function (id) { return padrao.indexOf(id) !== -1; });
+      return ordem.concat(padrao.filter(function (id) { return ordem.indexOf(id) === -1; })).filter(function (id) { return fora.indexOf(id) === -1; });
+    },
+    definirTopo: function (ids) { mudar(function (v) { v.topo = listaTexto(ids); }); },
+    definirPosicaoGrupos: function (pos) { mudar(function (v) { v.gruposPos = POSICOES_GRUPOS[pos] ? pos : 'topright'; }); },
+    posicaoGrupos: function () { return atual().gruposPos; },
+    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', topo: null, gruposPos: 'topright' }); },
+    aoMudar: function (f) { ouvintes.push(f); },
+    aplicar: function () { aplicarAparencia(); },
+  };
+  aplicarAparencia();
+
+  window.UI = { el: el, aviso: aviso, abrirModal: abrirModal, fecharModal: fecharModal, fecharTodos: fecharTodos, confirmar: confirmar,
+    dica: dica, campo: campo, grade: grade, rodape: rodape, secao: secao, escolhas: escolhas, aparencia: aparencia };
 })();

@@ -212,9 +212,8 @@
     var amostra = o.n == null ? el('span', { classe: 'dash-n dash-n-baixo', texto: 'n < 5' })
       : el('span', { classe: 'dash-n', texto: 'n = ' + o.n });
     return clicavel(el('section', { classe: 'dash-card dash-s' + (o.span || 12) }, [
-      el('header', { classe: 'dash-card-topo' }, [el('h3', { texto: o.titulo }), o.n === undefined ? null : amostra,
+      el('header', { classe: 'dash-card-topo' }, [el('h3', { classe: 'titulo-com-dica' }, [o.titulo, o.pergunta && window.UI ? UI.dica(o.pergunta) : null]), o.n === undefined ? null : amostra,
         o.aoClicar ? el('span', { classe: 'dash-card-dica', texto: o.dica || 'Detalhes ›' }) : null]),
-      o.pergunta ? el('p', { classe: 'dash-pergunta', texto: o.pergunta }) : null,
       el('div', { classe: 'dash-card-corpo' }, o.corpo),
       o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
     ]), o.aoClicar, 'Ver detalhes: ' + o.titulo);
@@ -428,9 +427,9 @@
       el('div', { classe: 'dash-acoes' }, [
         el('span', { classe: 'dash-atualizado muted', texto: 'Atualizado em ' + dataHora(d.gerado_em) }),
         el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Atualizar', onclick: function () { raiz.Dashboard.geral(elemento); } }),
-        /[?&]vista=dashboard\b/.test(location.search) ? null : el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-nova-janela', texto: '↗ Abrir em outra janela',
-          title: 'Dica: deixe o Dashboard numa janela (ou outro monitor) e as operações na outra',
-          onclick: function () { window.open(location.pathname + '?vista=dashboard', 'gbs-dashboard', 'noopener'); } }),
+        janelaPropria() ? null : el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-nova-janela', texto: '↗ Abrir em outra janela',
+          title: 'Abre só o dashboard numa janela própria (ou outro monitor)',
+          onclick: function () { abrirJanelaDashboard(''); } }),
       ]),
     ]);
 
@@ -1334,6 +1333,11 @@
     }
   }
 
+  // Dashboard numa janela própria: dashboard.html, só o dashboard (sem o mapa nem o painel).
+  // Sempre o mesmo nome de janela: abrir de novo reaproveita a que já está aberta.
+  function janelaPropria() { return /dashboard\.html$/.test(location.pathname); }
+  function abrirJanelaDashboard(busca) { window.open('dashboard.html' + (busca || ''), 'gbs-dashboard', 'noopener'); }
+
   raiz.Dashboard = {
     geral: function (elemento) {
       pararMapa();
@@ -1358,5 +1362,6 @@
     calcularEsforco: calcularEsforco,
     pararMapa: pararMapa,
     localNoParana: function (lat, lng) { return localNoParana(lat, lng); },
+    abrirJanela: function (opId) { abrirJanelaDashboard('?op=' + encodeURIComponent(opId)); },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

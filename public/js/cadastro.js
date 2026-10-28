@@ -81,10 +81,10 @@
         mostrar();
       }
       var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-mapa-escolha' }, [
-        UI.el('h2', { id: 'modal-titulo', texto: titulo || 'Escolher o local no mapa' }),
+        UI.el('h2', { id: 'modal-titulo', texto: titulo || 'Escolher no mapa' }),
         caixaMapa,
         info,
-        UI.el('div', { classe: 'modal-acoes' }, [
+        UI.rodape([
           UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
           btnOk,
         ]),
@@ -149,7 +149,7 @@
     var coordTxt = UI.el('input', { classe: 'campo mono', id: id('ponto-txt'), placeholder: 'ou digite: -22.4508, -42.9762 · 23K 708263 7515869' });
     var coordAviso = UI.el('small', { classe: 'muted' });
     var miniMapaEl = UI.el('div', { classe: 'mini-mapa', id: id('mini-mapa'), role: 'img', 'aria-label': 'Mapa com o ponto da operação' });
-    var miniVazio = UI.el('p', { classe: 'mini-mapa-vazio muted', texto: 'Nenhum ponto marcado ainda. Escolha no mapa, use sua posição ou digite as coordenadas.' });
+    var miniVazio = UI.el('p', { classe: 'mini-mapa-vazio muted', texto: 'Nenhum ponto marcado.' });
     var mapaMini = null, marcadorMini = null;
 
     function atualizarMiniMapa() {
@@ -212,8 +212,7 @@
     var endereco = UI.el('input', { classe: 'campo', id: id('endereco'), maxlength: '300', autocomplete: 'off',
       placeholder: 'Rua, número, bairro, cidade ou referência', value: op.local_endereco || '' });
     var painelEndereco = UI.el('div', { classe: 'cad-local-endereco' }, [
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('endereco'), texto: 'Endereço' }), endereco]),
-      UI.el('p', { classe: 'ajuda', texto: 'Sem ponto no mapa, a operação não aparece no mapa e não entra nos cálculos de distância (ULV).' }),
+      UI.campo('Endereço', endereco, { para: id('endereco'), dica: 'Sem ponto no mapa, a operação não aparece no mapa nem entra nos cálculos de distância.' }),
     ]);
     var radiosModo = UI.el('div', { classe: 'cad-modo', role: 'radiogroup', 'aria-label': 'Como informar o local' }, [
       ['mapa', 'Marcar no mapa'], ['endereco', 'Só endereço (sem ponto)'],
@@ -297,7 +296,7 @@
       ipo.imagens_anexas === true ? 'sim' : ipo.imagens_anexas === false ? 'nao' : '');
 
     // Na criação, o início é automático (a hora em que a operação for criada)
-    var inicioAuto = UI.el('p', { classe: 'ajuda', id: id('inicio-auto'), texto: 'Início das operações: automático, a data e a hora em que a operação for criada.' });
+    var inicioAuto = UI.el('p', { classe: 'ajuda', id: id('inicio-auto'), texto: 'Automático: data e hora da criação.' });
 
     // (cada campo é um nó do DOM: aparece em uma única seção)
     var secoes = inicial
@@ -392,45 +391,67 @@
   /* ------------------------------------------------------------------ */
   /* Dados da operação: ver e editar                                      */
   /* ------------------------------------------------------------------ */
+  // Quadros "rótulo em cima, valor embaixo" (UI.blocos). pares: [rótulo, valor, largo?]; valor vazio vira "—".
+  function blocos(pares) {
+    return UI.el('dl', { classe: 'kv-grade' }, pares.filter(Boolean).map(function (x) {
+      var vazio = x[1] == null || x[1] === '';
+      return UI.el('div', { classe: 'kv' + (x[2] ? ' kv-largo' : '') }, [UI.el('dt', { texto: x[0] }), UI.el('dd', { classe: vazio ? 'kv-vazio' : null }, [vazio ? '—' : x[1]])]);
+    }));
+  }
+
   // opcoes.aoSalvar(op) — chamado com a operação atualizada; opcoes.verNoMapa(op)
   function abrirDados(op, opcoes) {
     opcoes = opcoes || {};
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
-    linha('Nome', op.codigo);
-    linha('Acionamento (início das operações)', op.acionado_em ? dataHora(op.acionado_em) : '— não informado');
-    linha('Localidade / endereço', op.local_endereco || '— não informado');
-    linha('Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '— não marcado');
-    linha('Contexto / descrição', op.descricao || '—');
     var ipo = window.Ipo.normalizarIpo(op.ipo || {});
-    if (ipo.natureza || ipo.solicitante_nome || ipo.meio_liquido || ipo.pessoas_perdidas != null) {
-      linha('IPO para', ipo.destinatarios);
-      if (ipo.natureza) linha('Natureza', ipo.natureza);
-      if (ipo.solicitante_nome) linha('Solicitante', [ipo.solicitante_nome, ipo.solicitante_documento].filter(Boolean).join(' · '));
-      if (ipo.desaparecimento) linha('Data e hora do último momento visto', dataHora(ipo.desaparecimento));
-      if (ipo.meio_liquido) linha('Meio líquido', textoIpo(window.Ipo.MEIOS, ipo.meio_liquido));
-      if (ipo.pessoas_perdidas != null) linha('Pessoas perdidas', String(ipo.pessoas_perdidas));
-      if (ipo.bms_envolvidos != null) linha('BMs diretamente envolvidos', String(ipo.bms_envolvidos));
-      if (ipo.buscas_preliminares) linha('Buscas preliminares', textoIpo(window.Ipo.BUSCAS, ipo.buscas_preliminares));
-      if (ipo.possibilidade_vida) linha('Possibilidade real de vida', textoIpo(window.Ipo.VIDA, ipo.possibilidade_vida));
-      if (ipo.imagens_anexas != null) linha('Imagens anexas', ipo.imagens_anexas ? 'Sim' : 'Não');
-      if (ipo.responsavel_informacoes) linha('Responsável pelas informações', ipo.responsavel_informacoes);
-    }
-    if (op.gps_intervalo_s) linha('GPS', 'ponto pelo menos a cada ' + op.gps_intervalo_s + ' s · falha acima de ' + op.gps_lacuna_s + ' s sem ponto');
-    if ('permanencia_limite_min' in op) linha('Permanência no setor', op.permanencia_limite_min ? 'alerta depois de ' + textoMinutos(op.permanencia_limite_min) + ' no mesmo setor' : 'alerta desligado');
-    linha('Criada', dataHora(op.criada_em));
-    if (op.atualizado_por_nome) linha('Alterada', dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome);
     var editavel = opcoes.editavel !== false;
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
-      incompleto(op) ? UI.el('p', { classe: 'nota', texto: 'Cadastro inicial: o restante (tipo, localidade e os dados do IPO) pode ser completado depois em Editar, no painel da operação.' }) : null,
-      dl,
-      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
-        op.local_lat != null && opcoes.verNoMapa ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { fechar(); editarDados(op, opcoes); } }) : null,
-        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+    var temIpo = Boolean(ipo.solicitante_nome || ipo.solicitante_documento || ipo.destinatarios || ipo.responsavel_informacoes);
+    var temBusca = ipo.pessoas_perdidas != null || ipo.bms_envolvidos != null || ipo.buscas_preliminares || ipo.possibilidade_vida || ipo.meio_liquido || ipo.imagens_anexas != null;
+    var verNoMapa = op.local_lat != null && opcoes.verNoMapa
+      ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null;
+    var tipo = textoTipo(op) || ipo.natureza;
+    var resumo = UI.el('div', { classe: 'resumo-op' }, [
+      UI.el('div', { classe: 'resumo-op-nome' }, [UI.el('strong', { texto: op.codigo }), tipo ? UI.el('span', { texto: tipo }) : null]),
+      UI.el('div', { classe: 'resumo-op-selos' }, [
+        UI.el('span', { classe: 'selo ' + (op.status === 'ativa' ? 'selo-ok' : 'selo-neutro'), texto: op.status === 'ativa' ? 'Ativa' : 'Encerrada' }),
+        incompleto(op) ? UI.el('span', { classe: 'selo selo-alerta', title: 'Complete em Editar', texto: 'Cadastro incompleto' }) : null,
       ]),
-    ]));
+    ]);
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao dados-op' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
+      resumo,
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Ocorrência', [blocos([
+          ['Início das operações', op.acionado_em ? dataHora(op.acionado_em) : ''],
+          ['Último momento visto', ipo.desaparecimento ? dataHora(ipo.desaparecimento) : ''],
+          ipo.natureza && ipo.natureza !== tipo ? ['Natureza', ipo.natureza, true] : null,
+          ['Descrição', op.descricao, true],
+        ])]),
+        UI.secao('Local', [blocos([
+          ['Endereço', op.local_endereco, true],
+          ['Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '', true],
+        ]), verNoMapa]),
+        temIpo ? UI.secao('Solicitante', [blocos([
+          ['Nome', ipo.solicitante_nome], ['Documento', ipo.solicitante_documento],
+          ['IPO para', ipo.destinatarios], ['Informações por', ipo.responsavel_informacoes],
+        ])]) : null,
+        temBusca ? UI.secao('Busca', [blocos([
+          ipo.pessoas_perdidas != null ? ['Pessoas perdidas', String(ipo.pessoas_perdidas)] : null,
+          ipo.bms_envolvidos != null ? ['BMs envolvidos', String(ipo.bms_envolvidos)] : null,
+          ipo.possibilidade_vida ? ['Possibilidade de vida', textoIpo(window.Ipo.VIDA, ipo.possibilidade_vida)] : null,
+          ipo.buscas_preliminares ? ['Buscas preliminares', textoIpo(window.Ipo.BUSCAS, ipo.buscas_preliminares)] : null,
+          ipo.meio_liquido ? ['Meio líquido', textoIpo(window.Ipo.MEIOS, ipo.meio_liquido)] : null,
+          ipo.imagens_anexas != null ? ['Imagens anexas', ipo.imagens_anexas ? 'Sim' : 'Não'] : null,
+        ])]) : null,
+        UI.secao('Configuração', [blocos([
+          op.gps_intervalo_s ? ['GPS', 'ponto a cada ' + op.gps_intervalo_s + ' s · falha após ' + op.gps_lacuna_s + ' s'] : null,
+          'permanencia_limite_min' in op ? ['Permanência no setor', op.permanencia_limite_min ? 'alerta após ' + textoMinutos(op.permanencia_limite_min) : 'desligado'] : null,
+        ])]),
+      ]),
+      UI.el('p', { classe: 'meta-area dados-op-meta', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
+      UI.rodape([
+        editavel ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { fechar(); editarDados(op, opcoes); } }) : null,
+      ]),
+    ]), { tamanho: 'largo' });
   }
 
   function textoMinutos(m) { return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); }
@@ -451,26 +472,24 @@
     var lacuna = UI.el('input', { classe: 'campo', id: 'dados-gps-lacuna', type: 'number', min: '30', max: '3600', step: '5', inputmode: 'numeric', value: String(op.gps_lacuna_s || 60) });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'dados-salvar', texto: 'Salvar' });
-    var form = UI.el('form', { classe: 'form-dados', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Editar dados da operação' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-nome', texto: 'Nome ou código da operação' }), nome]),
+    var form = UI.el('form', { classe: 'form-dados form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Editar operação' }),
+      UI.campo('Nome ou código', nome, { para: 'dados-nome' }),
       campos.elemento,
       secaoFichas(op, opcoes),
       temGps ? UI.el('fieldset', { classe: 'grupo-gps' }, [
-        UI.el('legend', { texto: 'Trilha GPS' }),
-        UI.el('div', { classe: 'grupo-duplo' }, [
-          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-gps-intervalo', texto: 'Ponto pelo menos a cada (s)' }), intervalo]),
-          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-gps-lacuna', texto: 'Falha acima de (s sem ponto)' }), lacuna]),
+        UI.el('legend', null, ['Trilha GPS', UI.dica('Andando ou de carro os pontos continuam mais frequentes. Intervalos maiores que o limite aparecem tracejados no mapa.')]),
+        UI.grade([
+          UI.campo('Ponto a cada (s)', intervalo, { para: 'dados-gps-intervalo' }),
+          UI.campo('Falha após (s)', lacuna, { para: 'dados-gps-lacuna' }),
         ]),
-        UI.el('small', { classe: 'muted', texto: 'Andando ou de carro os pontos continuam mais frequentes. Intervalos maiores que o limite aparecem tracejados no mapa, com início e fim marcados.' }),
       ]) : null,
       temPerm ? UI.el('fieldset', { classe: 'grupo-gps' }, [
-        UI.el('legend', { texto: 'Tempo de permanência em setor' }),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'dados-permanencia', texto: 'Alertar quando uma pessoa ou grupo estiver no mesmo setor' }), perm]),
-        UI.el('small', { classe: 'muted', texto: 'Calculado pela trilha GPS: conta da entrada à saída do setor. Um alerta por limite atingido (1×, 2×…), para avaliar a troca da equipe.' }),
+        UI.el('legend', null, ['Permanência em setor', UI.dica('Conta da entrada à saída do setor pela trilha GPS. Um alerta por limite atingido (1×, 2×…), para avaliar a troca da equipe.')]),
+        UI.campo('Alertar depois de', perm, { para: 'dados-permanencia' }),
       ]) : null,
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -574,8 +593,7 @@
     aberta = { op: op, render: render };
     render();
     return UI.el('section', { classe: 'dados-vitimas' }, [
-      UI.el('h3', { texto: 'Vítimas' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Só os responsáveis desta operação veem estas fichas. Civis e militares de campo não têm acesso.' }),
+      UI.el('h3', { classe: 'titulo-com-dica' }, ['Vítimas', UI.dica('Só os responsáveis desta operação veem estas fichas. Civis e militares de campo não têm acesso.')]),
       lista,
       vazio,
       editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vitima-nova', texto: '＋ Nova ficha', onclick: function () { editarFicha(op, null, filhas); } }) : null,
@@ -615,7 +633,7 @@
       UI.el('h2', { id: 'modal-titulo', texto: v.nome }),
       caixaFoto,
       dl,
-      UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      UI.rodape([
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitima-editar', texto: 'Editar', onclick: function () { fechar(); editarFicha(op, v, opcoes); } }) : null,
         editavel ? rotFoto : null,
         editavel ? inFoto : null,
@@ -661,31 +679,23 @@
       window.Ipo.PERFIS_VITIMA.map(function (x) {
         return UI.el('option', { value: x[0], selected: (v.perfil || [])[0] === x[0] ? true : null, texto: x[1] });
       })));
-    var perfil = UI.el('div', { classe: 'grupo' }, [
-      UI.el('label', { classe: 'rotulo', for: prefixo + '-perfil', texto: 'Perfil da vítima (para estudos)' }), perfilSel,
-      UI.el('small', { classe: 'muted', texto: 'Idoso: 60 anos ou mais · Criança: até 12 anos · Adolescente: 13 a 17 anos.' }),
-    ]);
+    var perfil = UI.campo('Perfil', perfilSel, { para: prefixo + '-perfil', dica: 'Idoso: 60 anos ou mais · Criança: até 12 anos · Adolescente: 13 a 17 anos. Usado nos estudos da operação.' });
     // Foto da vítima (opcional): tirada agora ou escolhida; é enviada quando a ficha é salva
     var foto = UI.el('input', { classe: 'campo', type: 'file', accept: 'image/*', id: prefixo + '-foto' });
-    var grupoFoto = UI.el('div', { classe: 'grupo' }, [
-      UI.el('label', { classe: 'rotulo', for: prefixo + '-foto', texto: 'Foto da vítima' }), foto,
-      v.foto_caminho ? UI.el('small', { classe: 'muted', texto: 'Já tem foto: escolher outra substitui a atual.' }) : null,
-    ]);
+    var grupoFoto = UI.campo('Foto', foto, { para: prefixo + '-foto', ajuda: v.foto_caminho ? 'Já tem foto: escolher outra substitui a atual.' : null });
     var elementos = [
-      UI.el('div', { classe: 'grupo-duplo grupo-duplo-largo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nome', texto: 'Nome *' }), nome]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-idade', texto: 'Idade (anos)' }), idade]),
+      UI.grade([
+        UI.campo('Nome *', nome, { para: prefixo + '-nome', largo: true }),
+        UI.campo('Idade', idade, { para: prefixo + '-idade' }),
+        UI.campo('Nascimento', nasc, { para: prefixo + '-nascimento', dica: 'Formato dd/mm/aaaa. Vai para o IPO.' }),
+        UI.campo('Sexo', sexo, { para: prefixo + '-sexo' }),
+        UI.campo('Origem', origem, { para: prefixo + '-origem', dica: 'Cidade ou bairro de onde a pessoa é.' }),
+        perfil,
+        grupoFoto,
+        UI.campo('Características', carac, { para: prefixo + '-caracteristicas', largo: true, dica: 'Altura, porte, cabelo, sinais, tatuagens, cicatrizes.' }),
+        UI.campo('Roupas', roupas, { para: prefixo + '-roupas', largo: true, dica: 'Cores e tipo de roupa, calçado, acessórios, mochila.' }),
+        UI.campo('Observações', obs, { para: prefixo + '-observacoes', largo: true, dica: 'Saúde, medicamentos, último contato, hábitos, para onde iria.' }),
       ]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-nascimento', texto: 'Nascimento' }), nasc]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-sexo', texto: 'Sexo' }), sexo]),
-      ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-origem', texto: 'Origem (cidade/bairro)' }), origem]),
-      perfil,
-      grupoFoto,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-caracteristicas', texto: 'Características físicas' }), carac]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-roupas', texto: 'Roupas' }), roupas]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: prefixo + '-observacoes', texto: 'Observações' }), obs]),
     ];
     function ler() {
       return {
@@ -724,11 +734,11 @@
     var campos = camposVitima(v, 'vitima');
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'vitima-salvar', texto: nova ? 'Criar ficha' : 'Salvar' });
-    var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova ficha de vítima' : 'Editar ficha' }),
+    var form = UI.el('form', { classe: 'form-vitima form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova vítima' : 'Editar vítima' }),
     ].concat(campos.elementos, [
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
     ]));
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

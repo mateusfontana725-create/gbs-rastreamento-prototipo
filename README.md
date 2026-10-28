@@ -112,6 +112,9 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   comuns não viram marcador (para não poluir o mapa), mas têm **Ver no mapa**.
 - O participante pode pedir ajuda respondendo **PRECISO DE AJUDA** ao comando CONFIRME (alarme,
   destaque na lista e no mapa, **Marcar como atendido** na ficha).
+- Na aba **Dados** da ficha, cada participante mostra a **última posição** (coordenadas, horário e há quanto tempo) e a
+  **distância percorrida em km**, somada dos rastros GPS válidos (as falhas sem registro não contam). Os detalhes (tempo em
+  movimento, velocidades e altitude) ficam em **Trilha de…**, e o total por pessoa no dashboard (**Percorrido**).
 - A **ficha** do participante (menu lateral) é enxuta: no topo, em texto simples, **nome** (✎ renomeia), **tipo · grupo**,
   a **situação** e "Posição há X · ±Y m", com **✕** para fechar. Abaixo, o que pede atenção (pedido de ajuda, pedido de
   saída, destino em andamento), **Ver no mapa** e **⋮ Mais** (enviar destino, rota até a pessoa, trilha, encontrou a
@@ -289,17 +292,20 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 
 #### Controle de tempo e comunicação (migração 032)
 
-- **Horários combinados**: ao enviar destino a um grupo, **⏱ Horários combinados e comunicação** (opcional)
-  registra **iniciar até** e **retornar até** (com atalhos agora/+15/+30 min e +1/+2/+4 h; uma hora já passada há
-  mais de 6 h é de amanhã), a **tolerância** antes do alerta (padrão 10 min), o tempo **sem comunicação** que vira
-  alerta (padrão 10 min) e **o que foi combinado** (ex.: rádio a cada 30 min no canal 3). Depois, em
-  **Deslocamentos de grupos → ⏱ Prazos**, dá para ajustar (prorrogar o retorno, por exemplo). Cada alteração vai
-  ao **diário** com quem definiu. Se a gravação dos prazos falhar, o destino continua enviado (não é repetido) e o
-  painel avisa para tentar de novo em ⏱ Prazos.
-- **Na lista de deslocamentos**: cada horário combinado com a situação — ✔ cumprido (e quanto depois do
-  combinado), faltam X min, na tolerância ou **⚠ ATRASADO** —, a tolerância, quem definiu, o combinado, os horários
-  na linha do tempo e a coluna **Contato** de cada membro (há quanto tempo o servidor recebeu algo do celular;
-  **📵** em vermelho quando passa do limite).
+- **Horários combinados**: no envio ao grupo, o bloco **Horários combinados (opcional)** tem **Sair até** e
+  **Estar de volta até** (atalhos agora / +15 / +30 min e +1 / +2 / +4 h; uma hora já passada há mais de 6 h é
+  de amanhã). Em **Alertas e combinados** (fechado por padrão, 10 min e 10 min) ficam o **atraso** que dispara o
+  aviso (depois do horário), a **falta de contato** (tempo sem nenhuma notícia do celular) e o que foi combinado
+  (ex.: rádio a cada 30 min no canal 3).
+- **Retorno à base** (no mesmo formulário): a base, o raio em que a chegada conta ("Na base quando estiver a até")
+  e **Voltar em até (min) depois da busca**, que começa a contar ao clicar em **Finalizar busca**. O horário de volta
+  e esse tempo são verificados os dois; o alerta de retorno atrasado vale para quem ultrapassar qualquer um.
+- **Ferramentas → Deslocamentos de grupos**: um cartão por deslocamento, com as etapas (enviado, saiu, no setor,
+  busca encerrada, todos na base), o quadro **Horários combinados** (quanto falta ou o que já aconteceu, em
+  vermelho quando atrasou), a situação de cada membro e a última notícia dele (**📵** em vermelho quando passa do
+  limite). Ações: **Finalizar busca**, **Mais 15 min para voltar**, **⏱ Horários** (muda os horários, a
+  tolerância e os alertas; cada alteração vai ao **diário** com quem definiu), **Ver no mapa** e **Encerrar**.
+  Se a gravação dos horários falhar, o destino continua enviado (não é repetido) e o painel avisa para tentar de novo.
 - **Alertas gerados pelo servidor** (`verificar_prazos`, chamada junto com `verificar_retornos` pelo `pg_cron` a
   cada minuto ou pelo painel aberto — mesmo com os celulares sem internet):
   - **INÍCIO ATRASADO** (crítico) — ninguém do grupo começou o deslocamento até o horário + tolerância;
@@ -312,6 +318,57 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
     ficou sem contato e **quantas posições gravadas sem internet chegaram depois** (e de que horário a que
     horário), pela diferença entre a hora do GPS e a hora de chegada ao servidor.
   Cada alerta sai uma vez por horário combinado / episódio (não repete a cada verificação) e entra no diário.
+
+### Pedidos de ajuda (migração 035)
+
+O pedido de ajuda (botão **Preciso de ajuda** do participante ou resposta **PRECISO DE AJUDA** a um comando) vira um
+**pedido com estados**, controlado pelo servidor (`pedidos_ajuda`). Ler a mensagem ou dar ciente **não resolve**:
+só **Resolver**, com a justificativa.
+
+- **Estados**: recebido → assumido (por um responsável) → equipe enviada → em atendimento → resolvido. Cada passo
+  grava **quem fez e quando** no histórico (`pedido_ajuda_eventos`), que é só de acréscimo: não se edita nem se apaga.
+- **Tempo sem atendimento**: enquanto ninguém assume, o cartão mostra **SEM ATENDIMENTO há X** e a pílula **🆘** do
+  topo (vermelha e pulsante) conta quantos pedidos estão abertos e há quanto tempo o mais antigo espera.
+- **Escalonamento**: se ninguém assume, o servidor (`verificar_pedidos_ajuda`, pelo `pg_cron` a cada minuto e pelo
+  painel aberto) gera o alerta crítico **ajuda sem atendimento**, que toca o alarme e se repete em níveis (prazo base
+  por prioridade: crítica 2 min, alta 3, média 8, baixa 15; o prazo cresce depois que alguém assume ou envia equipe).
+- **Prioridade** (crítica, alta, média, baixa; padrão alta). **Baixar** a prioridade exige justificativa.
+- **Encerrar** exige **como terminou** (atendido, sem necessidade, falso alarme, encaminhado, outro) e a
+  **justificativa** (mín. 5 caracteres). **Reabrir** exige motivo e guarda a resolução anterior no histórico.
+- **Participante**: `meu_pedido_ajuda` devolve só o estado do pedido dele (nunca os dados de outros).
+- Telas: **Ferramentas → Pedidos de ajuda**, a pílula do topo e o bloco da **ficha** do participante (que antes tinha
+  "Marcar como atendido", só local). Sem a migração 035, o painel continua com o aviso antigo.
+
+### Recursos e segurança das equipes (migração 036)
+
+Cada equipe (grupo) tem **disponibilidade** (disponível, em descanso, indisponível, com observação e hora de volta;
+**em missão** aparece sozinho quando há deslocamento ativo), **capacidades** (texto livre, ex.: mergulho, APH) e
+**recursos**: embarcação, viatura, drone, cão de busca, equipamento de comunicação, primeiros socorros e outro
+(identificação, quantidade, situação operacional/limitada/indisponível). Em **Ferramentas → Grupos**, cada equipe
+mostra os chips e o botão **Recursos**.
+
+- **Aviso de segurança**: equipe com recursos informados mas **sem comunicação** ou **sem primeiros socorros**.
+  Sem nada informado, não se acusa falta.
+- **Enviar destino** a uma equipe em descanso, indisponível ou já em missão pede confirmação (a decisão é do comando).
+- Alterações vão ao **diário** (`equipe_recursos`) e entram no briefing. Gravação só por `salvar_recursos_grupo`.
+
+### Briefing e passagem de comando (migração 037)
+
+**Ferramentas → Briefing e passagem de comando** abre uma página curta montada pelo servidor
+(`briefing_operacao_dados`) com o que **já está cadastrado**, sem redigitar: objetivo, vítimas e **último local
+visto**, hipóteses (último cenário POA aprovado de cada vítima), riscos (pontos de risco, pedidos de ajuda abertos,
+alertas críticos sem ciente), equipes (disponibilidade, recursos, avisos), tarefas (deslocamentos e setores
+pendentes), comunicações e **decisões pendentes** (as anotadas e as que o sistema vê esperando alguém).
+Só objetivo, riscos, comunicações, observações e decisões são digitados aqui. **Copiar texto** gera um resumo para rádio ou mensagem.
+
+- **Quem comanda** aparece no topo (chip ★). **Passar o comando**: o comandante (ou administrador) escolhe outro
+  responsável da operação; o servidor guarda uma **foto do briefing** naquele momento. O comando **só muda quando a
+  outra pessoa aceita** (com o horário do aceite); ela pode **recusar com motivo**. Quem passou pode cancelar.
+- **Assumir o comando** sem aceite (comandante sem resposta): exige motivo (mín. 10 caracteres) e entra no diário em destaque.
+- O histórico de passagens é **imutável** (aceite, recusa, cancelamento, assunção) e a foto de cada uma pode ser revista.
+
+**Migrações 035, 036 e 037**: rode no Supabase em ordem (035 → 036 → 037). Cada módulo do painel avisa se a sua migração
+ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cada função estão nos próprios arquivos `.sql`.
 
 ### Rota até um participante (ir até a pessoa ou mandar apoio)
 
@@ -346,6 +403,74 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   vasculhado. Os detalhes mostram, separado, **"Percorrido (estimativa pelos rastros GPS)"**: a parte do
   setor que ficou a até 25 m de algum rastro (rastros com precisão pior que 100 m não contam). É só uma
   estimativa; o setor só fica **Concluído** quando um responsável marca.
+- **Probabilidades de busca (POA, POD e POS)** — botão **POA/POD** no topo da operação (o único acesso; clicar num setor
+  só mostra as informações dele, sem editar). O painel tem as abas **POA** (lista de setores com o percentual e uma
+  justificativa curta, a linha fixa **Fora da área** e a **soma em destaque**: só publica quando dá exatamente 100%, em
+  décimos de ponto percentual), **Buscas** e **Versões**; detalhes extras ficam em "Mais detalhes" e as explicações atrás
+  de um (i). Violeta é a cor de probabilidade (fora das cores de emergência e risco). (migrações **033** e **034**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`). Segue o guia
+  "POA e POD no GBS": o app organiza decisões documentadas do comando e nunca inventa percentuais.
+  - **POA** = probabilidade de a pessoa estar em cada setor. É **decisão do responsável**, por vítima, num **cenário**:
+    POA por setor mais **Fora da área** (a soma dos dois dá 100%; "fora" são os trechos sem setor desenhado, sem busca), justificativa geral e por setor,
+    **horário de referência**, **hipóteses**, **limitações**, **sustentação dos dados** (baixa/média/alta, julgamento e não
+    intervalo estatístico), **origem do POA**, **último ponto confiável** (referência a um ponto de interesse, com cópia dos
+    dados) e **evidências** (pontos do mapa e anotações livres, cada uma "confirmada" ou "não confirmada"). O editor começa
+    vazio; "Dividir pela área" é só uma hipótese uniforme opcional, que você ajusta e justifica.
+  - **Setores do cenário não se sobrepõem**: a mesma área seria contada duas vezes. A tela avisa na hora e **o servidor
+    recusa aprovar** (mais de 2% do menor setor em comum; rascunho pode). A geometria e a área de cada setor ficam
+    **copiadas na versão**: editar ou excluir o setor depois não altera a versão aprovada. A tela mostra a **densidade**
+    (% por km²) só como apoio ao planejamento, nunca como ordem automática.
+  - **Versões**: cada versão nasce como **rascunho** (um por vítima, editável) e vira **aprovada** depois de justificada
+    (mín. 10 caracteres, ao menos um setor com POA). **Versão aprovada não muda nem se apaga** (o servidor garante). Rever
+    cria a próxima versão, e o histórico fica visível. A aprovação confere a **revisão esperada** (outro responsável mexeu
+    no rascunho: recusa) e usa uma **chave de idempotência** (reenviar não duplica). Entra no diário.
+  - **Vítima localizada**: o cenário dela fica **encerrado** (só consulta); os das demais vítimas seguem.
+  - **Publicar** (migração **038**): o servidor guarda o **"Fora da área"** da versão e só aceita publicar quando **setores +
+    fora = exatamente 100%** (tolerância de 0,05 ponto, o arredondamento de uma casa). Versões antigas, sem esse campo,
+    seguem como estão ("fora" = o que sobra). Cada valor guarda sua **origem**: manual, **sugerido por IA e revisado por <nome>**
+    ou cálculo pós-busca. Se a versão vigente mudou depois do rascunho, publicar o rascunho é recusado até você revisá-lo e
+    salvá-lo de novo; a numeração das versões nunca volta atrás.
+  - **POD** = probabilidade de a busca achar a pessoa, **se ela estiver na área coberta**. Vem da estimativa da equipe,
+    **nunca do GPS**, e **pertence à missão de busca** (migração **039**), não ao setor. Aba **Missões** → **Nova missão**:
+    setor, vítima (ou todas), **equipe**, **método**, **área atribuída** (% do setor, com descrição), **POD estimada** (opcional;
+    vazio = **"POD não estimada"**, nunca zero) e em que ela se baseia (obrigatório quando há POD). Depois do retorno da equipe,
+    **Registrar resultado**: **localizado / não localizado / não concluído**, a **execução real** (cobertura real, horários), o
+    POD final e observações. O resultado entra uma vez só; missão concluída não se edita nem se apaga; planejada pode ser
+    cancelada (com motivo, fica no histórico). Reenviar a mesma missão (mesma chave) não duplica.
+  - **Cálculo pós-busca** (feito no servidor, `busca_missao_resultado`; o mesmo cálculo existe em `public/js/pod.js` e os dois são
+    conferidos nos testes). Só **busca negativa** (não localizado; ou não concluído com cobertura real informada): `q = POD ×
+    cobertura` no setor pesquisado e `q = 0` nos demais (inclusive "Fora da área"); `r_j = p_j × (1 − q_j)`; `Z = Σ r_k`;
+    `p'_j = r_j ÷ Z`. **Cada cálculo gera uma nova versão aprovada** (origem "cálculo pós-busca"); as anteriores não mudam.
+    - **POD desconhecido**: não recalcula; a missão fica **pendente de POD** até alguém informá-lo (uma vez, com a base).
+    - **Z = 0 ou valores inválidos**: a missão fica **inconsistente**, com o motivo, e **nada é alterado**.
+    - **Nunca soma PODs de missões diferentes**: cada missão atualiza a versão vigente, uma depois da outra.
+    - **POS da missão = POA do setor × POD da missão**, mostrado como **"chance de localizar nesta busca"** (nunca como chance
+      de sobrevivência); fica guardado por vítima com a versão antes e depois.
+    - Localizado: não recalcula (registre o encontro em "Vítima encontrada"). A tela mostra a **prévia** do novo POA antes de confirmar.
+    - Os **registros antigos** (por setor) continuam guardados e aparecem em "Registros anteriores", mas **não entram mais no
+      cálculo**. O servidor ainda aceita `busca_registrar` (para telas antigas em cache), que a tela nova não usa mais.
+    - O exemplo do capítulo 13 do guia (A 45%, B 25%, C 20%, externo 10%; M1 em A com POD 60%, M2 em B com POD 50%) segue como teste
+      automático (`calcular`): 24,66% / 34,25% / 27,40% / 13,70% e depois 29,75% / 20,66% / 33,06% / 16,53%, cumulativo 39,5%.
+  - **Sugerir com IA** (opcional, etapa de revisão humana; `api/poa-ia.js`): no editor de POA, o botão **Sugerir com IA** analisa a
+    descrição da operação, a ficha da vítima, o último ponto conhecido, as observações, os relatos e as evidências marcadas, e
+    preenche valor e **uma frase de justificativa** por setor (e "Fora da área") como **sugestão**: borda tracejada e rótulo
+    "sugerido por IA". **A IA não publica nada**: você revisa, ajusta e publica. Sem dados suficientes ela responde
+    **"informação insuficiente"** e o campo fica vazio (não inventa percentual). O que você digitou não é sobrescrito; editar um
+    valor sugerido devolve-o ao modo manual. Ao salvar, cada valor guarda a origem (**manual** ou **sugerido por IA, revisado por
+    <usuário>**, com o modelo) e a publicação registra isso no diário. Na **Nova missão**, o botão **Sugerir POD com IA** faz o mesmo
+    com o método, a área e as observações do setor (mesma marcação, sempre revisável). Se a IA falhar (sem chave, cota, rede ou
+    resposta inválida), aparece uma mensagem simples e o fluxo manual continua igual. A chave só existe no servidor (`ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`). **Privacidade:** a ficha vai para um serviço externo (sem nome, CPF e telefone); em planos gratuitos, alguns provedores podem usar o conteúdo para melhorar produtos: confira a política antes de usar em operação real.
+  - **Mapa**: "Ver no mapa" pinta os setores da versão vigente numa escala própria (violeta, que não se confunde com
+    as cores de emergência), com legenda (vítima, versão, horário de referência e "prévia"), separada da passagem GPS.
+  - **Relatório final**: seção "Probabilidades de busca" com as versões aprovadas (hipóteses, limitações, evidências, origem
+    de cada valor, inclusive as calculadas) e as missões de busca (POD, resultado, execução real, POA recalculado).
+  - Referências: Koopman, *Search and Screening* (1980); manual IAMSAR, vol. II; Guarda Costeira dos EUA, *The Theory of
+    Search*. O modelo estima, não prova: o setor só fica **Concluído** quando um responsável marca.
+  - Banco: `busca_cenarios`, `busca_cenario_setores`, `busca_cenario_evidencias` e `busca_registros` (só leitura pelos
+    responsáveis da operação; escrita só pelas funções `cenario_salvar_rascunho`, `cenario_aprovar`,
+    `cenario_descartar_rascunho`, `busca_registrar` e `busca_anular`). Operação encerrada: somente leitura. **Antes de usar,
+    rode `033_cenario_busca_pod_poa.sql` e depois `034_poa_pod_guia.sql` no Supabase** (não rode a 033 sozinha depois da 034).
+  - Ainda fora do escopo: líder de campo registrando pelo celular, catálogo de modelos de detecção validados, deriva de alvo
+    móvel (aquático) e propagação automática do POA.
 - O participante atribuído vê o contorno do **seu** setor no mapa do celular ("Seu setor: A-1").
 - Ficam salvos no Supabase (tabela `setores`) e aparecem em tempo real para os outros responsáveis.
 
@@ -479,37 +604,61 @@ e o mapa e o rastreamento continuam funcionando.
 > **não foi verificado contra as APIs reais** (o ambiente de desenvolvimento não tinha acesso a elas). Confirme a
 > resposta real de cada fonte depois de publicar, em Preview, antes de usar em operação.
 
-- **Radar de precipitação** (RainViewer): quadros recentes com horário, linha do tempo e animação (▶). Cada quadro
-  é **observado** pelo radar. Não há extrapolação do radar nesta versão.
+- **Radar de precipitação** (RainViewer): **desligado por padrão**, porque a licença do RainViewer é só pessoal e
+  educacional. Liga-se com `METEO_RADAR=rainviewer` (só para testes). Não há radar gratuito com licença comercial que cubra
+  o Brasil; a alternativa profissional é um provedor pago (ver a seção de licenças).
 - **Vento e temperatura no mapa** (estilo dos mapas de vento): partículas animadas seguindo a direção e a velocidade
   do vento, e um campo colorido de temperatura, sobre uma região de 240 km (120 km para cada lado da operação). Não há seletor de área: afaste o mapa para ver o radar de regiões maiores.
-  Vêm de uma grade de 169 pontos (Open-Meteo), atualizada junto com a previsão. Mostram a **previsão de modelo** (vento e temperatura
+  Vêm de uma grade de 49 pontos (7 × 7, MET Norway; 169 pontos com o Open-Meteo pago), atualizada junto com a previsão. Mostram a **previsão de modelo** (vento e temperatura
   atuais), não observação. Ligue em **Vento** e **Temperatura** dentro da camada Meteorologia.
 - **Chuva na região**: a grade mostra a chuva em cada ponto. O alerta indica a distância e a direção (cardeal) do ponto
-  molhado mais próximo do centro, para ajudar a decidir se dá tempo de sair. Não há direção de deslocamento: é só a
-  posição atual segundo o modelo.
-- **Previsão** (Open-Meteo) para o centro da operação: temperatura, vento e rajadas agora, e a chegada prevista da
-  chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). É previsão de modelo, não extrapolação do radar.
+  molhado mais próximo do centro. **Se aproximando**: a cada leitura nova da grade (a cada ~15 min) o painel guarda essa
+  distância; com duas ou mais leituras (≥ 10 min entre a 1ª e a última, queda de pelo menos 5 km, velocidade entre 3 e
+  100 km/h) estima a velocidade de avanço e a **chegada** ("Chuva se aproximando: ~40 km O, chega em ~43 min"), e o nível
+  sobe (alerta se chega em até 1 h, atenção em até 3 h, para chuva moderada ou intensa). Um "sem chuva" na grade zera a
+  série. É **estimativa grosseira** pela mudança entre leituras do modelo (pontos a ~40 km), **não é radar**; o texto do
+  alerta diz isso. A série fica só na memória: some ao recarregar a página e leva ~15 min para a 1ª estimativa.
+- **Previsão** (MET Norway; Open-Meteo se houver chave) para o centro da operação: temperatura, vento e chuva agora, e a
+  chegada prevista da chuva com **incerteza** (±30 min na 1ª hora, ±60 min depois). A fonte MET não informa rajadas nem
+  probabilidade de chuva: esses campos ficam em branco e não geram alerta de rajada. É previsão de modelo, não extrapolação do radar.
+- **Vento pela escala Beaufort**: o painel usa o maior vento médio previsto agora e nas próximas 3 h e o classifica em
+  força 0–12 (km/h: 1, 6, 12, 20, 29, 39, 50, 62, 75, 89, 103 e 118 marcam as forças 1 a 12). O cartão de vento mostra "Bf n".
+  Alerta pelo efeito na equipe: força 5 informativo; **6 atenção** (progressão difícil, drones e embarcações pequenas em
+  risco); **7 e 8 alerta** (difícil caminhar contra o vento; suspender drones, embarcações e helicóptero; queda de galhos);
+  **9 a 12 crítico** (queda de árvores e estruturas; considerar suspender deslocamentos). Quando o pico é daqui a algumas
+  horas, o alerta traz o horário previsto. É previsão de modelo, não medição.
 - **Alertas**: níveis Informativo, Atenção, Alerta e Crítico, com fonte, horário, validade e estado (novo, atualizado,
   ativo, expirado). Alertas oficiais do INMET (formato CAP) têm prioridade. Os indicativos calculados (chuva, rajada,
   tempestade e granizo a partir do código do modelo) são rotulados como tal. O som toca só para Alerta e Crítico,
   com no máximo um toque a cada 10 min por alerta, e precisa de um toque da pessoa (regra do navegador).
 - **Não são usados**: raios (a política da rede Blitzortung proíbe usar os dados para sistemas de aviso) e medições
   de granizo ou frente fria. Estas fontes não medem isso.
-- **Monitoramento**: a leitura acontece ao abrir a operação e a cada 5 min, só com a aba visível. Ocultar o aviso
+- **Quando consulta**: assim que a operação carrega, sempre que a operação ou o local dela mudam, e a cada 5 min (só com a
+  aba visível). Se uma consulta falha, tenta de novo em 30 s, sem esperar o ciclo. "Defina o local da operação" só aparece
+  quando a operação realmente não tem coordenada.
+- **Legendas**: cada camada tem a sua, com título e unidade (Radar · intensidade da chuva; Vento · velocidade em km/h;
+  Temperatura em °C). A lista de **fontes** mostra, para cada uma, o horário do dado e a idade (ex.: "Previsão · MET
+  Norway: dado de 19:53 (há 4 min)"); se uma fonte falhar, mostra o último dado bom e quando foi obtido.
+- **Chuva prevista**: a previsão é por hora. Se a hora com chuva já começou, o painel diz "chuva prevista desde 19:00
+  (período já iniciado)"; só uma hora futura aparece como "chegada prevista por volta de…". Os avisos de incerteza foram mantidos.
+- **Monitoramento**: Ocultar o aviso
   não para o monitoramento. O endpoint exige o login de um responsável e tem cache de 5 a 15 min por fonte.
 
-**Licenças (confirme antes do uso operacional):** RainViewer é gratuito só para fins pessoais e educacionais; Open-Meteo
-é gratuito só para uso não comercial e exige plano (chave) para produção. O endpoint inclui esses avisos na resposta.
+**Licenças (confirme antes do uso operacional):** a previsão padrão vem do **MET Norway** (Meteorologisk institutt): sem chave,
+cobre o Brasil e exige atribuição ("MET Norway") e identificação do aplicativo (`METEO_USER_AGENT`). O Open-Meteo gratuito é
+apenas não comercial; com `OPEN_METEO_API_KEY` ele passa a usar o plano comercial. O RainViewer, quando ligado, é só pessoal
+e educacional. Confira os termos do MET Norway antes da operação real. O endpoint inclui esses avisos na resposta.
 
 **Variáveis de ambiente (Vercel → Settings → Environment Variables, em Production e Preview):**
 
 | Nome | Obrigatória? | Para quê |
 |---|---|---|
 | `METEO_ALERTAS_URL` | não | URL do feed de alertas do INMET no formato CAP (JSON). Sem ela, o painel mostra "alertas oficiais não configurados". O endereço ainda não foi verificado: confirme no catálogo WIS2 do INMET antes de definir |
-| `OPEN_METEO_API_KEY` | não | chave do plano comercial do Open-Meteo, para uso em produção. Sem ela, usa o endpoint gratuito não comercial |
+| `OPEN_METEO_API_KEY` | não | chave do plano comercial do Open-Meteo. Se definida, a previsão passa a vir dele (no lugar do MET Norway) |
+| `METEO_USER_AGENT` | não | identificação do aplicativo enviada ao MET Norway (nome e contato). Há um valor padrão |
+| `METEO_RADAR` | não | `rainviewer` liga o radar (uso pessoal e educacional apenas). Sem a variável, o radar fica desligado |
 
-O radar (RainViewer) não exige chave. Nada disso aparece no navegador: as chaves ficam só no servidor.
+O MET Norway não exige chave. Nada disso aparece no navegador: as chaves ficam só no servidor.
 A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainviewer.com`.
 
 ### Rota por caminhos (serviço de roteamento)
@@ -611,7 +760,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 | A pé | ponto quando o afastamento sai do círculo de precisão, ou com a velocidade medida pelo GPS (≥ 0,7 m/s), ou quando o afastamento se mantém por 3 leituras **na mesma direção**; no máximo 1 ponto a cada 2 s. Na prática: ~1 ponto a cada 3 s andando (com velocidade do GPS) ou a cada ~5 s (sem ela) |
 | Veículo | acima de 18 km/h (velocidade do GPS, ou deslocamento rápido e em linha): **até 1 ponto por segundo**, a cada 8 m |
 | Parado | oscilação menor que 0,6 × a precisão (de 3 a 25 m) não vira trilha; com o GPS informando velocidade 0, só um afastamento claro conta; confirma a posição a cada **15 s** (o **intervalo máximo sem ponto**, configurável por operação em Dados da operação: 5 a 300 s) |
-| Guardado no aparelho | todo ponto aceito é gravado **primeiro no IndexedDB** (sem ele, localStorage) com id único (UUID do aparelho), latitude, longitude, precisão, hora do GPS, usuário, operação e o **indicador de envio**; vale também para a "Minha posição" do responsável. A fila antiga (localStorage) é migrada sozinha |
+| Guardado no aparelho | todo ponto aceito é gravado **primeiro no IndexedDB** (durabilidade `strict`; se falhar, no localStorage como reserva) com id único (UUID do aparelho), latitude, longitude, precisão, hora do GPS, usuário, operação e o estado (pendente, enviado ou recusado); vale também para a "Minha posição" do responsável. **Só é "salvo" quando o aparelho confirma a gravação**: sem confirmação (sem espaço, banco indisponível, só memória) o ponto fica marcado como **não gravado**, é regravado a cada tentativa e o usuário é avisado para não fechar a página. O app pede ao navegador **armazenamento persistente** e monitora o espaço. **Não há limite de pendentes nem descarte dos mais antigos.** A fila antiga (localStorage e a versão 1 do banco) é migrada sozinha |
 | Saltos | só é "salto" o que for incoerente com o movimento recente (> 12 m/s sem histórico, ou > 2,5 × a velocidade recente; nunca acima de 252 km/h). Um pico isolado é descartado; se a leitura seguinte confirmar o novo local (ex.: entrou num carro), **as duas entram** — nada de pontos intermediários perdidos |
 | Precisão | até 150 m entra na trilha (com as regras acima); pior que 150 m vira "posição aproximada" (no máximo 1 a cada 30 s), fora da linha da trilha |
 | Leituras ruins | antiga (> 30 s), repetida, fora de ordem ou inválida (0,0, NaN): descartada. Relógio do GPS diferente do celular: corrigido. Relógio do celular errado: o horário dos pontos é convertido para o do servidor antes do envio (o servidor recusaria pontos "do futuro") |
@@ -619,6 +768,30 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 | Painel | recebe cada ponto pelo tempo real (com conferência periódica de reserva), insere na **ordem do horário do GPS** (empate: pelo id) e redesenha no quadro seguinte da tela. **Todos os pontos viram vértices** (nada é escondido). Quando dois pontos seguidos estão separados por mais que o **limite de falha** da operação (padrão **60 s**, configurável), ou há salto impossível, o trecho é desenhado **tracejado em cinza**, com **○ início** e **● fim** da falha marcados ("Falha: sem posições registradas de 10:02 a 10:21 — o percurso real é desconhecido"). Pontos de pessoas diferentes nunca se ligam |
 | Medição | o histórico da ficha mostra, para cada ponto, **quanto tempo levou da captura até chegar ao servidor** (coluna "Chegou") |
 
+- **Fila offline: garantias e transparência** (`public/js/trilha-local.js`, `public/js/fila-estado.js`):
+  - **Regra de ouro**: nenhum ponto é dado como *salvo* sem confirmação de gravação no aparelho, nem como *sincronizado*
+    sem confirmação do servidor (`enviar_posicoes_lote` devolve os ids que existem no servidor; só esses saem da fila de
+    pendentes). Resposta sem a lista de confirmados, ponto não citado e erro do servidor deixam o ponto **pendente**.
+    Reenviar é seguro: o servidor ignora o id repetido e o confirma de novo.
+  - **Servidor antigo** (sem a migração 009): os pontos são entregues por `enviar_posicoes`, mas **continuam pendentes**
+    ("entregues sem confirmação") e só saem da fila quando o servidor atualizado os confirmar; o aviso fica visível.
+  - **Nada é descartado em silêncio**: sem limite de 5.000; pontos recusados pelo servidor ficam guardados com o motivo
+    (e contam como perda no resumo); só enviados e confirmados são apagados do aparelho, 48 h depois.
+  - **O que a tela mostra** (bloco "Detalhes do envio" na página do participante e no menu Ferramentas do responsável):
+    quantidade de pontos **pendentes** e a **idade do mais antigo**, **estado da gravação local** (segura, reserva,
+    só memória, falha), **última sincronização confirmada**, recusados, intervalos sem registro, se o armazenamento é
+    persistente e quanto do espaço está usado. Se há ponto fora do armazenamento, aparece um alerta fixo e o navegador
+    pergunta antes de fechar a página.
+  - **Registro de falhas** (guardado no aparelho, só a mudança de estado, sem repetir a cada tentativa): GPS que parou e
+    voltou, falha ao gravar (com o motivo: sem espaço ou outro), armazenamento reserva em uso, falha e retorno do envio,
+    pontos recusados, pontos sem confirmação e **intervalos sem ponto** (início, fim e duração). A trilha não liga os
+    dois lados de um intervalo: o painel a mostra **interrompida/tracejada** (limite de falha da operação).
+  - **Desempenho**: só os pendentes ficam na memória (os enviados só são contados); lotes de 200, ou de 500 quando há
+    mais de 1.000 acumulados (limite do servidor); tentativas não são gravadas a cada ponto. Medido no navegador com
+    IndexedDB real: 50.000 pontos gravados em ~7 s, enviados e confirmados em ~8 s (103 lotes), reabrir leva ~1,7 s.
+  - Testes: `node testes/trilha_local.test.js` (sem internet, recarregar, sem espaço, servidor com erro e antigo, 60.000
+    pontos) e `node testes/fila_estado.test.js` (resumo na interface). Os testes com IndexedDB real (reabrir a página,
+    migrar o banco antigo, cota, durabilidade) rodam no navegador, fora do repositório.
 - **Diagnóstico**: **Ferramentas → Diagnóstico do GPS** (responsável) e, no participante, abrindo o link com
   `&diag=1` no fim. Mostra cada leitura: hora, aceita/descartada e o **motivo**, precisão, distância,
   idade e coordenadas arredondadas. Fica **só no aparelho**.
@@ -738,6 +911,19 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     Fotos), mais **Mostrar tudo**. Acima ficam **Tipo de mapa** e **Visualização (2D/3D)**. O botão **Camadas** mostra
     "personalizado" enquanto algo estiver escondido. A escolha fica lembrada no aparelho; esconder **Pessoas** não
     para o rastreamento.
+- **Personalizar tela** (Ferramentas → ✎ Personalizar tela; vale só no aparelho, não muda nada para os outros):
+  - **arrastar** um botão do topo muda a ordem; arrastar para fora do topo (ou tocar no ×) manda para **Ferramentas**;
+  - **Mensagens** e **Convidar** também podem sair do topo (vão para Ferramentas) e voltar, como os outros botões;
+  - **qualquer função das Ferramentas** (Grupos, Diário, Enviar destino, Vítima encontrada, Exportar…) pode ir para o
+    topo: arraste da bandeja **Em Ferramentas** até o lugar desejado, ou toque nela para pôr no fim;
+  - o painel **Grupos** do mapa pode ser arrastado para qualquer canto (ou escolhido no quadradinho);
+  - **tamanho do texto** (Menor, Normal, Maior, Grande) muda o painel todo na hora;
+  - **Padrão** volta tudo como era; **Concluir** (ou Esc) sai do modo. No teclado: ← → mudam a ordem do botão em foco e
+    Delete tira do topo. No modo de edição os botões não executam a ação, só se movem.
+- **Modais e formulários** (padrão único, `UI.abrirModal` em `js/interface.js`): cabeçalho fixo com o título, o **i**
+  (explicação, em vez de parágrafos de texto) e o **×**; corpo que rola; rodapé com as ações sempre à vista. Campos
+  agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
+  e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.
@@ -747,6 +933,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 Recursos de aplicativos de navegação em campo, adaptados à operação. Ficam no menu **Ferramentas →
 Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na ficha do participante.
 
+- **Régua circular**: botão **◎ Régua** no topo (ou Ferramentas → Régua circular). Uma régua graduada no centro da
+  tela: eixos com marcas e **vários números** (distância até o centro, em m ou km); o **raio** aparece na ponta de
+  cada lado e a legenda mostra o diâmetro (2 × raio). Acompanha o zoom e não grava nada.
 - **Formato das coordenadas**: decimal, graus-minutos-segundos (GMS), graus e minutos decimais, **UTM**
   (WGS 84) ou **MGRS**. A escolha vale para a ficha, os popups e o medidor e fica lembrada no aparelho.
   Para passar por rádio, use UTM ou MGRS (mesmo sistema das cartas militares e da maioria dos GPS).
@@ -995,16 +1184,14 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
 
 ### Excluir uma operação
 
-- **Criador da operação** (ou responsável adicionado, que não é administrador) só pode excluir operação **sem atividade
-  registrada** (criadas por engano). Com atividade no diário (pessoas, setores iniciados, deslocamentos, relatos,
-  observações, resultado ou relatório), o banco recusa: o diário e os relatórios são o documento da operação, e os
-  dados pessoais saem pela retenção.
-- **Administrador** exclui **qualquer** operação da equipe, sem essa restrição: diário, observações e relatórios
-  gerados também são apagados (migração 020). Os PDFs saem do Storage pela fila de limpeza diária.
+- **Quem criou a operação** e **administradores** excluem a operação com tudo o que é dela, **com ou sem atividade**
+  (diário, observações, deslocamentos, relatórios gerados…) — migração 041. Antes, quem não era administrador só
+  conseguia excluir operação sem atividade (erro "operacao_com_registros"). Os PDFs e as fotos saem do Storage pela
+  fila de limpeza.
 - Disponível para **quem criou a operação** e para **administradores** (que alcançam **todas** as operações, inclusive para excluir): na lista de
   operações (botão **Excluir operação**) e em **Ferramentas → Excluir operação**. Os demais nem veem o
   botão, e o banco recusa a exclusão se alguém tentar por fora. Participantes nunca podem excluir.
-- A janela de confirmação lista tudo o que será apagado e exige **digitar o nome da operação**.
+- Uma **confirmação simples** (Excluir / Cancelar) diz o que será apagado; não é preciso digitar o nome.
 - Numa **única transação** no banco são apagados a operação, participantes, posições/trilhas,
   mensagens e relatos, registros de fotos, equipe de responsáveis e os **tokens dos links** (o QR Code
   deixa de funcionar na hora). Os arquivos das fotos entram numa fila (`arquivos_pendentes`) e o painel
@@ -1036,7 +1223,7 @@ rastreamento-sar/
 ├── public/                     ← site publicado pelo Vercel
 │   ├── militar.html            painel do responsável
 │   ├── civil.html              página do participante
-│   ├── sw.js                   service worker mínimo (notificações no Android)
+│   ├── sw.js                   service worker: notificações no Android, página e mapa guardados para abrir sem internet
 │   ├── versao.json             versão publicada (páginas abertas há muito tempo avisam que há versão nova)
 │   ├── css/estilos.css         estilos (alto contraste, botões grandes, responsivo)
 │   └── js/
@@ -1052,6 +1239,11 @@ rastreamento-sar/
 │       ├── cadastro.js         cadastro da operação, escolha de ponto no mapa e fichas das vítimas
 │       ├── relatorio.js        diário da operação, resultado, mapas em canvas e geração do relatório final
 │       ├── relatorio-pdf.js    monta o documento do relatório final (pdfmake), sem rede nem tela
+│       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
+│       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
+│       ├── briefing.js         briefing da operação e passagem de comando com aceite
+│       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
+│       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM, limite da política)
 │       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
 │       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 │   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
@@ -1060,6 +1252,7 @@ rastreamento-sar/
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
 │   ├── responsaveis.js         cria login e redefine senha de responsáveis (só administradores; chave SECRETA)
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
+│   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
 ├── supabase/
 │   ├── schema.sql              instalação completa e idempotente (inclui todas as migrações)
@@ -1081,6 +1274,11 @@ rastreamento-sar/
 │       ├── 030_percursos_trajetos.sql         meio/cor/origem das trilhas; trajeto desenhado como destino
 │       ├── 031_vitima_encontrada_detalhes.sql ficha, estado, local e quem encontrou no registro da vítima
 │       ├── 032_controle_tempo_missoes.sql     horários combinados, alertas de atraso e de falta de comunicação
+│       ├── 038_poa_fora_origem.sql / 039_missoes_busca_pos.sql   Fora da área, origem dos valores, missões de busca e cálculo pós-busca
+│       ├── 033_cenario_busca_pod_poa.sql / 034_poa_pod_guia.sql   POA/POD: cenários, versões, registros de busca
+│       ├── 035_pedidos_ajuda.sql              pedidos de ajuda com estados, prioridade, escalonamento e histórico
+│       ├── 036_recursos_equipes.sql           disponibilidade, capacidades e recursos das equipes
+│       └── 037_briefing_comando.sql           briefing, decisões pendentes e passagem de comando
 │       ├── 012_diario_relatorio.sql           diário, observações, resultado e relatórios guardados
 │       ├── 013_permanencia_setor.sql          alerta de tempo de permanência em setor (pela trilha GPS)
 │       └── 014_fotos_localizacao.sql          fotos: setor, localização pendente e atualização pelo GPS
@@ -1275,6 +1473,10 @@ rastreamento-sar/
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
+   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
+   | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-3.8-flash` |
+   | `POA_IA_PROVEDOR` | (opcional) `anthropic` ou `gemini`. Sem ela, usa o provedor que tiver chave (Anthropic primeiro) |
+   | `POA_IA_MODELO` | (opcional) troca o modelo do provedor escolhido. Padrões: `claude-haiku-5-5` (Anthropic, o mais barato) e `gemini-3.8-flash` |
 
 4. Clique em **Deploy**.
 
@@ -1394,6 +1596,7 @@ roda todo dia às 07:00 UTC (04:00 de Brasília) pelo Vercel Cron, que chama `/a
 | Mensagens e relatos | o participante só lê a própria conversa; os responsáveis leem as da operação. Envio só pela função `participante_enviar_mensagem` (valida participante, operação ativa, tipo, texto ≤ 1000 caracteres, coordenadas; limite de 20 por minuto; reenvio sem duplicar) |
 | Fotos | bucket **privado**: não existe link público. A imagem só é vista por **link temporário assinado (1 h)**, gerado apenas para os responsáveis da operação ou para o próprio autor. O envio só é aceito na pasta `operação/participante/` do próprio participante, com a operação ativa, JPEG até 10 MB; o registro (`registrar_foto`) confere que o arquivo existe e valida as coordenadas |
 | Setores, pontos e destinos | leitura só pelos responsáveis da operação (RLS); gravação só pelas funções, que conferem a equipe da operação; excluir só por quem criou o registro, quem criou a operação ou um administrador; participantes recebem só o próprio setor, pontos de encontro/risco e o próprio destino (`mapa_do_participante`, `meu_destino` e a política `destinos_ler_participante`, que só libera a linha do próprio participante — inclusive no tempo real); um destino só é enviado a participante da mesma operação |
+| IA do POA/POD | a chave da IA (`ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`) fica só em variável do servidor; `/api/poa-ia` exige login e que o banco confirme (com o token da própria pessoa) que ela é responsável **da operação**; limita a 6 pedidos por minuto por usuário; **nome, CPF e telefone da vítima não são enviados** (só idade, sexo, perfil, características, roupas e o que a ficha tem de descrição) e os textos são truncados. A IA só **sugere**; nada é publicado nem gravado pela função |
 | Rota por caminhos | a chave do openrouteservice fica só na variável `ORS_API_KEY` da Vercel; `/api/rota` exige login (participante ativo, só para si; ou responsável ativo), limita a 20 cálculos/min por pessoa, valida coordenadas e distância e não grava nada |
 | Fichas de vítimas | tabela `vitimas` e bucket privado `vitimas`: leitura, envio e visualização da foto **só pelos responsáveis da operação** (RLS no banco e regras no Storage); participantes não têm política de leitura; gravação só por `salvar_vitima`/`definir_foto_vitima` (confere que o arquivo existe na pasta da própria ficha); apagadas com a retenção ou a exclusão da operação |
 | Cadastro da operação | só responsáveis da operação editam (`atualizar_operacao`); tipo, acionamento (não pode estar no futuro), coordenadas e tamanhos validados no servidor; `info_operacao` continua entregando ao participante só o nome |
@@ -1431,6 +1634,15 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
    - o painel nunca apresenta uma posição antiga como atual: mostra o horário e marca o participante
      como instável ou sem atualização.
 2. **Gravação offline** só acontece enquanto a página estiver aberta e ativa; não há gravação com a página fechada.
+   Mas a página **reabre sem internet**: quem já estava na busca neste aparelho e recarrega (ou fecha e abre de novo o
+   link) sem sinal volta direto ao rastreamento, com a sessão e a fila guardadas; o servidor confere a participação
+   quando o sinal voltar.
+3. **Mapa sem internet** (página do participante): ao ter a primeira posição boa, a página guarda no aparelho o mapa
+   (OpenStreetMap) num raio de ~3 km, em zoom 10 a 16, e guarda outra área quando a pessoa se afasta mais de 1,5 km das
+   já guardadas ou recebe um destino (até 4 áreas; uma nova apaga a mais antiga). Respeita a política de uso do
+   tile.openstreetmap.org: no máximo 250 quadros por área em zoom ≥ 13 (aqui ≤ 240), baixados um por vez. Embaixo do
+   mapa aparece "Mapa guardado no aparelho: N área(s)…" com a conferência de quantas partes estão de fato guardadas.
+   Fora dessas áreas, sem internet, o mapa fica em branco; a posição continua sendo registrada normalmente.
 3. **Mensagens com a página fechada** não chegam. Com a página aberta em segundo plano, o celular
    vibra, toca um alerta e, se o participante tocou em **Ativar alertas de mensagem**, mostra uma
    notificação, desde que o navegador ainda esteja executando a página. Para entrega garantida com a
@@ -1503,7 +1715,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 25 | Trocar para **Topográfico** e abrir **Relevo em 3D** numa região com morros | curvas de nível visíveis com trilhas e setores por cima; o 3D mostra os morros e a altitude ao tocar |
 | 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** vermelhoo; outros civis não aparecem |
 | 22b | No civil, tocar **FALAR COM OS BOMBEIROS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
-| 22 | Criar uma operação de teste, registrar dados e **Excluir operação** (digitando o nome) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
+| 22 | Criar uma operação de teste, registrar dados (diário, relatório) e **Excluir operação** (confirmar) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
 | 26 | Celular parado sobre uma mesa por 5 min | a trilha não vira um "novelo"; no diagnóstico (`&diag=1`) aparecem leituras descartadas como "oscilação parado" |
 | 27 | Enviar um destino a um civil com a página dele aberta | o cartão **IR ATÉ** aparece em poucos segundos, sem recarregar; a ficha mostra "✓ recebido no celular" |
 | 28 | Remover um civil e depois tocar em **Reincluir** | o celular dele mostra "Os bombeiros chamaram você de volta"; ao tocar, volta ao mesmo registro e a trilha continua |
@@ -1521,10 +1733,21 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40 | Repetir com prazo de retorno de 5 min e um membro que não volta (ou com o celular em modo avião) | ao vencer o prazo, faixa vermelha "EQUIPE PODE ESTAR PERDIDA" com o alarme repetindo até **Ciente**, mesmo com o painel fechado durante o prazo (com `pg_cron` ativo) |
 | 40a | Enviar destino a um grupo com **retornar até** daqui a 5 min, tolerância 0, e deixar um membro longe da base; noutro celular do grupo, ligar o modo avião por 12 min | no horário, faixa "RETORNO ATRASADO" com quem falta; após 10 min sem contato, "SEM COMUNICAÇÃO — nome" com a última posição; ao religar, aviso "Comunicação restabelecida" com as posições gravadas sem internet |
 | 40b | Na ficha de um participante, **📍 Rota até ela** saindo da base, e ele andar 100 m | a rota aparece com a barra embaixo e se refaz sozinha; **Parar** apaga |
+| 40c | **Ferramentas → Personalizar tela**: arrastar **Foto** para fora do topo, arrastar **Grupos** da bandeja para o 2º lugar, arrastar o painel de grupos para o canto inferior esquerdo, texto **Maior**, **Concluir** e recarregar | Foto passa a ficar em Ferramentas e funciona de lá; Grupos aparece no topo e abre a lista de grupos; o painel de grupos fica no canto escolhido; tudo continua igual depois de recarregar; **Padrão** desfaz |
+| 40d | Abrir os modais (Encerrar, Vítima encontrada, Marcar ponto, Enviar destino, Relatório final) no computador e no celular | título com **i** e **×** no topo; ações sempre visíveis embaixo; no celular, folha de baixo sem rolagem lateral |
+| 40e | Civil entra na busca com internet e espera aparecer "Mapa guardado no aparelho"; liga o modo avião, **recarrega a página** e anda 2 min; desliga o modo avião | a página reabre direto no rastreamento, o mapa da área aparece, os pontos ficam na fila e chegam ao painel quando o sinal volta |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
 
+- **Pedidos de ajuda, recursos e briefing (migrações 035–037)**: banco — 638 verificações (migrações 007–037: pedido
+  criado pela mensagem de ajuda, máquina de estados no servidor, ciente não resolve, baixar prioridade e encerrar exigem
+  justificativa, reabrir, histórico imutável, escalonamento sem repetir, participante só vê o próprio pedido, recursos e
+  disponibilidade só por RPC, briefing com os dados existentes, passagem só do comandante, aceite muda o comando,
+  recusa com motivo, assunção com motivo, passagem imutável, encerrada só leitura). Navegador (banco simulado — 38):
+  pílula e tempo sem atendimento, fluxo completo do pedido, justificativas, recursos e avisos, confirmação de envio a
+  equipe em descanso, briefing, decisões, texto copiável, passagem, aceite e assunção. **Não testado**: Supabase real
+  com 035–037 aplicadas e celulares físicos.
 - **Cadastro, vítimas, grupos, trilha offline e deslocamentos (versão 2026-10-13)**: `npm test` passa —
   filtro de GPS com o intervalo de 15 s e a falha por tempo (39 verificações), coordenadas (45) e a
   **fila offline** (20: pendentes em ordem do GPS, campos de cada ponto, sem conexão, recarregar, confirmação
@@ -1575,7 +1798,9 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
   tablet em pé continuam em uma coluna. Navegador (t28 — 23): camadas agrupadas sem repetição, Mostrar tudo, meteorologia
   acima da legenda (liga/desliga, painel sem cobrir o botão), modais em 2 colunas sem rolagem no computador e em 1
   coluna no celular/tablet em pé, natureza com 3 opções, gráfico por mês com aquática × terrestre, por tipo com Outros,
-  **↗ Abrir em outra janela** no Dashboard (a janela nova abre direto no Dashboard).
+  **↗ Abrir em outra janela** no Dashboard (geral ou da operação): abre `dashboard.html`, uma janela só com o
+  dashboard, sem o mapa nem o painel. Abrir de novo reaproveita a mesma janela. A janela usa a mesma sessão do
+  painel (`data-pagina="militar"` no `dashboard.html`: a sessão é guardada por página); quem já entrou não entra de novo.
 - **Mapa limpo (versão 2026-10-23)**: navegador (banco simulado, t27 — 23): nenhum nome no mapa, balão no clique
   (preso ao ponto) sem abrir a ficha, ficha por dois cliques (sem zoom), por clicar e segurar e pelo toque longo, arrastar
   não abre, lista abre direto, ficha com "⋮ Mais", símbolos e agrupamentos menores de longe, translúcidos (quem pede

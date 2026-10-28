@@ -123,15 +123,14 @@
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diario' }, [
       UI.el('div', { classe: 'diario-topo' }, [
         UI.el('div', null, [
-          UI.el('h2', { id: 'modal-titulo', texto: 'Diário da operação' }),
+          UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Diário da operação' }, [UI.dica('Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.')]),
           resumo,
         ]),
         UI.el('div', { classe: 'diario-acoes' }, [btnNova, btnRelatorio]),
       ]),
       filtros,
       lista,
-      UI.el('p', { classe: 'nota diario-nota', texto: 'Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [btnAtualizar, UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([btnAtualizar, UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { pararDiario(); diario.render = null; diario.fechar = null; } });
     diario.fechar = fechar;
 
@@ -243,15 +242,17 @@
     escolha.addEventListener('change', function () { texto.placeholder = dicas[escolha.value] || dicas.observacao; });
     var erro = UI.el('p', { classe: 'erro-form', hidden: true });
     var salvar = UI.el('button', { classe: 'btn btn-primario', type: 'submit', texto: e ? 'Salvar edição' : 'Adicionar ao diário' });
-    var form = UI.el('form', { classe: 'form-observacao', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: e ? (TIPOS_IPO[e.tipo] ? 'Editar registro' : 'Editar observação') : 'Novo registro no diário' }),
-      e ? UI.el('p', { classe: 'muted', texto: 'Escrito por ' + e.autor_nome + '. A versão atual fica guardada no histórico.' }) : null,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-tipo', texto: 'Tipo do registro' }), escolha]),
-      grupoProc,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-quando', texto: 'Data e hora do fato' }), quando]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'obs-texto', texto: 'Texto' }), texto]),
+    var form = UI.el('form', { classe: 'form-observacao form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: e ? (TIPOS_IPO[e.tipo] ? 'Editar registro' : 'Editar observação') : 'Novo registro' },
+        e ? [UI.dica('Escrito por ' + e.autor_nome + '. A versão anterior fica no histórico.')] : []),
+      UI.grade([
+        UI.campo('Tipo', escolha, { para: 'obs-tipo', largo: !grupoProc }),
+        grupoProc,
+        UI.campo('Data e hora', quando, { para: 'obs-quando' }),
+      ]),
+      UI.campo('Texto', texto, { para: 'obs-texto', largo: true }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirDiario(op); } }),
         salvar,
       ]),
@@ -297,7 +298,7 @@
         UI.el('p', { texto: e.detalhe }),
       ]),
       ul,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirDiario(op); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirDiario(op); } })]),
     ]));
     try {
       var v = await C.consultar(C.cliente.from('diario_versoes').select('*').eq('diario_id', e.id).order('versao', { ascending: false }));
@@ -701,40 +702,38 @@
     var listaSalvos = UI.el('ul', { classe: 'rel-salvos', id: 'rel-salvos' });
     var erro = UI.el('p', { classe: 'erro-form', hidden: true });
 
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-relatorio' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Relatório final' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-relatorio form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Relatório final' },
+        [UI.dica('PDF com cadastro, pessoas e grupos, setores varridos, diário e resultado. Cada relatório gerado fica guardado; só o administrador pode excluir.')]),
       opcoes.aviso ? UI.el('p', { classe: 'rel-aviso', texto: opcoes.aviso }) : null,
-      UI.el('p', { classe: 'muted', texto: 'Documento em PDF com o cadastro, as pessoas e grupos, os setores varridos (mapas e fotos), o diário consolidado e o resultado. Cada relatório gerado fica guardado. Só o administrador pode excluir um relatório, e a exclusão fica registrada no diário.' }),
-      UI.el('section', { classe: 'rel-bloco' }, [
-        UI.el('h3', { texto: 'Resultado da operação' }),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rel-resultado', texto: 'Desfecho' }), selRes]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rel-resultado-texto', texto: 'Descrição' }), txtRes]),
-        infoRes,
-        UI.el('div', { classe: 'acoes-linha' }, [btnRes]),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Resultado da operação', [
+          UI.campo('Desfecho', selRes, { para: 'rel-resultado' }),
+          UI.campo('Descrição', txtRes, { para: 'rel-resultado-texto' }),
+          infoRes,
+          UI.el('div', { classe: 'acoes-linha' }, [btnRes]),
+        ], { dica: 'O resultado aparece na capa e no fim do relatório.' }),
+        UI.secao('Gerar o PDF', [
+          UI.campo('Fotos dos setores', selFotos, { para: 'rel-fotos' }),
+          UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-fundo' }, [chkFundo, ' Mapa de fundo nos mapas']),
+          progresso,
+          erro,
+          UI.el('div', { classe: 'acoes-linha' }, [btnGerar]),
+        ]),
       ]),
-      UI.el('section', { classe: 'rel-bloco' }, [
-        UI.el('h3', { texto: 'Gerar o PDF' }),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rel-fotos', texto: 'Fotos dos setores' }), selFotos]),
-        UI.el('label', { classe: 'rel-check', for: 'rel-fundo' }, [chkFundo, ' Mapa de fundo (OpenStreetMap) nos mapas do relatório']),
-        progresso,
-        erro,
-        UI.el('div', { classe: 'acoes-linha' }, [btnGerar]),
-      ]),
-      UI.el('section', { classe: 'rel-bloco' }, [
-        UI.el('h3', { texto: 'Relatórios já gerados' }),
-        listaSalvos,
-      ]),
-      UI.el('div', { classe: 'modal-acoes' }, [
-        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário da operação', onclick: function () { fechar(); abrirDiario(op); } }),
+      UI.secao('Relatórios já gerados', [listaSalvos]),
+      UI.rodape([
+        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', onclick: function () { fechar(); abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),
-    ]), { fecharNoFundo: false, aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });
+    ]), { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });
 
     var gerou = false;
     selRes.value = op.resultado || '';
     txtRes.value = op.resultado_texto || '';
     function mostrarInfoRes() {
-      infoRes.textContent = op.resultado_em ? 'Registrado por ' + (op.resultado_por_nome || '') + ' em ' + dataHora(op.resultado_em) + '.' : 'O resultado aparece na capa e no fim do relatório.';
+      infoRes.textContent = op.resultado_em ? 'Registrado por ' + (op.resultado_por_nome || '') + ' em ' + dataHora(op.resultado_em) + '.' : '';
+      infoRes.hidden = !op.resultado_em;
     }
     mostrarInfoRes();
 
@@ -790,6 +789,8 @@
         var pdfMake = await carregarPdfMake();
         passo('Buscando os dados da operação…');
         var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+        // probabilidades de busca (cenários aprovados, buscas registradas): se falhar, o relatório sai sem a seção
+        try { dados.busca = window.BuscaCenario ? await window.BuscaCenario.dadosRelatorio() : null; } catch (e) { dados.busca = null; }
         var doc = await prepararDocumento(dados, { fotos: selFotos.value, fundo: chkFundo.checked }, passo);
         passo('Gerando o PDF…');
         var r = await gerarBlob(pdfMake, doc);

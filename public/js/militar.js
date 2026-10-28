@@ -225,6 +225,7 @@
     return m ? m[1] : null;
   }
 
+
   function rotear() {
     if (!est.responsavel) return;
     if (location.hash === '#responsaveis') {
@@ -354,6 +355,15 @@
     $('opt-setores').addEventListener('click', function () { definirPrefMapa('setores', !est.prefsMapa.setores); });
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
+    $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
+    $('menu-aparencia').addEventListener('click', function () { fecharMenu(false); if (window.Personalizar) window.Personalizar.iniciar(); });
+    $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
+    $('btn-regua').addEventListener('click', alternarRegua);
+    $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
+    $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
+    $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
+    $('comando-chip').addEventListener('click', function () { if (window.Briefing) window.Briefing.abrir(); });
+    if (window.AjudaPedidos) window.AjudaPedidos.aoMudar(function () { if (est.op) { atualizarEstados(); if (est.selecionado) atualizarFicha(); } });
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
     $('visao-3d-atualizar').addEventListener('click', function () { adicionarDados3D(); UI.aviso('Posições atualizadas no 3D.', 'ok'); });
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
@@ -447,8 +457,10 @@
     document.addEventListener('pointerdown', prepararAudio, { once: true });
     window.addEventListener('hashchange', rotear);
     window.addEventListener('online', function () { if (est.op) { sincronizar(); enviarFilaFotos(); } });
+    window.addEventListener('pagehide', function () { if (est.filaMinha) est.filaMinha.persistirPendentes(); });
     window.addEventListener('beforeunload', function (ev) {
-      if (est.fotosFila.length) { ev.preventDefault(); ev.returnValue = ''; }
+      // fotos não enviadas ou pontos de GPS que ainda não estão gravados no aparelho (só na memória)
+      if (est.fotosFila.length || (est.filaMinha && est.filaMinha.qtdNaoDuraveis()) || est.bufferMinha.length) { ev.preventDefault(); ev.returnValue = ''; }
     });
 
     if (!C.configurado) {
@@ -749,7 +761,6 @@
 
   // Vista da tela inicial: "dashboard" (painel de estatísticas) ou "lista" (operações). Fica salva neste navegador.
   function vistaAtual() {
-    if (/[?&]vista=dashboard\b/.test(location.search)) return 'dashboard';   // aberto em outra janela pelo próprio Dashboard
     try { return localStorage.getItem('gbs.vista') === 'lista' ? 'lista' : 'dashboard'; } catch (e) { return 'dashboard'; }
   }
 
@@ -894,19 +905,17 @@
     var cancelar = UI.el('button', { classe: 'btn', type: 'button', id: 'nova-cancelar', texto: 'Cancelar', onclick: function () { fechar(); } });
     var dadosOp = UI.el('fieldset', { classe: 'nova-op-dados', id: 'nova-op-dados' }, [
       UI.el('div', { classe: 'nova-op-linha' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'nova-codigo', texto: 'Nome ou código da operação *' }), codigo]),
-        UI.el('p', { classe: 'muted nova-op-guarda', texto: 'Os dados ficam guardados depois de encerrar (o painel abre só para consulta). Só saem se a operação for excluída.' }),
+        UI.campo('Nome ou código *', codigo, { para: 'nova-codigo', largo: true, dica: 'Só o nome é obrigatório. O resto do cadastro vai depois, em Dados da operação. Os dados ficam guardados até a exclusão da operação.' }),
       ]),
       campos.elemento,
     ]);
-    var form = UI.el('form', { classe: 'form-nova-op', id: 'form-nova', novalidate: true }, [
+    var form = UI.el('form', { classe: 'form-nova-op form-padrao', id: 'form-nova', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),
-      UI.el('p', { classe: 'muted', texto: 'Só o nome é obrigatório. O restante do cadastro é preenchido depois, no painel da operação (Dados da operação → Editar).' }),
       vitimas.elemento,
       dadosOp,
       status,
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [cancelar, btn]),
+      UI.rodape([cancelar, btn]),
     ]);
     // ctx.op: a operação já criada (a partir daí o formulário só tenta salvar as vítimas que faltam)
     var ctx = { op: null, foi: false };
@@ -934,9 +943,8 @@
     var qtd = UI.el('span', { classe: 'nova-vitimas-qtd', id: 'nova-vitimas-qtd' });
     var add = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'nova-add-vitima', texto: '+ Adicionar vítima' });
     var caixa = UI.el('details', { classe: 'nova-vitimas', id: 'nova-vitimas' }, [
-      UI.el('summary', null, [UI.el('span', { texto: 'Vítimas (opcional)' }), qtd]),
+      UI.el('summary', null, [UI.el('span', { texto: 'Vítimas' }), qtd]),
       UI.el('div', { classe: 'nova-vitimas-corpo' }, [
-        UI.el('p', { classe: 'ajuda', texto: 'Quem está sendo procurado: uma ficha por pessoa, com a foto se houver. A ficha completa também pode ser preenchida depois, em Dados da operação → Editar.' }),
         lista,
         UI.el('div', { classe: 'nova-vitimas-acoes' }, [add]),
       ]),
@@ -1120,10 +1128,17 @@
   function abrirDashboardOperacao() {
     if (!est.op || !window.Dashboard) return;
     var corpo = UI.el('div', { classe: 'estudo-operacao', id: 'estudo-operacao' });
+    // Como no Dashboard geral: numa janela própria (ou outro monitor), com as operações noutra janela.
+    var novaJanela = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-nova-janela', texto: '↗ Abrir em outra janela',
+      title: 'Abre só o dashboard desta operação numa janela própria, para deixar o mapa em outra',
+      onclick: function () { window.Dashboard.abrirJanela(est.op.id); } });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao modal-dashboard' }, [
       UI.el('div', { classe: 'modal-dashboard-topo' }, [
         UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
-        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Fechar', texto: 'Fechar', onclick: function () { fechar(); } }),
+        UI.el('div', { classe: 'dash-acoes' }, [
+          novaJanela,
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Fechar', texto: 'Fechar', onclick: function () { fechar(); } }),
+        ]),
       ]),
       corpo,
     ]));
@@ -1226,95 +1241,69 @@
     return { apagados: apagados, falhas: itens.length - apagados };
   }
 
-  function excluirOperacao(op) {
+  // Excluir: uma confirmação simples. Apaga a operação e tudo o que é dela (migração 041).
+  async function excluirOperacao(op) {
     if (!op || !podeExcluir(op)) return;
-    var nFotos = est.op && est.op.id === op.id ? est.fotos.size : null;
-    var entrada = UI.el('input', { classe: 'campo', id: 'excluir-codigo', autocomplete: 'off', spellcheck: 'false', 'aria-describedby': 'excluir-ajuda' });
-    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btnOk = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'excluir-confirmar', texto: 'Excluir definitivamente', disabled: true });
-    var btnCancelar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } });
-    function confere() { return entrada.value.trim().toUpperCase() === String(op.codigo).trim().toUpperCase(); }
-    entrada.addEventListener('input', function () { btnOk.disabled = !confere(); erro.hidden = true; });
-
-    var form = UI.el('form', { classe: 'form-excluir', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Excluir a operação "' + op.codigo + '"?' }),
-      UI.el('p', { classe: 'nota nota-perigo', texto: 'A exclusão é DEFINITIVA e não pode ser desfeita. Serão apagados a operação e todos os dados vinculados a ela:' }),
-      UI.el('ul', { classe: 'lista-exclusao' }, [
-        UI.el('li', { texto: 'participantes civis e militares cadastrados na operação;' }),
-        UI.el('li', { texto: 'todo o histórico de localizações e as trilhas GPS;' }),
-        UI.el('li', { texto: 'mensagens trocadas e relatos de campo (objetos, vestígios, pistas, obstáculos);' }),
-        UI.el('li', { texto: 'fotografias registradas no mapa' + (nFotos ? ' (' + nFotos + ')' : '') + ' e os arquivos armazenados;' }),
-        UI.el('li', { texto: 'fichas das vítimas e as fotos delas;' }),
-        UI.el('li', { texto: 'grupos, deslocamentos de grupos e alertas;' }),
-        UI.el('li', { texto: 'diário da operação e relatórios gerados (PDF);' }),
-        UI.el('li', { texto: 'equipe de responsáveis da operação e os links/QR Codes de convite (inclusive os dos grupos), que deixam de funcionar na hora.' }),
-      ]),
-      UI.el('p', { classe: 'ajuda', texto: 'Quem ainda estiver com o link aberto deixa de enviar localização, mensagens e fotos. Outras operações não são afetadas.' }),
-      UI.el('p', { classe: 'ajuda', texto: est.responsavel.admin
-        ? 'Como administrador, a exclusão vale para qualquer operação da equipe, mesmo com atividade no diário ou relatórios gerados.'
-        : 'Só operações sem atividade (criadas por engano) podem ser excluídas. Com atividade no diário, a exclusão é recusada: o diário e os relatórios são o documento da operação.' }),
-      UI.el('div', { classe: 'grupo' }, [
-        UI.el('label', { classe: 'rotulo', for: 'excluir-codigo', texto: 'Para confirmar, digite o nome da operação' }),
-        UI.el('p', { classe: 'ajuda mono', id: 'excluir-ajuda', texto: op.codigo }),
-        entrada,
-      ]),
-      erro,
-      UI.el('div', { classe: 'modal-acoes' }, [btnCancelar, btnOk]),
-    ]);
-    form.addEventListener('submit', async function (ev) {
-      ev.preventDefault();
-      if (!confere()) {
-        erro.textContent = 'O nome digitado não confere com o da operação.';
-        erro.hidden = false;
-        return;
-      }
-      btnOk.disabled = true;
-      btnCancelar.disabled = true;
-      btnOk.textContent = 'EXCLUINDO…';
-      var r;
-      try {
-        r = await C.rpc('excluir_operacao', { p_operacao: op.id }, 30000);
-      } catch (e) {
-        erro.textContent = 'Não foi possível excluir: ' + e.message + (e.rede ? ' Nada foi apagado; tente de novo quando a conexão voltar.' : '');
-        erro.hidden = false;
-        btnOk.disabled = false;
-        btnCancelar.disabled = false;
-        btnOk.textContent = 'Excluir definitivamente';
-        return;
-      }
-      btnOk.textContent = 'APAGANDO FOTOS…';
-      var arq = await limparArquivosPendentes();
-      fechar(true);
-      var resumo = 'Operação "' + (r && r.operacao || op.codigo) + '" excluída' +
-        (r ? ' (' + r.participantes + ' participante(s), ' + r.fotos + ' foto(s)' + (r.vitimas != null ? ', ' + r.vitimas + ' ficha(s) de vítima' : '') + ')' : '') + '.';
-      if (arq.falhas) UI.aviso(resumo + ' ' + textoFalhaArquivos(arq.falhas), 'erro', 15000);
-      else UI.aviso(resumo + ' Todos os dados foram apagados.', 'ok', 8000);
-      if (est.op && est.op.id === op.id) {
-        fecharPainel();
-        if (location.hash) location.hash = '';
-        else mostrarOperacoes();
-      } else {
-        mostrarOperacoes();
-      }
+    var r = await UI.confirmar({
+      titulo: 'Excluir "' + op.codigo + '"?',
+      texto: 'Apaga a operação e todos os dados dela: participantes, trilhas, mensagens, fotos, fichas, grupos, diário e relatórios. Os links deixam de funcionar. Não dá para desfazer.',
+      ok: 'Excluir',
+      perigo: true,
     });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    if (!r) return;
+    var aviso = UI.aviso('Excluindo a operação…', null, 'fixo');
+    var res;
+    try {
+      res = await C.rpc('excluir_operacao', { p_operacao: op.id }, 30000);
+    } catch (e) {
+      if (aviso && aviso.parentNode) aviso.remove();
+      UI.aviso('Não foi possível excluir: ' + e.message + (e.rede ? ' Nada foi apagado; tente de novo quando a conexão voltar.' : ''), 'erro', 8000);
+      return;
+    }
+    var arq = await limparArquivosPendentes();
+    if (aviso && aviso.parentNode) aviso.remove();
+    var resumo = 'Operação "' + (res && res.operacao || op.codigo) + '" excluída' +
+      (res ? ' (' + res.participantes + ' participante(s), ' + res.fotos + ' foto(s)' + (res.vitimas != null ? ', ' + res.vitimas + ' ficha(s) de vítima' : '') + ')' : '') + '.';
+    if (arq.falhas) UI.aviso(resumo + ' ' + textoFalhaArquivos(arq.falhas), 'erro', 'fixo');
+    else UI.aviso(resumo, 'ok', 5000);
+    if (est.op && est.op.id === op.id) {
+      fecharPainel();
+      if (location.hash) location.hash = '';
+      else mostrarOperacoes();
+    } else {
+      mostrarOperacoes();
+    }
   }
 
   /* ------------------------------------------------------------------ */
   /* Painel: abertura e fechamento                                        */
   /* ------------------------------------------------------------------ */
+  // Spinner sobre o painel até a operação carregar (participantes, posições, mensagens, setores, grupos, POA, pedidos de ajuda, briefing…).
+  // Trava de segurança: some sozinho depois de 45 s, para nunca prender a tela.
+  function carregandoPainel(ligado) {
+    var c = $('painel-carregando');
+    if (!c) return;
+    clearTimeout(est.timerCarregando);
+    c.hidden = !ligado;
+    $('tela-painel').setAttribute('aria-busy', String(Boolean(ligado)));
+    if (ligado) est.timerCarregando = setTimeout(function () { c.hidden = true; $('tela-painel').setAttribute('aria-busy', 'false'); }, 45000);
+  }
+
   async function abrirPainel(id) {
     fecharPainel();
     mostrarTela('painel');
+    carregandoPainel(true);
     var op;
     try {
       op = await C.consultar(C.cliente.from('operacoes').select('*').eq('id', id).maybeSingle());
     } catch (e) {
+      carregandoPainel(false);
       UI.aviso(e.message, 'erro');
       location.hash = '';
       return;
     }
     if (!op) {
+      carregandoPainel(false);
       UI.aviso('Operação não encontrada ou sem permissão de acesso.', 'erro');
       location.hash = '';
       return;
@@ -1330,6 +1319,12 @@
     assinarTempoReal();
     assinarTempoRealExtras();
     assinarTrilhasManuais();
+    var cargasModulos = [];
+    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing'].forEach(function (nome) {
+      if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
+    });
+    // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
+    Promise.all(cargasModulos).then(function () { if (est.op && est.op.id === op.id) carregandoPainel(false); });
     est.timerStatus = setInterval(atualizarEstados, 5000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
@@ -1357,6 +1352,7 @@
   }
 
   function fecharPainel() {
+    carregandoPainel(false);
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
     est.timerMeuSinal = null;
@@ -1427,6 +1423,10 @@
       est.canalExtras = null;
     }
     encerrarTrilhasManuais();
+    if (window.BuscaCenario) window.BuscaCenario.parar();
+    if (window.AjudaPedidos) window.AjudaPedidos.parar();
+    if (window.RecursosEquipe) window.RecursosEquipe.parar();
+    if (window.Briefing) window.Briefing.parar();
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -1541,8 +1541,10 @@
   /* ------------------------------------------------------------------ */
   function criarMapa() {
     var mapa = L.map('mapa', { zoomControl: true, preferCanvas: false, worldCopyJump: true }).setView([-15.79, -47.88], 4);
+    // Acima do zoom que o servidor tem (maxNativeZoom) os ladrilhos são ampliados, em vez de sumirem.
     var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxNativeZoom: 19,
+      maxZoom: 22,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     });
     var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
@@ -1552,7 +1554,8 @@
       attribution: '&copy; OpenStreetMap, SRTM | Estilo: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
     });
     var satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
+      maxNativeZoom: 18,   // bug: sem isto o mapa sumia perto de 20 m de escala; agora o ladrilho do zoom 18 é ampliado
+      maxZoom: 22,
       attribution: 'Imagens &copy; Esri, Maxar, Earthstar Geographics',
     });
     // As camadas de fundo são escolhidas no painel "Camadas", sobre o mapa.
@@ -1611,7 +1614,7 @@
 
     // Grupos: cada grupo com o ícone de olho (mostrar só o grupo / restaurar tudo).
     var Grupos = L.Control.extend({
-      options: { position: 'topright' },
+      options: { position: UI.aparencia.posicaoGrupos() },
       onAdd: function () {
         var div = L.DomUtil.create('div', 'controle-grupos');
         div.hidden = true;
@@ -1808,11 +1811,10 @@
       renderizarLegenda();
       UI.aviso('Legenda atualizada (neste aparelho).', 'ok');
     } }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Editar legenda do mapa' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Troque o texto de cada item (vazio = texto padrão) ou desmarque para tirar da legenda. Só muda a legenda, não o mapa. Fica guardado neste aparelho. Os nomes dos grupos se mudam em Ferramentas → Grupos.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Legenda do mapa' }, [UI.dica('Muda só o texto da legenda, não o mapa. Fica neste aparelho. Os nomes dos grupos mudam em Ferramentas → Grupos.')]),
     ].concat(corpo).concat([
-      UI.el('div', { classe: 'modal-acoes' }, [
-        UI.el('button', { classe: 'btn', type: 'button', id: 'legenda-padrao', texto: 'Restaurar padrão', onclick: function () {
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', id: 'legenda-padrao', texto: 'Padrão', onclick: function () {
           Object.keys(campos).forEach(function (k) { campos[k].txt.value = ''; campos[k].ver.checked = true; });
         } }),
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
@@ -1834,6 +1836,23 @@
       est.camadaAtual = nome;
     }
     definirPrefMapa('camada', nome);
+    aplicarBase3D(nome);   // se o 3D estiver aberto, troca o fundo dele também
+  }
+
+  // Troca o fundo do relevo 3D sem fechar a visão 3D (câmera e marcadores continuam).
+  function aplicarBase3D(nome) {
+    var v = est.visao3d;
+    if (!v || !v.mapa || !BASES_3D[nome]) return;
+    var base = BASES_3D[nome];
+    try {
+      if (v.mapa.getLayer('base')) v.mapa.removeLayer('base');
+      if (v.mapa.getSource('base')) v.mapa.removeSource('base');
+      v.mapa.addSource('base', { type: 'raster', tiles: base.tiles, tileSize: 256, maxzoom: base.maxzoom, attribution: base.attribution });
+      v.mapa.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'sombreamento');
+    } catch (e) {
+      UI.aviso('Não foi possível trocar o fundo do 3D: ' + e.message, 'erro', 6000);
+    }
+    atualizarMenu();
   }
 
   function definirPrefMapa(chave, valor) {
@@ -1915,7 +1934,6 @@
     fecharMenu(false);
     var fechar = UI.abrirModal(UI.el('div', { classe: 'escolha-setor' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Novo setor de busca' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Como você quer marcar a área?' }),
       UI.el('div', { classe: 'opcoes-setor' }, [
         UI.el('button', { classe: 'opcao-setor', type: 'button', id: 'setor-tipo-poligono', onclick: function () { fechar(true); iniciarDesenho('poligono'); } }, [
           UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '⬠' }),
@@ -1924,7 +1942,7 @@
           UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '◯' }),
           UI.el('strong', { texto: 'Por raio' }), UI.el('small', { texto: 'toque no centro e informe o raio em metros' })]),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
   }
 
@@ -2551,13 +2569,12 @@
     var campo = UI.el('input', { classe: 'campo', id: 'renomear-nome', maxlength: '40', value: d.nome, autofocus: true });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nome' });
-    var form = UI.el('form', { novalidate: true }, [
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Renomear participante' }),
-      UI.el('p', { classe: 'ajuda', texto: 'O novo nome aparece para os responsáveis, no mapa e nas listas. A pessoa continua vendo o nome que ela digitou (' + original + ').' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'renomear-nome', texto: 'Nome no painel' }), campo]),
+      UI.campo('Nome no painel', campo, { para: 'renomear-nome', dica: 'O novo nome aparece para os responsáveis, no mapa e nas listas. A pessoa continua vendo o nome que digitou: ' + original + '.' }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [
-        d.nome_painel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao nome original', onclick: function () { salvar(''); } }) : null,
+      UI.rodape([
+        d.nome_painel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Nome original', onclick: function () { salvar(''); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         btn,
       ]),
@@ -2632,6 +2649,11 @@
   // Pedido de ajuda ainda não atendido: resposta "PRECISO DE AJUDA" a um CONFIRME
   // ou o botão "Preciso de ajuda" da página do participante.
   function temAjuda(p) {
+    // Com o fluxo de pedidos (migração 035) só o estado "resolvido" tira o aviso: ler ou dar ciente não resolve.
+    if (window.AjudaPedidos && window.AjudaPedidos.disponivel()) {
+      var ped = window.AjudaPedidos.abertoDoParticipante(p.id);
+      return ped ? { id: ped.id, pedido: ped, direcao: 'pedido', criada_em: ped.recebido_em, lat: ped.lat, lng: ped.lng } : null;
+    }
     var ultima = null, sos = null;
     est.mensagens.forEach(function (m) {
       if (m.participante_id !== p.id) return;
@@ -2913,6 +2935,16 @@
   // Não liga pontos imprecisos, separados por longa pausa ou por salto
   // impossível, nem desenha o vaivém de quem está parado (gps.js). Os pontos
   // guardados não mudam: o histórico completo continua na ficha.
+  // Distância percorrida pelo participante (rastros GPS válidos; as falhas sem registro não contam)
+  function distanciaPercorridaM(p) {
+    var m = 0;
+    trilhaDe(p).segmentos.forEach(function (seg) { m += comprimentoLinhaM(seg); });
+    return m;
+  }
+  function formatarKm(m) {
+    return (m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' km';
+  }
+
   function trilhaDe(p) {
     return window.GPS.trilha(p.pontos, { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp() });
   }
@@ -3495,6 +3527,7 @@
         '<button type="button" class="btn btn-pequeno btn-link" data-cpf="' + p.id + '">' + (est.cpfVisivel.has(p.id) ? 'ocultar' : 'mostrar') + '</button>' : '—'],
       ['Coordenadas', pos ? '<span class="mono">' + C.esc(window.Coords.formatar(pos.lat, pos.lng, est.prefsMapa.coord || 'dec')) + '</span> <span class="muted">' + C.esc(C.precisao(pos.prec)) + '</span>' : '—'],
       ['Última posição', pos ? C.hora(pos.t) + ' <span class="muted">(' + C.idade(pos.t) + ')</span>' : '—'],
+      ['Distância percorrida', (p.pontos && p.pontos.length) ? formatarKm(distanciaPercorridaM(p)) + ' <span class="muted">(rastros GPS, sem as falhas)</span>' : '—'],
       ['Último contato', d.ultimo_contato_em ? C.hora(d.ultimo_contato_em) + ' <span class="muted">(' + C.idade(d.ultimo_contato_em) + ')</span>' : '—'],
       ['Rastreamento', (ehResp ? (d.rastreando ? 'Compartilhando posição' : 'Posição não compartilhada') : (d.rastreando ? 'Ativo' : 'Interrompido')) + ' · ' + C.esc(textoGps(d.gps_estado))],
       [ehResp ? 'Entrou no painel' : 'Ingressou', C.hora(d.criado_em)],
@@ -3535,7 +3568,17 @@
     var ajuda = temAjuda(p);
     var caixaAjuda = $('ficha-alerta');
     caixaAjuda.hidden = !ajuda;
-    if (ajuda) {
+    if (ajuda && ajuda.pedido) {
+      caixaAjuda.innerHTML = '';
+      var AP = window.AjudaPedidos, pd = ajuda.pedido;
+      caixaAjuda.appendChild(UI.el('div', { classe: 'nota nota-ajuda' }, [
+        UI.el('strong', { texto: 'PEDIU AJUDA às ' + C.hora(pd.recebido_em) + ' · ' + ((AP.ESTADOS[pd.estado] || {}).rotulo || pd.estado) + '. ' }),
+        pd.estado === 'recebido' ? 'Ninguém assumiu há ' + AP.duracao(C.agora() - C.paraMs(pd.recebido_em)) + '. ' : (pd.assumido_por_nome ? 'Responsável: ' + pd.assumido_por_nome + '. ' : ''),
+        pd.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { est.mapa.setView([pd.lat, pd.lng], Math.max(est.mapa.getZoom(), 17)); } }) : null,
+        ' ',
+        UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: pd.estado === 'recebido' ? 'Assumir / tratar' : 'Abrir atendimento', onclick: function () { AP.abrir(pd.id); } }),
+      ]));
+    } else if (ajuda) {
       caixaAjuda.innerHTML = '';
       caixaAjuda.appendChild(UI.el('div', { classe: 'nota nota-ajuda' }, [
         UI.el('strong', { texto: 'PEDIU AJUDA às ' + C.hora(ajuda.direcao === 'entrada' ? ajuda.criada_em : ajuda.confirmada_em) + '. ' }),
@@ -3865,16 +3908,16 @@
     var OPCOES = [
       ['localizada', 'Vítima localizada', ultimo
         ? 'já registrada' + (regs.length > 1 ? ' (' + regs.length + ' registros)' : '') + ': ' + CONDICAO_VITIMA[ultimo.condicao].toLowerCase() + (ultimo.local_descricao ? ' · ' + ultimo.local_descricao : '')
-        : 'abre o formulário de vítima encontrada (ficha, condição, local e quem encontrou)'],
-      ['nao_localizada', 'Vítima não localizada', 'busca suspensa ou encerrada sem localizar'],
+        : 'em seguida: ficha, condição e local'],
+      ['nao_localizada', 'Vítima não localizada', ''],
       ['outro', 'Outro desfecho', 'descreva abaixo'],
-      ['sem', 'Encerrar sem informar o resultado', 'dá para informar depois em Relatório final'],
+      ['sem', 'Sem informar agora', 'dá para informar no relatório'],
     ];
     var inicial = pre.escolha || (op.resultado === 'nao_localizada' ? 'nao_localizada' : op.resultado === 'outro' ? 'outro' : ultimo || /^localizada/.test(op.resultado || '') ? 'localizada' : null);
     var opcoes = UI.el('div', { classe: 'opcoes-resultado', role: 'radiogroup', 'aria-label': 'Resultado da busca' }, OPCOES.map(function (o) {
       return UI.el('label', { classe: 'opcao-resultado', 'data-resultado': o[0] }, [
         UI.el('input', { type: 'radio', name: 'enc-resultado', value: o[0], checked: inicial === o[0] ? true : null }),
-        UI.el('span', null, [UI.el('strong', { texto: o[1] }), UI.el('small', { classe: 'muted', texto: o[2] })]),
+        UI.el('span', null, [UI.el('strong', { texto: o[1] }), o[2] ? UI.el('small', { classe: 'muted', texto: o[2] }) : null]),
       ]);
     }));
     var outraVitima = UI.el('input', { type: 'checkbox', id: 'enc-outra-vitima' });
@@ -3891,14 +3934,13 @@
       btn.textContent = registrar ? 'Registrar a vítima…' : 'Encerrar operação';
       texto.parentNode.hidden = e === 'sem';
     }
-    var form = UI.el('form', { classe: 'form-encerrar', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Encerrar a operação "' + op.codigo + '"' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Os celulares dos participantes vão parar de enviar a localização e os links deixarão de funcionar. ' +
-        'Nada é apagado: o painel abre só para consulta e os dados só saem se a operação for excluída.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Resultado da busca' }), opcoes, blocoOutra]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'enc-texto', texto: 'Descrição do desfecho (aparece no relatório)' }), texto]),
+    var form = UI.el('form', { classe: 'form-encerrar form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Encerrar operação' },
+        [UI.dica('Os celulares param de enviar localização e os links deixam de funcionar. Nada é apagado: o painel fica só para consulta. O desfecho aparece no relatório.')]),
+      UI.secao('Resultado da busca', [opcoes, blocoOutra]),
+      UI.campo('Desfecho', texto, { para: 'enc-texto', largo: true }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     opcoes.addEventListener('change', atualizar);
     outraVitima.addEventListener('change', atualizar);
@@ -3979,8 +4021,8 @@
       abaCivil.className = 'btn' + (tipo === 'civil' ? ' btn-ativo' : '');
       abaMil.className = 'btn' + (tipo === 'militar' ? ' btn-ativo' : '');
       nota.textContent = tipo === 'civil'
-        ? 'Compartilhe com os voluntários civis. Quem entrar por este link sempre aparecerá como CIVIL. O link não dá acesso a este painel.'
-        : 'Compartilhe SOMENTE com militares. Este link permite ao participante se identificar como MILITAR. O link não dá acesso a este painel.';
+        ? 'Quem entrar por este link aparece como civil.'
+        : 'Só para militares: quem entrar por este link se identifica como militar.';
       if (window.qrcode) {
         try {
           var q = window.qrcode(0, 'M');
@@ -4019,13 +4061,13 @@
     var botoes = [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Copiar', onclick: copiar })];
     if (navigator.share) botoes.push(UI.el('button', { classe: 'btn', type: 'button', texto: 'Compartilhar', onclick: compartilhar }));
 
-    var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Convidar participantes' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links não dão acesso ao painel. Só servem para entrar na operação como participante.')]),
       UI.el('div', { classe: 'abas' }, [abaCivil, abaMil]),
       UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
       qr,
       nota,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
     mostrar(atual);
   }
@@ -4263,7 +4305,7 @@
       m.categoria === 'VITIMA' ? seloCondicao(m) : null,
       UI.el('p', { classe: 'relato-texto', texto: m.texto }),
       dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes' }, [
+      compactarAcoes(UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
         p ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
@@ -4682,7 +4724,7 @@
       caixa,
       nav,
       dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes' }, [
+      compactarAcoes(UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', id: 'visor-ampliar', texto: 'Ampliar', onclick: function () { if (urlAtual) abrirLightbox(urlAtual, 'Foto de ' + autor); } }),
         f.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () {
           fechar();
@@ -4760,13 +4802,12 @@
     inCam.addEventListener('change', function (ev) { aoEscolherFotoPainel(ev, true, aoEnviar); });
     inArq.addEventListener('change', function (ev) { aoEscolherFotoPainel(ev, false, aoEnviar); });
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Registrar foto' }),
-      UI.el('p', { classe: 'ajuda', texto: 'A foto fica vinculada a você e a esta operação, com o local do GPS no momento do registro (ou o gravado na própria foto). Sem localização, ela é salva mas não aparece no mapa.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Registrar foto', UI.dica('A foto fica vinculada a você e a esta operação. O local é o do GPS no momento ou o gravado na foto. Sem local, ela é salva mas não aparece no mapa.')]),
       UI.el('div', { classe: 'fotos-botoes' }, [
         UI.el('label', { classe: 'btn btn-escuro btn-foto' }, [UI.el('span', { classe: 'ico-camera', 'aria-hidden': 'true' }), ' TIRAR FOTO', inCam]),
         UI.el('label', { classe: 'btn btn-foto' }, ['Escolher arquivo', inArq]),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
   }
 
@@ -5320,11 +5361,11 @@
     }
     var nome = UI.el('input', { classe: 'campo', id: 'setor-nome', maxlength: '60', value: d.nome });
     var raio = d.forma === 'circulo' ? UI.el('input', { classe: 'campo', id: 'setor-raio', type: 'number', min: '5', max: '50000', step: '10', inputmode: 'numeric', value: String(Math.round(d.raio_m)) }) : null;
-    var area = UI.el('p', { classe: 'ajuda', id: 'setor-area' });
+    var area = UI.el('p', { classe: 'meta-area', id: 'setor-area' });
     function atualizarArea() {
       var r = raio ? Number(raio.value) : null;
       var dd = Object.assign({}, d, raio ? { raio_m: r } : {});
-      area.textContent = 'Área aproximada: ' + (raio && !(r >= 5 && r <= 50000) ? '—' : formatarArea(areaSetorM2(dd)));
+      area.textContent = 'Área ≈ ' + (raio && !(r >= 5 && r <= 50000) ? '—' : formatarArea(areaSetorM2(dd)));
       if (raio && r >= 5 && r <= 50000) desenharPrevia(r);
     }
     if (raio) raio.addEventListener('input', atualizarArea);
@@ -5344,18 +5385,23 @@
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btnSalvar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'setor-salvar', texto: novo ? 'Criar setor' : 'Salvar' });
     var salvo = false;
-    var form = UI.el('form', { classe: 'form-setor', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo setor de busca' : 'Editar setor' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-nome', texto: 'Nome, número ou código' }), nome]),
-      raio ? UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-raio', texto: 'Raio (metros)' }), raio]) : null,
-      area,
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor' }), cores]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-participante', texto: 'Responsável pelo setor' }), part]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-equipe', texto: 'Equipe (opcional)' }), equipe]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-status', texto: 'Situação' }), status]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'setor-obs', texto: 'Observações (opcional)' }), obs]),
+    var form = UI.el('form', { classe: 'form-setor form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo setor' : 'Editar setor' }),
+      UI.secao(null, [
+        UI.grade([
+          UI.campo('Nome', nome, { para: 'setor-nome', dica: 'Nome, número ou código que a equipe reconhece no rádio.' }),
+          raio ? UI.campo('Raio (m)', raio, { para: 'setor-raio' }) : null,
+          UI.campo('Situação', status, { para: 'setor-status' }),
+          UI.campo('Responsável', part, { para: 'setor-participante' }),
+          UI.campo('Equipe', equipe, { para: 'setor-equipe', opcional: true }),
+          raio ? null : area,
+        ], { tres: true }),
+        raio ? area : null,
+      ]),
+      UI.campo('Cor', cores, { largo: true }),
+      UI.campo('Observações', obs, { para: 'setor-obs', largo: true, opcional: true }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnSalvar]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnSalvar]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -5413,18 +5459,74 @@
     est.mapa.fitBounds(L.latLngBounds(verticesSetor(d)), { padding: [40, 40], maxZoom: 17 });
   }
 
+  /* ---------- Camada de POA no mapa (js/busca-cenario.js) ---------- */
+  // Setores pintados pela probabilidade atual. Escala própria (violeta), que não se confunde com as cores de
+  // emergência nem de risco, e camada separada da passagem GPS e das missões. valores: { setorId: fração } ou nulo (remove).
+  function escalaProb(t) {
+    var a = [237, 233, 254], b = [91, 33, 182];
+    return 'rgb(' + [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); }).join(',') + ')';
+  }
+  function camadaProbabilidade(valores, titulo) {
+    if (est.camadaProb) { est.camadaProb.remove(); est.camadaProb = null; }
+    if (est.legendaProb) { est.legendaProb.remove(); est.legendaProb = null; }
+    if (!valores || !est.mapa) return;
+    var max = 0;
+    Object.keys(valores).forEach(function (k) { max = Math.max(max, valores[k]); });
+    if (!(max > 0)) return;
+    var grupo = L.layerGroup();
+    est.setores.forEach(function (s, id) {
+      if (valores[id] == null) return;
+      L.polygon(verticesSetor(s.d), { color: '#4c1d95', weight: 1, fillColor: escalaProb(valores[id] / max), fillOpacity: 0.55, interactive: false }).addTo(grupo);
+    });
+    grupo.addTo(est.mapa);
+    est.camadaProb = grupo;
+    var Legenda = L.Control.extend({
+      options: { position: 'bottomleft' },
+      onAdd: function () {
+        var div = L.DomUtil.create('div', 'legenda-prob');
+        div.innerHTML = '<strong></strong><span class="legenda-prob-barra"></span><span class="legenda-prob-eixo"><small>0%</small><small></small></span>';
+        div.querySelector('strong').textContent = titulo || 'POA atual (prévia)';
+        div.querySelectorAll('small')[1].textContent = (max * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '% (maior setor)';
+        return div;
+      },
+    });
+    est.legendaProb = new Legenda();
+    est.legendaProb.addTo(est.mapa);
+  }
+
+  /* ---------- Detalhes de setor, ponto de interesse e trilha (mesmo padrão visual) ---------- */
+  // Cabeçalho com a cor do item, o tipo, o nome e uma etiqueta de situação
+  function cabecaDetalhe(o) {
+    return UI.el('header', { classe: 'detalhe-cabeca', style: '--cor:' + (o.cor || '#64748b') }, [
+      o.marca || null,
+      UI.el('div', { classe: 'detalhe-cabeca-texto' }, [
+        UI.el('small', { classe: 'detalhe-tipo', texto: o.tipo }),
+        UI.el('h2', { id: 'modal-titulo', classe: 'detalhe-titulo' }, [o.titulo].concat(o.extra || [])),
+      ]),
+      o.etiqueta ? UI.el('span', { classe: 'selo ' + o.etiqueta.classe, texto: o.etiqueta.texto }) : null,
+    ]);
+  }
+
+  // Fatos em caixinhas: [rotulo, valor, ocupa a largura toda?]. Entradas nulas são ignoradas.
+  function fatosDetalhe(lista) {
+    return UI.el('dl', { classe: 'detalhe-fatos' }, lista.filter(Boolean).map(function (f) {
+      return UI.el('div', { classe: 'detalhe-fato' + (f[2] ? ' largo' : '') }, [UI.el('dt', { texto: f[0] }), UI.el('dd', null, [f[1]])]);
+    }));
+  }
+
+  function secaoDetalhe(titulo, conteudo) {
+    return UI.el('section', { classe: 'detalhe-secao' }, [UI.el('h3', { texto: titulo }), conteudo]);
+  }
+
+  // Ações no rodapé do detalhe (em telas estreitas, as menos usadas vão para "Mais")
+  function rodapeDetalhe(botoes) {
+    return compactarAcoes(UI.el('div', { classe: 'detalhe-rodape modal-acoes acoes-detalhe' }, botoes));
+  }
+
   function abrirSetor(id) {
     var s = est.setores.get(id);
     if (!s) return;
     var d = s.d;
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
-    linha('Forma', d.forma === 'circulo' ? 'Círculo — raio de ' + Math.round(d.raio_m).toLocaleString('pt-BR') + ' m' : 'Área desenhada — ' + d.pontos.length + ' cantos');
-    linha('Área aproximada', formatarArea(areaSetorM2(d)));
-    linha('Responsável', nomeResponsavelSetor(d));
-    linha('Criado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
-    if (d.atualizado_por_nome && d.atualizado_em !== d.criado_em) linha('Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome);
-    if (d.observacoes) linha('Observações', d.observacoes);
     var cob = coberturaSetor(d);
     var caixaCob = UI.el('div', { classe: 'nota nota-cobertura' }, [
       UI.el('strong', { texto: 'Percorrido (estimativa pelos rastros GPS): ' + cob.pct + '%' }),
@@ -5448,12 +5550,24 @@
         },
       });
     }));
+    var classeSituacao = { pendente: 'selo-neutro', andamento: 'selo-alerta', concluido: 'selo-ok' }[d.status] || 'selo-neutro';
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-setor' }, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }), ' ' + d.nome]),
-      botoesStatus,
-      caixaCob,
-      dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      cabecaDetalhe({
+        cor: d.cor, tipo: 'Setor de busca · ' + (d.forma === 'circulo' ? 'círculo' : 'área desenhada'), titulo: d.nome,
+        etiqueta: { texto: STATUS_SETOR[d.status].rotulo, classe: classeSituacao },
+      }),
+      secaoDetalhe('Situação', botoesStatus),
+      fatosDetalhe([
+        ['Área aproximada', formatarArea(areaSetorM2(d))],
+        d.forma === 'circulo' ? ['Raio', Math.round(d.raio_m).toLocaleString('pt-BR') + ' m'] : ['Cantos', String(d.pontos.length)],
+        ['Responsável', nomeResponsavelSetor(d)],
+        ['Equipe', d.equipe || 'não informada'],
+        ['Criado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome, true],
+        d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome, true] : null,
+      ]),
+      d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
+      secaoDetalhe('Busca', UI.el('div', { classe: 'detalhe-busca' }, [caixaCob, window.BuscaCenario ? window.BuscaCenario.blocoSetor(d) : null])),
+      rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verSetorNoMapa(d); } }),
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormSetor(d); } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', id: 'setor-ajustar', texto: 'Ajustar limites', onclick: function () { fechar(); ajustarLimites(d.id); } }) : null,
@@ -5464,11 +5578,11 @@
         } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'setor-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirSetor(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ])),
+      ]),
     ]));
   }
 
-  async function excluirSetor(d) {
+ async function excluirSetor(d) {
     var r = await UI.confirmar({
       titulo: 'Excluir o setor "' + d.nome + '"?',
       texto: 'O setor some do mapa de todos os responsáveis (e do celular de quem estava atribuído). As trilhas GPS não são afetadas.',
@@ -5573,14 +5687,14 @@
       ]);
     }));
     var titulo = UI.el('input', { classe: 'campo', id: 'ponto-titulo', maxlength: '80', value: d.titulo, placeholder: 'Ex.: Última vez vista na trilha da cachoeira' });
-    var desc = UI.el('textarea', { classe: 'campo', id: 'ponto-desc', maxlength: '1000', rows: '3' });
+    var desc = UI.el('textarea', { classe: 'campo', id: 'ponto-desc', maxlength: '1000', rows: '3', placeholder: 'Opcional' });
     desc.value = d.descricao || '';
     var lat = UI.el('input', { classe: 'campo mono', id: 'ponto-lat', type: 'number', step: 'any', inputmode: 'decimal', value: String(d.lat) });
     var lng = UI.el('input', { classe: 'campo mono', id: 'ponto-lng', type: 'number', step: 'any', inputmode: 'decimal', value: String(d.lng) });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'ponto-salvar', texto: novo ? 'Marcar ponto' : 'Salvar' });
     // coordenada digitada em qualquer formato (UTM, MGRS, GMS, decimal) preenche latitude/longitude
-    var coordTxt = UI.el('input', { classe: 'campo mono', id: 'ponto-coord', placeholder: 'Ex.: 23K 707870 7515797 ou 22°27\'05"S 42°58\'48"O' });
+    var coordTxt = UI.el('input', { classe: 'campo mono', id: 'ponto-coord', placeholder: 'Colar coordenada (UTM, MGRS, graus…)' });
     var coordInfo = UI.el('small', { classe: 'muted', id: 'ponto-coord-info' });
     coordTxt.addEventListener('input', function () {
       var c = window.Coords.interpretar(coordTxt.value);
@@ -5590,15 +5704,15 @@
     var raio = UI.el('input', { classe: 'campo', id: 'ponto-raio', type: 'number', min: '10', max: '5000', step: '10', inputmode: 'numeric',
       value: d.raio_m ? String(Math.round(d.raio_m)) : String(d.categoria === 'BASE' ? RAIO_BASE_PADRAO : RAIO_ALERTA_PADRAO) });
     var rotRaio = UI.el('label', { classe: 'rotulo', for: 'ponto-raio' });
-    var ajudaRaio = UI.el('small', { classe: 'muted' });
-    var grupoRaio = UI.el('div', { classe: 'grupo' }, [rotRaio, raio, ajudaRaio]);
+    var grupoRaio = UI.el('div', { classe: 'campo-bloco' }, [rotRaio, raio]);
     // Raio: alarme de proximidade (área de risco) ou chegada (base).
     function ajustarRaio(k) {
       grupoRaio.hidden = k !== 'RISCO' && k !== 'BASE';
-      rotRaio.textContent = k === 'BASE' ? 'Raio de chegada à base (m)' : 'Raio do alarme de proximidade (m)';
-      ajudaRaio.textContent = k === 'BASE'
-        ? 'Quem estiver dentro deste círculo (com o GPS preciso o suficiente) conta como "chegou à base" no controle de retorno dos grupos.'
-        : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.';
+      rotRaio.innerHTML = '';
+      rotRaio.appendChild(document.createTextNode(k === 'BASE' ? 'Raio da base (m)' : 'Raio de alerta (m)'));
+      rotRaio.appendChild(UI.dica(k === 'BASE'
+        ? 'Quem estiver dentro deste círculo, com GPS preciso, conta como "chegou à base" no controle de retorno.'
+        : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.'));
     }
     ajustarRaio(d.categoria);
     grade.addEventListener('change', function () {
@@ -5612,20 +5726,27 @@
     });
     if (!d.titulo) titulo.value = CAT_PONTO[d.categoria].rotulo;
     var salvo = false;
-    var form = UI.el('form', { classe: 'form-ponto', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Marcar ponto de interesse' : 'Editar ponto' }),
-      d.relatado_por_nome ? UI.el('p', { classe: 'ajuda', texto: 'A partir do relato de ' + d.relatado_por_nome + '.' }) : null,
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Categoria' }), grade]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-titulo', texto: 'Nome ou título' }), titulo]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-desc', texto: 'Descrição ou observações (opcional)' }), desc]),
-      grupoRaio,
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-coord', texto: 'Coordenada em qualquer formato (opcional)' }), coordTxt, coordInfo]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-lat', texto: 'Latitude' }), lat]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-lng', texto: 'Longitude' }), lng]),
+    var form = UI.el('form', { classe: 'form-ponto form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Marcar ponto' : 'Editar ponto' }),
+      d.relatado_por_nome ? UI.el('p', { classe: 'ajuda', texto: 'Relato de ' + d.relatado_por_nome }) : null,
+      UI.secao('Categoria', [grade]),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Identificação', [
+          UI.campo('Nome', titulo, { para: 'ponto-titulo' }),
+          grupoRaio,
+          UI.campo('Observações', desc, { para: 'ponto-desc' }),
+        ]),
+        UI.secao('Local', [
+          UI.campo('Coordenada', coordTxt, { para: 'ponto-coord', dica: 'Pode colar em qualquer formato: decimal, UTM, MGRS ou graus. A latitude e a longitude são preenchidas sozinhas.' }),
+          coordInfo,
+          UI.grade([
+            UI.campo('Latitude', lat, { para: 'ponto-lat' }),
+            UI.campo('Longitude', lng, { para: 'ponto-lng' }),
+          ]),
+        ]),
       ]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -5663,7 +5784,7 @@
         btn.disabled = false;
       }
     });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () { if (!salvo) cancelarDesenho(); } });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () { if (!salvo) cancelarDesenho(); } });
   }
 
   // Coordenadas no formato escolhido (Ferramentas › Formato das coordenadas), com os
@@ -5700,28 +5821,29 @@
     if (!p) return;
     var d = p.d;
     var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); var dd = UI.el('dd', null, [valor]); dl.appendChild(dd); return dd; }
-    linha('Categoria', cat.rotulo);
-    if (d.descricao) linha('Descrição', d.descricao);
-    linha('Coordenadas', blocoCoordenadas(d.lat, d.lng));
-    if (d.categoria === 'RISCO') linha('Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m');
-    if (d.categoria === 'BASE') linha('Chegada à base', 'raio de ' + Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m');
-    var alt = linha('Altitude', UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' }));
-    linha('Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
-    if (d.relatado_por_nome) linha('Relatado por', d.relatado_por_nome + ' (participante)');
-    if (d.atualizado_por_nome && d.atualizado_em !== d.criado_em) linha('Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome);
+    var alt = UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' });
     var foto = d.foto_id && est.fotos.get(d.foto_id);
-    var blocoFoto = foto ? UI.el('div', { classe: 'ponto-foto' }, [miniatura(foto, [foto.id])]) : null;
     var ativa = est.op.status === 'ativa';
     var editavel = podeAlterar();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-ponto' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-acao' }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]), ' ' + d.titulo,
-        editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-renomear', type: 'button', id: 'ponto-renomear', title: 'Renomear o ponto', 'aria-label': 'Renomear o ponto', texto: '✎',
-          onclick: function () { fechar(); renomearPonto(d); } }) : null]),
-      dl,
-      blocoFoto,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      cabecaDetalhe({
+        marca: UI.el('span', { classe: 'mk-poi poi-' + d.categoria, 'aria-hidden': 'true' }, [UI.el('span', { texto: cat.letra })]),
+        tipo: 'Ponto de interesse · ' + cat.rotulo, titulo: d.titulo,
+        extra: [editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-renomear', type: 'button', id: 'ponto-renomear', title: 'Renomear o ponto', 'aria-label': 'Renomear o ponto', texto: '✎',
+          onclick: function () { fechar(); renomearPonto(d); } }) : null],
+      }),
+      fatosDetalhe([
+        ['Coordenadas', blocoCoordenadas(d.lat, d.lng), true],
+        ['Altitude', alt],
+        d.categoria === 'RISCO' ? ['Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m'] : null,
+        d.categoria === 'BASE' ? ['Chegada à base', 'raio de ' + Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m'] : null,
+        ['Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
+        d.relatado_por_nome ? ['Relatado por', d.relatado_por_nome + ' (participante)'] : null,
+        d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
+      ]),
+      d.descricao ? secaoDetalhe('Descrição', UI.el('p', { classe: 'detalhe-texto', texto: d.descricao })) : null,
+      foto ? secaoDetalhe('Foto', UI.el('div', { classe: 'ponto-foto' }, [miniatura(foto, [foto.id])])) : null,
+      rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verPontoNoMapa(d); } }),
         ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormPontoInt(d); } }) : null,
@@ -5730,22 +5852,22 @@
           onclick: function () { fechar(); window.Ferramentas.alternarAneis({ id: d.id, lat: d.lat, lng: d.lng, nome: d.titulo }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'ponto-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirPontoInt(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ])),
+      ]),
     ]));
     altitudeEm(d.lat, d.lng).then(function (m) {
       alt.textContent = m == null ? 'indisponível (sem conexão com o modelo de terreno)' : '≈ ' + Math.round(m).toLocaleString('pt-BR') + ' m (modelo de terreno, aproximado)';
     });
   }
 
-  function renomearPonto(d) {
+ function renomearPonto(d) {
     var campo = UI.el('input', { classe: 'campo', id: 'ponto-novo-nome', maxlength: '80', value: d.titulo, autofocus: true });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nome' });
-    var form = UI.el('form', { novalidate: true }, [
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Renomear ponto' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ponto-novo-nome', texto: 'Nome do ponto' }), campo]),
+      UI.campo('Nome do ponto', campo, { para: 'ponto-novo-nome' }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -5853,7 +5975,7 @@
     var abaPessoas = UI.el('button', { classe: 'btn', type: 'button', id: 'destino-aba-pessoas', texto: 'Pessoas' });
     var abaGrupo = UI.el('button', { classe: 'btn', type: 'button', id: 'destino-aba-grupo', texto: 'Grupo', disabled: est.semGrupos ? true : null });
     var blocoPessoas = UI.el('div', { classe: 'grupo' }, [
-      UI.el('div', { classe: 'linha-rotulo' }, [UI.el('span', { classe: 'rotulo', texto: 'Para quem' }),
+      UI.el('div', { classe: 'linha-rotulo' }, [UI.el('span', { classe: 'rotulo', texto: 'Pessoas' }),
         lista.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Marcar todos', onclick: function () { caixas.querySelectorAll('input').forEach(function (c) { c.checked = true; }); } }) : null]),
       caixas,
     ]);
@@ -5882,19 +6004,20 @@
     var prazosGrupo = camposPrazos(null);
     var blocoGrupo = UI.el('div', { classe: 'bloco-destino-grupo' }, grupos.length ? [
       UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-grupo', texto: 'Grupo' }), selGrupo]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Quem recebe' }), publico]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-base', texto: 'Base para o retorno' }), selBase,
-        bases.length ? null : UI.el('small', { classe: 'muted', texto: 'Nenhuma base marcada: use Ferramentas → Marcar ponto de interesse → "Base da operação".' })]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-raio-base', texto: 'Raio de chegada à base (m)' }), raioBase]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-prazo', texto: 'Prazo de retorno após a busca (min)' }), prazo]),
+      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Quem recebe o destino' }), publico]),
+      UI.el('fieldset', { classe: 'bloco-form' }, [
+        UI.el('legend', { texto: 'Retorno à base' }),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-base', texto: 'Base' }), selBase,
+          bases.length ? null : UI.el('small', { classe: 'muted', texto: 'Nenhuma base marcada: use Ferramentas → Marcar ponto de interesse → "Base da operação".' })]),
+        UI.el('div', { classe: 'grupo-duplo' }, [
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-raio-base', texto: 'Na base quando estiver a até (m)' }), raioBase]),
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-prazo', texto: 'Voltar em até (min) depois da busca' }), prazo]),
+        ]),
       ]),
-      UI.el('details', { classe: 'grupo detalhes-prazos', id: 'destino-prazos' }, [
-        UI.el('summary', { texto: '⏱ Horários combinados e comunicação (opcional)' }),
+      UI.el('fieldset', { classe: 'bloco-form' }, [
+        UI.el('legend', { texto: 'Horários combinados (opcional)' }),
         prazosGrupo.el,
       ]),
-      UI.el('p', { classe: 'ajuda', texto: 'Você recebe alertas automáticos no início do deslocamento, na chegada ao ' + (alvo.setor_id ? 'setor' : 'destino') +
-        ', na finalização da busca e no retorno à base. Se o prazo de retorno passar sem todos na base, o painel avisa que a equipe pode estar perdida.' }),
     ] : [UI.el('p', { classe: 'muted', texto: 'Nenhum grupo nesta operação. Crie em Ferramentas → Grupos.' })]);
     function mostrarModo() {
       abaPessoas.className = 'btn' + (!modoGrupo ? ' btn-ativo' : '');
@@ -5911,19 +6034,22 @@
 
     var traj = window.Rotas.temTrajeto(alvo);
     var rotaTraj = traj ? window.Rotas.deTracado(alvo.trajeto, { modo: 'a_pe' }) : null;
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: traj ? 'Enviar trajeto desenhado' : 'Enviar destino' }),
-      UI.el('p', { classe: 'ajuda', texto: traj
-        ? 'O celular mostra a linha que você desenhou (' + window.Rotas.formatarDistancia(rotaTraj.distancia_m) + ', ' + rotaTraj.passos.filter(function (x) { return x.tipo === 'curva'; }).length +
-          ' curva(s)) e guia a pessoa por ela, do início (verde) ao fim. O destino é o fim da linha.'
-        : 'O celular de cada participante escolhido mostra o destino no mapa, a distância em linha reta e a direção. Coordenadas: ' + C.coord(alvo.lat) + ', ' + C.coord(alvo.lng) + '.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'destino-nome', texto: traj ? 'Nome do trajeto (o participante vê este nome)' : 'Nome do destino (o participante vê este nome)' }), nome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: traj ? 'Como vão percorrer (para estimar o tempo)' : 'Rota até lá (o celular calcula por ruas, caminhos e trilhas)' }), modos]),
-      UI.el('div', { classe: 'abas', role: 'group', 'aria-label': 'Enviar para' }, [abaPessoas, abaGrupo]),
-      blocoPessoas,
-      blocoGrupo,
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: traj ? 'Enviar trajeto' : 'Enviar destino' },
+        [UI.dica(traj
+          ? 'O celular mostra a linha desenhada (' + window.Rotas.formatarDistancia(rotaTraj.distancia_m) + ', ' + rotaTraj.passos.filter(function (x) { return x.tipo === 'curva'; }).length + ' curva(s)) e guia a pessoa do início ao fim.'
+          : 'O celular mostra o destino no mapa, a distância em linha reta e a direção. ' + C.coord(alvo.lat) + ', ' + C.coord(alvo.lng) + '.')]),
+      UI.secao(null, [
+        UI.campo(traj ? 'Nome do trajeto' : 'Nome do destino', nome, { para: 'destino-nome', dica: 'É o nome que aparece no celular de quem recebe.' }),
+        UI.campo(traj ? 'Como vão percorrer' : 'Rota até lá', modos, { dica: traj ? 'Serve para estimar o tempo.' : 'O celular calcula a rota por ruas, caminhos e trilhas.' }),
+      ]),
+      UI.secao('Para quem', [
+        UI.el('div', { classe: 'abas', role: 'group', 'aria-label': 'Enviar para' }, [abaPessoas, abaGrupo]),
+        blocoPessoas,
+        blocoGrupo,
+      ]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     mostrarModo();
     form.addEventListener('submit', async function (ev) {
@@ -5978,7 +6104,7 @@
     o.erro.hidden = true;
     if (!o.grupo) { o.erro.textContent = 'Escolha o grupo.'; o.erro.hidden = false; return; }
     if (o.base && !(o.raio >= 10 && o.raio <= 5000)) { o.erro.textContent = 'Raio de chegada à base: de 10 m a 5.000 m.'; o.erro.hidden = false; return; }
-    if (o.base && !(o.prazo >= 5 && o.prazo <= 720)) { o.erro.textContent = 'Prazo de retorno: de 5 a 720 minutos.'; o.erro.hidden = false; return; }
+    if (o.base && !(o.prazo >= 5 && o.prazo <= 720)) { o.erro.textContent = 'Tempo para voltar: de 5 a 720 minutos.'; o.erro.hidden = false; return; }
     var dadosPrazos = null;
     if (o.prazos) {
       try { dadosPrazos = o.prazos.ler(); } catch (e0) { o.erro.textContent = e0.message; o.erro.hidden = false; return; }
@@ -6000,7 +6126,7 @@
       o.fechar();
       var g = est.grupos.get(o.grupo);
       UI.aviso('Destino "' + o.nome + '" enviado ao grupo ' + (g ? g.nome : '') + ': ' + r.destinatarios + ' recebe(m) no celular, ' +
-        r.acompanhados + ' acompanhado(s).' + (o.base ? ' Prazo de retorno: ' + o.prazo + ' min após finalizar a busca.' : ' Sem base: não há controle de retorno.'), 'ok', 10000);
+        r.acompanhados + ' acompanhado(s).' + (o.base ? ' Voltar em até ' + o.prazo + ' min depois de finalizar a busca.' : ' Sem base: não há controle de retorno.'), 'ok', 10000);
       // Prazos combinados: a missão já existe; uma falha aqui não desfaz o envio (nem o repete)
       if (dadosPrazos && r.missao && r.missao.id) {
         try {
@@ -6029,30 +6155,31 @@
     var pontos = Array.from(est.pontosInt.values()).map(function (p) { return p.d; });
     var setores = Array.from(est.setores.values()).map(function (s) { return s.d; });
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Enviar destino' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Escolha um setor, um ponto de interesse ou toque no mapa.' }),
-      UI.el('div', { classe: 'acoes-linha' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Enviar destino' }, [UI.dica('Escolha um setor, um ponto de interesse ou toque no mapa.')]),
+      UI.el('div', { classe: 'acoes-linha acoes-iguais' }, [
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'destino-no-mapa', texto: 'Escolher no mapa', onclick: function () {
           fechar(); iniciarDesenho('destino', { participantes: participantes || [], grupo_id: grupoId || null });
         } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'destino-desenhar-trajeto', texto: '✎ Desenhar o trajeto', title: 'A equipe segue a linha que você desenhar',
           onclick: function () { fechar(); iniciarDesenhoTrajeto(participantes, grupoId); } }),
       ]),
-      setores.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, setores.map(function (d) {
-        return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
-          var c = centroSetor(d);
-          fechar(); abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: participantes, grupo_id: grupoId });
-        } }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }),
-          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: STATUS_SETOR[d.status].rotulo + ' · o centro do setor é o destino' })])])]);
-      })) : null,
-      pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
-        var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
-        return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
-          fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes, grupo_id: grupoId });
-        } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
-          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
-      })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto de interesse marcado ainda.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Setores', [setores.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, setores.map(function (d) {
+          return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
+            var c = centroSetor(d);
+            fechar(); abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: participantes, grupo_id: grupoId });
+          } }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }),
+            UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: (STATUS_SETOR[d.status] || STATUS_SETOR.pendente).rotulo })])])]);
+        })) : UI.el('p', { classe: 'muted', texto: 'Nenhum setor.' })], { dica: 'O centro do setor é o destino.' }),
+        UI.secao('Pontos de interesse', [pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
+          var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+          return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
+            fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes, grupo_id: grupoId });
+          } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
+            UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
+        })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto marcado.' })]),
+      ]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
   }
 
@@ -6165,13 +6292,13 @@
         ]);
       }));
     var idade = Date.now() - pos.t;
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Rota até ' + nomeExibido(p) }),
-      UI.el('p', { classe: 'ajuda', texto: 'Última posição às ' + C.hora(p.dados.ultima_posicao_em, false) + ' (' + C.idade(p.dados.ultima_posicao_em) + ')' +
-        (idade > 5 * 60000 ? '. ATENÇÃO: posição antiga — a pessoa pode estar sem sinal; a rota vai até onde ela foi vista por último.' : '. A rota acompanha a pessoa enquanto ela anda.') }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'rota-ate-origem', texto: 'Saindo de' }), sel]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Como vai até lá' }), modos]),
-      UI.el('div', { classe: 'modal-acoes' }, [
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Rota até ' + nomeExibido(p) },
+        [UI.dica('Última posição às ' + C.hora(p.dados.ultima_posicao_em, false) + ' (' + C.idade(p.dados.ultima_posicao_em) + ').' +
+          (idade > 5 * 60000 ? ' Posição antiga: a pessoa pode estar sem sinal; a rota vai até onde foi vista por último.' : ' A rota acompanha a pessoa enquanto ela anda.'))]),
+      UI.campo('Saindo de', sel, { para: 'rota-ate-origem', largo: true }),
+      UI.campo('Como vai', modos, { largo: true }),
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', id: 'rota-ate-enviar', texto: 'Mandar alguém até ela',
           title: 'Envia a posição atual da pessoa como destino para outra pessoa ou grupo',
@@ -6762,7 +6889,7 @@
         opcao('desenho-enviar', '➝ Enviar para alguém percorrer', 'A pessoa ou o grupo segue a linha no celular, do início (verde) ao fim.', function () { enviarDesenhoComoTrajeto(dz, guardar.checked); },
           UI.el('label', { classe: 'linha-opcao opcao-desenho-extra' }, [guardar, ' Guardar também no mapa como trilha planejada'])),
       ]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao desenho', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar ao desenho', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (!escolhido && est.desenho === dz) atualizarBarraTrilha(); } });
   }
 
@@ -6815,18 +6942,17 @@
     var cor = UI.el('input', { type: 'color', classe: 'campo-cor', id: 'trilha-cor', value: base.cor || '#22d3ee', 'aria-label': 'Cor da trilha' });
     cor.disabled = !base.cor;
     corPropria.addEventListener('change', function () { cor.disabled = !corPropria.checked; });
-    var estados = UI.el('div', { classe: 'opcoes-estado-trilha', role: 'radiogroup', 'aria-labelledby': 'trilha-estado-rot' }, Object.keys(ESTADO_TRILHA).map(function (k) {
+    var estados = UI.el('div', { classe: 'opcoes-estado-trilha', role: 'radiogroup', 'aria-label': 'Situação da trilha' }, Object.keys(ESTADO_TRILHA).map(function (k) {
       var e = ESTADO_TRILHA[k];
       return UI.el('label', { classe: 'opcao-estado-trilha' }, [
         UI.el('input', { type: 'radio', name: 'trilha-estado', value: k, checked: k === estadoAtual ? true : null }),
         UI.el('span', { classe: 'lg-trilha-desenhada lg-' + k, 'aria-hidden': 'true' }),
-        UI.el('span', null, [UI.el('strong', { texto: e.rotulo }), UI.el('small', { classe: 'muted', texto: ' — ' + e.dica })]),
+        UI.el('span', null, [UI.el('strong', { texto: e.rotulo })]),
       ]);
     }));
     var quando = UI.el('input', { classe: 'campo', id: 'trilha-percorrida-em', type: 'datetime-local', max: paraCampoDataHora(C.agora()),
       value: paraCampoDataHora(!novo && d.percorrida_em ? d.percorrida_em : (extra && extra.percorrida_em) || C.agora()) });
-    var grupoQuando = UI.el('div', { classe: 'grupo', hidden: estadoAtual !== 'percorrida' }, [
-      UI.el('label', { classe: 'rotulo', for: 'trilha-percorrida-em', texto: 'Quando foi percorrida' }), quando]);
+    var grupoQuando = UI.campo('Quando foi percorrida', quando, { para: 'trilha-percorrida-em', oculto: estadoAtual !== 'percorrida' });
     estados.addEventListener('change', function () {
       grupoQuando.hidden = ((form.querySelector('input[name="trilha-estado"]:checked') || {}).value) !== 'percorrida';
     });
@@ -6836,32 +6962,35 @@
       })));
     var part = opcoesParticipantes(novo ? null : d.participante_id, true);
     part.id = 'trilha-participante';
-    var equipe = UI.el('input', { classe: 'campo', id: 'trilha-equipe', maxlength: '60', value: novo ? '' : d.equipe || '', placeholder: 'Ex.: Equipe Alfa (se não for um grupo cadastrado)' });
+    var equipe = UI.el('input', { classe: 'campo', id: 'trilha-equipe', maxlength: '60', value: novo ? '' : d.equipe || '', placeholder: 'Se não for um grupo cadastrado' });
     var obs = UI.el('textarea', { classe: 'campo', id: 'trilha-obs', maxlength: '1000', rows: '2' });
     obs.value = novo ? '' : d.observacoes || '';
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btnSalvar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'trilha-salvar', texto: novo ? 'Salvar trilha' : 'Salvar' });
     var salvo = false;
-    var form = UI.el('form', { classe: 'form-trilha', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Nova trilha desenhada' : 'Editar trilha' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Operação ' + est.op.codigo + ' · ' + pontos.length + ' pontos · ' + formatarComprimento(comprimentoLinhaM(pontos)) +
-        '. Trilha desenhada à mão: não é rastro de GPS e não conclui setores.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-nome', texto: 'Nome da trilha' }), nome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', id: 'trilha-estado-rot', texto: 'Situação (escolha uma)' }), estados]),
-      grupoQuando,
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-meio', texto: 'Percurso feito por' }), meio]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor no mapa' }),
-          UI.el('label', { classe: 'linha-opcao' }, [corPropria, ' própria ', cor]),
-          UI.el('small', { classe: 'muted', texto: 'Sem cor própria: amarelo (planejada) ou branco (percorrida).' })]),
+    var form = UI.el('form', { classe: 'form-trilha form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Nova trilha' : 'Editar trilha' }),
+      UI.el('p', { classe: 'meta-area', texto: pontos.length + ' pontos · ' + formatarComprimento(comprimentoLinhaM(pontos)) }),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.secao('Trilha', [
+          UI.campo('Nome', nome, { para: 'trilha-nome' }),
+          UI.campo('Situação', estados, { dica: 'Trilha desenhada à mão: não é rastro de GPS e não conclui setores.' }),
+          grupoQuando,
+          UI.grade([
+            UI.campo('Feito por', meio, { para: 'trilha-meio' }),
+            UI.campo('Cor no mapa', UI.el('div', { classe: 'linha-cor' }, [UI.el('label', { classe: 'linha-opcao' }, [corPropria, ' própria']), cor]), { dica: 'Sem cor própria: amarelo (planejada) ou branco (percorrida).' }),
+          ]),
+        ]),
+        UI.secao('Quem', [
+          UI.campo('Grupo', grupoSel, { para: 'trilha-grupo', opcional: true }),
+          UI.campo('Responsável', part, { para: 'trilha-participante', opcional: true }),
+          UI.campo('Equipe', equipe, { para: 'trilha-equipe', opcional: true }),
+        ]),
       ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-grupo', texto: 'Grupo (opcional)' }), grupoSel]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-participante', texto: 'Responsável pelo trajeto (opcional)' }), part]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-equipe', texto: 'Equipe (opcional)' }), equipe]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'trilha-obs', texto: 'Observações (opcional)' }), obs]),
+      UI.campo('Observações', obs, { para: 'trilha-obs', largo: true, opcional: true }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [
-        UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-voltar', texto: novo ? 'Voltar ao desenho' : 'Cancelar', onclick: function () { fechar(); } }),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-voltar', texto: novo ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); } }),
         btnSalvar,
       ]),
     ]);
@@ -6912,7 +7041,7 @@
         btnSalvar.textContent = novo ? 'Tentar de novo' : 'Salvar';
       }
     });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () {
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () {
       // fechar sem salvar volta ao desenho (nada se perde)
       if (!salvo && novo && dz && est.desenho === dz) { atualizarBarraTrilha(); }
     } });
@@ -6959,24 +7088,22 @@
     if (!t) return;
     var d = t.d;
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
-    linha('Situação', e.rotulo + ' — ' + e.dica);
-    if (d.estado === 'percorrida' && d.percorrida_em) linha('Percorrida em', C.hora(d.percorrida_em) + (d.percorrida_por_nome ? ' (informado por ' + d.percorrida_por_nome + ')' : ''));
-    linha('Comprimento', formatarComprimento(d.comprimento_m != null ? d.comprimento_m : comprimentoLinhaM(d.pontos)) + ' · ' + d.pontos.length + ' pontos');
-    linha('Equipe', equipeDaTrilha(d) || 'Não informada');
-    linha('Percurso feito por', meioDe(d).ico + ' ' + meioDe(d).rotulo);
-    linha('Origem', d.origem === 'importada' ? 'Importada de arquivo' + (d.arquivo ? ' (' + d.arquivo + ')' : '') + ' (não é rastro de GPS do app)' : 'Desenhada à mão no mapa (não é rastro de GPS)');
-    linha('Criada', C.hora(d.criado_em) + ' por ' + d.criado_por_nome);
-    if (d.atualizado_por_nome && d.atualizado_em !== d.criado_em) linha('Alterada', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome);
-    if (d.observacoes) linha('Observações', d.observacoes);
     var editavel = podeAlterar();
     var oculta = trilhasOcultas().has(d.id);
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-trilha' }, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'lg-trilha-desenhada lg-' + d.estado, 'aria-hidden': 'true' }), ' ' + d.nome]),
-      UI.el('p', { classe: 'ajuda', texto: 'Uma linha indica o trajeto, não que toda a área em volta foi vasculhada. A situação dos setores não muda por causa das trilhas.' }),
-      dl,
-      compactarAcoes(UI.el('div', { classe: 'modal-acoes acoes-detalhe' }, [
+      cabecaDetalhe({ cor: e.cor, tipo: 'Trilha · ' + e.rotulo, titulo: d.nome, etiqueta: { texto: e.rotulo, classe: e.selo } }),
+      fatosDetalhe([
+        ['Situação', e.dica, true],
+        d.estado === 'percorrida' && d.percorrida_em ? ['Percorrida em', C.hora(d.percorrida_em) + (d.percorrida_por_nome ? ' (informado por ' + d.percorrida_por_nome + ')' : '')] : null,
+        ['Comprimento', formatarComprimento(d.comprimento_m != null ? d.comprimento_m : comprimentoLinhaM(d.pontos)) + ' · ' + d.pontos.length + ' pontos'],
+        ['Equipe', equipeDaTrilha(d) || 'não informada'],
+        ['Percurso feito por', meioDe(d).ico + ' ' + meioDe(d).rotulo],
+        ['Origem', d.origem === 'importada' ? 'Importada de arquivo' + (d.arquivo ? ' (' + d.arquivo + ')' : '') + ' · não é rastro de GPS do app' : 'Desenhada à mão no mapa · não é rastro de GPS', true],
+        ['Criada', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
+        d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterada', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
+      ]),
+      d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
+      rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verTrilhaNoMapa(d); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-ocultar', texto: oculta ? 'Mostrar no mapa' : 'Ocultar no mapa', onclick: function () { fechar(); alternarTrilhaOculta(d.id); } }),
         editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { fechar(); abrirFormTrilha(d, 'percorrida'); } }) : null,
@@ -6984,11 +7111,11 @@
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar-tracado', texto: 'Editar traçado', onclick: function () { fechar(); iniciarDesenhoTrilha(d.id); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'trilha-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirTrilhaManual(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-      ])),
+      ]),
     ]));
   }
 
-  async function excluirTrilhaManual(d) {
+ async function excluirTrilhaManual(d) {
     var r = await UI.confirmar({
       titulo: 'Excluir a trilha "' + d.nome + '"?',
       texto: 'A linha desenhada some do mapa de todos os responsáveis. Setores, participantes e rastros de GPS não são afetados.',
@@ -7117,6 +7244,16 @@
     topo: { tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], maxzoom: 17, attribution: '© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)' },
     satelite: { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], maxzoom: 19, attribution: 'Imagens © Esri, Maxar, Earthstar Geographics' },
   };
+
+  // Régua circular (js/regua.js): o botão do topo e o item de Ferramentas fazem a mesma coisa.
+  function alternarRegua() {
+    if (!est.mapa || !window.Regua) return;
+    var ligada = window.Regua.alternar(est.mapa);
+    $('btn-regua').setAttribute('aria-pressed', String(ligada));
+    $('btn-regua').classList.toggle('btn-ativo', ligada);
+    $('menu-regua').setAttribute('aria-pressed', String(ligada));
+    UI.aviso(ligada ? 'Régua circular ligada: os números são o raio, medido a partir do centro da tela.' : 'Régua circular desligada.', 'ok', 4000);
+  }
 
   async function abrirRelevo3D() {
     if (!est.mapa) return;
@@ -7300,6 +7437,7 @@
     $('ferramentas').classList.toggle('alerta-gps', Boolean(texto));
     if (texto && est.avisoGpsFeito !== e) UI.aviso(texto, 'erro', 8000);
     est.avisoGpsFeito = texto ? e : null;
+    atualizarFilaMinha();
   }
 
   function chaveMinhaPosAqui() { return 'gbs-minha-pos-aqui:' + (est.op ? est.op.id : ''); }
@@ -7386,7 +7524,7 @@
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: inst.titulo }),
       UI.el('ol', { classe: 'perm-passos' }, inst.passos.map(function (t) { return UI.el('li', { texto: t }); })),
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Verificar de novo', onclick: function () { fechar(); ligarMinhaPosicao(false); } }),
       ]),
@@ -7497,18 +7635,47 @@
         est.filaMinha = f;
         var buf = est.bufferMinha;
         est.bufferMinha = [];
-        return (buf.length ? f.adicionar(buf) : Promise.resolve()).then(function () { enviarMinhaFila(); return f; });
+        return (buf.length ? f.adicionar(buf).then(avaliarGravacaoMinha) : Promise.resolve()).then(function () { enviarMinhaFila(); return f; });
       })
       .catch(function () { est.abrindoMinha = null; return null; });
     est.abrindoMinha = { pid: pid, promessa: promessa };
     return promessa;
   }
 
+  // Ponto só é "salvo" quando o aparelho confirma a gravação; senão o usuário é avisado (no máximo 1 vez por minuto).
+  function avaliarGravacaoMinha(res) {
+    if (res && res.duraveis === false && Date.now() - (est.ultimoAvisoGravacaoMinha || 0) > 60000) {
+      est.ultimoAvisoGravacaoMinha = Date.now();
+      UI.aviso('Atenção: não foi possível gravar a sua posição neste aparelho (pode estar sem espaço). Os pontos estão só na memória: não feche esta página.', 'erro', 12000);
+    }
+    return res;
+  }
+
   function guardarMinhaPosicao(pontos) {
-    if (est.filaMinha && est.filaMinha.ids.participanteId === est.meuPart) return est.filaMinha.adicionar(pontos);
+    if (est.filaMinha && est.filaMinha.ids.participanteId === est.meuPart) return est.filaMinha.adicionar(pontos).then(avaliarGravacaoMinha);
+    // a fila ainda está abrindo: os pontos esperam aqui, sem limite (nenhum é descartado)
     Array.prototype.push.apply(est.bufferMinha, pontos);
-    if (est.bufferMinha.length > 2000) est.bufferMinha.splice(0, est.bufferMinha.length - 2000);
     return abrirMinhaTrilha();
+  }
+
+  function qtdParaEnviarMinha() {
+    return (est.filaMinha ? est.filaMinha.qtdParaEnviar() : 0) + est.bufferMinha.length;
+  }
+
+  // Detalhes da fila (pendentes, gravação no aparelho, última sincronização confirmada, falhas) no menu Ferramentas
+  function atualizarFilaMinha() {
+    if (est.filaMinha && est.gpsMeu) {
+      var ruim = est.gpsMeu === 'negado' || est.gpsMeu === 'indisponivel' || est.gpsMeu === 'sem_sinal';
+      if (est.compartilhando) est.filaMinha.transicao('gps', ruim, { motivo: est.gpsMeu });
+    }
+    if (!est.filaMinhaUI && $('fila-estado-meu') && window.FilaEstado) {
+      est.filaMinhaUI = window.FilaEstado.montar($('fila-estado-meu'), {
+        fila: function () { return est.filaMinha; },
+        extra: function () { return { pendentes: est.bufferMinha.length, naoDuraveis: est.bufferMinha.length }; },
+        ativo: function () { return Boolean(est.compartilhando); },
+      });
+    }
+    if (est.filaMinhaUI) est.filaMinhaUI.atualizar();
   }
 
   function pendentesMinha() {
@@ -7549,7 +7716,7 @@
   // Envio em lote: o ponto só é marcado como enviado quando o servidor confirma.
   async function enviarMinhaFila() {
     var fila = est.filaMinha;
-    if (est.enviandoMinha || !est.meuPart || !fila || fila.ids.participanteId !== est.meuPart || !fila.qtdPendentes()) return;
+    if (est.enviandoMinha || !est.meuPart || !fila || fila.ids.participanteId !== est.meuPart || !fila.qtdParaEnviar()) return;
     est.enviandoMinha = true;
     try {
       var r = await window.TrilhaLocal.enviarLote(fila, C.rpc, {
@@ -7565,7 +7732,9 @@
         est.enviouMinhaAlguma = true;
         C.local.gravar(chaveMinhaPosAqui(), Date.now());   // este aparelho é o que compartilha
       }
-      if (fila.qtdPendentes()) setTimeout(enviarMinhaFila, 300);
+      if (r.resp && r.resp.gps_lacuna_s > 0) fila.lacunaMs = r.resp.gps_lacuna_s * 1000;
+      fila.persistirPendentes();   // o que não conseguiu ser gravado no aparelho é tentado de novo
+      if (fila.qtdParaEnviar()) setTimeout(enviarMinhaFila, 300);
     } catch (e) {
       if (e.codigo === 'operacao_encerrada' || e.codigo === 'participante_invalido') {
         fila.limpar();
@@ -7578,6 +7747,7 @@
       }
     } finally {
       est.enviandoMinha = false;
+      atualizarFilaMinha();
     }
   }
 
@@ -7633,13 +7803,12 @@
     }
     render();
     var timer = setInterval(render, 2000);
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Diagnóstico do GPS (este aparelho)' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Mostra cada leitura do GPS e se ela entrou na trilha ou foi descartada, com o motivo. Fica só neste aparelho. ' +
-        'Para ver o de um participante, peça que ele abra o link com "&diag=1" no fim.' }),
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diag form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Diagnóstico do GPS' },
+        [UI.dica('Cada leitura do GPS: entrou na trilha ou foi descartada, com o motivo. Fica neste aparelho. Para o de um participante, ele abre o link com "&diag=1".')]),
       info,
       caixa,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { clearInterval(timer); } });
   }
 
@@ -7760,9 +7929,7 @@
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btnAdd = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Adicionar' });
     var form = UI.el('form', { classe: 'equipe-form', novalidate: true }, [
-      UI.el('label', { classe: 'rotulo', for: 'equipe-email', texto: 'Adicionar responsável pelo e-mail' }),
-      UI.el('div', { classe: 'link-caixa' }, [entrada, btnAdd]),
-      UI.el('p', { classe: 'ajuda', id: 'equipe-ajuda', texto: 'Só é possível adicionar quem já tem acesso ao painel (cadastrado pelo administrador).' }),
+      UI.campo('Adicionar responsável (e-mail)', UI.el('div', { classe: 'link-caixa' }, [entrada, btnAdd]), { para: 'equipe-email', dica: 'Só é possível adicionar quem já tem acesso ao painel (cadastrado pelo administrador).' }),
       erro,
     ]);
 
@@ -7822,11 +7989,10 @@
     });
 
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Responsáveis da operação' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Todos os responsáveis abaixo veem o mapa, os participantes, as posições uns dos outros e as mensagens desta operação, e podem enviar orientações.' + (souCriador ? '' : ' Só quem criou a operação pode remover responsáveis.') }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Responsáveis da operação' }, [UI.dica('Todos os responsáveis abaixo veem o mapa, os participantes, as posições uns dos outros e as mensagens desta operação, e podem enviar orientações.' + (souCriador ? '' : ' Só quem criou a operação pode remover responsáveis.'))]),
       lista,
       podeAlterar() ? form : UI.el('p', { classe: 'muted', texto: 'Operação encerrada: a equipe não pode ser alterada.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
 
     C.rpc('listar_responsaveis', { p_operacao: op.id }).then(render).catch(function (e) {
@@ -7843,13 +8009,15 @@
     var s2 = UI.el('input', { classe: 'campo', type: 'password', id: 'conta-senha2', autocomplete: 'new-password', maxlength: '72' });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Salvar nova senha' });
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Minha conta' }),
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Minha senha' }),
       UI.el('p', { classe: 'ajuda', texto: (est.responsavel ? est.responsavel.nome + ' · ' : '') + (est.usuario && est.usuario.email || '') }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'conta-senha1', texto: 'Nova senha (mínimo 8 caracteres)' }), s1]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'conta-senha2', texto: 'Repita a nova senha' }), s2]),
+      UI.grade([
+        UI.campo('Nova senha', s1, { para: 'conta-senha1', dica: 'Mínimo de 8 caracteres, com letras e números.' }),
+        UI.campo('Repita', s2, { para: 'conta-senha2' }),
+      ]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -8530,11 +8698,12 @@
         UI.el('span', null, [UI.el('strong', { texto: '★ Responsável' }), UI.el('small', { texto: 'leva a equipe e finaliza a busca no celular' })])]),
     ]);
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'add-grupo-salvar', texto: 'Adicionar' });
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Adicionar ' + nomeExibido(p) + ' a um grupo' }),
-      UI.el('div', { classe: 'grupo grupo-largo' }, [UI.el('span', { classe: 'rotulo', texto: 'Grupo' }), lista]),
-      UI.el('div', { classe: 'grupo grupo-largo' }, [UI.el('span', { classe: 'rotulo', texto: 'Papel' }), papel]),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Adicionar a grupo' }, [UI.dica('Responsável leva a equipe e finaliza a busca no celular.')]),
+      UI.el('p', { classe: 'ajuda', texto: nomeExibido(p) }),
+      UI.campo('Grupo', lista, { largo: true }),
+      UI.campo('Papel', papel, { largo: true }),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -8590,7 +8759,7 @@
         return;
       }
       var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-      if (!grupos.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum grupo ainda. Crie grupos com nome livre (ex.: Polícia Civil, Polícia Militar, Bombeiros).' }));
+      if (!grupos.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum grupo ainda.' }));
       corpo.appendChild(UI.el('ul', { classe: 'lista-grupos' }, grupos.map(function (g) {
         var mem = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; });
         var resp = mem.filter(function (x) { return x.m.papel === 'responsavel'; }).map(function (x) { return x.p.dados.nome; });
@@ -8602,12 +8771,17 @@
             UI.el('small', { classe: 'muted', texto: mem.length + ' pessoa(s)' + (resp.length ? ' · ★ ' + resp.join(', ') : ' · sem responsável') +
               ' · link: ' + (g.permite_militar ? 'militares ou civis' : 'civis') }),
           ]),
+          window.RecursosEquipe ? window.RecursosEquipe.resumo(g) : null,
           compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando no mapa' : '👁 Mostrar no mapa',
               onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { fechar(); abrirMembrosGrupo(g.id); } }),
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { fechar(); abrirLinkGrupo(g.id); } }) : null,
-            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: function () { fechar(); escolherDestino([], g.id); } }) : null,
+            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: async function () {
+              if (window.RecursosEquipe && !(await window.RecursosEquipe.confirmarEnvio(g))) return;
+              fechar(); escolherDestino([], g.id);
+            } }) : null,
+            window.RecursosEquipe ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Recursos', onclick: function () { window.RecursosEquipe.abrir(g.id); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormGrupo(g); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }) : null,
           ])),
@@ -8617,10 +8791,9 @@
     render();
     est.renderGruposAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-grupos' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Grupos da operação' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Grupos' }, [UI.dica('Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.')]),
       corpo,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { fechar(); abrirFormGrupo(null); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
@@ -8644,14 +8817,15 @@
     var mil = UI.el('input', { type: 'checkbox', id: 'grupo-militar', checked: g && g.permite_militar ? true : null });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'grupo-salvar', texto: novo ? 'Criar grupo' : 'Salvar' });
-    var form = UI.el('form', { novalidate: true }, [
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo grupo' : 'Editar grupo' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'grupo-nome', texto: 'Nome do grupo' }), nome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Cor' }), cores]),
-      UI.el('label', { classe: 'linha-opcao' }, [mil, ' Quem entrar pelo link do grupo pode se identificar como militar']),
-      UI.el('p', { classe: 'ajuda', texto: 'Sem esta opção, quem entra pelo link do grupo aparece sempre como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.' }),
+      UI.grade([
+        UI.campo('Nome do grupo', nome, { para: 'grupo-nome', largo: true }),
+      ]),
+      UI.campo('Cor', cores, { largo: true }),
+      UI.el('label', { classe: 'linha-opcao' }, [mil, ' Militar pelo link do grupo', UI.dica('Sem esta opção, quem entra pelo link do grupo aparece como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.')]),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -8687,9 +8861,11 @@
     function render() {
       corpo.innerHTML = '';
       var mem = membrosDe(gid);
-      corpo.appendChild(UI.el('h3', { texto: 'No grupo (' + mem.length + ')' }));
-      if (!mem.length) corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Ninguém ainda. Marque abaixo quem faz parte do grupo ou envie o link do grupo.' }));
-      corpo.appendChild(UI.el('ul', { classe: 'lista-membros' }, mem.map(function (x) {
+      var noGrupo = UI.secao('No grupo (' + mem.length + ')', []);
+      var adicionar = UI.secao('Adicionar pessoas', []);
+      corpo.appendChild(UI.el('div', { classe: 'form-colunas' }, editavel ? [noGrupo, adicionar] : [noGrupo]));
+      if (!mem.length) noGrupo.appendChild(UI.el('p', { classe: 'muted', texto: 'Ninguém ainda. Marque ao lado ou envie o link do grupo.' }));
+      noGrupo.appendChild(UI.el('ul', { classe: 'lista-membros' }, mem.map(function (x) {
         var papel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel de ' + x.p.dados.nome, disabled: editavel ? null : true }, [
           UI.el('option', { value: 'membro', selected: x.m.papel === 'membro' ? true : null, texto: 'Membro' }),
           UI.el('option', { value: 'responsavel', selected: x.m.papel === 'responsavel' ? true : null, texto: '★ Responsável' }),
@@ -8706,8 +8882,7 @@
       var naoMembros = Array.from(est.participantes.values())
         .filter(function (p) { return !p.dados.removido && !(est.membros.get(gid) && est.membros.get(gid).has(p.id)); })
         .sort(function (a, b) { return a.dados.nome.localeCompare(b.dados.nome, 'pt-BR'); });
-      corpo.appendChild(UI.el('h3', { texto: 'Adicionar pessoas' }));
-      if (!naoMembros.length) { corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Todos os participantes ativos já estão no grupo.' })); return; }
+      if (!naoMembros.length) { adicionar.appendChild(UI.el('p', { classe: 'muted', texto: 'Todos os participantes ativos já estão no grupo.' })); return; }
       var caixas = UI.el('div', { classe: 'lista-destino' }, naoMembros.map(function (p) {
         var outros = gruposDe(p.id).map(function (x) { return x.nome; });
         return UI.el('label', { classe: 'linha-opcao' }, [
@@ -8725,20 +8900,20 @@
         for (var i = 0; i < ids.length; i++) await definirMembro(gid, ids[i], pap.value);
         render();
       } });
-      corpo.appendChild(caixas);
-      corpo.appendChild(UI.el('div', { classe: 'acoes-linha' }, [pap, btnAdd]));
+      adicionar.appendChild(caixas);
+      adicionar.appendChild(UI.el('div', { classe: 'acoes-linha' }, [pap, btnAdd]));
     }
     render();
     est.renderGruposAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-membros' }, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' Membros — ' + g.nome]),
-      UI.el('p', { classe: 'ajuda', texto: 'O responsável do grupo (★) pode receber o destino pelo grupo e avisar pelo celular que a busca no setor terminou.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+        UI.dica('O responsável (★) pode receber o destino pelo grupo e avisar que a busca no setor terminou.')]),
       corpo,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
-    ]), { aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
+    ]), { tamanho: 'largo', aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
   }
 
   // QR Code de um link (mesma biblioteca do convite da operação).
@@ -8772,12 +8947,11 @@
         .catch(function () { /* cancelado */ });
     } }));
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' Link do grupo ' + g.nome]),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+        UI.dica('Quem abrir este link entra na operação e no grupo, como membro' + (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como civil.') + ' O link não dá acesso ao painel.')]),
       UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
       qr,
-      UI.el('p', { classe: 'nota', texto: 'Quem abrir este link entra na operação E no grupo ' + g.nome + ', como membro' +
-        (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como CIVIL.') + ' O link não dá acesso a este painel.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Gerar novo link', onclick: async function () {
           fechar();
           var r = await UI.confirmar({ titulo: 'Gerar um novo link para o grupo ' + g.nome + '?', texto: 'O link atual (e o QR Code) deixa de funcionar na hora. Quem já entrou continua no grupo.', ok: 'Gerar novo link', perigo: true });
@@ -8921,7 +9095,7 @@
         UI.el('span', null, [UI.el('span', { texto: texto }), UI.el('small', { classe: 'muted', texto: extra || '' })]),
       ]);
     }
-    var btnMapa = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vit-escolher-mapa', texto: temPonto ? 'Escolher outro ponto' : 'Escolher no mapa' });
+    var btnMapa = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vit-escolher-mapa', texto: temPonto ? 'Trocar' : 'Escolher' });
     var optMapa = opcaoOnde('mapa', 'Ponto no mapa', temPonto ? window.Coords.formatar(pre.lat, pre.lng, est.prefsMapa.coord || 'dec') : 'ainda não escolhido');
     optMapa.appendChild(btnMapa);
     var optQuem = opcaoOnde('quem', 'Posição de quem encontrou', '');
@@ -8929,7 +9103,7 @@
       optMapa,
       opcaoOnde('gps', 'Minha localização', 'GPS deste aparelho'),
       optQuem,
-      opcaoOnde('nenhum', 'Sem localização', 'registrar agora e marcar o local depois'),
+      opcaoOnde('nenhum', 'Sem localização', 'marcar depois'),
     ]);
     function marcarOnde(v) { var r = onde.querySelector('input[value="' + v + '"]'); if (r && !r.disabled) r.checked = true; }
     function posDeQuem() {
@@ -8941,7 +9115,7 @@
       var r = optQuem.querySelector('input');
       r.disabled = !pos;
       optQuem.classList.toggle('desativada', !pos);
-      optQuem.querySelector('small').textContent = !participanteQuem() ? 'escolha quem encontrou (participante)' : pos ? 'última posição ' + C.idade(pos.t) + ' · ± ' + Math.round(pos.prec || 0) + ' m' : 'essa pessoa ainda não tem posição';
+      optQuem.querySelector('small').textContent = !participanteQuem() ? 'escolha quem encontrou' : pos ? 'última posição ' + C.idade(pos.t) + ' · ± ' + Math.round(pos.prec || 0) + ' m' : 'essa pessoa ainda não tem posição';
       if (r.disabled && r.checked) marcarOnde(temPonto ? 'mapa' : 'gps');
     }
     function participanteQuem() { return quem.value && quem.value !== '__outra' ? quem.value : null; }
@@ -8952,22 +9126,27 @@
 
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var noEncerramento = typeof pre.aoRegistrar === 'function';
-    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: noEncerramento ? 'Registrar e continuar o encerramento' : 'Registrar vítima encontrada' });
-    var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
-      UI.el('h2', { texto: '✚ Vítima encontrada' }),
-      UI.el('p', { classe: 'muted', texto: noEncerramento
-        ? 'Registre a vítima antes de encerrar: entra no diário, no relatório e no resultado da operação. A condição só os responsáveis veem.'
-        : 'Para quando a notícia chega por rádio, telefone ou pessoalmente. Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-ficha', texto: 'Vítima' }), ficha, fichaNome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Condição' }), cond]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-obs', texto: 'Estado da vítima e encaminhamento (opcional)' }), obs]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-quem', texto: 'Quem encontrou (opcional)' }), quem, quemTexto]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Onde foi encontrada' }), onde]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-local', texto: 'Descrição do local (opcional)' }), localDesc]),
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: noEncerramento ? 'Registrar e continuar' : 'Registrar' });
+    quemTexto.placeholder = 'Quem? Ex.: morador, PM, SAMU';
+    localDesc.placeholder = 'Descrição do local (opcional)';
+    obs.placeholder = 'Ex.: consciente, hipotermia leve; levada pelo SAMU ao HU';
+    var form = UI.el('form', { classe: 'form-vitima form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: noEncerramento ? 'Vítima encontrada (antes de encerrar)' : 'Vítima encontrada' },
+        [UI.dica(noEncerramento
+          ? 'Entra no diário, no relatório e no resultado da operação. A condição só os responsáveis veem.'
+          : 'Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.')]),
+      UI.el('div', { classe: 'form-colunas' }, [
+        UI.el('div', null, [
+          UI.secao('Vítima', [ficha, fichaNome, cond]),
+          UI.secao('Quem encontrou', [quem, quemTexto], { dica: 'Opcional. Escolhendo um participante, dá para usar a posição dele como local.' }),
+        ]),
+        UI.secao('Onde', [onde, localDesc]),
+      ]),
+      UI.secao('Estado e encaminhamento', [obs]),
       erro,
-      UI.el('div', { classe: 'acoes-linha' }, [UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); } }), btn]),
     ]);
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo' });
 
     // Tudo o que foi preenchido (para voltar ao formulário depois de escolher o ponto no mapa).
     function estadoAtual() {
@@ -9273,7 +9452,8 @@
     return d;
   }
 
-  // Campos dos prazos combinados. m: a missão (para editar) ou nada (novo deslocamento).
+  // Horários combinados de um deslocamento: sair até, estar de volta até, e os alertas.
+  // m: a missão (para editar) ou nada (novo deslocamento). Usado no envio ao grupo e em ⏱ Horários.
   function camposPrazos(m) {
     m = m || {};
     var ini = UI.el('input', { classe: 'campo', id: 'prazo-inicio', type: 'time', value: isoParaHora(m.inicio_combinado_em) });
@@ -9283,44 +9463,50 @@
     var sem = UI.el('input', { classe: 'campo', id: 'prazo-sem-sinal', type: 'number', min: '3', max: '240', step: '1', inputmode: 'numeric',
       value: String(m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min) });
     var comb = UI.el('textarea', { classe: 'campo', id: 'prazo-combinado', maxlength: '500', rows: '2',
-      placeholder: 'Ex.: contato por rádio a cada 30 min no canal 3; retorno pela estrada principal' });
+      placeholder: 'Ex.: rádio a cada 30 min no canal 3; voltar pela estrada principal' });
     comb.value = m.combinado_texto || '';
     function atalho(campo, rotulo, min) {
       return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: rotulo, onclick: function () { campo.value = isoParaHora(new Date(Date.now() + min * 60000).toISOString()); } });
     }
-    var el = UI.el('div', { classe: 'campos-prazos' }, [
+    var personalizado = (m.tolerancia_min != null && m.tolerancia_min !== PRAZOS_PADRAO.tolerancia_min) ||
+      (m.sem_sinal_min != null && m.sem_sinal_min !== PRAZOS_PADRAO.sem_sinal_min) || Boolean(m.combinado_texto);
+    var el = UI.el('div', { classe: 'prazos-form' }, [
       UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-inicio', texto: 'Iniciar até (horário combinado)' }), ini,
-          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ini, 'agora', 0), atalho(ini, '+15 min', 15), atalho(ini, '+30 min', 30)])]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-retorno', texto: 'Retornar até (horário combinado)' }), ret,
-          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ret, '+1 h', 60), atalho(ret, '+2 h', 120), atalho(ret, '+4 h', 240)])]),
+        UI.el('div', { classe: 'grupo' }, [
+          UI.el('label', { classe: 'rotulo', for: 'prazo-inicio', texto: 'Sair até' }), ini,
+          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ini, 'agora', 0), atalho(ini, '+15 min', 15), atalho(ini, '+30 min', 30)]),
+        ]),
+        UI.el('div', { classe: 'grupo' }, [
+          UI.el('label', { classe: 'rotulo', for: 'prazo-retorno', texto: 'Estar de volta até' }), ret,
+          UI.el('span', { classe: 'atalhos-prazo' }, [atalho(ret, '+1 h', 60), atalho(ret, '+2 h', 120), atalho(ret, '+4 h', 240)]),
+        ]),
       ]),
-      UI.el('div', { classe: 'grupo-duplo' }, [
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-tolerancia', texto: 'Tolerância antes do alerta (min)' }), tol]),
-        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-sem-sinal', texto: 'Alerta de sem comunicação após (min)' }), sem]),
+      UI.el('details', { classe: 'grupo detalhes-prazos', open: personalizado ? true : null }, [
+        UI.el('summary', null, ['Alertas e combinados (padrão: 10 min)', UI.dica('Atraso: o horário passou e a condição não foi cumprida, além da tolerância. Falta de contato: alguém ficou sem notícia por esse tempo. Sem internet, o celular guarda as posições e envia depois.')]),
+        UI.el('div', { classe: 'grupo-duplo' }, [
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-tolerancia', texto: 'Avisar atraso depois de (min)' }), tol]),
+          UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-sem-sinal', texto: 'Avisar falta de contato depois de (min sem sinal)' }), sem]),
+        ]),
+        UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-combinado', texto: 'O que foi combinado com o grupo (opcional)' }), comb]),
       ]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'prazo-combinado', texto: 'O que foi combinado (opcional)' }), comb]),
-      UI.el('p', { classe: 'ajuda', texto: 'O servidor confere os horários a cada minuto, mesmo com os celulares sem internet: alerta se ninguém iniciar até o horário + tolerância, ' +
-        'se alguém não tiver voltado até o horário de retorno + tolerância e se um membro ficar sem nenhum contato pelo tempo definido. ' +
-        'Sem internet, o celular guarda as posições e envia quando o sinal volta — o painel avisa quando a comunicação for restabelecida.' }),
     ]);
     // Lê e confere. Devolve os dados para definir_prazos_missao ou lança Error com a mensagem.
     function ler() {
       var dIni = null, dRet = null;
       if (ini.value) {
         dIni = m.inicio_combinado_em && ini.value === isoParaHora(m.inicio_combinado_em) ? new Date(m.inicio_combinado_em) : horaParaData(ini.value);
-        if (!dIni) throw new Error('Horário de início inválido.');
+        if (!dIni) throw new Error('Horário de saída inválido.');
       }
       if (ret.value) {
         var manteve = m.retorno_combinado_em && ret.value === isoParaHora(m.retorno_combinado_em);
         dRet = manteve ? new Date(m.retorno_combinado_em) : horaParaData(ret.value, dIni ? dIni.getTime() : null);
-        if (!dRet) throw new Error('Horário de retorno inválido.');
-        if (!manteve && dRet.getTime() < Date.now()) throw new Error('O horário de retorno já passou. Informe um horário futuro.');
+        if (!dRet) throw new Error('Horário de volta inválido.');
+        if (!manteve && dRet.getTime() < Date.now()) throw new Error('O horário de volta já passou. Informe um horário futuro.');
       }
-      if (dIni && dRet && dRet.getTime() <= dIni.getTime()) throw new Error('O retorno combinado precisa ser depois do início.');
+      if (dIni && dRet && dRet.getTime() <= dIni.getTime()) throw new Error('A volta precisa ser depois da saída.');
       var t = Number(tol.value), ss = Number(sem.value);
-      if (!(tol.value !== '' && Number.isInteger(t) && t >= 0 && t <= 240)) throw new Error('Tolerância: de 0 a 240 minutos.');
-      if (!(sem.value !== '' && Number.isInteger(ss) && ss >= 3 && ss <= 240)) throw new Error('Sem comunicação: de 3 a 240 minutos.');
+      if (!(tol.value !== '' && Number.isInteger(t) && t >= 0 && t <= 240)) throw new Error('Atraso: informe de 0 a 240 minutos.');
+      if (!(sem.value !== '' && Number.isInteger(ss) && ss >= 3 && ss <= 240)) throw new Error('Falta de contato: informe de 3 a 240 minutos.');
       return {
         inicio_combinado_em: dIni ? dIni.toISOString() : '', retorno_combinado_em: dRet ? dRet.toISOString() : '',
         tolerancia_min: t, sem_sinal_min: ss, combinado_texto: comb.value.replace(/\s+/g, ' ').trim(),
@@ -9350,26 +9536,28 @@
     return { texto: '⚠ ATRASADO há ' + textoMin(-falta - tolMin) + ' (além da tolerância)', classe: 'atrasado' };
   }
 
-  // Bloco "Controle de tempo" de um deslocamento na lista
+  // Quadro dos horários combinados do deslocamento: sair até, voltar até e o que já aconteceu
   function blocoTempoMissao(m, membros) {
     if (m.inicio_combinado_em === undefined) return null;   // banco sem a migração 032
     var tol = m.tolerancia_min != null ? m.tolerancia_min : PRAZOS_PADRAO.tolerancia_min;
+    var sem = m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min;
     var linhas = [];
     if (m.inicio_combinado_em) {
       var inicios = membros.map(function (y) { return C.paraMs(y.x.iniciou_em); }).filter(Boolean);
       var primeiro = inicios.length ? new Date(Math.min.apply(null, inicios)).toISOString() : (m.iniciada_em || null);
       var si = situacaoPrazo(m.inicio_combinado_em, tol, primeiro);
-      linhas.push(UI.el('li', { classe: 'prazo-' + si.classe }, [UI.el('span', { texto: 'Iniciar até ' + C.hora(m.inicio_combinado_em, false) }), UI.el('small', { texto: si.texto })]));
+      linhas.push(UI.el('li', { classe: 'prazo-' + si.classe }, [UI.el('span', { texto: 'Sair até ' + C.hora(m.inicio_combinado_em, false) }), UI.el('small', { texto: si.texto })]));
     }
     if (m.retorno_combinado_em) {
       var concluido = m.status === 'na_base' || m.status === 'encerrada' ? (m.chegou_base_em || m.encerrada_em) : null;
       var sr = situacaoPrazo(m.retorno_combinado_em, tol, concluido);
-      linhas.push(UI.el('li', { classe: 'prazo-' + sr.classe }, [UI.el('span', { texto: 'Retornar até ' + C.hora(m.retorno_combinado_em, false) }), UI.el('small', { texto: sr.texto })]));
+      linhas.push(UI.el('li', { classe: 'prazo-' + sr.classe }, [UI.el('span', { texto: 'Estar de volta até ' + C.hora(m.retorno_combinado_em, false) }), UI.el('small', { texto: sr.texto })]));
     }
-    return UI.el('div', { classe: 'tempo-missao' }, [
-      linhas.length ? UI.el('ul', { classe: 'prazos-missao' }, linhas) : null,
-      UI.el('p', { classe: 'muted', texto: (linhas.length ? 'Tolerância ' + tol + ' min · ' : 'Sem horários combinados · ') +
-        'alerta de sem comunicação após ' + (m.sem_sinal_min != null ? m.sem_sinal_min : PRAZOS_PADRAO.sem_sinal_min) + ' min' +
+    return UI.el('div', { classe: 'painel-prazos' }, [
+      UI.el('div', { classe: 'painel-prazos-titulo', texto: 'Horários combinados' }),
+      linhas.length ? UI.el('ul', { classe: 'prazos-missao' }, linhas)
+        : UI.el('p', { classe: 'muted', texto: 'Nenhum horário combinado (sem aviso de atraso).' }),
+      UI.el('p', { classe: 'muted regra-prazos', texto: 'Avisa atraso depois de ' + tol + ' min do horário · falta de contato depois de ' + sem + ' min sem sinal' +
         (m.prazos_definidos_por_nome ? ' · definido por ' + m.prazos_definidos_por_nome + ' às ' + C.hora(m.prazos_definidos_em, false) : '') }),
       m.combinado_texto ? UI.el('p', { classe: 'combinado-missao', texto: 'Combinado: ' + m.combinado_texto }) : null,
     ]);
@@ -9389,11 +9577,12 @@
   function abrirPrazosMissao(m) {
     var campos = camposPrazos(m);
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'prazos-salvar', texto: 'Salvar prazos' });
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Prazos — ' + m.grupo_nome + ' → ' + m.nome }),
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'prazos-salvar', texto: 'Salvar horários' });
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Horários' }),
+      UI.el('p', { classe: 'meta-area', texto: m.grupo_nome + ' → ' + m.nome + (m.base_nome ? ' · base: ' + m.base_nome : ' · sem base') }),
       campos.el, erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -9405,7 +9594,7 @@
         var r = await C.rpc('definir_prazos_missao', { p_missao: m.id, p_dados: dados });
         if (r && r.id) est.missoes.set(r.id, r);
         fechar(true);
-        UI.aviso('Prazos de ' + m.grupo_nome + ' salvos e registrados no diário.', 'ok');
+        UI.aviso('Horários de ' + m.grupo_nome + ' salvos e registrados no diário.', 'ok');
         if (est.renderMissoesAberto) est.renderMissoesAberto();
         agendarMissoes();
       } catch (e) {
@@ -9417,28 +9606,68 @@
     var fechar = UI.abrirModal(form, { empilhar: true });
   }
 
+  // Quem envia e como foi: uma linha abaixo do título do deslocamento
+  function resumoEnvio(m) {
+    var quem = m.publico === 'responsavel' ? 'só o responsável recebeu' : 'todos receberam';
+    var base = m.base_nome ? 'base ' + m.base_nome + ' (chegada a até ' + Math.round(m.raio_base_m) + ' m)' : 'sem base (sem controle de retorno)';
+    return 'Enviado por ' + m.enviado_por_nome + ' às ' + C.hora(m.enviada_em, false) + ' · ' + quem + ' · ' + base;
+  }
+
+  // Etapas do deslocamento, em ordem. A primeira sem horário é a que está acontecendo agora.
   function linhaTempoMissao(m) {
     var etapas = [
-      ['Enviada', m.enviada_em],
-      ['Início do deslocamento', m.iniciada_em],
-      [m.setor_nome ? 'Chegada ao setor' : 'Chegada ao destino', m.chegou_setor_em],
-      ['Busca finalizada' + (m.busca_finalizada_por_nome ? ' (' + m.busca_finalizada_por_nome + ')' : ''), m.busca_finalizada_em],
+      ['Enviado', m.enviada_em],
+      ['Saiu', m.iniciada_em],
+      [m.setor_nome ? 'No setor' : 'No destino', m.chegou_setor_em],
+      ['Busca encerrada', m.busca_finalizada_em],
     ];
-    if (m.inicio_combinado_em) etapas.splice(1, 0, ['Início combinado', m.inicio_combinado_em, true]);
-    if (m.retorno_combinado_em) etapas.push(['Retorno combinado', m.retorno_combinado_em, true]);
-    if (m.base_lat != null) {
-      etapas.push(['Prazo de retorno', m.prazo_retorno_em, true]);
-      etapas.push(['Todos na base', m.chegou_base_em]);
-    }
-    if (m.encerrada_em) etapas.push(['Encerrada' + (m.encerrada_por_nome ? ' (' + m.encerrada_por_nome + ')' : ''), m.encerrada_em]);
-    return UI.el('ol', { classe: 'linha-tempo' }, etapas.map(function (e) {
-      return UI.el('li', { classe: e[1] ? (e[2] ? 'prazo' : 'feita') : 'pendente' }, [
-        UI.el('span', { texto: e[0] }), UI.el('small', { texto: e[1] ? C.hora(e[1]) : '—' }),
+    if (m.base_lat != null) etapas.push(['Todos na base', m.chegou_base_em]);
+    if (m.encerrada_em) etapas.push(['Encerrado', m.encerrada_em]);
+    var atual = etapas.findIndex(function (e) { return !e[1]; });
+    return UI.el('ol', { classe: 'etapas-missao', 'aria-label': 'Etapas do deslocamento' }, etapas.map(function (e, i) {
+      var classe = e[1] ? 'feita' : (i === atual ? 'atual' : 'pendente');
+      return UI.el('li', { classe: classe }, [UI.el('span', { texto: e[0] }), UI.el('small', { texto: e[1] ? C.hora(e[1], false) : (i === atual ? 'agora' : '—') })]);
+    }));
+  }
+
+  // Situação de um membro no deslocamento (uma pílula na lista)
+  function situacaoMembro(m, y) {
+    if (y.p && y.p.dados.removido) return { texto: 'fora da operação', classe: '' };
+    if (y.x.chegou_base_em) return { texto: '✔ na base às ' + C.hora(y.x.chegou_base_em, false), classe: 'ok' };
+    if (m.status === 'retorno_atrasado') return { texto: 'ainda não chegou à base', classe: 'atrasado' };
+    if (y.x.chegou_setor_em) return { texto: (m.setor_nome ? 'no setor' : 'no destino') + ' às ' + C.hora(y.x.chegou_setor_em, false), classe: 'ok' };
+    if (y.x.iniciou_em) return { texto: 'em deslocamento desde ' + C.hora(y.x.iniciou_em, false), classe: '' };
+    return { texto: 'ainda não saiu', classe: m.status === 'enviada' ? '' : 'alerta' };
+  }
+
+  // Lista de membros: quem está onde e a última notícia de cada um
+  function listaMembrosMissao(m, membros) {
+    if (!membros.length) return UI.el('p', { classe: 'muted', texto: 'Nenhum membro neste deslocamento.' });
+    return UI.el('ul', { classe: 'membros-lista', 'aria-label': 'Membros do deslocamento' }, membros.map(function (y) {
+      var st = situacaoMembro(m, y);
+      var c = contatoMembro(m, y);
+      return UI.el('li', null, [
+        UI.el('span', { classe: 'membro-nome', texto: y.p ? nomeExibido(y.p) : 'participante' }),
+        UI.el('small', { classe: 'muted', texto: y.x.recebe_destino ? 'recebe o destino' : 'só acompanhado' }),
+        UI.el('span', { classe: 'pilula-estado ' + st.classe, texto: st.texto }),
+        c.texto === '—' ? null : UI.el('span', { classe: 'pilula-estado ' + c.classe, title: c.titulo || null, texto: 'contato: ' + c.texto }),
       ]);
     }));
   }
 
-  // Ferramentas → Deslocamentos de grupos
+  // Ações do cartão: a principal primeiro; encerrar fica separado, à direita
+  function acoesMissao(m, ativa, fecharModal) {
+    var botoes = [];
+    if (ativa && !m.busca_finalizada_em) botoes.push(UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Finalizar busca',
+      title: 'O grupo terminou a busca no setor: começa a contar o tempo para voltar à base', onclick: function () { finalizarBuscaPainel(m); } }));
+    if (ativa && m.busca_finalizada_em && m.base_lat != null) botoes.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Mais 15 min para voltar', onclick: function () { prorrogarRetorno(m); } }));
+    if (ativa && m.inicio_combinado_em !== undefined) botoes.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⏱ Horários', title: 'Hora de sair, hora de voltar e alertas', onclick: function () { abrirPrazosMissao(m); } }));
+    botoes.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fecharModal(); verMissaoNoMapa(m); } }));
+    if (ativa) botoes.push(UI.el('button', { classe: 'btn btn-pequeno btn-perigo empurrar', type: 'button', texto: 'Encerrar', onclick: function () { encerrarMissaoPainel(m); } }));
+    return UI.el('div', { classe: 'acoes-missao' }, botoes);
+  }
+
+  // Ferramentas → Deslocamentos de grupos: um cartão por deslocamento
   function abrirMissoes() {
     if (!est.op) return;
     var corpo = UI.el('div', { classe: 'corpo-missoes' });
@@ -9453,7 +9682,7 @@
         return aa - bb || C.paraMs(b.enviada_em) - C.paraMs(a.enviada_em);
       });
       if (!lista.length) {
-        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum deslocamento ainda. Envie um destino a um grupo: Ferramentas → Enviar destino → Grupo (ou "Enviar o centro como destino" num setor).' }));
+        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum deslocamento ainda. Para criar: Enviar destino → Grupo.' }));
         return;
       }
       lista.forEach(function (m) {
@@ -9461,50 +9690,28 @@
         var ativa = m.status !== 'encerrada' && m.status !== 'na_base' && est.op.status === 'ativa';
         var membros = (est.missaoMembros.get(m.id) || []).map(function (x) { return { x: x, p: est.participantes.get(x.participante_id) }; })
           .sort(function (a, b) { return (a.p ? a.p.dados.nome : '').localeCompare(b.p ? b.p.dados.nome : '', 'pt-BR'); });
-        var tabela = UI.el('table', { classe: 'tabela-membros-missao' }, [
-          UI.el('thead', null, [UI.el('tr', null, ['Pessoa', 'Destino', 'Iniciou', m.setor_nome ? 'No setor' : 'Chegou', 'Na base', 'Contato'].map(function (t) { return UI.el('th', { texto: t }); }))]),
-          UI.el('tbody', null, membros.map(function (y) {
-            var fora = y.p && y.p.dados.removido;
-            return UI.el('tr', { classe: fora ? 'fora' : '' }, [
-              UI.el('td', { texto: (y.p ? nomeExibido(y.p) : 'participante') + (fora ? ' (fora da operação)' : '') }),
-              UI.el('td', { texto: y.x.recebe_destino ? 'recebeu' : '—' }),
-              UI.el('td', { texto: y.x.iniciou_em ? C.hora(y.x.iniciou_em, false) : '—' }),
-              UI.el('td', { texto: y.x.chegou_setor_em ? C.hora(y.x.chegou_setor_em, false) : '—' }),
-              UI.el('td', { classe: !y.x.chegou_base_em && m.status === 'retorno_atrasado' && !fora ? 'atrasado' : '',
-                texto: y.x.chegou_base_em ? C.hora(y.x.chegou_base_em, false) : (m.base_lat != null && m.busca_finalizada_em ? 'ainda não' : '—') }),
-              (function () { var c = contatoMembro(m, y); return UI.el('td', { classe: c.classe, title: c.titulo || null, texto: c.texto }); })(),
-            ]);
-          })),
-        ]);
-        corpo.appendChild(UI.el('section', { classe: 'item-missao status-' + m.status }, [
-          UI.el('div', { classe: 'item-missao-cabeca' }, [
-            UI.el('strong', { texto: m.grupo_nome + ' → ' + m.nome }),
+        corpo.appendChild(UI.el('article', { classe: 'cartao-missao status-' + m.status }, [
+          UI.el('header', { classe: 'cartao-missao-topo' }, [
+            UI.el('div', { classe: 'cartao-missao-titulo' }, [
+              UI.el('strong', { texto: m.grupo_nome + ' → ' + m.nome }),
+              UI.el('small', { classe: 'muted', texto: resumoEnvio(m) }),
+            ]),
             UI.el('span', { classe: 'selo ' + st.selo, texto: st.rotulo }),
           ]),
-          UI.el('p', { classe: 'muted', texto: (m.publico === 'responsavel' ? 'Só o responsável do grupo recebeu o destino' : 'Todos os membros receberam o destino') +
-            ' · enviado por ' + m.enviado_por_nome + (m.base_nome ? ' · base: ' + m.base_nome + ' (raio ' + Math.round(m.raio_base_m) + ' m, prazo ' + m.prazo_retorno_min + ' min)' : ' · sem base (sem controle de retorno)') }),
-          blocoTempoMissao(m, membros),
           linhaTempoMissao(m),
-          tabela,
-          compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verMissaoNoMapa(m); } }),
-            ativa && !m.busca_finalizada_em ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: 'Finalizar busca', onclick: function () { finalizarBuscaPainel(m); } }) : null,
-            ativa && m.busca_finalizada_em && m.base_lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Prorrogar +15 min', onclick: function () { prorrogarRetorno(m); } }) : null,
-            ativa && m.inicio_combinado_em !== undefined ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⏱ Prazos', title: 'Horário combinado de início e de retorno, tolerância e alerta de sem comunicação',
-              onclick: function () { abrirPrazosMissao(m); } }) : null,
-            ativa ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Encerrar', onclick: function () { encerrarMissaoPainel(m); } }) : null,
-          ])),
+          blocoTempoMissao(m, membros),
+          listaMembrosMissao(m, membros),
+          acoesMissao(m, ativa, function () { fechar(); }),
         ]));
       });
     }
     render();
     est.renderMissoesAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-missoes' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Deslocamentos de grupos' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Início, chegada e retorno são calculados pelo servidor a partir da trilha GPS de cada membro (hora do GPS). ' +
-        'Os alertas de equipe possivelmente perdida, de horário combinado vencido e de membro sem comunicação são verificados por tempo, mesmo com os celulares sem sinal.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Deslocamentos de grupos' }, [UI.dica('Cada cartão é um deslocamento: horários combinados, onde está cada pessoa e o que falta. ' +
+        'Os alertas de atraso e de falta de contato são verificados pelo servidor, mesmo sem internet.')]),
       corpo,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (est.renderMissoesAberto === render) est.renderMissoesAberto = null; } });
   }
 
@@ -9568,6 +9775,8 @@
   /* ------------------------------------------------------------------ */
   window.Painel = {
     mapa: function () { return est.mapa; },
+    controleGrupos: function () { return est.controleGrupos; },
+    fecharMenu: function () { fecharMenu(false); },
     compactarAcoes: compactarAcoes,
     op: function () { return est.op; },
     usuario: function () { return est.usuario; },
@@ -9595,6 +9804,11 @@
     posicao: function (p) { return posicaoAtual(p); },
     pontosInteresse: function () { return Array.from(est.pontosInt.values()).map(function (x) { return x.d; }); },
     setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },
+    areaSetorM2: areaSetorM2,
+    grupos: function () { return Array.from(est.grupos.values()); },
+    podeAlterar: podeAlterar,
+    missoes: function () { return Array.from(est.missoes.values()); },
+    camadaProbabilidade: camadaProbabilidade,
     categorias: CAT_PONTO,
     raioAlertaPadrao: RAIO_ALERTA_PADRAO,
     formatoCoord: function () { return est.prefsMapa.coord || 'dec'; },
@@ -9619,6 +9833,15 @@
     blocoCoordenadas: blocoCoordenadas,
     copiar: copiarTexto,
     fecharMenu: function () { fecharMenu(false); },
+    // Relatos de campo recentes (pistas, vestígios, objetos, obstáculos), sem o nome de quem enviou: contexto da sugestão de POA por IA
+    relatos: function () {
+      return Array.from(est.mensagens.values()).filter(function (m) { return m.direcao === 'entrada' && m.categoria && m.categoria !== 'MENSAGEM' && m.categoria !== 'AJUDA' && m.categoria !== 'VITIMA' && m.texto; })
+        .sort(function (a, b) { return C.paraMs(b.criada_em) - C.paraMs(a.criada_em); }).slice(0, 15)
+        .map(function (m) { return { texto: m.texto, quando: new Date(C.paraMs(m.criada_em)).toISOString(), categoria: (CATEGORIAS[m.categoria] || CATEGORIAS.OUTRO).rotulo, lat: m.lat, lng: m.lng }; });
+    },
+    irPara: function (lat, lng) { if (est.mapa && lat != null && lng != null) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 17)); },
+    recarregarGrupos: function () { return carregarGrupos().then(function () { if (est.renderGruposAberto) est.renderGruposAberto(); }); },
+    abrirCentral: function (aba) { abrirCentral(aba); },
   };
 
   iniciar();

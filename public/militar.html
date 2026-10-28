@@ -222,11 +222,13 @@
 
   <!-- Painel da operação -->
   <section id="tela-painel" hidden>
+    <div class="painel-carregando" id="painel-carregando" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span class="painel-carregando-txt">Carregando a operação…</span></div>
     <header class="barra-topo painel-topo">
       <button class="btn btn-barra btn-pequeno" type="button" id="btn-voltar" title="Voltar para as operações" aria-label="Voltar para as operações">◀</button>
       <div class="titulo-op">
         <strong id="op-codigo"></strong>
         <span id="op-sub"></span>
+        <button class="comando-chip" type="button" id="comando-chip" hidden></button>
       </div>
       <span class="pilula-conexao" id="pilula" role="status"><span class="ponto ponto-aguardando"></span><span>Conectando…</span></span>
       <!-- Ações mais usadas, sempre à vista no topo (no celular, numa faixa logo abaixo) -->
@@ -235,15 +237,18 @@
         <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="btn-registrar-foto" title="Registrar uma foto com a localização"><span class="ico-camera" aria-hidden="true"></span><span class="rotulo-acao">Foto</span></button>
         <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-setor" title="Novo setor de busca: desenhando a área ou por raio"><span class="ico-acao" aria-hidden="true">⬠</span><span class="rotulo-acao">Setor</span></button>
         <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-trilha" title="Desenhe e depois escolha: trilha já feita, planejada ou enviar para alguém percorrer"><span class="ico-acao" aria-hidden="true">〰</span><span class="rotulo-acao">Trilha</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="btn-regua" aria-pressed="false" title="Régua circular no centro da tela: mostra as distâncias a partir do centro"><span class="ico-acao" aria-hidden="true">◎</span><span class="rotulo-acao">Régua</span></button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-cenario" title="POA/POD: probabilidade de a pessoa estar em cada setor e registro das buscas"><span class="ico-acao" aria-hidden="true">◍</span><span class="rotulo-acao">POA/POD</span></button>
         <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-dashboard" title="Dashboard da operação"><span class="ico-acao" aria-hidden="true">▦</span><span class="rotulo-acao">Dashboard</span></button>
-      </div>
-      <div class="painel-acoes">
-        <button class="btn btn-barra btn-pequeno btn-msgs" type="button" id="btn-mensagens" aria-label="Mensagens, relatos e fotos" aria-controls="central" aria-expanded="false" title="Mensagens, relatos e fotos dos participantes">
-          <span class="ico-msg" aria-hidden="true"></span><span class="rotulo-longo">Mensagens</span>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo btn-msgs" type="button" id="btn-mensagens" aria-label="Mensagens, relatos e fotos" aria-controls="central" aria-expanded="false" title="Mensagens, relatos e fotos dos participantes">
+          <span class="ico-msg" aria-hidden="true"></span><span class="rotulo-acao">Mensagens</span>
           <span class="contador" id="contador-msgs" hidden>0</span>
         </button>
+        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="btn-convite" hidden title="Convidar participantes para esta operação"><span class="ico-acao" aria-hidden="true">＋</span><span class="rotulo-acao">Convidar</span></button>
+      </div>
+      <div class="painel-acoes">
+        <button class="btn btn-barra btn-pequeno btn-ajuda" type="button" id="btn-ajuda" hidden title="Pedidos de ajuda em aberto: abrir o tratamento"><span aria-hidden="true">🆘</span> <span id="ajuda-qtd">0</span> <span id="ajuda-tempo" class="rotulo-longo"></span></button>
         <button class="btn btn-barra btn-pequeno btn-alerta-pendente" type="button" id="btn-alerta-pendente" hidden title="Mensagem de outro responsável aguardando sua resposta">✉ <span id="alerta-pendente-qtd">1</span> <span class="rotulo-longo">para você</span></button>
-        <button class="btn btn-barra btn-pequeno" type="button" id="btn-convite" hidden title="Convidar participantes para esta operação"><span aria-hidden="true">＋</span> <span>Convidar</span></button>
         <div class="ferramentas" id="ferramentas">
           <button class="btn btn-barra btn-pequeno btn-ferramentas" type="button" id="btn-ferramentas" aria-label="Ferramentas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-ferramentas" title="Ferramentas da operação e do mapa">
             <span class="ico-menu" aria-hidden="true"></span><span class="rotulo-longo">Ferramentas</span>
@@ -261,6 +266,8 @@
                 <button class="btn btn-pequeno" type="button" id="gps-alerta-como">Como liberar</button>
               </div>
             </div>
+            <!-- Pontos pendentes, gravação no aparelho, última sincronização confirmada e falhas da "Minha posição" (js/fila-estado.js) -->
+            <div class="fila-estado" id="fila-estado-meu" hidden></div>
             <!-- Uma lista só, sem subgrupos. Marcar ponto, foto, setor, trilha e dashboard ficam no topo da tela. -->
             <nav class="menu-lista" aria-label="Funções">
               <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
@@ -268,12 +275,16 @@
               <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
               <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
+              <button class="menu-item" type="button" id="menu-ajuda"><span class="ico-item" aria-hidden="true">🆘</span><span>Pedidos de ajuda</span><small class="menu-estado" id="menu-ajuda-qtd"></small></button>
+              <button class="menu-item" type="button" id="menu-briefing"><span class="ico-item" aria-hidden="true">★</span><span>Briefing e passagem de comando</span></button>
               <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
               <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
               <button class="menu-item" type="button" id="menu-relatorio"><span class="ico-item" aria-hidden="true">▤</span><span>Relatório final (PDF)</span></button>
               <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
               <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
               <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
+              <button class="menu-item" type="button" id="menu-aparencia"><span class="ico-item" aria-hidden="true">✎</span><span>Personalizar tela</span></button>
+              <button class="menu-item" type="button" id="menu-regua" aria-pressed="false"><span class="ico-item" aria-hidden="true">◎</span><span>Régua circular</span></button>
               <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
               <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar</span></button>
               <button class="menu-item" type="button" id="menu-diag-gps"><span class="ico-item" aria-hidden="true">⌁</span><span>Diagnóstico do GPS</span></button>
@@ -660,6 +671,11 @@
     <header class="visao-3d-cabeca">
       <button class="btn btn-pequeno" type="button" id="visao-3d-fechar">◀ Voltar ao mapa</button>
       <h2 id="visao-3d-titulo">Relevo em 3D</h2>
+      <div class="seg seg-3d" role="radiogroup" aria-label="Tipo de mapa no 3D">
+        <button class="seg-opcao" type="button" role="radio" data-camada="osm" aria-checked="true">Mapa</button>
+        <button class="seg-opcao" type="button" role="radio" data-camada="topo" aria-checked="false">Topográfico</button>
+        <button class="seg-opcao" type="button" role="radio" data-camada="satelite" aria-checked="false">Satélite</button>
+      </div>
       <button class="btn btn-pequeno" type="button" id="visao-3d-atualizar">Atualizar posições</button>
     </header>
     <div class="visao-3d-mapa" id="visao-3d-mapa"></div>
@@ -678,6 +694,7 @@
   <script src="js/fotos.js"></script>
   <script src="js/gps.js"></script>
   <script src="js/trilha-local.js"></script>
+  <script src="js/fila-estado.js"></script>
   <script src="js/rotas.js"></script>
   <script src="js/coords.js"></script>
   <script src="js/arquivos.js"></script>
@@ -687,8 +704,15 @@
   <script src="js/relatorio-pdf.js"></script>
   <script src="js/relatorio.js"></script>
   <script src="js/mapa-rotulos.js"></script>
+  <script src="js/regua.js"></script>
+  <script src="js/pod.js"></script>
   <script src="js/militar.js"></script>
   <script src="js/ferramentas.js"></script>
+  <script src="js/busca-cenario.js"></script>
+  <script src="js/ajuda-pedidos.js"></script>
+  <script src="js/recursos-equipe.js"></script>
+  <script src="js/briefing.js"></script>
+  <script src="js/personalizar.js"></script>
   <script src="js/meteo-core.js"></script>
   <script src="js/meteo-mapa.js"></script>
   <script src="js/meteo.js"></script>

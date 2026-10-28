@@ -158,7 +158,7 @@ async function chamar(corpo, rotas, token) {
     ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'segredo-g' }); const ch = [];
     global.fetch = rede(Object.assign({}, AUTORIZADO, { 'generativelanguage.googleapis.com': () => json({ error: { message: 'models/xyz is not found for API version v1beta' } }, 404) }), ch);
     const r = resposta(); await carregar()(req({ modo: 'poa', operacao_id: OP, contexto: CTX }), r);
-    assert.strictEqual(r.code, 502); assert.ok(/gemini-2\.5-flash/.test(r.body.mensagem) && /404/.test(r.body.mensagem) && /not found/.test(r.body.mensagem), r.body.mensagem); assert.ok(!r.body.mensagem.includes('segredo-g'));
+    assert.strictEqual(r.code, 502); assert.ok(/gemini-3\.8-flash/.test(r.body.mensagem) && /404/.test(r.body.mensagem) && /not found/.test(r.body.mensagem), r.body.mensagem); assert.ok(!r.body.mensagem.includes('segredo-g'));
     assert.strictEqual(JSON.parse(ch[ch.length - 1].init.body).generationConfig.thinkingConfig, undefined);   // modelo 3.x: sem configuração de raciocínio (evita 400)
   });
   await teste('Gemini: resposta vazia por limite de saída explica o motivo', async () => {

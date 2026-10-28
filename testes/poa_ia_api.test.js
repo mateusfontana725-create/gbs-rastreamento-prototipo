@@ -14,7 +14,7 @@ function resposta() {
 const json = (obj, status) => ({ ok: (status || 200) < 300, status: status || 200, json: async () => obj, text: async () => JSON.stringify(obj) });
 const OP = '11111111-1111-4111-8111-111111111111';
 const ENV = { SUPABASE_URL: 'https://proj.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'pub', ANTHROPIC_API_KEY: 'chave-secreta-de-teste' };
-function ambiente(extra) { delete process.env.POA_IA_MODELO; delete process.env.POA_IA_PROVEDOR; delete process.env.GEMINI_API_KEY; delete process.env.GOOGLE_API_KEY; Object.assign(process.env, ENV, extra || {}); }
+function ambiente(extra) { process.env.POA_IA_ESPERA_MS = '0'; delete process.env.POA_IA_MODELO; delete process.env.POA_IA_PROVEDOR; delete process.env.GEMINI_API_KEY; delete process.env.GOOGLE_API_KEY; Object.assign(process.env, ENV, extra || {}); }
 const req = (corpo, token) => ({ method: 'POST', body: corpo, headers: token === null ? {} : { authorization: 'Bearer ' + (token || 'tok-' + Math.random()) } });
 const SETORES = [{ id: 's1', nome: 'Norte', area_km2: 0.4 }, { id: 's2', nome: 'Sul', area_km2: 0.3 }];
 const CTX = { operacao: { tipo: 'terrestre', descricao: 'Idoso saiu para caminhar' }, vitima: { idade: 78, sexo: 'M', perfil: ['idoso'], nome: 'Seu Antônio', cpf: '52998224725', telefone: '21998765432', caracteristicas: 'usa bengala' },
@@ -165,6 +165,22 @@ async function chamar(corpo, rotas, token) {
     ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' });
     const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => json({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }] }) });
     assert.strictEqual(r.body.erro, 'ia_resposta_invalida'); assert.ok(/MAX_TOKENS/.test(r.body.mensagem));
+  });
+
+  await teste('sobrecarga momentânea (503): tenta de novo e funciona na segunda', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' }); let n = 0;
+    const r = await chamar({ modo: 'pod', operacao_id: OP, contexto: { setor: { nome: 'Norte' }, metodo: 'Drone' } }, { 'generativelanguage.googleapis.com': () => (++n < 2 ? json({ error: { message: 'high demand' } }, 503) : gem('{"pod":0.5,"justificativa":"ok"}')()) });
+    assert.strictEqual(r.code, 200); assert.strictEqual(r.body.pod, 0.5); assert.strictEqual(n, 2);
+  });
+  await teste('sobrecarga que não passa: 3 tentativas e depois mensagem com o motivo', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' }); let n = 0;
+    const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => { n++; return json({ error: { message: 'high demand' } }, 503); } });
+    assert.strictEqual(r.code, 502); assert.strictEqual(n, 3); assert.ok(/503/.test(r.body.mensagem) && /high demand/.test(r.body.mensagem));
+  });
+  await teste('cota (429) e chave inválida não repetem', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' }); let n = 0;
+    await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => { n++; return json({}, 429); } });
+    assert.strictEqual(n, 1);
   });
 
   console.log('Limite de uso');

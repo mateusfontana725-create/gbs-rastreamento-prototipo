@@ -26,7 +26,7 @@
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIMITE_POR_MIN = 6;
-const TEMPO_LIMITE_MS = 40000;
+const TEMPO_LIMITE_MS = 20000;   // por tentativa (a função tem até 60 s, com até 3 tentativas)
 const TAMANHO_MAX_CORPO = 40000;
 const contagem = new Map();
 
@@ -269,7 +269,13 @@ module.exports = async (req, res) => {
       prompt = promptPod(ctx);
     }
 
-    const r = await perguntar(prov, chaveIa, modelo, prompt);
+    // Sobrecarga momentânea do provedor (500, 502, 503, 504): tenta de novo, com espera crescente, dentro do prazo da função
+    const espera = Number(process.env.POA_IA_ESPERA_MS || 1500), inicio = Date.now();
+    let r = await perguntar(prov, chaveIa, modelo, prompt);
+    for (let n = 1; n <= 2 && [500, 502, 503, 504].includes(r.status) && Date.now() - inicio < 25000; n++) {
+      await new Promise((ok) => setTimeout(ok, espera * n));
+      r = await perguntar(prov, chaveIa, modelo, prompt);
+    }
     if (r.status === 429) return res.status(503).json({ erro: 'ia_cota', mensagem: `A IA (${prov}) atingiu o limite de uso agora. Tente em alguns minutos ou preencha manualmente.` });
     if (r.status === 401 || r.status === 403) return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: `A chave da IA (${variavel}) foi recusada pelo provedor ${prov}. Confira a chave. O preenchimento manual continua funcionando.` });
     if (!r.ok) return res.status(502).json({ erro: 'ia_indisponivel', mensagem: `A IA (${prov}, ${modelo}) respondeu com erro ${r.status}${r.motivo ? ': ' + r.motivo : ''}. Preencha manualmente ou tente de novo.` });

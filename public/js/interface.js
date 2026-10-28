@@ -220,34 +220,61 @@
    */
   var CHAVE_APARENCIA = 'gbs-aparencia';
   var FONTES = { menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
-  var PADRAO_APARENCIA = { fonte: 'normal', ocultos: [] };
+  var POSICOES_GRUPOS = { topright: 'Canto superior direito', topleft: 'Canto superior esquerdo', bottomright: 'Canto inferior direito', bottomleft: 'Canto inferior esquerdo' };
+  var PADRAO_APARENCIA = { fonte: 'normal', ocultos: [], noMenu: [], ordem: [], gruposPos: 'topright' };
+  function listaTexto(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : []; }
   function lerAparencia() {
     try {
       var v = JSON.parse(localStorage.getItem(CHAVE_APARENCIA) || 'null') || {};
-      return { fonte: FONTES[v.fonte] ? v.fonte : 'normal', ocultos: Array.isArray(v.ocultos) ? v.ocultos.filter(function (x) { return typeof x === 'string'; }) : [] };
-    } catch (e) { return { fonte: 'normal', ocultos: [] }; }
+      return {
+        fonte: FONTES[v.fonte] ? v.fonte : 'normal',
+        ocultos: listaTexto(v.ocultos), noMenu: listaTexto(v.noMenu), ordem: listaTexto(v.ordem),
+        gruposPos: POSICOES_GRUPOS[v.gruposPos] ? v.gruposPos : 'topright',
+      };
+    } catch (e) { return JSON.parse(JSON.stringify(PADRAO_APARENCIA)); }
   }
   function gravarAparencia(v) {
     try { localStorage.setItem(CHAVE_APARENCIA, JSON.stringify(v)); } catch (e) { /* sem armazenamento: vale só nesta sessão */ }
     aplicarAparencia();
   }
+  // Ordem dos botões do topo: os ids da preferência primeiro, o resto na ordem original
+  function ordenarBotoes() {
+    var v = lerAparencia();
+    var topo = document.getElementById('acoes-topo');
+    if (!topo || !v.ordem.length) return;
+    v.ordem.forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b && b.parentNode === topo) topo.appendChild(b);
+    });
+  }
   function aplicarAparencia() {
     var v = lerAparencia();
     document.documentElement.setAttribute('data-fonte', v.fonte);
     document.querySelectorAll('[data-pref]').forEach(function (e) {
-      e.hidden = v.ocultos.indexOf(e.getAttribute('data-pref')) !== -1;
+      var id = e.getAttribute('data-pref');
+      e.hidden = v.ocultos.indexOf(id) !== -1 || v.noMenu.indexOf(id) !== -1;
     });
+    ordenarBotoes();
   }
   var aparencia = {
     ler: lerAparencia,
     fontes: FONTES,
+    posicoesGrupos: POSICOES_GRUPOS,
     definirFonte: function (f) { var v = lerAparencia(); v.fonte = FONTES[f] ? f : 'normal'; gravarAparencia(v); },
-    alternarOculto: function (id, oculto) {
+    // Botão do topo: 'topo' (à vista), 'menu' (vai para Ferramentas) ou 'oculto'
+    definirLocal: function (id, local) {
       var v = lerAparencia();
       v.ocultos = v.ocultos.filter(function (x) { return x !== id; });
-      if (oculto) v.ocultos.push(id);
+      v.noMenu = v.noMenu.filter(function (x) { return x !== id; });
+      if (local === 'oculto') v.ocultos.push(id);
+      if (local === 'menu') v.noMenu.push(id);
       gravarAparencia(v);
     },
+    localDe: function (id) { var v = lerAparencia(); return v.ocultos.indexOf(id) !== -1 ? 'oculto' : v.noMenu.indexOf(id) !== -1 ? 'menu' : 'topo'; },
+    // Nova ordem dos botões do topo (lista de ids)
+    definirOrdem: function (ids) { var v = lerAparencia(); v.ordem = listaTexto(ids); gravarAparencia(v); },
+    definirPosicaoGrupos: function (pos) { var v = lerAparencia(); v.gruposPos = POSICOES_GRUPOS[pos] ? pos : 'topright'; gravarAparencia(v); },
+    posicaoGrupos: function () { return lerAparencia().gruposPos; },
     restaurar: function () { gravarAparencia(JSON.parse(JSON.stringify(PADRAO_APARENCIA))); },
     aplicar: aplicarAparencia,
   };

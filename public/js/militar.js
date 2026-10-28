@@ -357,6 +357,7 @@
     $('menu-3d').addEventListener('click', abrirRelevo3D);
     $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
     $('menu-aparencia').addEventListener('click', function () { fecharMenu(false); abrirAparencia(); });
+    aplicarAtalhos();
     $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
     $('btn-regua').addEventListener('click', alternarRegua);
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
@@ -1655,7 +1656,7 @@
 
     // Grupos: cada grupo com o ícone de olho (mostrar só o grupo / restaurar tudo).
     var Grupos = L.Control.extend({
-      options: { position: 'topright' },
+      options: { position: UI.aparencia.posicaoGrupos() },
       onAdd: function () {
         var div = L.DomUtil.create('div', 'controle-grupos');
         div.hidden = true;
@@ -8030,26 +8031,75 @@
     ['menu-ponto', 'Marcar ponto'], ['btn-registrar-foto', 'Foto'], ['menu-setor', 'Setor'], ['menu-trilha', 'Trilha'],
     ['btn-regua', 'Régua'], ['menu-cenario', 'POA/POD'], ['menu-dashboard', 'Dashboard'],
   ];
+  // Atalhos no menu Ferramentas para os botões que o usuário mandou para lá: disparam o botão original (mesma ação)
+  function aplicarAtalhos() {
+    var lista = document.querySelector('#menu-ferramentas .menu-lista');
+    if (!lista) return;
+    BOTOES_TOPO.forEach(function (b) {
+      var atalho = document.getElementById('menu-atalho-' + b[0]);
+      if (!atalho) {
+        atalho = UI.el('button', { classe: 'menu-item', type: 'button', id: 'menu-atalho-' + b[0] }, [UI.el('span', { classe: 'ico-item', 'aria-hidden': 'true', texto: '▸' }), UI.el('span', { texto: b[1] })]);
+        atalho.addEventListener('click', function () { fecharMenu(false); var original = document.getElementById(b[0]); if (original) original.click(); });
+        lista.insertBefore(atalho, lista.firstChild);
+      }
+      atalho.hidden = UI.aparencia.localDe(b[0]) !== 'menu';
+    });
+  }
   function abrirAparencia() {
     var ap = UI.aparencia;
     var atual = ap.ler();
     var fonte = UI.el('div', { classe: 'seg', role: 'radiogroup', 'aria-label': 'Tamanho do texto' }, Object.keys(ap.fontes).map(function (k) {
-      return UI.el('button', { classe: 'seg-opcao', type: 'button', 'aria-pressed': String(atual.fonte === k), 'data-fonte': k, texto: ap.fontes[k],
+      return UI.el('button', { classe: 'seg-opcao', type: 'button', 'aria-pressed': String(atual.fonte === k), texto: ap.fontes[k],
         onclick: function () { ap.definirFonte(k); fechar(); abrirAparencia(); } });
     }));
-    var caixas = BOTOES_TOPO.map(function (b) {
-      var oculto = atual.ocultos.indexOf(b[0]) !== -1;
-      return UI.el('label', { classe: 'linha-opcao' }, [
-        UI.el('input', { type: 'checkbox', id: 'ap-' + b[0], checked: !oculto ? true : null, onchange: function (ev) { ap.alternarOculto(b[0], !ev.target.checked); } }),
-        ' ' + b[1],
-      ]);
-    });
+    // Ordem atual do topo (ids): a preferência primeiro, depois o que sobrou na ordem original
+    function ordemAtual() {
+      var ids = BOTOES_TOPO.map(function (b) { return b[0]; });
+      var pref = atual.ordem.filter(function (id) { return ids.indexOf(id) !== -1; });
+      return pref.concat(ids.filter(function (id) { return pref.indexOf(id) === -1; }));
+    }
+    var ordem = ordemAtual();
+    var lista = UI.el('ul', { classe: 'ap-botoes', id: 'ap-botoes' });
+    function desenhar() {
+      lista.innerHTML = '';
+      ordem.forEach(function (id, i) {
+        var nome = BOTOES_TOPO.filter(function (b) { return b[0] === id; })[0][1];
+        var local = ap.localDe(id);
+        var sel = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Onde fica ' + nome, onchange: function (ev) { ap.definirLocal(id, ev.target.value); aplicarAtalhos(); } }, [
+          UI.el('option', { value: 'topo', selected: local === 'topo' ? true : null, texto: 'No topo' }),
+          UI.el('option', { value: 'menu', selected: local === 'menu' ? true : null, texto: 'No menu Ferramentas' }),
+          UI.el('option', { value: 'oculto', selected: local === 'oculto' ? true : null, texto: 'Escondido' }),
+        ]);
+        lista.appendChild(UI.el('li', { classe: 'ap-botao' }, [
+          UI.el('strong', { texto: nome }),
+          sel,
+          UI.el('span', { classe: 'ap-setas' }, [
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Subir ' + nome, disabled: i === 0 ? true : null, texto: '▲',
+              onclick: function () { mover(i, -1); } }),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Descer ' + nome, disabled: i === ordem.length - 1 ? true : null, texto: '▼',
+              onclick: function () { mover(i, 1); } }),
+          ]),
+        ]));
+      });
+    }
+    function mover(i, d) {
+      var j = i + d;
+      if (j < 0 || j >= ordem.length) return;
+      var x = ordem[i]; ordem[i] = ordem[j]; ordem[j] = x;
+      ap.definirOrdem(ordem);
+      desenhar();
+    }
+    desenhar();
+    var posicoes = UI.el('select', { classe: 'campo', id: 'ap-grupos-pos', 'aria-label': 'Posição do painel de grupos',
+      onchange: function (ev) { ap.definirPosicaoGrupos(ev.target.value); if (est.controleGrupos) est.controleGrupos.setPosition(ev.target.value); } },
+      Object.keys(ap.posicoesGrupos).map(function (k) { return UI.el('option', { value: k, selected: atual.gruposPos === k ? true : null, texto: ap.posicoesGrupos[k] }); }));
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Aparência' }, [UI.dica('Fica neste aparelho. Não muda nada para as outras pessoas.')]),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Aparência' }, [UI.dica('Neste aparelho. Não muda nada para as outras pessoas.')]),
       UI.campo('Tamanho do texto', fonte, { largo: true }),
-      UI.campo('Botões no topo', UI.el('div', { classe: 'caixas-coluna' }, caixas), { largo: true, dica: 'Desmarque para esconder. "Ferramentas" fica sempre à vista.' }),
+      UI.campo('Botões do topo', lista, { largo: true, dica: 'Escolha onde fica cada botão e a ordem (▲ ▼). "Ferramentas" fica sempre à vista.' }),
+      UI.campo('Painel de grupos no mapa', posicoes, { para: 'ap-grupos-pos', largo: true }),
       UI.rodape([
-        UI.el('button', { classe: 'btn', type: 'button', texto: 'Padrão', onclick: function () { ap.restaurar(); fechar(); abrirAparencia(); } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Padrão', onclick: function () { ap.restaurar(); if (est.controleGrupos) est.controleGrupos.setPosition(ap.posicaoGrupos()); fechar(); abrirAparencia(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Pronto', onclick: function () { fechar(); } }),
       ]),
     ]));

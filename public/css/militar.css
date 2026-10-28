@@ -2020,3 +2020,10 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 .caixas-coluna { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
 @media (max-width: 600px) { .caixas-coluna { grid-template-columns: 1fr; } }
+.ap-botoes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ap-botao { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.ap-botao strong { min-width: 0; overflow-wrap: anywhere; }
+.ap-botao .campo { min-height: 40px; }
+.ap-setas { display: inline-flex; gap: 4px; }
+.ap-setas .btn { min-width: 40px; min-height: 40px; }
+@media (max-width: 600px) { .ap-botao { grid-template-columns: 1fr auto; } .ap-botao .campo { grid-column: 1 / -1; } }

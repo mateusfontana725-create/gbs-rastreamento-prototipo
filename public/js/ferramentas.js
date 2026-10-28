@@ -170,12 +170,11 @@
       Object.keys(Co.FORMATOS).forEach(function (f) { previa.appendChild(UI.el('div', { classe: 'mono' + (f === achado.formato ? '' : ' muted'), texto: t[f] })); });
     }
     entrada.addEventListener('input', ler);
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Ir para coordenada' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Aceita graus decimais, graus-minutos-segundos (N/S, L/O ou E/W), graus e minutos decimais, UTM (zona + banda, ex.: 23K) e MGRS. Datum WGS 84 (o mesmo do GPS).' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'ir-coord', texto: 'Coordenada' }), entrada]),
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Ir para coordenada' }, [UI.dica('Aceita graus decimais, graus-minutos-segundos, UTM (ex.: 23K) e MGRS. Datum WGS 84, o mesmo do GPS.')]),
+      UI.campo('Coordenada', entrada, { para: 'ir-coord', largo: true }),
       previa,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnIr]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnIr]),
     ]);
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
@@ -303,14 +302,12 @@
     }));
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var baixar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'exp-baixar', texto: 'Baixar arquivo' });
-    var form = UI.el('form', { novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Exportar' }),
-      UI.el('p', { classe: 'muted', texto: 'Só sai o que estiver marcado.' }),
+    var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Exportar' }, [UI.dica('O arquivo tem a localização de pessoas: guarde e compartilhe com o mesmo cuidado dos dados da operação.')]),
       gTrilhas.elemento, gPontos.elemento, gSetores.elemento,
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Formato' }), radios]),
-      UI.el('p', { classe: 'nota', texto: 'O arquivo contém a localização de pessoas: guarde e compartilhe com o mesmo cuidado dos dados da operação.' }),
+      UI.campo('Formato', radios, { largo: true }),
       erro,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), baixar]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), baixar]),
     ]);
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
@@ -458,7 +455,7 @@
       ]),
       lista,
       d.pontos.length > 300 ? UI.el('p', { classe: 'muted', texto: 'Mostrando os 300 primeiros pontos.' }) : null,
-      UI.el('div', { classe: 'modal-acoes' }, [
+      UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'imp-salvar', texto: 'Salvar' }),
       ]),
@@ -545,7 +542,7 @@
       erro,
       UI.el('h3', { texto: 'Camadas importadas' }),
       lista,
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
   }
 
@@ -663,7 +660,7 @@
       grafico,
       tabela,
       UI.el('p', { classe: 'ajuda', texto: 'Altitude do modelo de terreno (≈ 20–30 m de resolução) nos pontos da trilha, não a do GPS. Velocidade máxima: valor alto típico (percentil 95), para não contar erro de GPS.' }),
-      UI.el('div', { classe: 'modal-acoes' }, [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]), { aoFechar: function () { if (atual.marcaPerfil) { atual.marcaPerfil.remove(); atual.marcaPerfil = null; } } });
     if (!s.distancia) { subida.textContent = descida.textContent = extremos.textContent = '—'; return; }
     perfil(s.trilha).then(function (r) {

@@ -48,7 +48,7 @@ async function chamar(corpo, rotas, token) {
   await teste('token recusado pelo banco: 401', async () => { ambiente(); const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'rpc/dono_operacao': () => json({}, 401) }); assert.strictEqual(r.code, 401); });
   await teste('sem chave da IA: 503 com a mensagem de que o manual continua', async () => {
     ambiente({ ANTHROPIC_API_KEY: '' }); const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX });
-    assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_nao_configurada'); assert.ok(/manual/.test(r.body.mensagem));
+    assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_nao_configurada'); assert.ok(/manual/.test(r.body.mensagem) && /ANTHROPIC_API_KEY/.test(r.body.mensagem));
   });
   await teste('sem setores: 400', async () => { ambiente(); const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: { operacao: {}, vitima: {}, setores: [] } }); assert.strictEqual(r.code, 400); });
 
@@ -142,7 +142,7 @@ async function chamar(corpo, rotas, token) {
     assert.strictEqual(r.body.pod, 0.5); assert.strictEqual(r.body.modelo, 'gemini-x'); assert.ok(ch.some((x) => x.url.includes('models/gemini-x:')));
   });
   await teste('provedor escolhido sem a chave dele: 503 "não configurada" (não usa a outra)', async () => {
-    ambiente({ ANTHROPIC_API_KEY: 'a', POA_IA_PROVEDOR: 'gemini' }); const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }); assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_nao_configurada');
+    ambiente({ ANTHROPIC_API_KEY: 'a', POA_IA_PROVEDOR: 'gemini' }); const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }); assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_nao_configurada'); assert.ok(/GEMINI_API_KEY/.test(r.body.mensagem));
   });
   await teste('falhas do Gemini: cota (429), chave inválida (400 "API key not valid"), erro 500 e resposta sem JSON', async () => {
     ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' });

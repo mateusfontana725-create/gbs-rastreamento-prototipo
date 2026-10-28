@@ -225,7 +225,7 @@ function configurarIa() {
   if (prov !== 'anthropic' && prov !== 'gemini') prov = chaveAnthropic ? 'anthropic' : chaveGemini ? 'gemini' : 'anthropic';
   const chave = prov === 'gemini' ? chaveGemini : chaveAnthropic;
   const modelo = (env.POA_IA_MODELO || (prov === 'gemini' ? 'gemini-2.5-flash' : 'claude-haiku-5-5')).trim();
-  return { prov, chave, modelo };
+  return { prov, chave, modelo, variavel: prov === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY' };
 }
 
 module.exports = async (req, res) => {
@@ -234,7 +234,7 @@ module.exports = async (req, res) => {
 
   const url = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
   const chavePublica = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  const { prov, chave: chaveIa, modelo } = configurarIa();
+  const { prov, chave: chaveIa, modelo, variavel } = configurarIa();
   if (!url || !chavePublica) return res.status(500).json({ erro: 'variaveis_de_ambiente_ausentes' });
 
   const auth = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');
@@ -251,7 +251,7 @@ module.exports = async (req, res) => {
     if (v.status === 401) return res.status(401).json({ erro: 'nao_autenticado' });
     if (v.dados !== true) return res.status(403).json({ erro: 'sem_permissao' });
     if (!chaveIa) {
-      return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: 'A IA não está configurada neste servidor. O preenchimento manual continua funcionando.' });
+      return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: `A IA não está configurada neste servidor: falta a variável ${variavel} (provedor ${prov}). O preenchimento manual continua funcionando.` });
     }
     if (!limitar(token.slice(-24))) return res.status(429).json({ erro: 'muitos_pedidos', mensagem: 'Muitos pedidos à IA em pouco tempo. Aguarde um minuto.' });
 
@@ -267,8 +267,8 @@ module.exports = async (req, res) => {
     }
 
     const r = await perguntar(prov, chaveIa, modelo, prompt);
-    if (r.status === 429) return res.status(503).json({ erro: 'ia_cota', mensagem: 'A IA atingiu o limite de uso agora. Tente em alguns minutos ou preencha manualmente.' });
-    if (r.status === 401 || r.status === 403) return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: 'A chave da IA é inválida neste servidor. O preenchimento manual continua funcionando.' });
+    if (r.status === 429) return res.status(503).json({ erro: 'ia_cota', mensagem: `A IA (${prov}) atingiu o limite de uso agora. Tente em alguns minutos ou preencha manualmente.` });
+    if (r.status === 401 || r.status === 403) return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: `A chave da IA (${variavel}) foi recusada pelo provedor ${prov}. Confira a chave. O preenchimento manual continua funcionando.` });
     if (!r.ok) return res.status(502).json({ erro: 'ia_indisponivel', mensagem: 'A IA não respondeu agora. Preencha manualmente ou tente de novo.' });
 
     const bruto = extrairJson(r.texto);

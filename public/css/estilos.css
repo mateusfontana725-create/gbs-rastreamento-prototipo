@@ -184,10 +184,13 @@ textarea.campo { min-height: 96px; resize: vertical; }
 /* ---------- Modal ------------------------------------------------------- */
 .modal-fundo {
   position: fixed; inset: 0; z-index: 2500; background: rgba(0, 0, 0, .75);
-  display: flex; align-items: center; justify-content: center; padding: 16px;
+  display: flex; padding: 16px; overflow-y: auto;
 }
+/* margin: auto centraliza sem cortar o topo quando o modal é mais alto que a tela */
+.modal-fundo > .modal { margin: auto; }
 .modal {
-  width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto;
+  width: min(520px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow: auto;
+  overscroll-behavior: contain;
   background: var(--superficie); border: 1px solid var(--borda-forte); border-top: 4px solid var(--primaria);
   border-radius: 10px; box-shadow: var(--sombra); padding: 20px;
 }
@@ -1965,3 +1968,7 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 .titulo-com-dica { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .titulo-com-dica .dica-caixa { display: inline-flex; }
 .titulo-com-dica .dica-texto { font-size: .82rem; }
+
+/* Rodapé dos formulários fica sempre à vista ao rolar um modal alto */
+.modal .form-rodape { position: sticky; bottom: -20px; margin: 18px -20px -20px; padding: 12px 20px; background: var(--superficie); border-top: 1px solid var(--borda); z-index: 1; }
+.modal .form-rodape:empty { display: none; }

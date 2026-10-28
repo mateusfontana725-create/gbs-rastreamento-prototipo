@@ -59,7 +59,7 @@
     var op = P.op();
     if (!op) return;
     est.opId = op.id;
-    carregar();
+    var carga = carregar();
     try {
       est.canal = C.cliente.channel('op-briefing-' + op.id + '-' + Date.now());
       [['passagens_comando', 'operacao_id=eq.' + op.id], ['decisoes_pendentes', 'operacao_id=eq.' + op.id], ['briefing_operacao', 'operacao_id=eq.' + op.id], ['operacoes', 'id=eq.' + op.id]].forEach(function (t) {
@@ -72,6 +72,7 @@
         }
       });
     } catch (e) { /* sem tempo real: recarrega ao abrir */ }
+    return carga;
   }
 
   function parar() {

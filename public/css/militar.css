@@ -2011,3 +2011,10 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
   .passagem-botoes { width: 100%; }
   .passagem-botoes .btn { flex: 1 1 0; }
 }
+
+/* Spinner sobre o painel enquanto a operação carrega */
+.painel-carregando { position: absolute; inset: 0; z-index: 2400; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(10, 13, 16, .82); backdrop-filter: blur(2px); color: var(--texto-2); font-weight: 600; }
+.painel-carregando[hidden] { display: none; }
+.spinner { width: 44px; height: 44px; border: 4px solid var(--borda-forte); border-top-color: var(--responsavel); border-radius: 50%; animation: girar .8s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }

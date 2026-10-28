@@ -50,12 +50,13 @@
     var op = P.op();
     if (!op) return;
     est.opId = op.id;
-    carregar();
+    var carga = carregar();
     try {
       est.canal = C.cliente.channel('op-recursos-' + op.id + '-' + Date.now())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grupo_recursos', filter: 'operacao_id=eq.' + op.id }, agendar)
         .subscribe();
     } catch (e) { /* sem tempo real: recarrega ao abrir e ao salvar */ }
+    return carga;
   }
 
   function parar() {

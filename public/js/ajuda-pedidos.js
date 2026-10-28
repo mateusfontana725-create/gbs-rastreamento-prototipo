@@ -102,7 +102,7 @@
     var op = P.op();
     if (!op) return;
     est.opId = op.id;
-    carregar();
+    var carga = carregar();
     assinar();
     // relógio da tela (tempo sem atendimento) e verificação de escalação enquanto o painel está aberto
     est.timerRelogio = setInterval(function () { atualizarPilula(); if (est.renderAtual) est.renderAtual(); }, 20000);
@@ -111,6 +111,7 @@
       if (!o || o.status !== 'ativa' || est.ausente || !abertos().length) return;
       C.rpc('verificar_pedidos_ajuda', { p_operacao: o.id }, 15000).then(function (n) { if (n) carregar(); }).catch(function () { /* tenta no próximo ciclo */ });
     }, 60000);
+    return carga;
   }
 
   function parar() {

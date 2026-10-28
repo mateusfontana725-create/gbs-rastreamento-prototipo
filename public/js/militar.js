@@ -1320,18 +1320,32 @@
   /* ------------------------------------------------------------------ */
   /* Painel: abertura e fechamento                                        */
   /* ------------------------------------------------------------------ */
+  // Spinner sobre o painel até a operação carregar (participantes, posições, mensagens, setores, grupos, POA, pedidos de ajuda, briefing…).
+  // Trava de segurança: some sozinho depois de 45 s, para nunca prender a tela.
+  function carregandoPainel(ligado) {
+    var c = $('painel-carregando');
+    if (!c) return;
+    clearTimeout(est.timerCarregando);
+    c.hidden = !ligado;
+    $('tela-painel').setAttribute('aria-busy', String(Boolean(ligado)));
+    if (ligado) est.timerCarregando = setTimeout(function () { c.hidden = true; $('tela-painel').setAttribute('aria-busy', 'false'); }, 45000);
+  }
+
   async function abrirPainel(id) {
     fecharPainel();
     mostrarTela('painel');
+    carregandoPainel(true);
     var op;
     try {
       op = await C.consultar(C.cliente.from('operacoes').select('*').eq('id', id).maybeSingle());
     } catch (e) {
+      carregandoPainel(false);
       UI.aviso(e.message, 'erro');
       location.hash = '';
       return;
     }
     if (!op) {
+      carregandoPainel(false);
       UI.aviso('Operação não encontrada ou sem permissão de acesso.', 'erro');
       location.hash = '';
       return;
@@ -1347,10 +1361,12 @@
     assinarTempoReal();
     assinarTempoRealExtras();
     assinarTrilhasManuais();
-    if (window.BuscaCenario) window.BuscaCenario.iniciar();
-    if (window.AjudaPedidos) window.AjudaPedidos.iniciar();
-    if (window.RecursosEquipe) window.RecursosEquipe.iniciar();
-    if (window.Briefing) window.Briefing.iniciar();
+    var cargasModulos = [];
+    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing'].forEach(function (nome) {
+      if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
+    });
+    // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
+    Promise.all(cargasModulos).then(function () { if (est.op && est.op.id === op.id) carregandoPainel(false); });
     est.timerStatus = setInterval(atualizarEstados, 5000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
@@ -1378,6 +1394,7 @@
   }
 
   function fecharPainel() {
+    carregandoPainel(false);
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
     est.timerMeuSinal = null;

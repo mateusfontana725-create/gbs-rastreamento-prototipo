@@ -138,8 +138,9 @@
     var op = P.op();
     if (!op) return;
     est.opId = op.id;
-    carregar();
+    var carga = carregar();
     assinar();
+    return carga;
   }
 
   function parar() {

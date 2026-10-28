@@ -9148,19 +9148,23 @@
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var noEncerramento = typeof pre.aoRegistrar === 'function';
     var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'vit-registrar', texto: noEncerramento ? 'Registrar e continuar o encerramento' : 'Registrar vítima encontrada' });
-    var form = UI.el('form', { classe: 'form-vitima', novalidate: true }, [
-      UI.el('h2', { texto: '✚ Vítima encontrada' }),
-      UI.el('p', { classe: 'muted', texto: noEncerramento
-        ? 'Registre a vítima antes de encerrar: entra no diário, no relatório e no resultado da operação. A condição só os responsáveis veem.'
-        : 'Para quando a notícia chega por rádio, telefone ou pessoalmente. Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.' }),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-ficha', texto: 'Vítima' }), ficha, fichaNome]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Condição' }), cond]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-obs', texto: 'Estado da vítima e encaminhamento (opcional)' }), obs]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-quem', texto: 'Quem encontrou (opcional)' }), quem, quemTexto]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Onde foi encontrada' }), onde]),
-      UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: 'vit-local', texto: 'Descrição do local (opcional)' }), localDesc]),
+    var form = UI.el('form', { classe: 'form-vitima form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: noEncerramento ? 'Vítima encontrada (antes de encerrar)' : 'Vítima encontrada' },
+        [UI.dica(noEncerramento
+          ? 'Entra no diário, no relatório e no resultado da operação. A condição só os responsáveis veem.'
+          : 'Dispara o alerta de vítima localizada para os responsáveis e entra no diário. A condição só os responsáveis veem.')]),
+      UI.grade([
+        UI.campo('Vítima', ficha, { para: 'vit-ficha', largo: true }),
+        fichaNome,
+        UI.campo('Condição', cond, { largo: true }),
+        UI.campo('Quem encontrou', quem, { para: 'vit-quem', ajuda: 'Opcional' }),
+        quemTexto,
+        UI.campo('Onde', onde, { largo: true }),
+        UI.campo('Descrição do local', localDesc, { para: 'vit-local', largo: true, ajuda: 'Opcional' }),
+        UI.campo('Estado e encaminhamento', obs, { para: 'vit-obs', largo: true, ajuda: 'Opcional' }),
+      ]),
       erro,
-      UI.el('div', { classe: 'acoes-linha' }, [UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); } }), btn]),
     ]);
     var fechar = UI.abrirModal(form, { fecharNoFundo: false });
 

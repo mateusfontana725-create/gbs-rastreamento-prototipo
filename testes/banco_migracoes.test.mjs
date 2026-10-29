@@ -1856,6 +1856,8 @@ console.log('Cadastro rápido de vítima e convite por e-mail (migração 044)')
   chk(/convite_envios_limite/.test(await erroDe(rpc(resp1, 'convite_dados_envio', { p_convite: cv.id }))), 'limite de 5 envios por convite');
   const uC = await usuario(null, true);
   chk((await rpc(uC, 'convite_ler', { p_codigo: cv.codigo })).nome === 'Ana S.', 'a página do participante lê só o nome do convite');
+  chk((await como(null, `select (public.convite_ler($1))->>'nome' as nome`, [cv.codigo], 'anon')).rows[0].nome === 'Ana S.', 'a página lê o nome do convite mesmo antes de entrar (sem sessão)');
+  chk(/permission denied/.test(await erroDe(como(null, `select public.convite_dados_envio($1)`, [cv.id], 'anon'))), 'sem sessão não pega os dados do envio');
   chk((await rpc(uC, 'convite_ler', { p_codigo: 'zzzz' })) === null && (await rpc(uC, 'convite_ler', { p_codigo: '0'.repeat(24) })) === null, 'código inválido ou desconhecido: nulo');
   chk(JSON.stringify(await rpc(uC, 'convite_ler', { p_codigo: cv.codigo })).indexOf('exemplo.com') < 0, 'o e-mail não sai pelo código do convite');
   const pC = await rpc(uC, 'ingressar', { p_token: opQ.token_civil, p_nome: 'Ana Souza', p_tipo: 'civil', p_cpf: null, p_telefone: tel });

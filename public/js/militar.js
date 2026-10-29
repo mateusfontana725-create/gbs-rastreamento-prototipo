@@ -205,6 +205,7 @@
     alertaFaixa: null,
     // "Encontrei a vítima": registros com a condição (só responsáveis leem)
     vitimasLoc: new Map(),      // mensagem_id → registro
+    fichas: new Map(),          // id da ficha → {nome, idade, cadastro_rapido…} (para o nome no marcador da vítima localizada)
     semVitimaLoc: false,        // banco sem a migração 011
     // tempo de permanência em setor (calculado no servidor pela trilha GPS)
     permanencias: new Map(),    // id → permanência aberta (pessoa ainda no setor)
@@ -375,6 +376,7 @@
     $('ficha-renomear').addEventListener('click', function () { var p = est.participantes.get(est.selecionado); if (p) renomearParticipante(p); });
     $('ficha-vitima').addEventListener('click', function () { if (est.selecionado) abrirRegistroVitima({ encontrou: est.selecionado, onde: 'quem' }); });
     $('menu-vitima').addEventListener('click', function () { fecharMenu(false); abrirRegistroVitima({}); });
+    $('menu-vitima-rapida').addEventListener('click', function () { fecharMenu(false); abrirCadastroRapido(); });
     $('btn-excluir-op').addEventListener('click', function () { excluirOperacao(est.op); });
     document.querySelectorAll('[data-camada]').forEach(function (b) {
       b.addEventListener('click', function () { trocarCamada(b.getAttribute('data-camada')); });
@@ -1410,6 +1412,7 @@
     est.alertasCarregados = false;
     est.alertaFaixa = null;
     est.vitimasLoc = new Map();
+    est.fichas = new Map();
     est.semVitimaLoc = false;
     est.permanencias = new Map();
     est.semPermanencia = false;
@@ -1482,6 +1485,7 @@
     est.missaoMembros = new Map();
     est.alertas = new Map();
     est.vitimasLoc = new Map();
+    est.fichas = new Map();
     est.permanencias = new Map();
     est.filtroGrupos = new Set();   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
@@ -1517,6 +1521,7 @@
     $('btn-convite').hidden = op.status !== 'ativa';
     $('btn-registrar-foto').hidden = op.status !== 'ativa';
     $('menu-vitima').hidden = op.status !== 'ativa';
+    $('menu-vitima-rapida').hidden = op.status !== 'ativa';
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
@@ -1686,7 +1691,8 @@
     return L.markerClusterGroup({
       clusterPane: 'pontos',
       showCoverageOnHover: false,
-      maxClusterRadius: function (z) { return z >= 17 ? 28 : 45; },
+      // agrupa já na escala de 200 m e de 100 m (zoom 16 e 17); só bem de perto o raio diminui
+      maxClusterRadius: function (z) { return z >= 19 ? 26 : z >= 17 ? 40 : 50; },
       spiderfyOnMaxZoom: true,
       zoomToBoundsOnClick: true,
       iconCreateFunction: function (grupo) {
@@ -2359,6 +2365,7 @@
       est.canalExtras = C.cliente.channel('op-extras-' + opId + '-' + Date.now())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'vitimas', filter: filtro }, function () {
           if (window.Cadastro) window.Cadastro.aoMudarVitimas(opId);
+          carregarFichas();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grupos', filter: filtro }, agendarGrupos)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grupo_membros', filter: filtro }, agendarGrupos)
@@ -4017,12 +4024,21 @@
     var nota = UI.el('p', { classe: 'nota' });
     var abaCivil = UI.el('button', { classe: 'btn btn-ativo', type: 'button', texto: '● Link para CIVIS' });
     var abaMil = UI.el('button', { classe: 'btn', type: 'button', texto: '■ Link para MILITARES' });
+    var abaEmail = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-email', texto: '✉ Convidar por e-mail' }) : null;
+    var caixaLink = UI.el('div', { classe: 'link-caixa' });
+    var painelEmail = abaEmail ? window.Convites.painel() : null;
+    if (painelEmail) painelEmail.hidden = true;
 
     function mostrar(tipo) {
-      atual = tipo;
-      entrada.value = links[tipo];
+      var porEmail = tipo === 'email';
+      if (!porEmail) atual = tipo;
+      if (!porEmail) entrada.value = links[tipo];
       abaCivil.className = 'btn' + (tipo === 'civil' ? ' btn-ativo' : '');
       abaMil.className = 'btn' + (tipo === 'militar' ? ' btn-ativo' : '');
+      if (abaEmail) abaEmail.className = 'btn' + (porEmail ? ' btn-ativo' : '');
+      caixaLink.hidden = qr.hidden = nota.hidden = porEmail;
+      if (painelEmail) painelEmail.hidden = !porEmail;
+      if (porEmail) return;
       nota.textContent = tipo === 'civil'
         ? 'Quem entrar por este link aparece como civil.'
         : 'Só para militares: quem entrar por este link se identifica como militar.';
@@ -4060,16 +4076,19 @@
 
     abaCivil.addEventListener('click', function () { mostrar('civil'); });
     abaMil.addEventListener('click', function () { mostrar('militar'); });
+    if (abaEmail) abaEmail.addEventListener('click', function () { mostrar('email'); });
 
     var botoes = [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Copiar', onclick: copiar })];
     if (navigator.share) botoes.push(UI.el('button', { classe: 'btn', type: 'button', texto: 'Compartilhar', onclick: compartilhar }));
+    [entrada].concat(botoes).forEach(function (n) { caixaLink.appendChild(n); });
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links não dão acesso ao painel. Só servem para entrar na operação como participante.')]),
-      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil]),
-      UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
+      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil, abaEmail]),
+      caixaLink,
       qr,
       nota,
+      painelEmail,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
     mostrar(atual);
@@ -4254,8 +4273,9 @@
     });
     ligarCliquesMapa(mk, {
       info: function () {
+        if (m.categoria === 'VITIMA') return infoVitimaLocalizada(m, mk);
         return { latlng: mk.getLatLng(), titulo: cat.rotulo, sub: nomeDoParticipante(m.participante_id, m.remetente_nome) + ' · ' + C.hora(m.criada_em, false),
-          texto: m.categoria === 'VITIMA' ? null : resumoTexto(m.texto, 90), deslocY: -10 };
+          texto: resumoTexto(m.texto, 90), deslocY: -10 };
       },
       detalhes: function () { abrirRelato(m.id); },
     });
@@ -4288,9 +4308,99 @@
     destacarNoMapa(mkR && camadaDoPonto(mkR), mkR, m.lat, m.lng);
   }
 
+  // Balão do marcador da vítima localizada: o nome da vítima, a condição e o que se sabe do achado
+  function infoVitimaLocalizada(m, mk) {
+    var reg = registroDaMensagem(m);
+    if (!reg) return { latlng: mk.getLatLng(), titulo: 'Vítima localizada', sub: C.hora(m.criada_em, false), texto: 'Carregando os detalhes…', deslocY: -10 };
+    var f = reg.vitima_id ? est.fichas.get(reg.vitima_id) : null;
+    var enc = quemEncontrou(reg);
+    var linhas = [
+      'Condição: ' + CONDICAO_VITIMA[reg.condicao],
+      enc ? 'Encontrada por ' + nomeExibido(enc) : reg.encontrada_por_texto ? 'Encontrada por ' + reg.encontrada_por_texto : 'Registrada por ' + reg.registrado_por_nome,
+      reg.local_descricao ? 'Local: ' + resumoTexto(reg.local_descricao, 70) : null,
+      f && f.cadastro_rapido ? 'Cadastro rápido: falta completar a ficha' : null,
+    ].filter(Boolean);
+    return { latlng: mk.getLatLng(), titulo: f ? textoFicha(f) : 'Vítima localizada', sub: 'Localizada às ' + C.hora(reg.posicao_em || reg.registrado_em, false), texto: linhas.join('\n'), deslocY: -10, botao: 'O que aconteceu ›' };
+  }
+
+  // Tudo sobre a vítima localizada: quem é, a condição, quem encontrou, onde, e quem estava perto
+  function abrirVitimaLocalizada(m) {
+    var reg = registroDaMensagem(m);
+    var f = reg && reg.vitima_id ? est.fichas.get(reg.vitima_id) : null;
+    var enc = reg ? quemEncontrou(reg) : null;
+    var op = est.op;
+    var dl = UI.el('dl', { classe: 'kv-grade vit-loc-dados' });
+    function kv(rot, valor, largo) {
+      dl.appendChild(UI.el('div', { classe: 'kv' + (largo ? ' kv-largo' : '') }, [UI.el('dt', { texto: rot }), UI.el('dd', { classe: valor ? null : 'kv-vazio' }, [valor || 'não informado'])]));
+    }
+    var corpo = [UI.el('h2', { id: 'modal-titulo', texto: f ? f.nome : 'Vítima localizada' })];
+    if (!reg) {
+      corpo.push(UI.el('p', { classe: 'muted', texto: est.semVitimaLoc ? 'Detalhes indisponíveis: falta a migração 011 no Supabase.' : 'Carregando os detalhes…' }));
+    } else {
+      corpo.push(UI.el('div', { classe: 'acoes-linha vit-loc-selos' }, [
+        seloCondicaoReg(reg),
+        f && f.cadastro_rapido ? UI.el('span', { classe: 'selo selo-alerta', texto: 'Cadastro rápido: completar' }) : null,
+        !f ? UI.el('span', { classe: 'selo selo-neutro', texto: 'Sem ficha' }) : null,
+      ]));
+      var pos = reg.lat != null ? { lat: reg.lat, lng: reg.lng } : null;
+      var quando = reg.posicao_em || reg.registrado_em;
+      var setor = pos ? setorDoPonto(pos.lat, pos.lng) : null;
+      var ulv = pos && op.local_lat != null ? C.distancia(op.local_lat, op.local_lng, pos.lat, pos.lng) : null;
+      var inicio = op.acionado_em ? C.paraMs(op.acionado_em) : null;
+      kv('Vítima', f ? textoFicha(f) : '');
+      kv('Localizada', C.hora(quando) + ' (' + C.idade(quando) + ')');
+      kv('Encontrada por', enc ? nomeExibido(enc) + ' (' + TIPOS[tipoDe(enc.dados)].rotulo.toLowerCase() + ')' : reg.encontrada_por_texto || '');
+      kv('Registrada por', reg.registrado_por_nome.replace(/\s*\(encontrada por [^)]*\)\s*$/, '') + ' às ' + C.hora(reg.registrado_em, false));
+      kv('Local', reg.local_descricao || '', true);
+      kv('Coordenadas', pos ? C.coord(pos.lat) + ', ' + C.coord(pos.lng) + ' (' + C.precisao(reg.precisao) + ')' : '', true);
+      kv('Setor', pos ? (setor ? setor.nome : 'fora dos setores desenhados') : '');
+      kv('Do último local visto', ulv != null ? formatarComprimento(ulv) : '');
+      kv('Depois do início', inicio && C.paraMs(quando) >= inicio ? textoMin(Math.round((C.paraMs(quando) - inicio) / 60000)) : '');
+      kv('Estado e encaminhamento', reg.observacoes || '', true);
+      // Participantes: quem estava perto na última posição conhecida
+      if (pos) {
+        var perto = [];
+        est.participantes.forEach(function (p) {
+          if (p.dados.removido || (enc && p.id === enc.id) || tipoDe(p.dados) === 'responsavel') return;
+          var pp = posicaoAtual(p);
+          if (!pp) return;
+          var d = C.distancia(pos.lat, pos.lng, pp.lat, pp.lng);
+          if (d <= 300) perto.push({ p: p, d: d, pp: pp });
+        });
+        perto.sort(function (a, b) { return a.d - b.d; });
+        var lista = perto.length ? UI.el('ul', { classe: 'lista-perto' }, perto.map(function (x) {
+          var gr = gruposDe(x.p.id).map(function (g) { return g.nome; }).join(', ');
+          return UI.el('li', null, [
+            UI.el('strong', { texto: nomeExibido(x.p) }),
+            UI.el('small', { classe: 'muted', texto: TIPOS[tipoDe(x.p.dados)].rotulo + (gr ? ' · ' + gr : '') + ' · a ' + formatarComprimento(x.d) + ' · posição ' + C.idade(x.pp.t) }),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ficha', onclick: function () { fechar(); selecionar(x.p.id); } }),
+          ]);
+        })) : UI.el('p', { classe: 'muted', texto: 'Ninguém com posição conhecida a menos de 300 m.' });
+        corpo.push(dl, UI.secao('Participantes', [
+          enc ? UI.el('p', null, [UI.el('strong', { texto: nomeExibido(enc) }), ' encontrou a vítima ', UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'ver ficha', onclick: function () { fechar(); selecionar(enc.id); } })]) : null,
+          UI.el('p', { classe: 'muted', texto: 'Perto do local (até 300 m, pela última posição):' }),
+          lista,
+        ]));
+      } else {
+        corpo.push(dl);
+      }
+    }
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'visor-vitima-loc' }, corpo.concat([
+      compactarAcoes(UI.rodape([
+        f && window.Cadastro ? UI.el('button', { classe: 'btn' + (f.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitloc-ficha', texto: f.cadastro_rapido ? 'Completar a ficha' : 'Abrir a ficha', onclick: function () {
+          fechar();
+          window.Cadastro.abrirFichaPorId(op, f.id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas });
+        } }) : null,
+        m.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }) : null,
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ])),
+    ])));
+  }
+
   function abrirRelato(id) {
     var m = est.mensagens.get(id);
     if (!m) return;
+    if (m.categoria === 'VITIMA') { marcarLidas([m.id]); abrirVitimaLocalizada(m); return; }
     var p = est.participantes.get(m.participante_id);
     var cat = CATEGORIAS[m.categoria] || CATEGORIAS.MENSAGEM;
     marcarLidas([m.id]);
@@ -4506,7 +4616,8 @@
       var acoes = UI.el('div', { classe: 'feed-acoes' }, [
         m.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verRelatoNoMapa(m); } }) : null,
         p ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Responder', onclick: function () { abrirConversa(m.participante_id); } }) : null,
-        relato && window.RelatosRevisao && window.RelatosRevisao.disponivel() ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
+        m.categoria === 'VITIMA' || (relato && window.RelatosRevisao && window.RelatosRevisao.ehRelato(m) && window.RelatosRevisao.disponivel())
+          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: m.categoria === 'VITIMA' ? 'Detalhes' : 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
       ]);
       ul.appendChild(UI.el('li', { classe: 'feed-item' + (relato ? ' relato' : '') + (est.destaqueNovas.has(m.id) || !jaLida(m) ? ' nova' : ''), 'data-id': m.id }, [
         topo,
@@ -5383,12 +5494,7 @@
       if (raio && r >= 5 && r <= 50000) desenharPrevia(r);
     }
     if (raio) raio.addEventListener('input', atualizarArea);
-    var cores = UI.el('div', { classe: 'cores-setor', role: 'radiogroup', 'aria-label': 'Cor do setor' }, CORES_SETOR.map(function (c) {
-      return UI.el('label', { classe: 'cor-opcao', title: c }, [
-        UI.el('input', { type: 'radio', name: 'setor-cor', value: c, checked: c.toLowerCase() === d.cor.toLowerCase() ? true : null }),
-        UI.el('span', { style: 'background:' + c }),
-      ]);
-    }));
+    var cores = UI.seletorCor({ rotulo: 'Cor do setor', valor: d.cor, padroes: CORES_SETOR });
     var part = opcoesParticipantes(d.participante_id, true);
     var equipe = UI.el('input', { classe: 'campo', id: 'setor-equipe', maxlength: '60', value: d.equipe || '', placeholder: 'Ex.: Equipe Alfa' });
     var status = UI.el('select', { classe: 'campo', id: 'setor-status' }, Object.keys(STATUS_SETOR).map(function (k) {
@@ -5422,7 +5528,7 @@
       erro.hidden = true;
       var dados = {
         nome: nome.value.replace(/\s+/g, ' ').trim(),
-        cor: (form.querySelector('input[name="setor-cor"]:checked') || {}).value || d.cor,
+        cor: cores.valor() || d.cor,
         participante_id: part.value || null,
         equipe: equipe.value.trim(),
         status: status.value,
@@ -8816,18 +8922,9 @@
 
   function abrirFormGrupo(g) {
     var novo = !g;
-    var usadas = new Set(Array.from(est.grupos.values()).map(function (x) { return x.cor.toLowerCase(); }));
-    var corPadrao = g ? g.cor : (GRUPO_CORES.filter(function (c) { return !usadas.has(c.toLowerCase()); })[0] || GRUPO_CORES[0]);
-    // grupos antigos com outra cor continuam mostrando a cor que já têm
-    var opcoesCor = GRUPO_CORES.slice();
-    if (g && opcoesCor.indexOf(g.cor) < 0) opcoesCor.push(g.cor);
+    var corPadrao = g ? g.cor : window.Cores.livre(GRUPO_CORES, Array.from(est.grupos.values()).map(function (x) { return x.cor; }));
     var nome = UI.el('input', { classe: 'campo', id: 'grupo-nome', maxlength: '60', value: g ? g.nome : '', placeholder: 'Ex.: Polícia Civil' });
-    var cores = UI.el('div', { classe: 'cores-setor', role: 'radiogroup', 'aria-label': 'Cor do grupo' }, opcoesCor.map(function (c) {
-      return UI.el('label', { classe: 'cor-opcao', title: c }, [
-        UI.el('input', { type: 'radio', name: 'grupo-cor', value: c, checked: c.toLowerCase() === corPadrao.toLowerCase() ? true : null }),
-        UI.el('span', { style: 'background:' + c }),
-      ]);
-    }));
+    var cores = UI.seletorCor({ rotulo: 'Cor do grupo', valor: corPadrao, padroes: GRUPO_CORES });
     var mil = UI.el('input', { type: 'checkbox', id: 'grupo-militar', checked: g && g.permite_militar ? true : null });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'grupo-salvar', texto: novo ? 'Criar grupo' : 'Salvar' });
@@ -8846,7 +8943,7 @@
       erro.hidden = true;
       var dados = {
         nome: nome.value.replace(/\s+/g, ' ').trim(),
-        cor: (form.querySelector('input[name="grupo-cor"]:checked') || {}).value || corPadrao,
+        cor: cores.valor() || corPadrao,
         permite_militar: Boolean(mil.checked),
       };
       if (!dados.nome) { erro.textContent = 'Informe o nome do grupo.'; erro.hidden = false; return; }
@@ -9233,9 +9330,59 @@
       var r = await C.consultar(C.cliente.from('vitima_localizacoes').select('*').eq('operacao_id', opId).order('registrado_em').limit(500));
       if (!est.op || est.op.id !== opId) return;
       receberVitimasLoc(r || []);
+      carregarFichas();
     } catch (e) {
       if (ehTabelaAusente(e)) est.semVitimaLoc = true;
     }
+  }
+
+  // Fichas das vítimas (só os responsáveis leem): dão o nome ao marcador da vítima localizada.
+  async function carregarFichas() {
+    if (!est.op) return;
+    var opId = est.op.id;
+    try {
+      var r = await C.consultar(C.cliente.from('vitimas').select('id,nome,idade,idade_qualidade,sexo,cadastro_rapido').eq('operacao_id', opId).limit(200));
+      if (!est.op || est.op.id !== opId) return;
+      est.fichas = new Map((r || []).map(function (v) { return [v.id, v]; }));
+    } catch (e) { /* sem fichas (migração antiga): o marcador mostra "Vítima localizada" */ }
+  }
+
+  function textoFicha(f) {
+    if (!f) return '';
+    var idade = f.idade != null ? (f.idade_qualidade === 'estimada' ? '~' : '') + f.idade + ' anos' : '';
+    return f.nome + (idade ? ' · ' + idade : '');
+  }
+  // Registro da vítima localizada de uma mensagem VITIMA (ou null)
+  function registroDaMensagem(m) { return m ? est.vitimasLoc.get(m.id) || null : null; }
+  function nomeDaVitima(reg) {
+    var f = reg && reg.vitima_id ? est.fichas.get(reg.vitima_id) : null;
+    return f ? f.nome : 'Vítima localizada';
+  }
+  function setorDoPonto(lat, lng) {
+    var achado = null;
+    est.setores.forEach(function (x) {
+      var d = x.d;
+      if (achado) return;
+      if (d.forma === 'circulo') { if (C.distancia(d.centro_lat, d.centro_lng, lat, lng) <= d.raio_m) achado = d; return; }
+      var pts = d.pontos || [], dentro = false;
+      for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        if (((pts[i][0] > lat) !== (pts[j][0] > lat)) && (lng < (pts[j][1] - pts[i][1]) * (lat - pts[i][0]) / (pts[j][0] - pts[i][0]) + pts[i][1])) dentro = !dentro;
+      }
+      if (dentro) achado = d;
+    });
+    return achado;
+  }
+  // Participante que encontrou: o do alerta "vitima:<id>" (quando o registro tem um participante de campo)
+  function quemEncontrou(reg) {
+    var achado = null;
+    est.alertas.forEach(function (a) { if (a.tipo === 'vitima_localizada' && a.chave === 'vitima:' + reg.id) achado = a; });
+    var p = achado && achado.participante_id ? est.participantes.get(achado.participante_id) : null;
+    return p && p.id !== reg.participante_id ? p : null;
+  }
+
+  function abrirCadastroRapido() {
+    if (!est.op || est.op.status !== 'ativa' || !window.Cadastro) return;
+    window.Cadastro.abrirRapido(est.op, { aoSalvar: function () { carregarFichas(); } });
   }
 
   function receberVitimasLoc(lista) {
@@ -9856,6 +10003,8 @@
     irPara: function (lat, lng) { if (est.mapa && lat != null && lng != null) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 17)); },
     recarregarGrupos: function () { return carregarGrupos().then(function () { if (est.renderGruposAberto) est.renderGruposAberto(); }); },
     abrirCentral: function (aba) { abrirCentral(aba); },
+    // link do civil.html da operação (com o código de um convite por e-mail, quando houver)
+    linkCivil: function (codigo) { return est.op ? linkPara(est.op.token_civil) + (codigo ? '&c=' + codigo : '') : ''; },
     atualizarCentral: function () { if (est.op) agendarCentral(); },
     abrirRelato: function (id) { abrirRelato(id); },
     mensagens: function () { return Array.from(est.mensagens.values()); },

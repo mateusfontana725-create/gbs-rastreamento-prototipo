@@ -2161,3 +2161,35 @@ html[data-fonte="menor"] { font-size: 93.75%; }
 .check-curto { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: .88rem; color: var(--texto-2); cursor: pointer; }
 .check-curto input { width: 18px; height: 18px; margin: 0; }
 .campo-sob { margin-top: 6px; }
+
+/* Seletor de cor livre (js/cores.js) */
+.seletor-cor { display: flex; flex-direction: column; gap: 10px; }
+.cor-amostra { width: 34px; height: 34px; padding: 0; border-radius: 8px; border: 3px solid transparent; box-shadow: 0 0 0 1px #000; cursor: pointer; }
+.cor-amostra.marcada { border-color: #fff; box-shadow: 0 0 0 2px var(--acento); }
+.cor-amostra:focus-visible, .cor-mais:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; }
+.cor-mais { width: 34px; height: 34px; padding: 0; border-radius: 8px; border: 2px dashed var(--borda-forte); background: var(--superficie-2); color: var(--texto); font-size: 1.1rem; line-height: 1; cursor: pointer;
+  background-image: conic-gradient(from 0deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); background-blend-mode: soft-light; }
+.cor-mais.aberto { border-style: solid; border-color: var(--acento); }
+.cor-painel { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.cor-painel[hidden] { display: none; }
+.cor-painel-topo { display: flex; align-items: center; gap: 10px; }
+.cor-preview { flex: none; width: 40px; height: 40px; border-radius: 8px; box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--borda-forte); }
+.cor-codigo { flex: 1; min-width: 0; font-family: var(--mono); max-width: 9rem; }
+.cor-nativo { flex: none; width: 48px; height: 40px; padding: 2px; }
+.cor-linha { display: grid; grid-template-columns: 6.5rem 1fr; align-items: center; gap: 10px; font-size: .85rem; color: var(--texto-2); }
+.cor-deslizante { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; border-radius: 8px; border: 1px solid var(--borda-forte); margin: 0; }
+.cor-deslizante::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2px solid #000; box-shadow: 0 1px 3px rgba(0, 0, 0, .6); cursor: pointer; }
+.cor-deslizante::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 2px solid #000; cursor: pointer; }
+.cor-painel > .btn { align-self: flex-start; }
+
+/* Cadastro rápido de vítima (js/cadastro.js) */
+.chips-rapido { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-rapido { position: relative; cursor: pointer; }
+.chip-rapido input { position: absolute; opacity: 0; inset: 0; }
+.chip-rapido span { display: inline-flex; align-items: center; min-height: 42px; padding: 0 16px; border-radius: 21px; border: 2px solid var(--borda-forte); background: var(--superficie-2); font-weight: 600; }
+.chip-rapido input:checked + span { background: var(--acento); border-color: var(--acento); color: #0a0d10; }
+.chip-rapido input:focus-visible + span { outline: 3px solid var(--acento); outline-offset: 2px; }
+.selo-rapido { margin-left: 8px; font-size: .62rem; vertical-align: middle; }
+.nota-rapido { border-left: 4px solid var(--alerta); padding: 8px 12px; background: var(--alerta-claro); color: var(--alerta-texto); border-radius: var(--raio); margin: 0 0 10px; }
+.form-rapido .campo { min-height: 46px; font-size: 1.05rem; }
+.abas { flex-wrap: wrap; }

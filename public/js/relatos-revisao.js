@@ -26,8 +26,8 @@
 
   var est = { opId: null, porMensagem: new Map(), ausente: false, erro: null, canal: null, timer: null, ouvintes: [] };
 
-  // Pedido de ajuda tem fluxo próprio (ajuda-pedidos.js): não entra na revisão
-  function ehRelato(m) { return Boolean(m && m.direcao === 'entrada' && m.categoria && m.categoria !== 'MENSAGEM' && m.categoria !== 'AJUDA'); }
+  // Pedido de ajuda e vítima localizada têm fluxo próprio (ajuda-pedidos.js, vitima_localizacoes): não entram na revisão
+  function ehRelato(m) { return Boolean(m && m.direcao === 'entrada' && m.categoria && m.categoria !== 'MENSAGEM' && m.categoria !== 'AJUDA' && m.categoria !== 'VITIMA'); }
 
   /* ---------- Dados ------------------------------------------------------ */
   function aplicar(lista) {

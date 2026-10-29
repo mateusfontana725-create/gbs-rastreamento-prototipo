@@ -14064,11 +14064,15 @@ declare
   f text;
 begin
   foreach f in array array['criar_convite_participante(uuid, text, text)', 'convite_dados_envio(uuid)', 'convite_registrar_envio(uuid, text)',
-                           'cancelar_convite_participante(uuid)', 'convite_ler(text)', 'convite_aceitar(text, uuid)'] loop
+                           'cancelar_convite_participante(uuid)', 'convite_aceitar(text, uuid)'] loop
     execute format('revoke execute on function public.%s from public, anon', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
 end;
 $$;
+-- A página do participante lê o nome do convite antes de entrar (ainda sem sessão). O código é um segredo de 96 bits
+-- e só devolve o nome de quem foi convidado, nunca o e-mail.
+revoke execute on function public.convite_ler(text) from public;
+grant execute on function public.convite_ler(text) to anon, authenticated;
 
 notify pgrst, 'reload schema';

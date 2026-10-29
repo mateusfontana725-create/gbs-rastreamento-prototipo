@@ -139,6 +139,12 @@
     return /^[0-9a-f]{64}$/.test(t) ? t : null;
   }
 
+  // Código do convite por e-mail (#t=…&c=…): só preenche o nome; quem manda no acesso é o token do link
+  function lerCodigoConvite() {
+    var c = (new URLSearchParams(location.hash.replace(/^#/, '')).get('c') || '').trim().toLowerCase();
+    return /^[0-9a-f]{24}$/.test(c) ? c : null;
+  }
+
   async function iniciar() {
     $('btn-recarregar').addEventListener('click', function () { location.reload(); });
 
@@ -180,6 +186,14 @@
     $('ini-tipo-escolha').hidden = !permiteMilitar;
 
     var salvo = C.local.ler(CHAVE_PART, null);
+    estado.convite = lerCodigoConvite();
+    if (estado.convite && !(salvo && salvo.token === estado.token)) {
+      try {
+        var conv = await C.rpc('convite_ler', { p_codigo: estado.convite });
+        if (conv && conv.nome) $('ini-nome').value = conv.nome;
+        else estado.convite = null;
+      } catch (e) { /* sem o nome pré-preenchido: a pessoa digita */ }
+    }
     if (salvo && salvo.token === estado.token) {
       $('ini-nome').value = salvo.nome || '';
       $('ini-cpf').value = mascararCpf(salvo.cpf || '');
@@ -514,6 +528,7 @@
         p_token: estado.token, p_nome: dados.nome, p_tipo: dados.tipo,
         p_cpf: dados.cpf || null, p_telefone: dados.tel || null,
       });
+      if (estado.convite) C.rpc('convite_aceitar', { p_codigo: estado.convite, p_participante: part.participante_id }).catch(function () { /* o convite não impede a participação */ });
       estado.cpf = dados.cpf;
       estado.telefone = dados.tel;
       estado.saidaSolicitadaEm = part.saida_solicitada_em || null;

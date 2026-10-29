@@ -18,7 +18,7 @@
 
   // Botões que a página já põe no topo (na ordem padrão) e funções do menu que podem ir para lá.
   var PADRAO = ['menu-ponto', 'btn-registrar-foto', 'menu-setor', 'menu-trilha', 'btn-regua', 'menu-cenario', 'menu-dashboard', 'btn-mensagens', 'btn-convite'];
-  var DO_MENU = ['menu-vitima', 'menu-destino', 'menu-areas', 'menu-grupos', 'menu-missoes', 'menu-ajuda', 'menu-binomio', 'menu-drone-agua', 'menu-briefing', 'menu-dados-op',
+  var DO_MENU = ['menu-vitima', 'menu-vitima-rapida', 'menu-destino', 'menu-areas', 'menu-grupos', 'menu-missoes', 'menu-ajuda', 'menu-binomio', 'menu-drone-agua', 'menu-briefing', 'menu-dados-op',
     'menu-diario', 'menu-relatorio', 'btn-equipe', 'menu-ir-coord', 'menu-medir', 'menu-importar', 'menu-exportar', 'menu-diag-gps'];
   var TODOS = PADRAO.concat(DO_MENU);
   // A régua já tem item próprio no menu (menu-regua): fora do topo não precisa de atalho.

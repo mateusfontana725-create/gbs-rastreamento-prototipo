@@ -192,6 +192,13 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   **Seguir sem elas**) — a operação não é criada de novo, ficha salva não é reenviada e, antes de repetir,
   o painel confere no servidor se a tentativa anterior já tinha gravado (sem duplicar). A foto é
   adicionada depois, na ficha.
+- **Cadastro rápido** (migração 044): **Ferramentas → Cadastro rápido de vítima** (ou **⚡ Cadastro rápido** na lista de
+  vítimas) pede só o essencial, com botões grandes: **nome** (em branco = "Não identificada"), **faixa etária** (criança,
+  adolescente, adulto, idoso — criança, adolescente e idoso já preenchem o perfil), **idade** aproximada (fica "estimada"),
+  **sexo** e **roupa e aparência**. **Salvar e novo** deixa o formulário limpo para a próxima pessoa; Enter salva. A ficha
+  fica marcada **completar** na lista e na ficha (aviso e botão **Completar a ficha**); salvar o formulário completo tira a
+  marca, a menos que se marque "Ainda falta completar". A vítima criada só com o nome em **Vítima encontrada** também nasce
+  como cadastro rápido.
 - **Vítimas (fichas)** ficam em **Dados da operação → Editar** (e na criação da operação): uma ou mais fichas por operação, com **foto**, **nome** (ou "Não
   identificada"), **idade**, **características físicas**, **roupas** e **observações**.
 - **Idade informada ou estimada** (migração 042): ao lado da idade, a caixa **estimada** marca que ela veio da
@@ -228,6 +235,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   **círculo** = civil, **losango vermelho com R** = responsável da operação (diferenciado do militar pela forma e pela letra). O **responsável do grupo** recebe um
   **distintivo branco com ★** no canto do marcador, que não depende da cor. O **responsável da operação**
   nunca recebe a cor de um grupo.
+- **Cor livre** (grupos e setores): além das amostras prontas, o botão **＋** abre o painel de cor com **tom,
+  intensidade e claridade** (deslizantes), o **código #rrggbb** e o seletor do sistema. **Guardar em "Minhas cores"**
+  mantém até 12 cores neste aparelho para reaproveitar em outros grupos e setores (`js/cores.js`; o servidor aceita
+  qualquer #rrggbb). Dá para criar quantos grupos quiser, cada um na sua cor.
 - **Paleta dos grupos** (novos grupos): rosa, laranja, índigo, lima, branco e ocre, escolhidas para não
   se confundir com o vermelho dos militares e responsáveis, o verde dos civis, o amarelo de
   pedido de ajuda, o âmbar da seleção e as trilhas roxas e azuis. Grupos que já existiam mantêm a cor salva.
@@ -242,7 +253,9 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   botão **Detalhes ›**. A **ficha** ou os **detalhes** abrem com **dois cliques**, **clicar e segurar** (mouse ou dedo)
   ou o botão do balão; arrastar o mapa a partir de um símbolo não abre nada. **Na lista lateral um clique abre direto.**
   Os símbolos ficam **translúcidos** (quem pede ajuda, quer sair ou está selecionado fica opaco) e **diminuem ao
-  afastar o zoom** (até ~metade do tamanho, agrupamentos inclusive); trilhas finas (2,5 px de perto, ~1 px de longe;
+  afastar o zoom** (até ~metade do tamanho, agrupamentos inclusive) **e também de muito perto**: do zoom 17 (escala de 100 m)
+  em diante cada nível diminui um pouco (90% no zoom 16, 80% no 17, 68% no 18, 58% no 19 e 50% do 20 em diante); vítima localizada e pedido
+  de ajuda nunca ficam abaixo de 80%; trilhas finas (2,5 px de perto, ~1 px de longe;
   com alguém selecionado, as outras ficam apagadas), setores e círculos de base/risco com traço e preenchimento
   discretos. **Camadas → Nomes no mapa** volta a mostrar os nomes como abaixo.
 - **Fileiras de botões** viram **"⋮ Mais"**: na ficha ficam **Ver no mapa** e **⋮ Mais** (enviar destino, rota até a
@@ -405,6 +418,25 @@ e os estados finais (confirmado, descartado, inconclusivo, contestado) **exigem 
   indicações do cão em análise e confirmadas; focos térmicos a verificar; indicações na água; área observada por drone.
 
 **Migrações 042 e 043**: rode no Supabase em ordem. Sem elas, cada janela avisa qual migração falta e o resto do painel segue normal.
+
+### Convidar por e-mail (migração 044)
+
+**Convidar → ✉ Convidar por e-mail**: o responsável digita o **nome** e o **e-mail** do participante e toca **Enviar convite**. O
+participante recebe um e-mail com o botão **Abrir e começar** (o link do `civil.html` da operação). Ao abrir no celular, o
+**nome já vem preenchido** e basta tocar em COMEÇAR e permitir a localização.
+
+- A lista **Convidados** mostra a situação de cada convite: **Não enviado**, **Enviado** (hora e número de envios), **Falha no envio**
+  (com o motivo) e **Entrou** (hora em que a pessoa começou o rastreamento). Cada linha tem **Reenviar** (até 5 envios por convite),
+  **Copiar link** e **Cancelar**. O mesmo e-mail na mesma operação reaproveita o convite (não duplica). Limite de 200 convites por operação.
+- **Quem envia é o servidor** (`api/convidar.js`): o navegador manda só o identificador do convite. O servidor confere o login do
+  responsável, lê do banco o e-mail e o token da operação, monta o link e envia pelo provedor **Resend** (<https://resend.com>).
+  Variáveis na Vercel: `RESEND_API_KEY` (chave do provedor), `EMAIL_REMETENTE` (ex.: `Rastreamento GBS <convite@seudominio.com.br>`,
+  com o domínio verificado no provedor) e, opcionalmente, `SITE_URL` (endereço público do site; sem ela usa o da requisição).
+  **Sem essas variáveis**, o painel avisa que o envio não está configurado e oferece **Abrir no meu e-mail** (mensagem pronta no
+  seu programa de e-mail) e **Copiar link** — o convite fica cadastrado do mesmo jeito.
+- O **código do convite** (`#t=…&c=…`) só preenche o nome e marca o convite como aceito; o acesso à operação continua sendo o token
+  do link. O e-mail do convidado é dado pessoal: só os responsáveis da operação o leem, a página do participante nunca o recebe, e ele é
+  apagado junto com a operação (exclusão ou fim da retenção). Convite, envio e aceite entram no diário.
 
 ### Rota até um participante (ir até a pessoa ou mandar apoio)
 
@@ -874,7 +906,8 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     críticos como vítima, risco, base e última localização, pessoas, demais pontos, setores). Se o lado direito estiver
     ocupado, o nome tenta a esquerda, em cima ou embaixo; sem espaço, some até aproximar. Passar o mouse (ou focar) no
     marcador mostra o nome escondido. O nome do setor fica abaixo das pessoas e dos pontos, sem cobri-los.
-  - **Pessoas próximas agrupadas** de longe (até o zoom 15): um círculo com o número de pessoas e um anel com as cores dos
+  - **Pessoas próximas agrupadas** (até o zoom 18, ou seja, já na escala de **200 m** e de **100 m**; só de muito perto, 25 m ou
+    menos, ficam soltas): um círculo com o número de pessoas e um anel com as cores dos
     grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
     nunca entra no agrupamento. Fica **sempre ligado** (não há opção para desligar).
 - **Topo do painel**: as ações mais usadas ficam à vista — **Marcar ponto**, **Foto**, **Setor** (pergunta: desenhar a
@@ -933,7 +966,8 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     no mesmo agrupamento quando está perto. O grupo é um **quadrado arredondado** (as pessoas agrupadas são
     círculos) com o número e um anel com a cor de cada tipo (azul-claro pontos de interesse, laranja relatos, roxo
     fotos); um **!** vermelho avisa que há área de risco ou pedido de ajuda dentro. Passar o mouse diz quantos de
-    cada; tocar aproxima; vários no mesmo lugar abrem em leque. De perto (zoom 17+) o raio do agrupamento diminui.
+    cada; tocar aproxima; vários no mesmo lugar abrem em leque. O agrupamento já funciona na escala de 200 m e de 100 m (raio de
+    40 a 50 px) e só diminui de muito perto (zoom 19+).
     **Vítima encontrada** (ponto ou relato) nunca entra no grupo, e os círculos das áreas de risco e da base
     continuam sempre visíveis. **Ver no mapa** de um ponto agrupado aproxima até ele aparecer e pisca. As camadas
     e os modos (Pontos, Relatos, Fotos) continuam ligando e desligando cada tipo. A legenda mostra os dois
@@ -1052,6 +1086,12 @@ chave própria).
   da chamada, nunca na URL, e não aparece em notificações.
 - No painel: faixa de alerta própria (magenta; roxo escuro para óbito) com alarme, selo com a condição no
   relato, na ficha, na central e nos alertas, e marcador no mapa.
+- **Tocar no marcador da vítima** mostra o balão com o **nome da vítima** (e a idade, "~" se estimada), a condição, **quem
+  encontrou**, o local e o aviso "falta completar a ficha". **O que aconteceu ›** (ou dois toques, ou a mensagem "Detalhes" na
+  central) abre a janela completa: vítima, hora (e há quanto tempo), quem encontrou e quem registrou, local, coordenadas, **setor**,
+  distância do último local visto, tempo depois do início, estado e encaminhamento, e os **participantes**: quem encontrou e quem estava
+  **a até 300 m** (pela última posição, com grupo, distância e idade da posição, e atalho para a ficha). Daí abre a ficha da
+  vítima (ou **Completar a ficha**) e **Ver no mapa**.
 - **O responsável também registra** (quando a notícia chega por rádio, telefone ou pessoalmente), por três
   caminhos: **Ferramentas → Vítima encontrada**, **toque longo / botão direito no mapa → ✚ Vítima encontrada
   aqui** e, na ficha de um participante, **✚ Encontrou a vítima**. O formulário pede a **condição** (com vida ou
@@ -1289,6 +1329,8 @@ rastreamento-sar/
 │       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
 │       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
 │       ├── briefing.js         briefing da operação e passagem de comando com aceite
+│       ├── convites.js         convite por e-mail: cadastro, envio, situação e link
+│       ├── cores.js            cor livre (tom, intensidade, claridade, minhas cores) e conversões
 │       ├── relatos-revisao.js  revisão dos relatos (estado, justificativa, versões, hora do fato)
 │       ├── binomio.js          sessão do binômio cão e condutor: indicações e confirmações independentes
 │       ├── observacoes-campo.js drone (plano, telemetria, área observada, foco térmico) e indicação na água
@@ -1302,6 +1344,7 @@ rastreamento-sar/
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
 │   ├── responsaveis.js         cria login e redefine senha de responsáveis (só administradores; chave SECRETA)
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
+│   ├── convidar.js             envio do convite de participante por e-mail (chave RESEND_API_KEY só no servidor)
 │   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
 ├── supabase/
@@ -1522,6 +1565,9 @@ rastreamento-sar/
    | `SUPABASE_SECRET_KEY` | chave secret (ou service_role) — usada na limpeza diária e no cadastro de responsáveis |
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
+   | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
+   | `EMAIL_REMETENTE` | (com a chave acima) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
+   | `SITE_URL` | (opcional) endereço público do site, ex.: `https://busca.seudominio.com.br`. Sem ela, o link do e-mail usa o endereço da requisição |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
    | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
    | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-3.8-flash` |
@@ -1790,9 +1836,23 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40g | **Ferramentas → Binômio → + Nova sessão** (cão, condutor participante, setor, artigo de odor), **Iniciar**, andar 2 min com o condutor, **⚑ Indicação**, **Confirmar por outro meio** sem método e depois com "Equipe no local" | a trilha roxa do condutor aparece no mapa só durante a sessão; I1 "em análise" no mapa; sem método não confirma; C1 "pendente" até o **Resultado** |
 | 40h | **Ferramentas → Drone e água**: importar o GPX do voo em **+ Telemetria**, marcar um **+ Foco térmico** no mapa e descartá-lo com justificativa; na aba Água, **+ Indicação na água** sem mexer na corrente | a linha do voo aparece; o foco começa "a verificar" e fica riscado ao descartar; a indicação mostra "Corrente: desconhecida" e a fonte do vento |
 | 40i | Ficha da vítima com idade 70 e **estimada**; IPO com o último momento visto **estimado**; abrir o Dashboard geral | a ficha mostra "cerca de 70 anos (estimada)", os Dados da operação "(estimado)"; o cartão **Qualidade dos dados** mostra unidade, válidos, ausentes, não localizados e duplicatas |
+| 40j | Tocar no marcador da vítima localizada; depois **O que aconteceu ›** | o balão mostra o nome da vítima, a condição, quem encontrou e o local; a janela mostra setor, distância do ULV, quem encontrou e quem estava a até 300 m |
+| 40k | **Ferramentas → Cadastro rápido de vítima**: só **Idoso**, **Feminino** e a roupa → **Salvar e novo**; depois só o nome → Enter | duas fichas "completar" na lista de vítimas; abrir uma e tocar em **Completar a ficha** tira a marca ao salvar |
+| 40l | **Novo grupo**: tocar em **＋**, escolher uma cor pelo tom/claridade, **Guardar em "Minhas cores"**, criar outro grupo e reutilizá-la; repetir no **Setor** | a cor escolhida aparece no marcador, na trilha e na lista; "Minhas cores" aparece nos dois formulários |
+| 40m | Aproximar o mapa de uma equipe de 3 pessoas a ~15 m uma da outra, do zoom 16 até o 20 | até o zoom 18 ficam num círculo com o número; a partir do 19 se separam; os ícones diminuem do 17 em diante e a vítima localizada continua grande |
+| 40n | **Convidar → ✉ Convidar por e-mail** com nome e e-mail reais; abrir o e-mail no celular e o link | o e-mail chega com o botão; a página abre com o nome preenchido; ao começar, o convite passa a **Entrou**; sem `RESEND_API_KEY`, aparecem **Abrir no meu e-mail** e **Copiar link** |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Cadastro rápido, vítima no mapa, cor livre, agrupamento e convite por e-mail (migração 044)**: banco — 800 verificações
+  (migrações 007–044: ficha rápida, completar tira a marca, vítima só com o nome nasce rápida; convite com e-mail normalizado,
+  reaproveitado, limite de envios, só o nome pelo código, aceite só do próprio participante, e-mails apagados na retenção);
+  unitários — conversão de cor, cor livre e escala dos ícones por zoom, e o endpoint `/api/convidar` com a rede simulada
+  (login, link montado no servidor, HTML escapado, provedor ausente ou recusando). Navegador (Playwright, 1280 px e 390 px): balão
+  e janela da vítima localizada, cadastro rápido (Salvar e novo, Enter), seletor de cor em grupo e setor (código, tom, minhas cores),
+  aba de convite por e-mail (e-mail inválido, sem provedor, envio) e agrupamento/tamanho por zoom 12–20; página do participante
+  com convite válido, desconhecido, malformado e sem convite.
 
 - **Verificação e qualidade dos dados (migrações 042–043)**: banco — 770 verificações (migrações 007–043: revisão de
   relatos com versões, justificativa e hora do fato; idade estimada sem zero; binômio com transições, I/C numerados,

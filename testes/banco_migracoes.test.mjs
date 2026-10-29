@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1822,5 +1822,63 @@ console.log('Qualidade dos dados dos estudos (migração 043)');
   for (const o of [opA, opB, opC, opD]) await rpc(resp1, 'excluir_operacao', { p_operacao: o.id });
 }
 
-console.log('\nMigrações 007–043 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Cadastro rápido de vítima e convite por e-mail (migração 044)');
+{
+  const opQ = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 044', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  console.log('  cadastro rápido');
+  const vr = await rpc(resp1, 'salvar_vitima', { p_operacao: opQ.id, p_id: null, p_dados: JSON.stringify({ nome: 'Não identificada', idade: 60, idade_qualidade: 'estimada', sexo: 'F', roupas: 'jaqueta vermelha', cadastro_rapido: true }) });
+  chk(vr.cadastro_rapido === true && vr.idade === 60 && vr.idade_qualidade === 'estimada' && vr.sexo === 'F', 'ficha rápida: só o essencial, marcada como cadastro rápido', vr);
+  const vc = await rpc(resp1, 'salvar_vitima', { p_operacao: opQ.id, p_id: vr.id, p_dados: JSON.stringify({ nome: 'Maria da Silva', caracteristicas: 'cabelo grisalho', cadastro_rapido: false }) });
+  chk(vc.cadastro_rapido === false && vc.nome === 'Maria da Silva', 'completar a ficha tira a marca de cadastro rápido', vc);
+  const vn = await rpc(resp1, 'salvar_vitima', { p_operacao: opQ.id, p_id: null, p_dados: JSON.stringify({ nome: 'Completa' }) });
+  chk(vn.cadastro_rapido === false, 'ficha comum não é cadastro rápido');
+  const vq = await rpc(resp1, 'salvar_vitima', { p_operacao: opQ.id, p_id: vr.id, p_dados: JSON.stringify({ roupas: 'camisa azul' }) });
+  chk(vq.cadastro_rapido === false, 'editar sem mandar a marca não a muda');
+  const enc = await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opQ.id, p_dados: JSON.stringify({ condicao: 'viva', lat: -22.9, lng: -43.2, vitima_nome: 'Só o nome' }) });
+  chk(enc.vitima && enc.vitima.cadastro_rapido === true, 'vítima criada só com o nome em "encontrada" nasce como cadastro rápido', enc.vitima);
+
+  console.log('  convite por e-mail');
+  chk(/email_convite_invalido/.test(await erroDe(rpc(resp1, 'criar_convite_participante', { p_operacao: opQ.id, p_nome: 'Ana', p_email: 'ana@@x' }))), 'e-mail inválido: recusado');
+  chk(/nome_convite_invalido/.test(await erroDe(rpc(resp1, 'criar_convite_participante', { p_operacao: opQ.id, p_nome: 'A', p_email: 'ana@x.com' }))), 'nome curto demais: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'criar_convite_participante', { p_operacao: opQ.id, p_nome: 'Ana', p_email: 'ana@x.com' }))), 'responsável de fora da operação não convida');
+  const cv = await rpc(resp1, 'criar_convite_participante', { p_operacao: opQ.id, p_nome: 'Ana Souza', p_email: ' Ana@Exemplo.com ' });
+  chk(cv.email === 'ana@exemplo.com' && /^[0-9a-f]{24}$/.test(cv.codigo) && cv.envios === 0 && !cv.enviado_em, 'convite criado com e-mail minúsculo e código aleatório', cv);
+  const cv2 = await rpc(resp1, 'criar_convite_participante', { p_operacao: opQ.id, p_nome: 'Ana S.', p_email: 'ana@exemplo.com' });
+  chk(cv2.id === cv.id && cv2.codigo === cv.codigo && cv2.nome === 'Ana S.', 'mesmo e-mail: reaproveita o convite (não duplica)');
+  const dados = await rpc(resp1, 'convite_dados_envio', { p_convite: cv.id });
+  chk(dados.email === 'ana@exemplo.com' && dados.token_civil === opQ.token_civil && dados.operacao === 'OP 044' && dados.envios === 0, 'dados para o servidor enviar (e-mail, token do civil)');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'convite_dados_envio', { p_convite: cv.id }))), 'quem não é da operação não pega os dados do envio');
+  const e1 = await rpc(resp1, 'convite_registrar_envio', { p_convite: cv.id, p_erro: 'provedor fora do ar' });
+  chk(e1.envio_erro === 'provedor fora do ar' && e1.envios === 0, 'falha de envio guardada, sem contar envio');
+  const e2 = await rpc(resp1, 'convite_registrar_envio', { p_convite: cv.id });
+  chk(e2.envios === 1 && e2.enviado_em && e2.envio_erro === null, 'envio registrado');
+  for (let i = 0; i < 4; i++) await rpc(resp1, 'convite_registrar_envio', { p_convite: cv.id });
+  chk(/convite_envios_limite/.test(await erroDe(rpc(resp1, 'convite_dados_envio', { p_convite: cv.id }))), 'limite de 5 envios por convite');
+  const uC = await usuario(null, true);
+  chk((await rpc(uC, 'convite_ler', { p_codigo: cv.codigo })).nome === 'Ana S.', 'a página do participante lê só o nome do convite');
+  chk((await rpc(uC, 'convite_ler', { p_codigo: 'zzzz' })) === null && (await rpc(uC, 'convite_ler', { p_codigo: '0'.repeat(24) })) === null, 'código inválido ou desconhecido: nulo');
+  chk(JSON.stringify(await rpc(uC, 'convite_ler', { p_codigo: cv.codigo })).indexOf('exemplo.com') < 0, 'o e-mail não sai pelo código do convite');
+  const pC = await rpc(uC, 'ingressar', { p_token: opQ.token_civil, p_nome: 'Ana Souza', p_tipo: 'civil', p_cpf: null, p_telefone: tel });
+  const uOutro = await usuario(null, true);
+  chk(/sem_permissao/.test(await erroDe(rpc(uOutro, 'convite_aceitar', { p_codigo: cv.codigo, p_participante: pC.participante_id }))), 'só o próprio participante aceita o convite');
+  await rpc(uC, 'convite_aceitar', { p_codigo: cv.codigo, p_participante: pC.participante_id });
+  const aceito = (await como(resp1, `select aceito_em, participante_id from public.convites_participante where id = $1`, [cv.id])).rows[0];
+  chk(aceito.aceito_em && aceito.participante_id === pC.participante_id, 'convite aceito fica ligado ao participante');
+  chk((await como(uC, `select count(*)::int n from public.convites_participante`)).rows[0].n === 0 && (await como(resp2, `select count(*)::int n from public.convites_participante`)).rows[0].n === 0, 'só os responsáveis da operação leem os convites');
+  chk(/permission denied|row-level/.test(await erroDe(como(resp1, `insert into public.convites_participante (operacao_id, nome, email, criado_por_nome) values ($1, 'X Y', 'x@y.com', 'x')`, [opQ.id]))), 'convite só pelas funções');
+  const dq = (await db.query(`select tipo from public.diario where operacao_id = $1 and tipo like 'convite%'`, [opQ.id])).rows.map((r) => r.tipo);
+  chk(['convite_criado', 'convite_enviado', 'convite_aceito'].every((t) => dq.includes(t)), 'convite no diário', dq);
+  const cx = await rpc(resp1, 'criar_convite_participante', { p_operacao: opQ.id, p_nome: 'Bia Lima', p_email: 'bia@exemplo.com' });
+  await rpc(resp1, 'cancelar_convite_participante', { p_convite: cx.id });
+  chk((await rpc(uC, 'convite_ler', { p_codigo: cx.codigo })) === null, 'convite cancelado deixa de valer');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opQ.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'criar_convite_participante', { p_operacao: opQ.id, p_nome: 'Caio', p_email: 'caio@exemplo.com' }))), 'encerrada: não cria convite');
+  await db.query(`update public.operacoes set dados_apagados_em = now() where id = $1`, [opQ.id]);
+  chk((await db.query(`select count(*)::int n from public.convites_participante where operacao_id = $1`, [opQ.id])).rows[0].n === 0, 'fim da retenção apaga os e-mails dos convidados');
+  const pub44 = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(pub44.includes('convites_participante'), 'convites no Realtime');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opQ.id });
+}
+
+console.log('\nMigrações 007–044 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

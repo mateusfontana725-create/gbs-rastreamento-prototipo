@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2013,5 +2013,54 @@ console.log('Painel de comando SCI (migração 045)');
   chk((await db.query(`select (select count(*) from public.sci_eventos where operacao_id in ($1, $2)) + (select count(*) from public.sci_itens where operacao_id in ($1, $2)) + (select count(*) from public.sci_estado where operacao_id in ($1, $2)) n`, [opS.id, opT.id])).rows[0].n == 0, 'excluir a operação apaga o SCI');
 }
 
-console.log('\nMigrações 007–045 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('SCI integrado ao app (migração 046)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opI = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP SCI INT', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre', local_lat: -25.43, local_lng: -49.27 }) });
+  const fM = await rpc(resp1, 'salvar_vitima', { p_operacao: opI.id, p_id: null, p_dados: J({ nome: 'Maria Souza', idade: 70, idade_qualidade: 'estimada', sexo: 'F' }) });
+  const fJ = await rpc(resp1, 'salvar_vitima', { p_operacao: opI.id, p_id: null, p_dados: J({ nome: 'João Lima', sexo: 'M' }) });
+  // João já estava no quadro (lançado pelo SCI, ligado à ficha) antes de ser encontrado
+  const sJ = await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opI.id, p_id: null, p_dados: J({ vitima_id: fJ.id, nome: 'João Lima' }) });
+  const uE = await usuario(null, true);
+  const pE = await rpc(uE, 'ingressar', { p_token: opI.token_militar, p_nome: 'Sd Achou', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const rM = await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opI.id, p_dados: J({ condicao: 'viva', vitima_id: fM.id, lat: -25.431, lng: -49.271, local_descricao: 'margem do córrego', encontrou: pE.participante_id }) });
+  const qM = (await db.query(`select * from public.sci_vitimas where localizacao_id = $1`, [rM.registro.id])).rows[0];
+  chk(qM && qM.vitima_id === fM.id && qM.nome === 'Maria Souza' && qM.idade === 70 && qM.idade_estimada && qM.sexo === 'F' && qM.fase === 'localizada' && qM.local === 'margem do córrego' && qM.triagem === null,
+    '"Vítima encontrada" entra sozinha no quadro do SCI, com os dados da ficha e o local', qM);
+  const rJ = await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opI.id, p_dados: J({ condicao: 'obito', vitima_id: fJ.id }) });
+  const qJ = (await db.query(`select * from public.sci_vitimas where operacao_id = $1 and vitima_id = $2`, [opI.id, fJ.id])).rows;
+  chk(qJ.length === 1 && qJ[0].id === sJ.id && qJ[0].localizacao_id === rJ.registro.id && qJ[0].triagem === 'cinza', 'vítima que já estava no quadro é completada (não duplica); óbito entra como cinza', qJ);
+  const rX = await rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opI.id, p_condicao: 'viva' });
+  const qX = (await db.query(`select * from public.sci_vitimas where localizacao_id = $1`, [rX.registro.id])).rows[0];
+  chk(qX && qX.numero === 3 && qX.vitima_id === null && qX.nome === '', 'vítima encontrada sem ficha também entra (número seguinte)', qX);
+  const evI = (await db.query(`select texto, categoria from public.sci_eventos where operacao_id = $1 and ref like 'localizacao:%' order by ocorrido_em`, [opI.id])).rows;
+  chk(evI.length === 3 && /V-02 localizada — Maria Souza \(com vida\)/.test(evI.map((e) => e.texto).join('|')) && evI.some((e) => e.categoria === 'seguranca' && /óbito/.test(e.texto)), 'linha do tempo do SCI registra a localização', evI);
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'sci_evento' and detalhe like '%Vítima encontrada%'`, [opI.id])).rows[0].n === 0, 'sem duplicar no diário (a vítima localizada já está lá)');
+
+  console.log('  contexto do app para o SCI');
+  const g = await rpc(resp1, 'salvar_grupo', { p_operacao: opI.id, p_id: null, p_dados: J({ nome: 'Alfa', cor: '#e11d48' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: g.id, p_participante: pE.participante_id, p_papel: 'responsavel' });
+  const base = await rpc(resp1, 'salvar_ponto', { p_operacao: opI.id, p_id: null, p_dados: J({ categoria: 'BASE', titulo: 'Base Barigui', lat: -25.432, lng: -49.272 }) });
+  await rpc(resp1, 'salvar_setor', { p_operacao: opI.id, p_id: null, p_dados: J({ nome: 'S1', forma: 'circulo', centro_lat: -25.43, centro_lng: -49.27, raio_m: 300 }) });
+  await rpc(resp1, 'salvar_briefing', { p_operacao: opI.id, p_dados: J({ objetivo: 'Localizar as 2 vítimas', riscos: 'Correnteza', comunicacoes: 'VHF canal 3' }) });
+  await rpc(resp1, 'decisao_criar', { p_operacao: opI.id, p_dados: J({ texto: 'Pedir apoio aéreo?', responsavel: 'CI' }) });
+  await rpc(resp1, 'sci_registrar_evento', { p_operacao: opI.id, p_dados: J({ categoria: 'decisao', texto: 'Teste SCI' }) });
+  const cx = await rpc(resp1, 'sci_contexto', { p_operacao: opI.id });
+  chk(cx.comando.nome === 'Sgt Um' && cx.briefing.objetivo === 'Localizar as 2 vítimas' && cx.briefing.comunicacoes === 'VHF canal 3', 'comando atual e briefing', [cx.comando, cx.briefing]);
+  chk(cx.fichas.length === 2 && cx.localizacoes.length === 3 && cx.localizacoes.some((l) => l.vitima_id === fM.id && l.condicao === 'viva'), 'fichas e localizações');
+  const eq = cx.equipes.find((e) => e.nome === 'Alfa');
+  chk(eq && eq.membros === 1 && eq.militares === 1 && eq.responsavel === 'Sd Achou' && eq.disponibilidade === 'disponivel' && Array.isArray(eq.recursos), 'equipe do app com membros, responsável, disponibilidade e recursos', eq);
+  chk(cx.participantes.militares === 1 && cx.participantes.total === 1 && cx.participantes.responsaveis >= 1, 'participantes rastreados por tipo', cx.participantes);
+  chk(cx.pontos.some((p) => p.id === base.id && p.categoria === 'BASE') && cx.setores.some((s) => s.nome === 'S1' && s.forma === 'circulo' && s.raio_m === 300), 'pontos do mapa e setores com a geometria');
+  chk(cx.decisoes.length === 1 && cx.alertas.some((a) => a.tipo === 'vitima_localizada'), 'decisões pendentes e alertas críticos sem ciente', cx.alertas.map((a) => a.tipo));
+  chk(cx.diario.length > 3 && cx.diario.every((d) => !/^sci_/.test(d.tipo)) && cx.diario.some((d) => d.tipo === 'vitima_localizada'), 'diário do app sem repetir os eventos do SCI');
+  chk(cx.verificacao.indicacoes_em_analise === 0 && cx.verificacao.focos_a_verificar === 0, 'verificação (cão e drone)');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'sci_contexto', { p_operacao: opI.id }))) && /sem_permissao/.test(await erroDe(rpc(uE, 'sci_contexto', { p_operacao: opI.id }))), 'contexto só para os responsáveis da operação');
+  const inst = await rpc(resp1, 'sci_salvar_item', { p_operacao: opI.id, p_id: null, p_tipo: 'instalacao', p_dados: J({ nome: 'Posto de Comando', tipo: 'pc', ponto_id: base.id }) });
+  chk(inst.dados.ponto_id === base.id, 'instalação ligada a um ponto do mapa');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opI.id });
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opI.id });
+}
+
+console.log('\nMigrações 007–046 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

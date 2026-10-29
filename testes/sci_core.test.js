@@ -70,6 +70,29 @@ teste('antes da ocorrência (nada em cena): sem cobranças', () => {
   assert.deepStrictEqual(S.alertas(d, AGORA), []);
 });
 
+console.log('SCI: integrado ao app');
+teste('fichas do cadastro: as que não estão no quadro são as procuradas e contam como não localizadas', () => {
+  const fichas = [{ id: 'f1', nome: 'Maria' }, { id: 'f2', nome: 'João' }];
+  const t = S.totais([{ numero: 1, fase: 'localizada', vitima_id: 'f1' }], {}, fichas);
+  assert.deepStrictEqual(t.procuradas.map((f) => f.nome), ['João']); assert.strictEqual(t.naoLocalizadas, 1); assert.strictEqual(t.fichas, 2);
+  assert.strictEqual(S.totais([], { total_vitimas: 5 }, fichas).naoLocalizadas, 5, 'total informado vale mais que as fichas');
+});
+teste('alertas do app entram no SCI: pedido de ajuda, retorno atrasado, passagem de comando, decisões, cão e drone', () => {
+  const d = base(); d.estado.funcoes.seguranca = { nome: 'Sgt Dinardi' };
+  d.ctx = { pedidos_ajuda: [{ participante_nome: 'Cb Silva', estado: 'recebido', recebido_em: em('10:20') }],
+    alertas: [{ tipo: 'sem_comunicacao', titulo: 'SEM COMUNICAÇÃO — Sd Ana', texto: 'última posição há 12 min' }, { tipo: 'vitima_localizada', titulo: 'VÍTIMA LOCALIZADA' }],
+    equipes: [{ nome: 'Alfa', missao: { status: 'retorno_atrasado' } }], comando: { nome: 'Cap X', passagem_pendente: 'Ten Y' },
+    decisoes: [{ texto: 'Pedir apoio aéreo?', prazo: em('10:00') }], verificacao: { indicacoes_em_analise: 2, focos_a_verificar: 1 }, participantes: { em_campo: 3 } };
+  const t = S.alertas(d, AGORA).map((x) => x.nivel + ':' + x.texto).join(' | ');
+  ['critico:Pedido de ajuda de Cb Silva SEM ATENDIMENTO', 'critico:SEM COMUNICAÇÃO — Sd Ana', 'critico:Equipe Alfa com retorno atrasado', 'alerta:Passagem de comando para Ten Y',
+    'alerta:Decisão pendente (prazo vencido): Pedir apoio aéreo?', '2 indicação(ões) do cão', '1 foco(s) térmico(s)'].forEach((x) => assert.ok(t.includes(x), x + ' → ' + t));
+  assert.ok(!/VÍTIMA LOCALIZADA/.test(t), 'vítima localizada já aparece no quadro, não repete como alerta');
+});
+teste('equipe do app em deslocamento conta como equipe em operação (cobra o Oficial de Segurança)', () => {
+  const d = base(); d.estado.marcos = {}; d.ctx = { equipes: [{ nome: 'Alfa', missao: { status: 'no_setor' } }] };
+  assert.ok(/Sem Oficial de Segurança designado com 1 equipe/.test(S.alertas(d, AGORA)[0].texto));
+});
+
 console.log('SCI: textos');
 teste('resumo para WhatsApp só com o que foi registrado', () => {
   const d = base(); d.op = { codigo: 'Simulado Três Bocas', local_endereco: 'Usina Três Bocas, Londrina/PR', local_lat: -23.3844, local_lng: -51.0761, acionado_em: em('07:19') };

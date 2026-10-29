@@ -34,6 +34,10 @@
   var SITUACAO_ORGAO = { acionado: 'Acionado', a_caminho: 'A caminho', no_local: 'No local', desmobilizado: 'Desmobilizado' };
   var TIPO_RECURSO = { viatura: 'Viatura', embarcacao: 'Embarcação', aeronave: 'Aeronave', equipamento: 'Equipamento', outro: 'Outro' };
   var STATUS_RECURSO = { solicitado: 'Solicitado', a_caminho: 'A caminho', no_local: 'No local – disponível', em_uso: 'Em uso', indisponivel: 'Indisponível', desmobilizado: 'Desmobilizado' };
+  var MISSAO_ATIVA = ['enviada', 'em_deslocamento', 'no_setor', 'busca_finalizada', 'retorno_atrasado'];
+  var STATUS_MISSAO = { enviada: 'Enviada', em_deslocamento: 'Em deslocamento', no_setor: 'No setor', busca_finalizada: 'Busca finalizada (retornando)', retorno_atrasado: 'RETORNO ATRASADO' };
+  var DISPONIBILIDADE = { disponivel: 'Disponível', em_descanso: 'Em descanso', indisponivel: 'Indisponível' };
+  var ESTADO_AJUDA = { recebido: 'sem atendimento', assumido: 'assumido', equipe_enviada: 'equipe enviada', em_atendimento: 'em atendimento' };
   var TENDENCIA = { subindo: 'Subindo', estavel: 'Estável', descendo: 'Descendo', a_confirmar: 'A confirmar' };
   var LOGISTICA = [['agua', 'Água'], ['alimentacao', 'Alimentação'], ['combustivel', 'Combustível'], ['energia', 'Energia']];
   var ORGAOS_CONHECIDOS = ['CBMPR', 'Corpo de Bombeiros', 'SAMU', 'Defesa Civil', 'Polícia Militar', 'Polícia Civil', 'Polícia Rodoviária Federal', 'Guarda Municipal',
@@ -77,7 +81,8 @@
 
   /* ---------- Vítimas ---------- */
   // total: o informado (pode estar NÃO CONFIRMADO); sem total informado, "ainda não localizadas" fica [PENDENTE].
-  function totais(vitimas, estado) {
+  // fichas (opcional): as vítimas cadastradas no app. As que ainda não estão no quadro são as "procuradas".
+  function totais(vitimas, estado, fichas) {
     vitimas = vitimas || []; estado = estado || {};
     var r = { informado: estado.total_vitimas == null ? null : estado.total_vitimas, confirmado: Boolean(estado.total_confirmado),
       localizadas: vitimas.length, removidas: 0, transportadas: 0, obitos: 0, porFase: {}, divergencia: null };
@@ -90,7 +95,12 @@
       if (v.fase === 'transportada') r.transportadas++;
       if (v.triagem === 'cinza') r.obitos++;
     });
-    r.naoLocalizadas = r.informado == null ? null : Math.max(0, r.informado - r.localizadas);
+    var noQuadro = {};
+    vitimas.forEach(function (v) { if (v.vitima_id) noQuadro[v.vitima_id] = true; });
+    r.procuradas = (fichas || []).filter(function (f) { return !noQuadro[f.id]; });
+    r.fichas = (fichas || []).length;
+    // sem total informado, as fichas ainda procuradas dizem quantas faltam; sem fichas nem total: [PENDENTE]
+    r.naoLocalizadas = r.informado != null ? Math.max(0, r.informado - r.localizadas) : r.fichas ? r.procuradas.length : null;
     if (r.informado != null && r.localizadas > r.informado) r.divergencia = 'O quadro tem ' + r.localizadas + ' vítimas, mas o total informado é ' + r.informado + '.';
     return r;
   }
@@ -126,21 +136,33 @@
     agora = agora || Date.now();
     var e = d.estado || {}, vit = d.vitimas || [], it = d.itens || [], out = [];
     function add(nivel, texto, bloco) { out.push({ nivel: nivel, texto: texto, bloco: bloco }); }
-    var t = totais(vit, e);
-    var equipesAtivas = porTipo(it, 'equipe').filter(function (x) { return x.dados.status === 'em_operacao'; });
+    var cx = d.ctx || {};
+    var t = totais(vit, e, cx.fichas);
+    var equipesAtivas = porTipo(it, 'equipe').filter(function (x) { return x.dados.status === 'em_operacao'; })
+      .concat((cx.equipes || []).filter(function (g) { return g.missao && MISSAO_ATIVA.indexOf(g.missao.status) !== -1; }));
     var marcos = e.marcos || {};
     var emCena = Boolean(marcos.chegada || marcos.acionamento || equipesAtivas.length || vit.length);
-    if (emCena && vazio(nomeFuncao(e, 'seguranca'))) add('critico', 'Sem Oficial de Segurança designado' + (equipesAtivas.length ? ' com ' + equipesAtivas.length + ' equipe(s) em operação' : '') + '.', 'comando');
+    // o que o app já cobra (pedidos de ajuda, retorno atrasado, sem comunicação…) aparece aqui também
+    (cx.pedidos_ajuda || []).forEach(function (p) {
+      add('critico', 'Pedido de ajuda de ' + p.participante_nome + (p.estado === 'recebido' ? ' SEM ATENDIMENTO' : ' — ' + (ESTADO_AJUDA[p.estado] || p.estado)) + ' (desde ' + horaCurta(p.recebido_em).slice(6) + ').', 'geral');
+    });
+    (cx.alertas || []).filter(function (a) { return a.tipo !== 'vitima_localizada'; }).forEach(function (a) { add('critico', a.titulo + (a.texto ? ': ' + a.texto : ''), 'equipes'); });
+    (cx.equipes || []).filter(function (g) { return g.missao && g.missao.status === 'retorno_atrasado'; }).forEach(function (g) {
+      if (!(cx.alertas || []).some(function (a) { return a.tipo === 'retorno_atrasado'; })) add('critico', 'Equipe ' + g.nome + ' com retorno atrasado.', 'equipes');
+    });
+    if (cx.comando && cx.comando.passagem_pendente) add('alerta', 'Passagem de comando para ' + cx.comando.passagem_pendente + ' aguardando aceite.', 'comando');
+    var emCena0 = emCena || ((cx.participantes || {}).em_campo > 0);
+    if (emCena0 && vazio(nomeFuncao(e, 'seguranca'))) add('critico', 'Sem Oficial de Segurança designado' + (equipesAtivas.length ? ' com ' + equipesAtivas.length + ' equipe(s) em operação' : '') + '.', 'comando');
     vit.filter(function (v) { return v.triagem === 'vermelho' && v.fase !== 'transportada'; }).forEach(function (v) {
       add('critico', vnum(v.numero) + ' VERMELHA ' + (v.fase === 'removida' ? 'na ACV aguardando transporte' : 'ainda em cena') + '.', 'vitimas');
     });
     var ul = ultimaLeitura(it);
-    if (ul && ul.dados.tendencia === 'subindo') add('critico', 'Rio SUBINDO na última leitura (' + horaCurta(ul.dados.em) + (ul.dados.ponto ? ', ' + ul.dados.ponto : '') + ').', 'rio');
+    if (ul && ul.dados.tendencia === 'subindo') add('critico', 'Rio SUBINDO na última leitura (' + horaCurta(ul.dados.em) + (ul.dados.ponto ? ', ' + ul.dados.ponto : '') + ').', 'recursos');
     var aquatica = d.op && d.op.tipo === 'aquatica';
     if (ul) {
       var idade = agora - (ms(ul.dados.em) || agora);
-      if (idade > 30 * 60000 && !marcos.termino) add('alerta', 'Última leitura de nível há ' + duracao(idade) + '.', 'rio');
-    } else if (aquatica && emCena && !marcos.termino) add('alerta', 'Nenhuma leitura do nível do rio registrada.', 'rio');
+      if (idade > 30 * 60000 && !marcos.termino) add('alerta', 'Última leitura de nível há ' + duracao(idade) + '.', 'recursos');
+    } else if (aquatica && emCena && !marcos.termino) add('alerta', 'Nenhuma leitura do nível do rio registrada.', 'recursos');
     if (t.divergencia) add('alerta', t.divergencia + ' Confira a contagem.', 'vitimas');
     if (t.informado == null && vit.length) add('alerta', 'Total de vítimas ' + PENDENTE + ': informe quantas são (mesmo que não confirmado).', 'vitimas');
     else if (t.informado != null && !t.confirmado) add('alerta', 'Total de ' + t.informado + ' vítimas NÃO CONFIRMADO pela equipe.', 'vitimas');
@@ -148,6 +170,13 @@
     vit.filter(function (v) { return v.fase === 'localizada' && agora - (ms(v.localizada_em) || agora) > 30 * 60000; }).forEach(function (v) {
       add('alerta', vnum(v.numero) + ' localizada há ' + duracao(agora - ms(v.localizada_em)) + ' e ainda não removida.', 'vitimas');
     });
+    (cx.decisoes || []).forEach(function (x) {
+      var venceu = x.prazo && ms(x.prazo) < agora;
+      add(venceu ? 'alerta' : 'pendencia', 'Decisão pendente' + (venceu ? ' (prazo vencido)' : '') + ': ' + x.texto + (x.responsavel_nome ? ' — ' + x.responsavel_nome : ''), 'comando');
+    });
+    var vf = cx.verificacao || {};
+    if (vf.indicacoes_em_analise) add('pendencia', vf.indicacoes_em_analise + ' indicação(ões) do cão em análise (confirmar por outro meio).', 'equipes');
+    if (vf.focos_a_verificar) add('pendencia', vf.focos_a_verificar + ' foco(s) térmico(s) do drone a verificar.', 'equipes');
     var nc = (d.eventos || []).filter(function (x) { return x.nao_confirmada && !x.anulado_em; }).length;
     if (nc) add('pendencia', nc + ' informação(ões) no registro aguardando confirmação.', 'linha');
     // o que falta
@@ -158,13 +187,16 @@
     porTipo(it, 'instalacao').forEach(function (x) {
       if (x.dados.estado !== 'desativada' && vazio(x.dados.responsavel)) add('pendencia', (x.dados.nome || INSTALACOES[x.dados.tipo]) + ': responsável ' + PENDENTE + '.', 'comando');
     });
-    if (vit.length && !instalacao(it, 'acv')) add('pendencia', 'ACV (Área de Concentração de Vítimas) não registrada.', 'comando');
-    porTipo(it, 'orgao').forEach(function (x) { if (x.dados.situacao === 'no_local' && x.dados.pessoas == null) add('pendencia', x.dados.nome + ' no local sem efetivo informado.', 'orgaos'); });
-    equipesAtivas.forEach(function (x) { if (vazio(x.dados.chefe)) add('pendencia', 'Equipe ' + x.dados.nome + ' sem responsável.', 'missoes'); });
+    if (vit.some(function (v) { return v.triagem !== 'cinza'; }) && !instalacao(it, 'acv')) add('pendencia', 'ACV (Área de Concentração de Vítimas) não registrada.', 'comando');
+    porTipo(it, 'orgao').forEach(function (x) { if (x.dados.situacao === 'no_local' && x.dados.pessoas == null) add('pendencia', x.dados.nome + ' no local sem efetivo informado.', 'equipes'); });
+    equipesAtivas.forEach(function (x) {
+      var nome = x.dados ? x.dados.nome : x.nome, chefe = x.dados ? x.dados.chefe : x.responsavel;
+      if (vazio(chefe)) add('pendencia', 'Equipe ' + nome + ' sem responsável' + (x.dados ? '.' : ' (★ no grupo).'), 'equipes');
+    });
     if (emCena) {
       ['despacho', 'chegada', 'pc', 'comunicacoes', 'sci'].forEach(function (k) { if (!marcos[k]) add('pendencia', 'Horário de "' + rotulo(MARCOS, k) + '" ' + PENDENTE + '.', 'linha'); });
     }
-    if (e.danos && !e.danos_confirmado) add('pendencia', 'Relatório de danos NÃO CONFIRMADO.', 'situacao');
+    if (e.danos && !e.danos_confirmado) add('pendencia', 'Relatório de danos NÃO CONFIRMADO.', 'local');
     var ordem = { critico: 0, alerta: 1, pendencia: 2 };
     return out.sort(function (a, b) { return ordem[a.nivel] - ordem[b.nivel]; });
   }
@@ -172,18 +204,22 @@
   /* ---------- Textos ---------- */
   function resumo(d, agora) {
     agora = agora || Date.now();
-    var e = d.estado || {}, op = d.op || {}, vit = d.vitimas || [], t = totais(vit, e), it = d.itens || [], to = totaisOrgaos(it);
+    var e = d.estado || {}, op = d.op || {}, vit = d.vitimas || [], cx = d.ctx || {}, t = totais(vit, e, cx.fichas), it = d.itens || [], to = totaisOrgaos(it);
     var l = [];
     l.push('*' + (op.codigo || 'Ocorrência') + '* — ' + horaCurta(agora));
     if (op.local_endereco || op.local_lat != null) l.push('Local: ' + (op.local_endereco || '') + (op.local_lat != null ? ' (' + dms(op.local_lat, op.local_lng) + ')' : ''));
     var ac = (e.marcos || {}).acionamento || op.acionado_em;
     if (ac) l.push('Acionamento ' + horaCurta(ac) + ' · decorrido ' + duracao(agora - ms(ac)) + ((e.marcos || {}).termino ? ' · TÉRMINO ' + horaCurta(e.marcos.termino) : ''));
     l.push('CI: ' + ou(nomeFuncao(e, 'ci')) + ' · Segurança: ' + ou(nomeFuncao(e, 'seguranca')));
+    if (t.fichas) l.push('Procuradas (fichas): ' + (t.procuradas.length ? t.procuradas.map(function (f) { return f.nome; }).join(', ') : 'nenhuma'));
     l.push('Vítimas: ' + (t.informado == null ? PENDENTE : t.informado + (t.confirmado ? '' : ' (NÃO CONFIRMADO)')) + ' total · ' + t.localizadas + ' localizadas · ' +
       t.removidas + ' removidas · ' + t.transportadas + ' transportadas · ' + t.obitos + ' óbitos');
     var tri = { verde: 0, amarelo: 0, vermelho: 0 };
     vit.forEach(function (v) { if (v.fase !== 'localizada' && tri[v.triagem] != null) tri[v.triagem]++; });
     if (tri.verde + tri.amarelo + tri.vermelho) l.push('Triagem: ' + tri.vermelho + ' vermelhas, ' + tri.amarelo + ' amarelas, ' + tri.verde + ' verdes');
+    var pa = cx.participantes;
+    var eqCampo = (cx.equipes || []).filter(function (g) { return g.missao && MISSAO_ATIVA.indexOf(g.missao.status) !== -1; }).length;
+    if (pa) l.push('Em campo pelo app: ' + pa.em_campo + ' de ' + pa.total + ' rastreados (' + pa.militares + ' militares, ' + pa.civis + ' civis) · ' + eqCampo + ' equipe(s) em deslocamento/busca');
     l.push('Órgãos: ' + to.orgaos + ' (' + to.noLocal + ' no local) · ' + to.pessoas + ' pessoas' + (to.semEfetivo ? ' (' + to.semEfetivo + ' sem efetivo informado)' : ''));
     if (e.situacao) l.push('Situação: ' + e.situacao);
     var al = alertas(d, agora).filter(function (a) { return a.nivel !== 'pendencia'; });
@@ -432,7 +468,7 @@
 
   var API = {
     PENDENTE: PENDENTE, MARCOS: MARCOS, FUNCOES: FUNCOES, CATEGORIAS: CATEGORIAS, FASES: FASES, TRIAGEM: TRIAGEM, INSTALACOES: INSTALACOES,
-    ESTADO_INSTALACAO: ESTADO_INSTALACAO, STATUS_EQUIPE: STATUS_EQUIPE, SITUACAO_ORGAO: SITUACAO_ORGAO, TIPO_RECURSO: TIPO_RECURSO,
+    ESTADO_INSTALACAO: ESTADO_INSTALACAO, MISSAO_ATIVA: MISSAO_ATIVA, STATUS_MISSAO: STATUS_MISSAO, DISPONIBILIDADE: DISPONIBILIDADE, STATUS_EQUIPE: STATUS_EQUIPE, SITUACAO_ORGAO: SITUACAO_ORGAO, TIPO_RECURSO: TIPO_RECURSO,
     STATUS_RECURSO: STATUS_RECURSO, TENDENCIA: TENDENCIA, LOGISTICA: LOGISTICA, ORGAOS_CONHECIDOS: ORGAOS_CONHECIDOS,
     rotulo: rotulo, vnum: vnum, dms: dms, links: links, horaCurta: horaCurta, duracao: duracao, ou: ou, vazio: vazio,
     totais: totais, proximoNumero: proximoNumero, porTipo: porTipo, instalacao: instalacao, totaisOrgaos: totaisOrgaos, ultimaLeitura: ultimaLeitura,

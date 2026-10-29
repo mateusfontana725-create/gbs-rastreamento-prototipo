@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1882,5 +1882,136 @@ console.log('Cadastro rápido de vítima e convite por e-mail (migração 044)')
   await rpc(resp1, 'excluir_operacao', { p_operacao: opQ.id });
 }
 
-console.log('\nMigrações 007–044 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Painel de comando SCI (migração 045)');
+{
+  const opS = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP SCI', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'aquatica' }) });
+  const J = (o) => JSON.stringify(o);
+  const ev = async () => (await db.query(`select * from public.sci_eventos where operacao_id = $1 order by registrado_em, ocorrido_em`, [opS.id])).rows;
+  console.log('  funções, total e marcos');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_salvar_estado', { p_operacao: opS.id, p_dados: J({ funcoes: { chefe: { nome: 'X' } } }) }))), 'função desconhecida: recusada');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'sci_salvar_estado', { p_operacao: opS.id, p_dados: J({ situacao: 'x' }) }))), 'responsável de fora não altera');
+  const e1 = await rpc(resp1, 'sci_salvar_estado', { p_operacao: opS.id, p_dados: J({ funcoes: { ci: { nome: 'Asp Of BM Gaffo' }, seguranca: { nome: 'Sgt Dinardi' }, ligacao: { acumula_ci: true } }, total_vitimas: 14 }) });
+  chk(e1.funcoes.ci.nome === 'Asp Of BM Gaffo' && e1.funcoes.ligacao.acumula_ci === true && e1.total_vitimas === 14 && e1.total_confirmado === false, 'funções e total gravados (total começa NÃO CONFIRMADO)', e1);
+  let lt = await ev();
+  chk(lt.some((x) => /Comandante do Incidente: Asp Of BM Gaffo/.test(x.texto)) && lt.some((x) => /Oficial de Ligação: acumulada pelo CI/.test(x.texto)) && lt.some((x) => /Total de vítimas: 14 \(NÃO CONFIRMADO\)/.test(x.texto) && x.nao_confirmada), 'mudanças de função e de total entram na linha do tempo', lt.map((x) => x.texto));
+  await rpc(resp1, 'sci_salvar_estado', { p_operacao: opS.id, p_dados: J({ total_confirmado: true }) });
+  const desp = new Date(Date.now() - 3 * 3600e3).toISOString();
+  chk(/sci_marco_invalido/.test(await erroDe(rpc(resp1, 'sci_marcar', { p_operacao: opS.id, p_marco: 'chegada_x' }))), 'marco desconhecido: recusado');
+  chk(/data_invalida/.test(await erroDe(rpc(resp1, 'sci_marcar', { p_operacao: opS.id, p_marco: 'despacho', p_em: new Date(Date.now() + 3600e3).toISOString() }))), 'marco no futuro: recusado');
+  const m1 = await rpc(resp1, 'sci_marcar', { p_operacao: opS.id, p_marco: 'despacho', p_em: desp });
+  const m2 = await rpc(resp1, 'sci_marcar', { p_operacao: opS.id, p_marco: 'pc' });
+  chk(new Date(m1.marcos.despacho).getTime() === new Date(desp).getTime() && m2.marcos.pc, 'marcos com a hora informada ou "agora"');
+  await rpc(resp1, 'sci_marcar', { p_operacao: opS.id, p_marco: 'despacho', p_em: new Date(Date.now() - 2.9 * 3600e3).toISOString() });
+  const m4 = await rpc(resp1, 'sci_marcar', { p_operacao: opS.id, p_marco: 'pc', p_apagar: true });
+  lt = await ev();
+  chk(lt.some((x) => /Despacho da equipe — corrigido de/.test(x.texto)) && lt.some((x) => /marco "Posto de Comando instalado" retirado/.test(x.texto)) && !m4.marcos.pc, 'corrigir e retirar marco ficam registrados', lt.map((x) => x.texto));
+
+  console.log('  vítimas');
+  const v1 = await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: null, p_dados: J({ sexo: 'F', local: 'na água, margem oposta' }) });
+  const v2 = await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: null, p_dados: J({ sexo: 'M' }) });
+  chk(v1.numero === 1 && v2.numero === 2 && v1.fase === 'localizada' && v1.localizada_em, 'vítimas numeradas na ordem (V-01, V-02), começam localizadas');
+  chk(/numero_em_uso/.test(await erroDe(rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: null, p_dados: J({ numero: 2 }) }))), 'número repetido: recusado');
+  const v1b = await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: v1.id, p_dados: J({ fase: 'removida' }) });
+  const v1c = await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: v1.id, p_dados: J({ triagem: 'amarelo' }) });
+  const v1d = await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: v1.id, p_dados: J({ fase: 'transportada', destino: 'Hospital – SAMU' }) });
+  chk(v1b.removida_em && v1c.triada_em && v1d.transportada_em && v1d.destino === 'Hospital – SAMU', 'cada passo guarda o horário (ACV, triagem, transporte)');
+  const v1e = await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: v1.id, p_dados: J({ fase: 'removida' }) });
+  chk(v1e.transportada_em === null && v1e.removida_em, 'voltar uma fase (correção) tira o horário da fase desfeita');
+  await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: v2.id, p_dados: J({ triagem: 'cinza' }) });
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: v2.id, p_dados: J({ triagem: 'azul' }) }))), 'triagem fora das cores: recusada');
+  lt = await ev();
+  const textos = lt.map((x) => x.texto).join(' | ');
+  chk(/V-01 localizada — na água, margem oposta \(feminino\)/.test(textos) && /V-01 removida para a ACV/.test(textos) && /V-01 triada AMARELO/.test(textos)
+    && /V-01 transportada — Hospital – SAMU/.test(textos) && /V-01 voltou para "removidas para a ACV" \(correção\)/.test(textos), 'cada movimento da vítima entra sozinho na linha do tempo', textos);
+  chk(lt.some((x) => /V-02 — óbito/.test(x.texto) && x.categoria === 'seguranca'), 'óbito (cinza) registrado como segurança');
+  chk(/justificativa_obrigatoria/.test(await erroDe(rpc(resp1, 'sci_excluir_vitima', { p_id: v2.id, p_motivo: '' }))), 'retirar vítima do quadro exige motivo');
+
+  console.log('  linha do tempo');
+  const ex = await rpc(resp1, 'sci_registrar_evento', { p_operacao: opS.id, p_dados: J({ categoria: 'informacao', texto: 'Relatório de danos do lado ilhado (Defesa Civil)', nao_confirmada: true, em: new Date(Date.now() - 600e3).toISOString() }) });
+  chk(ex.nao_confirmada && ex.origem === 'manual', 'registro manual "NÃO CONFIRMADA"');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_registrar_evento', { p_operacao: opS.id, p_dados: J({ categoria: 'fofoca', texto: 'x' }) }))), 'categoria desconhecida: recusada');
+  const ec = await rpc(resp1, 'sci_confirmar_evento', { p_id: ex.id });
+  chk(!ec.nao_confirmada && ec.confirmada_por_nome === 'Sgt Um', 'confirmação pela equipe');
+  const ek = await rpc(resp1, 'sci_corrigir_evento', { p_id: ex.id, p_dados: J({ texto: 'Resgatados 11 ilhados (5 masculinos, 6 femininos)', motivo: 'eram 9 na primeira contagem' }) });
+  chk(ek.historico.length === 1 && ek.historico[0].texto === 'Relatório de danos do lado ilhado (Defesa Civil)' && ek.corrigido_em && /eram 9/.test(ek.historico[0].motivo), 'correção guarda o texto anterior e o motivo', ek.historico);
+  chk(/justificativa_obrigatoria/.test(await erroDe(rpc(resp1, 'sci_anular_evento', { p_id: ex.id, p_motivo: '' }))), 'anular exige motivo');
+  const ea = await rpc(resp1, 'sci_anular_evento', { p_id: ex.id, p_motivo: 'lançado em duplicidade' });
+  chk(ea.anulado_em && ea.anulado_motivo === 'lançado em duplicidade' && (await db.query(`select count(*)::int n from public.sci_eventos where id = $1`, [ex.id])).rows[0].n === 1, 'anulado continua guardado, com o motivo');
+  const dia = (await db.query(`select tipo, titulo, nivel from public.diario where operacao_id = $1 and tipo like 'sci_%'`, [opS.id])).rows;
+  chk(dia.filter((d) => d.tipo === 'sci_evento').length === lt.length + 1 && ['sci_correcao', 'sci_confirmacao', 'sci_anulacao'].every((t) => dia.some((d) => d.tipo === t)), 'tudo também no diário (relatório final), com correção, confirmação e anulação', dia.length);
+  chk(dia.some((d) => d.nivel === 'critico' && /Segurança/.test(d.titulo)), 'eventos de segurança em destaque no diário');
+
+  console.log('  instalações, equipes, órgãos, recursos, canais, nível do rio');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'instalacao', p_dados: J({ tipo: 'pc' }) }))), 'item sem nome: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'orgao', p_dados: J({ nome: 'SAMU', situacao: 'talvez' }) }))), 'situação fora da lista: recusada');
+  chk(/posicao_invalida/.test(await erroDe(rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'instalacao', p_dados: J({ nome: 'PC', lat: -23.38 }) }))), 'latitude sem longitude: recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'foguete', p_dados: J({ nome: 'x' }) }))), 'tipo de item desconhecido: recusado');
+  const pc = await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'instalacao', p_dados: J({ nome: 'Posto de Comando', tipo: 'pc', responsavel: 'Asp Of BM Gaffo', lat: -23.384543, lng: -51.077683, estado: 'ativa', lixo: 'x' }) });
+  chk(pc.dados.lat === -23.384543 && !('lixo' in pc.dados), 'instalação com coordenadas; chaves desconhecidas descartadas', pc.dados);
+  const zpa = await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'instalacao', p_dados: J({ nome: 'ZPA', tipo: 'zpa', estado: 'ativa' }) });
+  await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: zpa.id, p_tipo: 'instalacao', p_dados: J({ nome: 'ZPA', tipo: 'zpa', estado: 'desativada', motivo: 'aeronave do SAMU indisponível por condições meteorológicas' }) });
+  const og = await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'orgao', p_dados: J({ nome: 'SAMU', situacao: 'acionado' }) });
+  await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: og.id, p_tipo: 'orgao', p_dados: J({ nome: 'SAMU', situacao: 'no_local', pessoas: 5, detalhe: 'Médico + 4 integrantes' }) });
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: og.id, p_tipo: 'orgao', p_dados: J({ nome: 'SAMU', pessoas: -1 }) }))), 'efetivo negativo: recusado');
+  await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'equipe', p_dados: J({ nome: 'Bote', orgao: 'CBMPR', efetivo: 4, missao: 'Resgate das vítimas ilhadas por bote', chefe: 'Sgt Gustavo', status: 'em_operacao' }) });
+  await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'recurso', p_dados: J({ nome: 'Aeronave do SAMU', tipo: 'aeronave', orgao: 'SAMU', qtd: 1, status: 'indisponivel', nota: 'condições meteorológicas' }) });
+  await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'canal', p_dados: J({ nome: 'Zello via Starlink', funcao: 'Ligação PC ↔ GGI', usuarios: 'PC, GGI' }) });
+  await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'leitura_rio', p_dados: J({ em: new Date().toISOString(), ponto: 'Ponto de transposição', nivel: 'Muito alto', vazao: 'Correnteza fortíssima', tendencia: 'subindo', fonte: 'Equipe de resgate' }) });
+  lt = await ev();
+  const t2 = lt.map((x) => x.texto).join(' | ');
+  chk(/Posto de Comando estabelecida? — responsável: Asp Of BM Gaffo|Posto de Comando estabelecida — responsável/.test(t2) || /Posto de Comando estabelecid/.test(t2), 'instalação ativada na linha do tempo', t2);
+  chk(/ZPA desativada — aeronave do SAMU indisponível/.test(t2) && /SAMU acionado/.test(t2) && /SAMU no local \(5 pessoas\)/.test(t2) && /Equipe Bote em operação/.test(t2) && /Aeronave do SAMU indisponível/.test(t2), 'órgão, equipe, recurso e desativação contam a história sozinhos', t2);
+  chk(lt.some((x) => /Nível do rio \(Ponto de transposição\): Muito alto, Correnteza fortíssima — SUBINDO/.test(x.texto) && x.categoria === 'seguranca'), 'leitura do rio subindo entra como segurança');
+
+  console.log('  imagens do local');
+  const cam = opS.id + '/aaaaaaaa-1111-4111-8111-' + '1'.repeat(12) + '.jpg';
+  chk(/imagem_nao_enviada/.test(await erroDe(rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'imagem', p_dados: J({ caminho: cam, legenda: 'Cena' }) }))), 'imagem só depois de enviada ao Storage');
+  chk(/row-level security/.test(await erroDe(como(resp2, `insert into storage.objects (bucket_id, name) values ('sci', $1)`, [cam]))), 'responsável de fora não envia imagem');
+  await como(resp1, `insert into storage.objects (bucket_id, name) values ('sci', $1)`, [cam]);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'imagem', p_dados: J({ caminho: 'outra/' + cam }) }))), 'caminho fora da pasta da operação: recusado');
+  const im = await rpc(resp1, 'sci_salvar_item', { p_operacao: opS.id, p_id: null, p_tipo: 'imagem', p_dados: J({ caminho: cam, legenda: 'Cena: ponte destruída' }) });
+  chk((await como(resp1, `select count(*)::int n from storage.objects where bucket_id = 'sci' and name = $1`, [cam])).rows[0].n === 1, 'responsável vê a imagem');
+  chk((await como(resp2, `select count(*)::int n from storage.objects where bucket_id = 'sci' and name = $1`, [cam])).rows[0].n === 0, 'responsável de fora não vê');
+  await rpc(resp1, 'sci_excluir_item', { p_id: im.id });
+  chk((await db.query(`select bucket from public.arquivos_pendentes where caminho = $1`, [cam])).rows[0].bucket === 'sci', 'imagem excluída entra na fila de remoção do Storage');
+
+  console.log('  acesso');
+  const uP = await usuario(null, true);
+  await rpc(uP, 'ingressar', { p_token: opS.token_civil, p_nome: 'Civil SCI', p_tipo: 'civil', p_cpf: null, p_telefone: tel });
+  chk(['sci_estado', 'sci_vitimas', 'sci_eventos', 'sci_itens'].every(() => true) && (await como(uP, `select (select count(*) from public.sci_vitimas) + (select count(*) from public.sci_eventos) + (select count(*) from public.sci_itens) + (select count(*) from public.sci_estado) n`)).rows[0].n == 0, 'participante não lê nada do SCI');
+  chk((await como(resp2, `select count(*)::int n from public.sci_vitimas`)).rows[0].n === 0, 'responsável de outra operação não lê');
+  chk((await como(resp1, `select count(*)::int n from public.sci_vitimas where operacao_id = $1`, [opS.id])).rows[0].n === 2, 'responsável da operação lê o quadro');
+  chk(/permission denied|row-level/.test(await erroDe(como(resp1, `insert into public.sci_eventos (operacao_id, ocorrido_em, categoria, texto, registrado_por_nome) values ($1, now(), 'decisao', 'x', 'x')`, [opS.id]))), 'escrita só pelas funções');
+  const pubS = (await db.query(`select tablename from pg_publication_tables where pubname = 'supabase_realtime'`)).rows.map((r) => r.tablename);
+  chk(['sci_estado', 'sci_vitimas', 'sci_eventos', 'sci_itens'].every((x) => pubS.includes(x)), 'tabelas do SCI no Realtime');
+
+  console.log('  modo teste e zerar');
+  chk(/sci_ja_iniciado/.test(await erroDe(rpc(resp1, 'sci_modo_teste', { p_operacao: opS.id, p_ligar: true }))), 'modo teste só com o quadro vazio');
+  const opT = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP SCI TESTE', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'aquatica' }) });
+  await rpc(resp1, 'sci_salvar_item', { p_operacao: opT.id, p_id: null, p_tipo: 'equipe', p_dados: J({ nome: 'Bote', efetivo: 4 }) });
+  const diarioAntes = (await db.query(`select count(*)::int n from public.diario where operacao_id = $1`, [opT.id])).rows[0].n;
+  await rpc(resp1, 'sci_modo_teste', { p_operacao: opT.id, p_ligar: false });
+  chk((await rpc(resp1, 'sci_modo_teste', { p_operacao: opT.id, p_ligar: true })).teste === true, 'liga o modo teste com o quadro vazio (equipes preparadas não contam)');
+  await rpc(resp1, 'sci_salvar_vitima', { p_operacao: opT.id, p_id: null, p_dados: J({ sexo: 'M', triagem: 'vermelho', fase: 'removida' }) });
+  await rpc(resp1, 'sci_marcar', { p_operacao: opT.id, p_marco: 'acionamento' });
+  await rpc(resp1, 'sci_salvar_estado', { p_operacao: opT.id, p_dados: J({ total_vitimas: 3 }) });
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1`, [opT.id])).rows[0].n === diarioAntes, 'no modo teste nada vai para o diário');
+  const z = await rpc(resp1, 'sci_modo_teste', { p_operacao: opT.id, p_ligar: false });
+  const estT = (await db.query(`select * from public.sci_estado where operacao_id = $1`, [opT.id])).rows[0];
+  chk(z.vitimas === 1 && z.eventos >= 3 && estT.teste === false && JSON.stringify(estT.marcos) === '{}' && estT.total_vitimas === null
+    && (await db.query(`select count(*)::int n from public.sci_itens where operacao_id = $1`, [opT.id])).rows[0].n === 1, 'zerar: vítimas, linha do tempo, marcos e total de teste apagados; equipes preparadas ficam', [z, estT]);
+
+  console.log('  encerrada, retenção e exclusão');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opS.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'sci_salvar_vitima', { p_operacao: opS.id, p_id: null, p_dados: J({}) })))
+    && /operacao_encerrada/.test(await erroDe(rpc(resp1, 'sci_marcar', { p_operacao: opS.id, p_marco: 'termino' }))), 'encerrada: somente leitura');
+  await db.query(`update public.operacoes set dados_apagados_em = now() where id = $1`, [opS.id]);
+  chk((await db.query(`select count(*)::int n from public.sci_vitimas where operacao_id = $1`, [opS.id])).rows[0].n === 0
+    && (await db.query(`select count(*)::int n from public.sci_eventos where operacao_id = $1`, [opS.id])).rows[0].n > 0, 'fim da retenção apaga o quadro de vítimas (dados pessoais); a linha do tempo fica');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opS.id });
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opT.id });
+  chk((await db.query(`select (select count(*) from public.sci_eventos where operacao_id in ($1, $2)) + (select count(*) from public.sci_itens where operacao_id in ($1, $2)) + (select count(*) from public.sci_estado where operacao_id in ($1, $2)) n`, [opS.id, opT.id])).rows[0].n == 0, 'excluir a operação apaga o SCI');
+}
+
+console.log('\nMigrações 007–045 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

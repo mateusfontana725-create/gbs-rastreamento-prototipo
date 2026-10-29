@@ -150,7 +150,7 @@
     // 2. vítimas e último local visto
     var vit = d.vitimas.map(function (v) {
       return el('li', null, [
-        el('div', { classe: 'briefing-linha' }, [el('strong', { texto: v.nome + (v.idade != null ? ', ' + v.idade + ' anos' : '') }),
+        el('div', { classe: 'briefing-linha' }, [el('strong', { texto: v.nome + (v.idade != null ? ', ' + v.idade + ' anos' + (v.idade_qualidade === 'estimada' ? ' (estimada)' : '') : '') }),
           v.localizada ? el('span', { classe: 'selo selo-ok', texto: 'LOCALIZADA · ' + (v.localizada.condicao === 'obito' ? 'óbito' : 'com vida') + ' ' + hora(v.localizada.em) }) : null]),
         sub([v.perfil && v.perfil.length ? v.perfil.join(', ') : '', v.caracteristicas, v.roupas].filter(Boolean).join(' · ')),
       ]);
@@ -250,7 +250,7 @@
     l.push('BRIEFING — ' + d.operacao.codigo + ' (' + C.hora(d.gerado_em, false) + ')');
     l.push('Comando: ' + (d.comando && d.comando.nome || '—'));
     l.push('OBJETIVO: ' + (d.objetivo.texto || d.objetivo.sugerido || 'não definido'));
-    l.push('VÍTIMAS: ' + (d.vitimas.map(function (v) { return v.nome + (v.idade != null ? ' (' + v.idade + ')' : '') + (v.localizada ? ' [LOCALIZADA]' : ''); }).join('; ') || '—'));
+    l.push('VÍTIMAS: ' + (d.vitimas.map(function (v) { return v.nome + (v.idade != null ? ' (' + (v.idade_qualidade === 'estimada' ? '~' : '') + v.idade + ')' : '') + (v.localizada ? ' [LOCALIZADA]' : ''); }).join('; ') || '—'));
     l.push('ÚLTIMO LOCAL VISTO: ' + (d.ultimo_local_visto.map(function (x) { return x.titulo + ' ' + coord(x); }).join('; ') || '—'));
     l.push('HIPÓTESES: ' + (d.hipoteses.map(function (h) { return h.vitima + ': ' + (h.hipoteses || h.justificativa || '—') + ' [' + h.setores.map(function (s) { return s.nome + ' ' + pct(s.poa); }).join(', ') + ']'; }).join(' | ') || 'sem cenário aprovado'));
     l.push('RISCOS: ' + ([d.riscos.texto].concat(d.riscos.pontos.map(function (p) { return p.titulo; })).filter(Boolean).join('; ') || '—') + (d.riscos.pedidos_ajuda_abertos ? ' | ' + d.riscos.pedidos_ajuda_abertos + ' pedido(s) de ajuda aberto(s)' : ''));

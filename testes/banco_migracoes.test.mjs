@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1795,5 +1795,32 @@ console.log('Proveniência, incerteza, binômio, drone e água (migração 042)'
   chk(exc42.operacao === 'OP 042' && (await db.query(`select (select count(*) from public.relato_revisoes where operacao_id = $1) + (select count(*) from public.binomio_eventos where operacao_id = $1) + (select count(*) from public.observacoes_campo where operacao_id = $1) n`, [opR.id])).rows[0].n == 0, 'excluir a operação apaga revisões, binômio e observações');
 }
 
-console.log('\nMigrações 007–042 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Qualidade dos dados dos estudos (migração 043)');
+{
+  const q0 = await rpc(resp1, 'estudo_qualidade', {});
+  chk(q0.unidade === 'operacao' && typeof q0.elegiveis === 'number' && q0.ausentes && q0.fichas, 'devolve a unidade de análise, os denominadores e os ausentes', q0);
+  const nova = (codigo, dados) => rpc(resp1, 'criar_operacao', { p_codigo: codigo, p_retencao_horas: 0, p_dados: JSON.stringify(Object.assign({ tipo: 'aquatica' }, dados)) });
+  const opA = await nova('OP Q A', { local_lat: -10.0, local_lng: -50.0 });
+  const opB = await nova('OP Q B', { local_lat: -10.003, local_lng: -50.002 });
+  const opC = await nova('OP Q C', {});
+  const opD = await nova('OP Q D', { local_lat: -12.0, local_lng: -52.0 });
+  const agora = new Date(Date.now() + 1000).toISOString();
+  await rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opA.id, p_condicao: 'viva', p_lat: -10.01, p_lng: -50.0, p_precisao: 5, p_posicao_em: agora });
+  await rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opC.id, p_condicao: 'viva', p_lat: -11.0, p_lng: -51.0, p_precisao: 5, p_posicao_em: agora });
+  await rpc(resp1, 'responsavel_registrar_vitima', { p_operacao: opD.id, p_condicao: 'obito' });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opB.id });
+  const q1 = await rpc(resp1, 'estudo_qualidade', {});
+  const d = (k) => q1[k] - q0[k], da = (k) => q1.ausentes[k] - q0.ausentes[k];
+  chk(d('operacoes') === 4, 'conta as operações novas', d('operacoes'));
+  chk(d('com_localizacao') === 2 && d('validos_distancia') === 1 && d('validos_tempo') === 2, 'válidos: distância só com ULV e posição; tempo com início e hora', [d('com_localizacao'), d('validos_distancia'), d('validos_tempo')]);
+  chk(da('ulv') === 1 && da('posicao_localizacao') === 1, 'ausentes contados à parte (sem ULV; localização sem posição) — não viram zero', q1.ausentes);
+  chk(d('nao_localizados') === 1, 'encerrada sem localização: não localizado (censurado)', d('nao_localizados'));
+  chk(d('elegiveis') === 4, 'elegíveis: encerradas e as com localização', d('elegiveis'));
+  chk(d('possiveis_duplicatas') === 2, 'mesmo tipo, ULV a menos de 1 km e início a menos de 48 h: possível duplicata (as duas)', d('possiveis_duplicatas'));
+  chk(/sem_permissao/.test(await erroDe(rpc(await usuario(null, true), 'estudo_qualidade', {}))), 'participante não vê a qualidade dos estudos');
+  chk(/permission denied/.test(await erroDe(como(null, `select public.estudo_qualidade()`, [], 'anon'))), 'anônimo não vê');
+  for (const o of [opA, opB, opC, opD]) await rpc(resp1, 'excluir_operacao', { p_operacao: o.id });
+}
+
+console.log('\nMigrações 007–043 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

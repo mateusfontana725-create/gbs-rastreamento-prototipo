@@ -361,6 +361,8 @@
     $('btn-regua').addEventListener('click', alternarRegua);
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
+    $('menu-binomio').addEventListener('click', function () { fecharMenu(false); if (window.Binomio) window.Binomio.abrir(); });
+    $('menu-drone-agua').addEventListener('click', function () { fecharMenu(false); if (window.ObservacoesCampo) window.ObservacoesCampo.abrir(); });
     $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
     $('comando-chip').addEventListener('click', function () { if (window.Briefing) window.Briefing.abrir(); });
     if (window.AjudaPedidos) window.AjudaPedidos.aoMudar(function () { if (est.op) { atualizarEstados(); if (est.selecionado) atualizarFicha(); } });
@@ -1320,7 +1322,7 @@
     assinarTempoRealExtras();
     assinarTrilhasManuais();
     var cargasModulos = [];
-    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing'].forEach(function (nome) {
+    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing', 'RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) {
       if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
     });
     // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
@@ -1427,6 +1429,7 @@
     if (window.AjudaPedidos) window.AjudaPedidos.parar();
     if (window.RecursosEquipe) window.RecursosEquipe.parar();
     if (window.Briefing) window.Briefing.parar();
+    ['RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) { if (window[nome]) window[nome].parar(); });
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -4291,23 +4294,31 @@
     var p = est.participantes.get(m.participante_id);
     var cat = CATEGORIAS[m.categoria] || CATEGORIAS.MENSAGEM;
     marcarLidas([m.id]);
+    var RR = window.RelatosRevisao;
+    var revisavel = Boolean(RR && RR.disponivel() && RR.ehRelato(m));
     var dl = UI.el('dl', { classe: 'dados' });
     function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
     linha('Enviado por', nomeDoParticipante(m.participante_id, m.remetente_nome) + (p ? ' (' + TIPOS[tipoDe(p.dados)].rotulo.toLowerCase() + ')' : ''));
-    linha('Horário', C.hora(m.criada_em) + ' (' + C.idade(m.criada_em) + ')');
+    if (!revisavel) linha('Horário', C.hora(m.criada_em) + ' (' + C.idade(m.criada_em) + ')');
     linha('Latitude', C.coord(m.lat));
     linha('Longitude', C.coord(m.lng));
     linha('Precisão', C.precisao(m.precisao));
-    if (m.posicao_em) linha('Posição obtida às', C.hora(m.posicao_em));
+    if (m.posicao_em) linha('Posição GPS obtida às', C.hora(m.posicao_em));
     linha('Leitura', m.lida_em ? 'Lida por ' + (m.lida_por_nome || 'responsável') + ' às ' + C.hora(m.lida_em, false) : 'Lida agora por você');
+    var ultRev = revisavel ? RR.ultima(m.id) : null;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'visor-relato' }, [
       UI.el('h2', { id: 'modal-titulo', texto: m.categoria && m.categoria !== 'MENSAGEM' ? 'Relato: ' + cat.rotulo : 'Mensagem com localização' }),
       m.categoria === 'VITIMA' ? seloCondicao(m) : null,
+      revisavel ? UI.el('div', { classe: 'acoes-linha' }, [RR.selo(m)]) : null,
       UI.el('p', { classe: 'relato-texto', texto: m.texto }),
+      ultRev && ultRev.nota ? UI.el('p', { classe: 'revisao-nota', texto: ultRev.revisado_por_nome + ': ' + ultRev.nota }) : null,
+      revisavel ? RR.horarios(m) : null,
       dl,
+      revisavel ? RR.historico(m) : null,
       compactarAcoes(UI.rodape([
+        revisavel && podeAlterar() ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'relato-revisar', texto: 'Revisar', onclick: function () { fechar(); RR.abrir(m, { aoSalvar: function () { abrirRelato(m.id); } }); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
-        p ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
+        p ? UI.el('button', { classe: 'btn' + (revisavel && podeAlterar() ? '' : ' btn-escuro'), type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
@@ -4489,11 +4500,13 @@
         simb,
         UI.el('strong', { texto: nomeDoParticipante(m.participante_id, m.remetente_nome) }),
         relato ? UI.el('span', { classe: 'selo selo-relato', texto: cat.rotulo }) : null,
+        relato && window.RelatosRevisao ? window.RelatosRevisao.selo(m) : null,
         UI.el('span', { classe: 'muted num feed-hora', texto: C.hora(m.criada_em, false) }),
       ]);
       var acoes = UI.el('div', { classe: 'feed-acoes' }, [
         m.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verRelatoNoMapa(m); } }) : null,
         p ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Responder', onclick: function () { abrirConversa(m.participante_id); } }) : null,
+        relato && window.RelatosRevisao && window.RelatosRevisao.disponivel() ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
       ]);
       ul.appendChild(UI.el('li', { classe: 'feed-item' + (relato ? ' relato' : '') + (est.destaqueNovas.has(m.id) || !jaLida(m) ? ' nova' : ''), 'data-id': m.id }, [
         topo,
@@ -5294,6 +5307,7 @@
     cancelarDesenho();
     fecharMenu(false);
     if (telaPequena()) { fecharAreas(); fecharCentral(); if (!$('ficha').hidden) fecharFicha(); }
+    if (gaveta.ativa) definirGaveta('mini', false);   // o mapa livre para tocar
     est.desenho = { tipo: 'externo', camadaTemp: L.layerGroup().addTo(est.mapa), aoClicar: o.aoClicar, aoCancelar: o.aoCancelar };
     $('mapa').classList.add('modo-desenho');
     var dz = est.desenho;
@@ -9842,6 +9856,9 @@
     irPara: function (lat, lng) { if (est.mapa && lat != null && lng != null) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 17)); },
     recarregarGrupos: function () { return carregarGrupos().then(function () { if (est.renderGruposAberto) est.renderGruposAberto(); }); },
     abrirCentral: function (aba) { abrirCentral(aba); },
+    atualizarCentral: function () { if (est.op) agendarCentral(); },
+    abrirRelato: function (id) { abrirRelato(id); },
+    mensagens: function () { return Array.from(est.mensagens.values()); },
   };
 
   iniciar();

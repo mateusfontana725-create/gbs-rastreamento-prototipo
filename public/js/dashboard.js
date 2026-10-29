@@ -407,6 +407,46 @@
     return out;
   }
 
+  /* ------------------------------ qualidade dos dados (denominadores) ------------------------------ */
+  // Diz sobre o que os números foram calculados. Ausente aparece como ausente (nunca zero);
+  // não localizados ficam fora das medianas (censurados), não entram como "distância zero".
+  function cartaoQualidade(q) {
+    if (!q) {
+      return cartao({ span: 12, titulo: 'Qualidade dos dados', pergunta: 'Sobre quantos casos cada número foi calculado.',
+        corpo: [el('p', { classe: 'muted', texto: 'Indisponível: rode a migração 043_qualidade_estudos.sql no Supabase.' })] });
+    }
+    function n(v, total) { return v == null ? null : String(v) + (total ? ' (' + percentual(v, total) + ')' : ''); }
+    var aus = q.ausentes || {}, f = q.fichas || {};
+    var colA = medidas([
+      ['Unidade de análise', 'operação'],
+      ['Casos elegíveis', n(q.elegiveis)],
+      ['Com localização (posição)', n(q.com_localizacao, q.elegiveis)],
+      ['Válidos para distância', n(q.validos_distancia, q.com_localizacao)],
+      ['Válidos para tempo', n(q.validos_tempo, q.com_localizacao)],
+    ]);
+    var colB = medidas([
+      ['Ausente: ULV', n(aus.ulv)],
+      ['Ausente: posição da localização', n(aus.posicao_localizacao)],
+      ['Ausente: hora de início', n(aus.inicio)],
+      ['Tempo negativo (inconsistente)', n(q.tempo_negativo)],
+      ['Possíveis duplicatas', n(q.possiveis_duplicatas)],
+    ]);
+    var colC = medidas([
+      ['Não localizados (encerradas)', n(q.nao_localizados)],
+      ['Abertas sem localização', n(q.abertas_sem_localizacao)],
+      ['Fichas: idade não informada', f.idade_nao_informada == null ? null : String(f.idade_nao_informada)],
+      ['Fichas: idade estimada', f.idade_estimada == null ? null : String(f.idade_estimada)],
+      ['Fichas: sem perfil', f.sem_perfil == null ? null : String(f.sem_perfil)],
+    ]);
+    return cartao({
+      span: 12, titulo: 'Qualidade dos dados', n: q.elegiveis, pergunta: 'Sobre quantos casos cada número foi calculado, e o que ficou de fora.',
+      corpo: [el('div', { classe: 'dash-qualidade' }, [colA, colB, colC])],
+      nota: 'Um caso = uma operação (primeira localização com posição). Dado ausente não vira zero: fica fora da conta e aparece aqui. ' +
+        'Não localizados ficam fora das medianas de distância e tempo (não se sabe onde nem quando a pessoa seria achada). ' +
+        'Duplicata possível: mesmo tipo, ULV a menos de 1 km e início a menos de 48 h — confira se é a mesma ocorrência.',
+    });
+  }
+
   /* ------------------------------ painel geral ------------------------------ */
   function renderGeral(d, elemento) {
     var ops = d.operacoes, dist = d.distancia_km, loc = d.localizacoes;
@@ -416,8 +456,9 @@
     var tipos = ['aquatica', 'terrestre', 'outras'].filter(function (k) { return somaTipo[k] > 0 || k !== 'outras'; })
       .map(function (k) { return { chave: k, rotulo: GRUPOS_TIPO[k], valor: somaTipo[k] }; });
     var condicoes = Object.keys(loc.por_condicao || {}).map(function (c) { return { chave: c, rotulo: CONDICOES[c] || c, valor: loc.por_condicao[c] }; });
-    var totalCond = condicoes.reduce(function (t, i) { return t + (i.valor || 0); }, 0);
     var comLocalizacao = loc.operacoes_com_localizacao;
+    // Denominador: todas as localizadas (cada caso tem uma condição). Somar só as visíveis trataria a oculta como zero.
+    var totalCond = typeof comLocalizacao === 'number' ? comLocalizacao : condicoes.reduce(function (t, i) { return t + (i.valor || 0); }, 0);
 
     var topo = el('header', { classe: 'dash-topo' }, [
       el('div', null, [
@@ -582,7 +623,7 @@
 
     return [
       topo, kpis, secaoMapaParana(), leitura,
-      el('div', { classe: 'dash-grade' }, [grafMeses, grafTipos, grafDist, resumoDist, grafPerfis, grafCond]),
+      el('div', { classe: 'dash-grade' }, [grafMeses, grafTipos, grafDist, resumoDist, grafPerfis, grafCond, cartaoQualidade(d.qualidade)]),
     ];
   }
 
@@ -1005,7 +1046,35 @@
       }))],
     });
 
-    return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cSet, cOcorr])];
+    // Verificação (só no painel, com a operação aberta): o que já foi conferido e o que ainda é só indicação
+    var cVerif = null;
+    var PN = raiz.Painel, RR = raiz.RelatosRevisao;
+    if (PN && PN.op && PN.op() && PN.op().id === op.id && RR && RR.disponivel()) {
+      var rv = RR.resumo(PN.mensagens ? PN.mensagens() : []), pe = rv.porEstado;
+      var bi = raiz.Binomio && raiz.Binomio.disponivel() ? raiz.Binomio.resumo() : null;
+      var oc = raiz.ObservacoesCampo && raiz.ObservacoesCampo.disponivel() ? raiz.ObservacoesCampo.resumo() : null;
+      cVerif = cartao({
+        span: 12, titulo: 'Verificação', n: rv.total, pergunta: 'Indicação não é confirmação: o que já foi conferido por outro meio e o que ainda espera.',
+        corpo: [ocorrencias([
+          { rotulo: 'Relatos sem revisão', valor: rv.naoRevisados, alerta: rv.naoRevisados > 0, aba: 'msgs' },
+          { rotulo: 'Em análise', valor: pe.em_analise, aba: 'msgs' },
+          { rotulo: 'Confirmados', valor: pe.confirmado, aba: 'msgs' },
+          { rotulo: 'Descartados', valor: pe.descartado, aba: 'msgs' },
+          { rotulo: 'Inconclusivos ou contestados', valor: pe.inconclusivo + pe.contestado, aba: 'msgs' },
+          bi ? { rotulo: 'Cão: indicações em análise', valor: bi.emAnalise, alerta: bi.emAnalise > 0, abrir: function () { raiz.Binomio.abrir(); } } : null,
+          bi ? { rotulo: 'Cão: confirmadas', valor: bi.confirmadas, abrir: function () { raiz.Binomio.abrir(); } } : null,
+          oc ? { rotulo: 'Focos térmicos a verificar', valor: oc.focosAVerificar, alerta: oc.focosAVerificar > 0, abrir: function () { raiz.ObservacoesCampo.abrir('drone'); } } : null,
+          oc ? { rotulo: 'Indicações na água', valor: oc.indicacoesAgua, abrir: function () { raiz.ObservacoesCampo.abrir('aquatica'); } } : null,
+        ].filter(Boolean).map(function (it) {
+          if (it.aba && acoes.abrirCentral) { it.aoClicar = function () { acoes.abrirCentral(it.aba); }; it.dica = 'Abrir as mensagens'; }
+          if (it.abrir) { it.aoClicar = it.abrir; it.dica = 'Abrir'; }
+          return it;
+        }))],
+        nota: oc && oc.areaObservadaM2 ? 'Área observada por drone (registrada): ' + (oc.areaObservadaM2 >= 1e4 ? num(oc.areaObservadaM2 / 1e4, 1) + ' ha' : Math.round(oc.areaObservadaM2) + ' m²') + '. Plano de voo não conta como área vista.' : null,
+      });
+    }
+
+    return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cSet, cOcorr, cVerif])];
   }
 
   /* ------------------------------ mapa do Paraná (operações) ------------------------------ */
@@ -1343,8 +1412,13 @@
       pararMapa();
       cacheOps = cacheLocalizadas = null;
       return carregar(elemento, function () {
-        return Promise.all([C.rpc('estudo_geral'), operacoesDoUsuario().catch(function () { return null; })])
-          .then(function (r) { Object.defineProperty(r[0], 'opsLista', { value: r[1], enumerable: false }); return r[0]; });   // fora do temOculto
+        return Promise.all([C.rpc('estudo_geral'), operacoesDoUsuario().catch(function () { return null; }), C.rpc('estudo_qualidade').catch(function () { return null; })])
+          .then(function (r) {
+            // fora do temOculto
+            Object.defineProperty(r[0], 'opsLista', { value: r[1], enumerable: false });
+            Object.defineProperty(r[0], 'qualidade', { value: r[2], enumerable: false });
+            return r[0];
+          });
       }, renderGeral);
     },
     // opcoes.resumo: função que devolve o resumo do painel (trilhas, grupos, setores, ocorrências).

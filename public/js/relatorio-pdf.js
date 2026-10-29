@@ -543,7 +543,7 @@
         ['Localidade / município / região', txt(op.local_endereco)],
         ['Início das operações (acionamento do CB)', op.acionado_em ? dataHora(op.acionado_em) : '—'],
         ['Coordenadas de referência (último avistamento)', coord(op.local_lat, op.local_lng)],
-        ['Data e hora do último momento visto', i.desaparecimento ? dataHora(i.desaparecimento) : '—'],
+        ['Data e hora do último momento visto', (window.Ipo ? window.Ipo.textoHoraVisto(i, dataHora) : (i.desaparecimento ? dataHora(i.desaparecimento) : '')) || '—'],
         ['Nº de pessoas perdidas', i.pessoas_perdidas != null ? String(i.pessoas_perdidas) : '—'],
       ]),
       subtitulo('Vítima(s)'),

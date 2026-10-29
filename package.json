@@ -7,7 +7,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node testes/rotas_desenhadas.test.js && node testes/filtro_gps.test.js && node testes/coords.test.js && node testes/esforco.test.js && node testes/pod.test.js && node testes/mapa_rotulos.test.js && node testes/trilha_local.test.js && node testes/fila_estado.test.js && node testes/meteo_core.test.js && node testes/mapa_offline.test.js && node testes/meteo_api.test.js && node testes/poa_ia_api.test.js",
+    "test": "node testes/rotas_desenhadas.test.js && node testes/filtro_gps.test.js && node testes/coords.test.js && node testes/esforco.test.js && node testes/pod.test.js && node testes/mapa_rotulos.test.js && node testes/trilha_local.test.js && node testes/fila_estado.test.js && node testes/meteo_core.test.js && node testes/mapa_offline.test.js && node testes/incerteza.test.js && node testes/meteo_api.test.js && node testes/poa_ia_api.test.js",
     "test:banco": "node testes/banco_migracoes.test.mjs"
   }
 }

@@ -284,7 +284,10 @@
     atualizarMeio();
 
     var grupoAcion = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('acionamento'), texto: 'Data e hora do início das operações *' }), acion]);
-    var grupoDesap = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('desap'), texto: 'Data e hora do último momento visto' }), desap]);
+    var desapQual = UI.el('select', { classe: 'campo campo-sob', id: id('desap-qual'), 'aria-label': 'Origem da hora do último momento visto' }, [UI.el('option', { value: '', texto: 'Origem da hora…' })].concat(
+      window.Ipo.QUALIDADE_HORA.map(function (x) { return UI.el('option', { value: x[0], selected: ipo.desaparecimento_qualidade === x[0] ? true : null, texto: x[1] }); })));
+    var grupoDesap = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('desap'), texto: 'Data e hora do último momento visto' }), desap, desapQual,
+      UI.el('p', { classe: 'ajuda', texto: 'Em branco: não informado. Ninguém sabe? Escolha "Desconhecido".' })]);
     var grupoDestino = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('destino'), texto: 'IPO para (destinatários)' }), destino]);
     var grupoSolicDoc = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-doc'), texto: 'Documento do solicitante (RG/CPF)' }), solicDoc]);
     var grupoResp = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('resp'), texto: 'Responsável pelas informações' }), responsavel]);
@@ -336,7 +339,7 @@
       dados.acionado_em = new Date(ms).toISOString();
       dados.ipo = window.Ipo.normalizarIpo({
         natureza: naturezaValor(), solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,
-        destinatarios: destino.value, desaparecimento: isoLocal(desap.value), meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
+        destinatarios: destino.value, desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value, meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
         pessoas_perdidas: pessoas.value, buscas_preliminares: marcadoEm(nomeBuscas), possibilidade_vida: marcadoEm(nomeVida),
         bms_envolvidos: bms.value, imagens_anexas: marcadoEm(nomeImagens) === 'sim' ? true : marcadoEm(nomeImagens) === 'nao' ? false : null,
         responsavel_informacoes: responsavel.value,
@@ -361,6 +364,7 @@
       solicDoc.value = '';
       destino.value = window.Ipo.DESTINO_PADRAO;
       desap.value = '';
+      desapQual.value = '';
       pessoas.value = '';
       bms.value = '';
       responsavel.value = '';
@@ -422,7 +426,7 @@
       UI.el('div', { classe: 'form-colunas' }, [
         UI.secao('Ocorrência', [blocos([
           ['Início das operações', op.acionado_em ? dataHora(op.acionado_em) : ''],
-          ['Último momento visto', ipo.desaparecimento ? dataHora(ipo.desaparecimento) : ''],
+          ['Último momento visto', window.Ipo.textoHoraVisto(ipo, dataHora)],
           ipo.natureza && ipo.natureza !== tipo ? ['Natureza', ipo.natureza, true] : null,
           ['Descrição', op.descricao, true],
         ])]),
@@ -553,7 +557,10 @@
     return (await C.consultar(C.cliente.from('vitimas').select('*').eq('operacao_id', op.id).order('criado_em', { ascending: true }))) || [];
   }
 
-  function textoIdade(v) { return v.idade == null ? 'idade não informada' : v.idade + (v.idade === 1 ? ' ano' : ' anos'); }
+  function textoIdade(v) {
+    if (v.idade == null) return 'idade não informada';
+    return (v.idade_qualidade === 'estimada' ? 'cerca de ' : '') + v.idade + (v.idade === 1 ? ' ano' : ' anos') + (v.idade_qualidade === 'estimada' ? ' (estimada)' : '');
+  }
 
   // opcoes: { editavel, limparArquivos() } — limparArquivos apaga do Storage as fotos substituídas
   // Fichas de vítima dentro do formulário de dados da operação (Dados da operação → Editar).
@@ -662,6 +669,9 @@
     v = v || { nome: '', idade: null, caracteristicas: '', roupas: '', observacoes: '' };
     var nome = UI.el('input', { classe: 'campo', id: prefixo + '-nome', maxlength: '80', value: v.nome, placeholder: 'Nome (ou "Não identificada")' });
     var idade = UI.el('input', { classe: 'campo', id: prefixo + '-idade', type: 'number', min: '0', max: '130', step: '1', inputmode: 'numeric', value: v.idade == null ? '' : String(v.idade) });
+    // Idade informada (documento, família) ou estimada (aparência): em branco é "não informada", nunca zero
+    var estimada = UI.el('input', { type: 'checkbox', id: prefixo + '-idade-estimada', checked: v.idade_qualidade === 'estimada' ? true : null });
+    var blocoIdade = UI.el('div', { classe: 'idade-linha' }, [idade, UI.el('label', { classe: 'check-curto', for: prefixo + '-idade-estimada' }, [estimada, ' estimada'])]);
     function area(id, max, valor, ph) { var a = UI.el('textarea', { classe: 'campo', id: prefixo + '-' + id, maxlength: String(max), rows: '3', placeholder: ph || '' }); a.value = valor || ''; return a; }
     var carac = area('caracteristicas', 1000, v.caracteristicas, 'Altura, porte, cabelo, cor da pele, sinais, tatuagens, cicatrizes…');
     var roupas = area('roupas', 1000, v.roupas, 'Cores e tipo de roupa, calçado, acessórios, mochila…');
@@ -686,7 +696,7 @@
     var elementos = [
       UI.grade([
         UI.campo('Nome *', nome, { para: prefixo + '-nome', largo: true }),
-        UI.campo('Idade', idade, { para: prefixo + '-idade' }),
+        UI.campo('Idade', blocoIdade, { para: prefixo + '-idade', dica: 'Em branco: não informada. Marque "estimada" quando a idade vem da aparência ou de um palpite.' }),
         UI.campo('Nascimento', nasc, { para: prefixo + '-nascimento', dica: 'Formato dd/mm/aaaa. Vai para o IPO.' }),
         UI.campo('Sexo', sexo, { para: prefixo + '-sexo' }),
         UI.campo('Origem', origem, { para: prefixo + '-origem', dica: 'Cidade ou bairro de onde a pessoa é.' }),
@@ -701,6 +711,7 @@
       return {
         nome: nome.value.replace(/\s+/g, ' ').trim(),
         idade: idade.value.trim() === '' ? null : Number(idade.value),
+        idade_qualidade: idade.value.trim() === '' ? null : (estimada.checked ? 'estimada' : 'informada'),
         caracteristicas: carac.value.trim(),
         roupas: roupas.value.trim(),
         observacoes: obs.value.trim(),
@@ -719,7 +730,7 @@
       return null;
     }
     function bloquear(sim) {
-      [nome, idade, nasc, sexo, origem, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); });
+      [nome, idade, estimada, nasc, sexo, origem, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); });
       perfil.querySelectorAll('select').forEach(function (c) { c.disabled = Boolean(sim); });
       foto.disabled = Boolean(sim);
     }

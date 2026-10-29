@@ -194,6 +194,9 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   adicionada depois, na ficha.
 - **Vítimas (fichas)** ficam em **Dados da operação → Editar** (e na criação da operação): uma ou mais fichas por operação, com **foto**, **nome** (ou "Não
   identificada"), **idade**, **características físicas**, **roupas** e **observações**.
+- **Idade informada ou estimada** (migração 042): ao lado da idade, a caixa **estimada** marca que ela veio da
+  aparência ou de um palpite ("cerca de 70 anos (estimada)"). Em branco é **não informada** — nunca vira zero, e os
+  estudos contam à parte as fichas sem idade e com idade estimada.
 - A foto é reduzida no aparelho (máx. 1600 px, JPEG) e guardada no bucket **privado `vitimas`** do
   Supabase Storage; só aparece por link temporário assinado. Trocar ou tirar a foto apaga o arquivo antigo.
 - **Somente os responsáveis da operação** veem as fichas (RLS no banco e no Storage). Civis e militares de
@@ -369,6 +372,39 @@ Só objetivo, riscos, comunicações, observações e decisões são digitados a
 
 **Migrações 035, 036 e 037**: rode no Supabase em ordem (035 → 036 → 037). Cada módulo do painel avisa se a sua migração
 ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cada função estão nos próprios arquivos `.sql`.
+
+### Verificação: relatos, binômio, drone e água (migrações 042 e 043)
+
+Regra de leitura em todos: **indicação não é confirmação**. Cada registro guarda **quem, quando e de onde veio** o dado,
+e os estados finais (confirmado, descartado, inconclusivo, contestado) **exigem justificativa**.
+
+- **Revisão de relatos** (pista, vestígio, objeto, obstáculo…): no relato (Mensagens → relato → **Detalhes e revisão**),
+  **Revisar** escolhe o estado — pendente, em análise, confirmado, descartado, inconclusivo ou contestado. Cada revisão
+  é uma **versão nova** (as anteriores ficam em "Versões da revisão"). O relato mostra **três horários separados**:
+  **Fato** (quando aconteceu: informado, estimado, pelo GPS ou desconhecido — em branco é "não informado", não a hora do
+  envio), **Recebido** (quando chegou) e **Revisado** (quem e quando). A hora da posição GPS aparece à parte. O selo do
+  estado aparece no feed de mensagens. Só os responsáveis veem as revisões; o participante continua vendo só a mensagem.
+- **Binômio (cão e condutor)** — Ferramentas → **Binômio**: sessão ligada a um **setor**, com o **condutor**
+  (participante do app ou só o nome), o **cão**, se o cão tem GPS (normalmente **sem dispositivo**: o mapa mostra a
+  **trilha do GPS do condutor** durante a sessão, sem as pausas, e diz isso), o **artigo de odor** (o quê, origem,
+  manipulação) e as **condições**. **Iniciar, Pausar, Retomar, Finalizar** guardam a hora de cada passo; o cartão mostra
+  o tempo efetivo de busca. **⚑ Indicação** registra I1, I2… "em análise" na posição do condutor (ou minha posição, ou
+  tocando no mapa). **Confirmar por outro meio** cria C1… ligada à indicação, com **método independente obrigatório**
+  (equipe no local, busca visual, drone…), "pendente" até alguém registrar o **Resultado** com justificativa. I e C
+  aparecem no mapa; tudo vai para o diário.
+- **Drone e água** — Ferramentas → **Drone e água**, abas Drone e Água:
+  - **Plano de voo** (linha ou área desenhada; sensor e altura): fica "planejado" — **plano não prova voo**;
+  - **Telemetria**: o arquivo do voo (GPX, KML/KMZ, GeoJSON ou CSV) vira o trajeto voado, com início e fim lidos do arquivo;
+  - **Área observada** (área desenhada; sensor, altura e qualidade: boa, parcial, ruim): é o que conta como visto;
+  - **Foco térmico** (ponto; temperatura e imagem): fica "a verificar" — **térmico não é vítima** — até alguém verificar ou descartar;
+  - **Indicação na água**: posição, **possível área de origem** (área desenhada), **corrente** (desconhecida, estimada ou
+    medida — **desconhecida é um valor válido**, os campos de direção e velocidade só aparecem quando há valor), **vento com a
+    fonte do dado** (medido, previsão, estimado, desconhecido) e condições.
+  Cada registro tem título, fonte, hora observada e estado; tocar no mapa abre o registro.
+- **Dashboard da operação → Verificação**: relatos sem revisão, em análise, confirmados, descartados, inconclusivos;
+  indicações do cão em análise e confirmadas; focos térmicos a verificar; indicações na água; área observada por drone.
+
+**Migrações 042 e 043**: rode no Supabase em ordem. Sem elas, cada janela avisa qual migração falta e o resto do painel segue normal.
 
 ### Rota até um participante (ir até a pessoa ou mandar apoio)
 
@@ -1136,6 +1172,14 @@ dado de participante sai do banco nesses painéis.
   registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
 - **Perfil da vítima** = uma lista de seleção na ficha ("Perfil da vítima (para estudos)"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
   Alzheimer/demência, autismo, deficiência intelectual, transtorno mental, outro). Não é calculado pela idade.
+- **Qualidade dos dados** (cartão no fim do Dashboard, migração 043, função `estudo_qualidade`): diz **sobre o que** os
+  números foram calculados. Unidade de análise: a **operação** (primeira localização com posição). Casos elegíveis,
+  com localização, **válidos para distância** (ULV e posição) e **para tempo** (início e hora, sem tempo negativo);
+  **ausentes** contados à parte (sem ULV, localização sem posição, sem hora de início) — **ausente nunca vira zero**;
+  **não localizados** (encerradas sem localização: ficam fora das medianas, censurados); abertas sem localização;
+  **possíveis duplicatas** (mesmo tipo, ULV a menos de 1 km e início a menos de 48 h); fichas sem idade, com idade
+  estimada e sem perfil (com o mesmo sigilo de 5 casos). A proporção "com vida / em óbito" usa todas as localizadas
+  como denominador (a oculta não conta como zero).
 - **Sigilo dos números:** grupos com **menos de 5 casos** chegam ocultos ("oculto (menos de 5 casos)"), no banco
   (`estudo_geral`, `estudo_operacao`), não só na tela.
 - **Limitação conhecida:** a localização não está ligada a uma ficha específica. Com duas vítimas na mesma operação,
@@ -1162,6 +1206,9 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
   local (ponto no mapa ou só endereço), solicitante (nome e documento), natureza, destinatários, data e hora do último momento
   visto, nº de pessoas perdidas, buscas preliminares, possibilidade de vida ("Não apurado" quando não se sabe), BMs
   diretamente envolvidos, imagens anexas, responsável pelas informações, a observação e as vítimas.
+  Abaixo da hora do último momento visto, a **origem da hora**: informado (testemunha, câmera, registro), estimado
+  ou **desconhecido** (apurado e ninguém sabe). Em branco fica "não informado"; com hora e sem origem, vale "informado".
+  Os Dados da operação e o PDF mostram "(estimado)" ao lado da hora.
   Em celular, o formulário tem uma coluna só; em tablet e PC (a partir de 760 px) as seções ficam lado a lado
   (Ocorrência | Solicitante, Busca | Observação) e a janela é mais larga. Na criação, Local | Ocorrência e
   nome da operação e retenção na mesma linha.
@@ -1242,6 +1289,9 @@ rastreamento-sar/
 │       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
 │       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
 │       ├── briefing.js         briefing da operação e passagem de comando com aceite
+│       ├── relatos-revisao.js  revisão dos relatos (estado, justificativa, versões, hora do fato)
+│       ├── binomio.js          sessão do binômio cão e condutor: indicações e confirmações independentes
+│       ├── observacoes-campo.js drone (plano, telemetria, área observada, foco térmico) e indicação na água
 │       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
 │       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM, limite da política)
 │       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
@@ -1736,9 +1786,22 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40c | **Ferramentas → Personalizar tela**: arrastar **Foto** para fora do topo, arrastar **Grupos** da bandeja para o 2º lugar, arrastar o painel de grupos para o canto inferior esquerdo, texto **Maior**, **Concluir** e recarregar | Foto passa a ficar em Ferramentas e funciona de lá; Grupos aparece no topo e abre a lista de grupos; o painel de grupos fica no canto escolhido; tudo continua igual depois de recarregar; **Padrão** desfaz |
 | 40d | Abrir os modais (Encerrar, Vítima encontrada, Marcar ponto, Enviar destino, Relatório final) no computador e no celular | título com **i** e **×** no topo; ações sempre visíveis embaixo; no celular, folha de baixo sem rolagem lateral |
 | 40e | Civil entra na busca com internet e espera aparecer "Mapa guardado no aparelho"; liga o modo avião, **recarrega a página** e anda 2 min; desliga o modo avião | a página reabre direto no rastreamento, o mapa da área aparece, os pontos ficam na fila e chegam ao painel quando o sinal volta |
+| 40f | Num relato de vestígio: **Detalhes e revisão → Revisar**, escolher **Confirmado** sem justificativa; depois com justificativa e hora do fato estimada | sem justificativa não salva; salvo, o relato mostra Fato (estimado), Recebido e Revisado, "Versões da revisão (1)" e o selo **Confirmado** no feed |
+| 40g | **Ferramentas → Binômio → + Nova sessão** (cão, condutor participante, setor, artigo de odor), **Iniciar**, andar 2 min com o condutor, **⚑ Indicação**, **Confirmar por outro meio** sem método e depois com "Equipe no local" | a trilha roxa do condutor aparece no mapa só durante a sessão; I1 "em análise" no mapa; sem método não confirma; C1 "pendente" até o **Resultado** |
+| 40h | **Ferramentas → Drone e água**: importar o GPX do voo em **+ Telemetria**, marcar um **+ Foco térmico** no mapa e descartá-lo com justificativa; na aba Água, **+ Indicação na água** sem mexer na corrente | a linha do voo aparece; o foco começa "a verificar" e fica riscado ao descartar; a indicação mostra "Corrente: desconhecida" e a fonte do vento |
+| 40i | Ficha da vítima com idade 70 e **estimada**; IPO com o último momento visto **estimado**; abrir o Dashboard geral | a ficha mostra "cerca de 70 anos (estimada)", os Dados da operação "(estimado)"; o cartão **Qualidade dos dados** mostra unidade, válidos, ausentes, não localizados e duplicatas |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Verificação e qualidade dos dados (migrações 042–043)**: banco — 770 verificações (migrações 007–043: revisão de
+  relatos com versões, justificativa e hora do fato; idade estimada sem zero; binômio com transições, I/C numerados,
+  método obrigatório e pausas; drone e água com estado inicial pelo tipo e geometria validada; somente leitura na
+  operação encerrada; denominadores do estudo com ausentes, censurados e duplicatas). Navegador (Playwright, painel com
+  Supabase falso, 1280 px e 390 px): revisar relato (justificativa obrigatória, três horários, versão e selo no feed),
+  sessão do binômio completa (criar, iniciar, indicação na posição do condutor, confirmação com método, pausar, marcadores
+  no mapa), drone e água (foco marcado no mapa voltando ao formulário, telemetria lida de GPX, descarte com justificativa,
+  corrente desconhecida), idade estimada, hora do último momento visto estimada e cartão de qualidade do Dashboard.
 
 - **Pedidos de ajuda, recursos e briefing (migrações 035–037)**: banco — 638 verificações (migrações 007–037: pedido
   criado pela mensagem de ajuda, máquina de estados no servidor, ciente não resolve, baixar prioridade e encerrar exigem

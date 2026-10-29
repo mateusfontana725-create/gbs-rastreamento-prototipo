@@ -386,6 +386,53 @@ Só objetivo, riscos, comunicações, observações e decisões são digitados a
 **Migrações 035, 036 e 037**: rode no Supabase em ordem (035 → 036 → 037). Cada módulo do painel avisa se a sua migração
 ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cada função estão nos próprios arquivos `.sql`.
 
+### Painel de comando SCI (migração 045)
+
+**SCI** no topo do painel abre o **painel de comando** do Sistema de Comando em Incidentes: a fonte única do Posto de Comando,
+atualizada em tempo real para todos os responsáveis. **↗ Outra janela** abre só o painel (`sci.html?op=…`) — é o link para o
+**comando remoto** (ex.: Comandante do Batalhão) acompanhar pelo celular: pede o login de responsável (administrador vê qualquer
+operação) e se atualiza sozinho. Com a operação encerrada, os botões de edição somem (só consulta).
+
+Os blocos, na ordem em que o comando remoto lê (onde é, quantas vítimas, quem responde por quê, o que já aconteceu):
+
+| Bloco | O que mostra |
+|---|---|
+| Cabeçalho | nome da ocorrência, natureza, local, coordenadas em graus/minutos/segundos, relógio e tempo decorrido desde o acionamento (ou o término) |
+| Local | imagens de satélite anexadas pelo painel (bucket privado `sci`, toque amplia, legenda), coordenadas, PC e ACV, links para Google Maps (satélite), Google Earth, OpenStreetMap e **rota**, **Ver no mapa**; aeronave em destaque (disponível ou não, ponto de pouso) |
+| Vítimas | três quadros arrastáveis — **Localizadas → Removidas para a ACV → Transportadas** —, um quadrado por vítima (V-01, V-02…) na cor da triagem (verde, amarelo, vermelho, cinza = óbito) **só depois da ACV**; arrastar (mouse ou dedo) muda de quadro e registra a hora; tocar abre nome, idade (estimada), sexo, triagem, local, destino, observações e os horários de cada passo. No celular, **→ Removidas para a ACV / → Transportadas** na ficha |
+| Totais | total informado (toque para editar; **NÃO CONFIRMADO** até a equipe confirmar; sem informação = [PENDENTE]), localizadas, ainda não localizadas, removidas, transportadas e óbitos; aviso quando a soma não fecha |
+| Quem responde por quê | funções SCI (CI, Segurança, Operações, Logística, Planejamento, Ligação, Informação Pública, Adm./Finanças) — vazia = **[PENDENTE]**, "acumula (CI)" —, instalações (PC, Área de Espera, ACV, ZPA, Abrigo, GGI…) com responsável, local, coordenadas e desativação com hora e motivo, setores do mapa e canais de comunicação |
+| Linha do tempo | 12 marcos fixos (acionamento — o do cadastro aparece para confirmar —, despacho, chegada e assunção do comando, PC, comunicações, SCI, relatório de danos, identificação, localização, resgate, consolidação ao GGI, término) com **Agora** / **Informar hora** / **Corrigir**; e todos os registros com hora e categoria (Decisão do Comando, Segurança, Resgate, Informação, Recurso, Comunicação), filtro, **NÃO CONFIRMADA** com **Confirmar**, **Corrigir** (o texto anterior e o motivo ficam guardados) e **Anular** com motivo. Movimento de vítima, órgão, recurso, instalação, equipe, função e leitura do rio entra sozinho |
+| Missão de cada equipe | equipe, órgão, efetivo, missão, responsável, setor, meios, andamento e status (a cor da faixa: em operação, designada, em deslocamento, disponível, desmobilizada) |
+| Órgãos envolvidos | um bloco por órgão (situação, pessoas, viaturas, detalhamento, missão, chegada); faixa com total de órgãos, no local, pessoas e viaturas — efetivo não informado aparece como **?** e é contado à parte, nunca como zero |
+| Alertas do Comando | calculados dos dados, **segurança primeiro**: sem Oficial de Segurança com equipe em operação, vítima vermelha em cena, rio subindo, leitura do rio antiga, soma que não fecha, total não confirmado, vítima na ACV sem triagem ou esperando remoção, informações aguardando confirmação e o que falta (funções, responsáveis das instalações, ACV, efetivos, horários) |
+| Situação | situação atual (com hora), objetivos do período, riscos principais, relatório de danos (fonte, hora, NÃO CONFIRMADO / Confirmar), comandante, segurança, coordenadas e PC |
+| Estrutura SCI | organograma: CI, staff (Segurança, Ligação, Informação Pública), órgãos em ligação, seções (Operações com as equipes, Planejamento, Logística, Adm./Finanças) e o acompanhamento remoto |
+| Recursos e logística | PC, ACV, água, alimentação, combustível e energia; tabela de viaturas, embarcações, aeronaves, equipamentos e pedidos com status, local, hora do pedido e da chegada |
+| Nível do rio | leituras com hora, ponto, nível, vazão/vertedouro, tendência e fonte |
+
+**Registrar por frase ou voz** (campo no topo, com 🎤 no Chrome do celular): frases curtas como "despacho 7h15", "PC estabelecido",
+"duas vítimas localizadas na água", "V-03 na ACV, amarela", "V-01 e V-02 transportadas ao hospital", "SAMU no local com 5 pessoas",
+"segurança: Sgt Dinardi", "Sgt Gustavo assume operações", "total de vítimas 14", "rio estável segundo o drone". O painel mostra **o que
+entendeu para conferir** (desmarque o que estiver errado) e as **divergências** antes de gravar (vítima que não está no quadro, horário já
+registrado, total menor que o quadro, triagem antes da ACV, troca de responsável). O que não vira registro específico vai para a linha do
+tempo com a categoria provável; informação de terceiros ("segundo…", "não confirmado") entra como **NÃO CONFIRMADA**. **Entender com IA**
+(opcional, `api/sci-ia.js`, a mesma chave do POA/POD) lê frases longas ou confusas e devolve as mesmas ações, que passam pela mesma
+validação (ação desconhecida ou campo inválido é descartado); nomes de vítimas não vão para a IA. **O que falta?** lista as pendências em
+ordem de prioridade.
+
+**Copiar resumo** (texto curto para WhatsApp), **Texto para a imprensa** (sem nomes de vítimas, para revisar antes de divulgar) e
+**Imprimir / PDF** (abre a janela própria e imprime; "Salvar como PDF" no navegador). Todo registro do SCI também entra no **diário**
+da operação (eventos de segurança em destaque) e, por ele, no **relatório final**.
+
+**Modo teste** (antes da ocorrência, com o quadro vazio): teste o quadro com vítimas e registros de teste — nada vai para o diário.
+**Sair do modo teste (zerar)** apaga as vítimas, a linha do tempo, os marcos e o total de teste; funções, instalações, equipes, órgãos e
+recursos preparados ficam. Assim o total começa [PENDENTE] e a linha do tempo vazia no acionamento.
+
+Banco (migração **045**): `sci_estado`, `sci_vitimas`, `sci_eventos` e `sci_itens`, leitura só pelos responsáveis da operação, escrita
+só pelas funções `sci_*`, Realtime, operação encerrada somente leitura; o fim da retenção apaga o quadro de vítimas (nomes e idades) e as
+imagens; excluir a operação apaga tudo.
+
 ### Verificação: relatos, binômio, drone e água (migrações 042 e 043)
 
 Regra de leitura em todos: **indicação não é confirmação**. Cada registro guarda **quem, quando e de onde veio** o dado,
@@ -1310,6 +1357,7 @@ rastreamento-sar/
 ├── public/                     ← site publicado pelo Vercel
 │   ├── militar.html            painel do responsável
 │   ├── civil.html              página do participante
+│   ├── sci.html                painel de comando SCI em janela própria (comando remoto, segundo monitor, impressão)
 │   ├── sw.js                   service worker: notificações no Android, página e mapa guardados para abrir sem internet
 │   ├── versao.json             versão publicada (páginas abertas há muito tempo avisam que há versão nova)
 │   ├── css/estilos.css         estilos (alto contraste, botões grandes, responsivo)
@@ -1329,6 +1377,9 @@ rastreamento-sar/
 │       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
 │       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
 │       ├── briefing.js         briefing da operação e passagem de comando com aceite
+│       ├── sci-core.js         regras do SCI sem tela: totais, alertas, resumo, imprensa, leitura das frases (também no servidor)
+│       ├── sci.js              painel de comando SCI (blocos, quadro de vítimas, linha do tempo, formulários, tempo real)
+│       ├── sci-janela.js       abre o SCI em sci.html (com login quando não há sessão)
 │       ├── convites.js         convite por e-mail: cadastro, envio, situação e link
 │       ├── cores.js            cor livre (tom, intensidade, claridade, minhas cores) e conversões
 │       ├── relatos-revisao.js  revisão dos relatos (estado, justificativa, versões, hora do fato)
@@ -1344,6 +1395,7 @@ rastreamento-sar/
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
 │   ├── responsaveis.js         cria login e redefine senha de responsáveis (só administradores; chave SECRETA)
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
+│   ├── sci-ia.js               assistente opcional do Posto de Comando: frase → ações para conferir (mesma chave do POA/POD)
 │   ├── convidar.js             envio do convite de participante por e-mail (chave RESEND_API_KEY só no servidor)
 │   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
@@ -1569,7 +1621,7 @@ rastreamento-sar/
    | `EMAIL_REMETENTE` | (com a chave acima) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
    | `SITE_URL` | (opcional) endereço público do site, ex.: `https://busca.seudominio.com.br`. Sem ela, o link do e-mail usa o endereço da requisição |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
-   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
+   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada por `/api/poa-ia` (botão "Sugerir com IA" do POA/POD) e por `/api/sci-ia` (botão "Entender com IA" do SCI). Sem ela, os botões avisam e o preenchimento manual (e a leitura de frases do próprio SCI) segue normal |
    | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-3.8-flash` |
    | `POA_IA_PROVEDOR` | (opcional) `anthropic` ou `gemini`. Sem ela, usa o provedor que tiver chave (Anthropic primeiro) |
    | `POA_IA_MODELO` | (opcional) troca o modelo do provedor escolhido. Padrões: `claude-haiku-5-5` (Anthropic, o mais barato) e `gemini-3.8-flash` |
@@ -1841,9 +1893,22 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40l | **Novo grupo**: tocar em **＋**, escolher uma cor pelo tom/claridade, **Guardar em "Minhas cores"**, criar outro grupo e reutilizá-la; repetir no **Setor** | a cor escolhida aparece no marcador, na trilha e na lista; "Minhas cores" aparece nos dois formulários |
 | 40m | Aproximar o mapa de uma equipe de 3 pessoas a ~15 m uma da outra, do zoom 16 até o 20 | até o zoom 18 ficam num círculo com o número; a partir do 19 se separam; os ícones diminuem do 17 em diante e a vítima localizada continua grande |
 | 40n | **Convidar → ✉ Convidar por e-mail** com nome e e-mail reais; abrir o e-mail no celular e o link | o e-mail chega com o botão; a página abre com o nome preenchido; ao começar, o convite passa a **Entrou**; sem `RESEND_API_KEY`, aparecem **Abrir no meu e-mail** e **Copiar link** |
+| 40o | **SCI → Modo teste**, registrar 2 vítimas e "despacho 7h15", **Sair do modo teste (zerar)** | quadro vazio, total [PENDENTE], linha do tempo vazia; o diário não tem os registros de teste |
+| 40p | No SCI: "duas vítimas localizadas na água", arrastar V-01 para a ACV, tocar e triar amarela; "V-02 na ACV, vermelha"; "segurança: Sgt Dinardi" | quadrados nos quadros certos, cor só depois da ACV, alerta crítico da V-02 vermelha e o de segurança some ao designar |
+| 40q | Abrir **↗ Outra janela** no celular de outro responsável, sem estar logado | pede o login; depois mostra o painel e se atualiza sozinho quando o PC registra algo |
+| 40r | Falar no 🎤 "SAMU no local com 5 pessoas" e conferir | órgão SAMU no local com 5 pessoas e hora de chegada; faixa de órgãos atualizada; entra na linha do tempo e no diário |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Painel de comando SCI (migração 045)**: banco — 852 verificações (migrações 007–045: funções e total com eventos automáticos, marcos com
+  correção e retirada, vítimas numeradas com horários de cada passo e correção de fase, óbito como segurança, registro manual, confirmação,
+  correção com histórico, anulação com motivo, espelho no diário, itens validados por tipo, imagens no bucket privado, acesso só dos
+  responsáveis, modo teste sem diário e zerar, encerrada, retenção e exclusão); unitários — regras do SCI com os dados e as frases do
+  simulado Três Bocas (totais, alertas, resumo, imprensa, 14 frases, divergências, normalização) e o endpoint `/api/sci-ia` com a rede
+  simulada. Navegador (Playwright, 1280 px e 390 px): abrir o SCI, marco por frase com hora, vítimas (nova, arrastar para a ACV, ficha,
+  triagem com cor), frase de vítima com alerta crítico, funções e acompanhamento remoto, órgão por frase, total não confirmado, rio
+  subindo, registro não confirmado e confirmação, "O que falta"; janela própria com sessão, encerrada (só consulta) e com login.
 
 - **Cadastro rápido, vítima no mapa, cor livre, agrupamento e convite por e-mail (migração 044)**: banco — 800 verificações
   (migrações 007–044: ficha rápida, completar tira a marca, vítima só com o nome nasce rápida; convite com e-mail normalizado,

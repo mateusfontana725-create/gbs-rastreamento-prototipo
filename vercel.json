@@ -6,7 +6,8 @@
     { "source": "/", "destination": "/militar.html", "permanent": false }
   ],
   "functions": {
-    "api/poa-ia.js": { "maxDuration": 60 }
+    "api/poa-ia.js": { "maxDuration": 60 },
+    "api/sci-ia.js": { "maxDuration": 30 }
   },
   "crons": [
     { "path": "/api/limpeza", "schedule": "0 7 * * *" }
@@ -18,7 +19,7 @@
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "geolocation=(self), camera=(), microphone=()" },
+        { "key": "Permissions-Policy", "value": "geolocation=(self), camera=(), microphone=(self)" },
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
         {
           "key": "Content-Security-Policy",

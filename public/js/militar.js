@@ -362,6 +362,7 @@
     $('btn-regua').addEventListener('click', alternarRegua);
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
+    $('menu-sci').addEventListener('click', function () { fecharMenu(false); abrirSci(); });
     $('menu-binomio').addEventListener('click', function () { fecharMenu(false); if (window.Binomio) window.Binomio.abrir(); });
     $('menu-drone-agua').addEventListener('click', function () { fecharMenu(false); if (window.ObservacoesCampo) window.ObservacoesCampo.abrir(); });
     $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
@@ -9378,6 +9379,19 @@
     est.alertas.forEach(function (a) { if (a.tipo === 'vitima_localizada' && a.chave === 'vitima:' + reg.id) achado = a; });
     var p = achado && achado.participante_id ? est.participantes.get(achado.participante_id) : null;
     return p && p.id !== reg.participante_id ? p : null;
+  }
+
+  // Painel de comando SCI (js/sci.js) numa janela grande; "Outra janela" abre sci.html para o comando remoto
+  function abrirSci() {
+    if (!est.op || !window.SCI) return;
+    var caixa = UI.el('div', { classe: 'sci-no-painel' });
+    var ctl = null;
+    var fechar = UI.abrirModal(UI.el('div', null, [UI.el('h2', { id: 'modal-titulo', texto: 'Comando SCI' }), caixa]), { tamanho: 'cheio', aoFechar: function () { if (ctl) ctl.parar(); } });
+    ctl = window.SCI.montar(caixa, {
+      op: est.op, podeAlterar: podeAlterar,
+      setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },
+      irPara: function (lat, lng) { fechar(); if (est.mapa) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 16)); },
+    });
   }
 
   function abrirCadastroRapido() {

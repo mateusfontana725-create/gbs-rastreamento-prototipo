@@ -76,34 +76,31 @@
       var ctx = this._canvas.getContext('2d');
       ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
       if (!this._grade || this._tipo === 'vento') return;
-      if (this._tipo === 'chuva') { this._pintarChuva(ctx); return; }
-      var m = this._map, bloco = 6, g = this._grade;
-      for (var y = 0; y < this._canvas.height; y += bloco) {
-        for (var x = 0; x < this._canvas.width; x += bloco) {
-          var ll = m.containerPointToLatLng([x + bloco / 2, y + bloco / 2]);
-          var t = Core.interpolar(g, ll.lat, ll.lng);
-          var cor = Core.corTemperatura(t);
-          if (!cor) continue;
-          ctx.fillStyle = 'rgba(' + cor[0] + ',' + cor[1] + ',' + cor[2] + ',0.42)';
-          ctx.fillRect(x, y, bloco, bloco);
-        }
-      }
+      if (this._tipo === 'chuva') { this._desenharCampo(ctx, function (mm) { var c = Core.corChuva(mm); return c ? c.concat(Core.opacidadeChuva(mm)) : null; }); return; }
+      this._desenharCampo(ctx, function (t) { var c = Core.corTemperatura(t); return c ? c.concat(0.42) : null; });
     },
 
-    // Chuva no estilo de radar: blocos coloridos pela intensidade (mm/h), mais opacos onde chove mais.
-    // A grade tem pontos a ~40 km: a interpolação dá manchas suaves (é previsão de modelo, não eco de radar).
-    _pintarChuva: function (ctx) {
-      var m = this._map, bloco = 5, g = this._grade;
-      for (var y = 0; y < this._canvas.height; y += bloco) {
-        for (var x = 0; x < this._canvas.width; x += bloco) {
-          var ll = m.containerPointToLatLng([x + bloco / 2, y + bloco / 2]);
-          var mm = Core.interpolar(g, ll.lat, ll.lng);
-          var cor = Core.corChuva(mm);
-          if (!cor) continue;
-          ctx.fillStyle = 'rgba(' + cor[0] + ',' + cor[1] + ',' + cor[2] + ',' + Core.opacidadeChuva(mm).toFixed(2) + ')';
-          ctx.fillRect(x, y, bloco, bloco);
+    // Campo contínuo: calcula num canvas pequeno (1 pixel a cada 6) e amplia com suavização, para as cores
+    // passarem de um ponto da grade a outro sem degraus. cor(valor) → [r, g, b, opacidade] ou null.
+    _desenharCampo: function (ctx, cor) {
+      var m = this._map, g = this._grade, passo = 6;
+      var w = Math.ceil(this._canvas.width / passo), h = Math.ceil(this._canvas.height / passo);
+      var pequeno = document.createElement('canvas');
+      pequeno.width = w; pequeno.height = h;
+      var pc = pequeno.getContext('2d'), img = pc.createImageData(w, h), d = img.data;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var ll = m.containerPointToLatLng([x * passo + passo / 2, y * passo + passo / 2]);
+          var c = cor(Core.interpolar(g, ll.lat, ll.lng));
+          if (!c) continue;
+          var k = (y * w + x) * 4;
+          d[k] = c[0]; d[k + 1] = c[1]; d[k + 2] = c[2]; d[k + 3] = Math.round(c[3] * 255);
         }
       }
+      pc.putImageData(img, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(pequeno, 0, 0, w * passo, h * passo);
     },
 
     _novaParticula: function () {
@@ -153,7 +150,50 @@
     },
   });
 
+  // Satélite GOES-East (infravermelho realçado, NASA GIBS): cada tile é filtrado num canvas para deixar só as
+  // nuvens — as coloridas (topos muito frios: tempestade e chuva forte) quase opacas, as brancas (nuvens altas)
+  // translúcidas e o resto (chão e nuvens baixas, em cinza escuro) transparente. Assim o mapa continua visível.
+  var Satelite = L.GridLayer.extend({
+    options: { tileSize: 256, maxNativeZoom: 6, minZoom: 2, opacity: 0.9, zIndex: 380, attribution: 'Satélite GOES-East © NOAA, via NASA GIBS' },
+    initialize: function (url) { this._urlBase = url; this._t = null; this.ok = 0; this.erros = 0; },
+    setTempo: function (t, url) {
+      if (url) this._urlBase = url;
+      if (t === this._t) return;
+      this._t = t;
+      if (this._map) this.redraw();
+    },
+    createTile: function (c, pronto) {
+      var tile = document.createElement('canvas');
+      tile.width = tile.height = 256;
+      var self = this;
+      if (!this._t || !this._urlBase || c.z > 6) { setTimeout(function () { pronto(null, tile); }, 0); return tile; }
+      var n = Math.pow(2, c.z), x = ((c.x % n) + n) % n;
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function () {
+        var ctx = tile.getContext('2d');
+        ctx.drawImage(img, 0, 0, 256, 256);
+        try {
+          var dados = ctx.getImageData(0, 0, 256, 256), p = dados.data;
+          for (var i = 0; i < p.length; i += 4) {
+            var r = p[i], g = p[i + 1], b = p[i + 2];
+            var mx = Math.max(r, g, b), sat = mx - Math.min(r, g, b);
+            if (sat > 40) p[i + 3] = 225;                                   // colorido: topo frio (tempestade)
+            else { p[i + 3] = Math.max(0, Math.min(150, (mx - 150) * 2)); p[i] = p[i + 1] = p[i + 2] = 235; }   // branco: nuvem alta
+          }
+          ctx.putImageData(dados, 0, 0);
+          self.ok++;
+        } catch (e) { /* sem CORS: fica a imagem sem filtro */ }
+        pronto(null, tile);
+      };
+      img.onerror = function () { self.erros++; pronto(null, tile); };
+      img.src = this._urlBase.replace('{t}', this._t).replace('{z}', c.z).replace('{y}', c.y).replace('{x}', x);
+      return tile;
+    },
+  });
+
   window.MeteoMapa = {
+    criarSatelite: function (url) { return new Satelite(url); },
     criarVento: function () { return new Camada('vento'); },
     criarTemperatura: function () { return new Camada('temperatura'); },
     criarChuva: function () { return new Camada('chuva'); },

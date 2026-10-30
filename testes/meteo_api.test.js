@@ -222,6 +222,64 @@ const MET = (fn) => (url) => json(fn(url));
     assert.strictEqual(r.body.grade.pontos.length, 169);
     delete process.env.OPEN_METEO_API_KEY;
   });
+  await teste('grade do Paraná: o estado inteiro (9 × 11), igual para todas as operações (sem lat/lng)', async () => {
+    ambiente({}); delete process.env.OPEN_METEO_API_KEY;
+    let consultas = 0;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true),
+      'api.met.no/weatherapi/locationforecast': () => { consultas++; return json(metResp(18, 3, 90, 1.5)); } });
+    const r = resposta(); await carregar()(req({ tipo: 'grade', area: 'parana' }, 't'), r);
+    assert.strictEqual(r.code, 200);
+    assert.strictEqual(r.body.ok, true);
+    assert.strictEqual(r.body.area, 'parana');
+    const g = r.body.grade;
+    assert.strictEqual(g.pontos.length, 99); assert.strictEqual(consultas, 99);
+    assert.strictEqual(g.nLin, 9); assert.strictEqual(g.nCol, 11);
+    assert.ok(g.lat0 <= -26.7 && g.lat0 + g.dlat * 8 >= -22.5 && g.lng0 <= -54.6 && g.lng0 + g.dlng * 10 >= -48, 'cobre o Paraná');
+  });
+  await teste('grade do Brasil: o país inteiro; alguns pontos sem resposta ficam vazios (não derrubam o mapa)', async () => {
+    ambiente({}); delete process.env.OPEN_METEO_API_KEY;
+    let n = 0;
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true),
+      'api.met.no/weatherapi/locationforecast': () => { n++; return n % 20 === 0 ? json({}, 503) : json(metResp(25, 2, 0, 0)); } });
+    const r = resposta(); await carregar()(req({ tipo: 'grade', area: 'brasil' }, 't'), r);
+    assert.strictEqual(r.body.ok, true);
+    const g = r.body.grade;
+    assert.strictEqual(g.pontos.length, 100);
+    assert.strictEqual(g.pontos.filter((p) => p.temperatura === null).length, 5);
+    assert.ok(g.lat0 <= -33 && g.lat0 + g.dlat * (g.nLin - 1) >= 5 && g.lng0 <= -73 && g.lng0 + g.dlng * (g.nCol - 1) >= -35, 'cobre o Brasil');
+  });
+  await teste('satélite: acha a imagem mais recente publicada e devolve 12 horários de 10 em 10 min', async () => {
+    ambiente({});
+    const pedidos = [];
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true),
+      'gibs.earthdata.nasa.gov': (url) => { pedidos.push(url); return { ok: pedidos.length >= 3, status: pedidos.length >= 3 ? 200 : 404 }; } });
+    const r = resposta(); await carregar()(req({ tipo: 'satelite' }, 't'), r);
+    assert.strictEqual(r.code, 200);
+    assert.strictEqual(r.body.ok, true);
+    const s = r.body.satelite;
+    assert.strictEqual(s.quadros.length, 12);
+    assert.ok(/GOES-East_ABI_Band13_Clean_Infrared/.test(s.url) && /\{t\}/.test(s.url) && /\{z\}\/\{y\}\/\{x\}/.test(s.url));
+    const ult = Date.parse(s.quadros[11]);
+    assert.ok(Date.now() - ult >= 30 * 60e3 && Date.now() - ult < 41 * 60e3, 'o 3º horário testado (o 1º publicado)');
+    assert.strictEqual(Date.parse(s.quadros[11]) - Date.parse(s.quadros[10]), 600e3);
+    assert.ok(pedidos[2].includes(s.quadros[11]));
+  });
+  await teste('satélite fora do ar: informa o erro sem derrubar', async () => {
+    ambiente({});
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'gibs.earthdata.nasa.gov': () => ({ ok: false, status: 503 }) });
+    const r = resposta(); await carregar()(req({ tipo: 'satelite' }, 't'), r);
+    assert.strictEqual(r.code, 200);
+    assert.strictEqual(r.body.ok, false);
+    assert.strictEqual(r.body.satelite, null);
+    assert.ok(r.body.erro);
+  });
+  await teste('satélite e grade regional também exigem login de responsável', async () => {
+    ambiente({}); global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(false) });
+    const r = resposta(); await carregar()(req({ tipo: 'satelite' }, 't'), r);
+    assert.strictEqual(r.code, 403);
+    const r2 = resposta(); await carregar()(req({ tipo: 'grade', area: 'brasil' }), r2);
+    assert.strictEqual(r2.code, 401);
+  });
 
   if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
   console.log('\nTodos os testes do endpoint de meteorologia passaram.');

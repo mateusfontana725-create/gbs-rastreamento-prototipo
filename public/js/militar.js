@@ -1774,13 +1774,15 @@
       zoomToBoundsOnClick: true,
       iconCreateFunction: function (grupo) {
         var filhos = grupo.getAllChildMarkers();
-        var cont = { poi: 0, relato: 0, foto: 0, verif: 0, import: 0 }, critico = false, vitima = 0;
+        var cont = { poi: 0, relato: 0, foto: 0, verif: 0, import: 0 }, critico = false, vitimas = [];
         filhos.forEach(function (m) {
           var t = cont[m.options.tipoPonto] != null ? m.options.tipoPonto : 'poi';
           cont[t]++;
           if (m.options.critico) critico = true;
-          if (m.options.vitima) vitima++;
+          if (m.options.vitima) vitimas.push(m.getLatLng());
         });
+        // relato e ponto da mesma vítima (a menos de 30 m) contam como uma só
+        var vitima = vitimas.filter(function (ll, i) { return !vitimas.slice(0, i).some(function (o) { return o.distanceTo(ll) < 30; }); }).length;
         var cores = [];
         TIPOS_PONTO_ORDEM.forEach(function (t) { for (var i = 0; i < cont[t]; i++) cores.push(COR_TIPO_PONTO[t]); });
         var anel = window.MapaRotulos ? window.MapaRotulos.fatiasDeCor(cores) : cores[0] + ' 0deg 360deg';
@@ -1790,7 +1792,9 @@
         return L.divIcon({
           className: 'cluster-wrap',
           html: '<div class="cluster cluster-pontos' + (critico ? ' cluster-critico' : '') + (vitima ? ' cluster-vitima' : '') + '" style="background:conic-gradient(' + anel + ')" title="' + C.esc(dica) + '">' +
-            '<b>' + filhos.length + '</b>' + (critico ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') + (vitima ? '<i class="cl-vitima" aria-hidden="true">+</i>' : '') + '</div>',
+            '<b>' + filhos.length + '</b>' + (critico ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') +
+            // vítima dentro do grupo: marca "+" verde (com a quantidade) e etiqueta fixa ao lado, em qualquer zoom
+            (vitima ? '<i class="cl-vitima" aria-hidden="true">+' + (vitima > 1 ? vitima : '') + '</i><span class="cl-vitima-rotulo">' + (vitima > 1 ? vitima + ' VÍTIMAS' : 'VÍTIMA') + '</span>' : '') + '</div>',
           iconSize: [38, 38],
           iconAnchor: [19, 19],
         });

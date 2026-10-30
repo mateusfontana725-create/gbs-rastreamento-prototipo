@@ -451,12 +451,25 @@
         <button class="btn btn-pequeno meteo-mais" type="button" id="meteo-mais-alertas" hidden></button>
 
         <div class="meteo-chips" role="group" aria-label="Camadas no mapa">
+          <button class="meteo-chip" type="button" id="meteo-satelite" aria-pressed="true" title="Nuvens de chuva e tempestade vistas pelo satélite GOES, em todo o Brasil, a cada 10 min">Satélite</button>
           <button class="meteo-chip" type="button" id="meteo-chuva" aria-pressed="true" title="Mapa de chuva em cores de radar (previsão de modelo para agora)">Chuva</button>
           <button class="meteo-chip" type="button" id="meteo-radar" aria-pressed="true">Radar</button>
           <button class="meteo-chip" type="button" id="meteo-vento" aria-pressed="false">Vento</button>
           <button class="meteo-chip" type="button" id="meteo-temp" aria-pressed="false">Temperatura</button>
         </div>
+        <div class="meteo-area-grade" role="radiogroup" aria-label="Área de vento, temperatura e chuva no mapa">
+          <span class="meteo-detalhe">Área:</span>
+          <button class="meteo-chip" type="button" role="radio" data-area="operacao" aria-checked="false" title="240 km ao redor da operação (mais detalhe)">Operação</button>
+          <button class="meteo-chip" type="button" role="radio" data-area="parana" aria-checked="true" title="O Paraná inteiro">Paraná</button>
+          <button class="meteo-chip" type="button" role="radio" data-area="brasil" aria-checked="false" title="O Brasil inteiro (menos detalhe)">Brasil</button>
+        </div>
         <div class="meteo-legenda" id="meteo-legenda" hidden></div>
+
+        <div class="meteo-radar-controle" id="meteo-sat-bloco" hidden>
+          <button class="btn btn-pequeno" type="button" id="meteo-sat-play" aria-label="Animar o satélite (últimas 2 horas)">▶</button>
+          <input type="range" id="meteo-sat-range" min="0" max="0" value="0" aria-label="Horário da imagem de satélite">
+          <span class="meteo-detalhe" id="meteo-sat-hora"></span>
+        </div>
 
         <div class="meteo-radar-controle" id="meteo-radar-bloco" hidden>
           <button class="btn btn-pequeno" type="button" id="meteo-play" aria-label="Animar o radar">▶</button>

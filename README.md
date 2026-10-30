@@ -751,6 +751,17 @@ e o mapa e o rastreamento continuam funcionando.
 > **não foi verificado contra as APIs reais** (o ambiente de desenvolvimento não tinha acesso a elas). Confirme a
 > resposta real de cada fonte depois de publicar, em Preview, antes de usar em operação.
 
+- **Satélite (nuvens de chuva em todo o Brasil)**: botão **Satélite** no painel da Meteorologia, ligado por padrão. Imagem
+  do **GOES-East** (NOAA), canal infravermelho realçado, pelo **NASA GIBS** (domínio público, sem chave), **nova a cada 10 min**
+  (atraso de ~30 min) e cobrindo **o Brasil inteiro**. O painel filtra a imagem: as nuvens de topo muito frio (onde chove
+  forte e há tempestade) aparecem coloridas — azul, verde, amarelo e vermelho, do mais fraco ao mais forte —, as nuvens altas
+  ficam brancas translúcidas e o resto fica transparente, então o mapa continua visível. **▶** anima as **últimas 2 horas**
+  (12 imagens) e a barra escolhe o horário ("Satélite GOES · 11:50 (há 26 min)"). Mostra as nuvens que costumam dar chuva,
+  não a chuva medida no chão (isso é radar).
+- **Área do vento, da temperatura e da chuva no mapa**: **Operação** (240 km ao redor, mais detalhe), **Paraná** (o estado
+  inteiro, padrão) ou **Brasil** (o país inteiro, menos detalhe). Paraná e Brasil são iguais para todas as operações e ficam
+  30 min em cache no servidor (`/api/meteo?tipo=grade&area=parana|brasil`). Os alertas de chuva perto da operação continuam
+  usando a grade da operação, que é mais detalhada.
 - **Mapa de chuva (estilo radar)**: botão **Chuva** no painel da Meteorologia, **ligado por padrão**. Pinta sobre o mapa a
   intensidade da chuva de agora em cada lugar da região (240 km), com as cores dos radares — azul-claro (garoa), azul, verde,
   amarelo, laranja, vermelho e magenta (acima de 50 mm/h) — e transparência pela intensidade (garoa quase transparente). Vem
@@ -1056,8 +1067,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     fotos); um **!** vermelho avisa que há área de risco ou pedido de ajuda dentro. Passar o mouse diz quantos de
     cada; tocar aproxima; vários no mesmo lugar abrem em leque. O agrupamento já funciona na escala de 200 m e de 100 m (raio de
     40 a 50 px) e só diminui de muito perto (zoom 19+).
-    **Vítima encontrada** (ponto ou relato) agrupa como os demais, mas o grupo ganha um **+ verde** no canto (e o
-    tooltip diz "inclui vítima localizada"), então ela não passa despercebida; de perto ela diminui junto com os outros
+    **Vítima encontrada** (ponto ou relato) agrupa como os demais, mas o grupo fica inconfundível: **borda verde
+    pulsante**, um **+ verde** no canto com a quantidade (**+2**) e a etiqueta **VÍTIMA** / **2 VÍTIMAS** ao lado, visível
+    em qualquer zoom (relato e ponto da mesma vítima, a menos de 30 m, contam como uma); de perto ela diminui junto com os outros
     ícones (só o pedido de ajuda mantém um tamanho mínimo). **Indicações a verificar** (binômio, drone e água, em amarelo
     no anel) e **pontos importados** (verde-limão) também entram no agrupamento e diminuem com o zoom, assim como o
     marcador de destino. Os círculos das áreas de risco e da base continuam sempre visíveis. **Ver no mapa** de um ponto agrupado aproxima até ele aparecer e pisca. As camadas
@@ -2001,6 +2013,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40y | **Ferramentas**: digitar "rela" na busca e Enter; recolher a seção **Equipes** e reabrir o menu | só "Relatório" aparece e Enter abre; Equipes continua recolhida |
 | 40z | **Trilha**: desenhar, abrir **⋯** e escolher **Limpar**; depois **×** | a barra fica numa linha (↶, ⋯, Concluir, ×); o menu ⋯ mostra Limpar, Mover mapa e Mais opções |
 | 40za | Marcar uma **Vítima encontrada** perto de outros pontos; afastar o mapa (zoom 14) e depois aproximar até o zoom 20 | de longe, o grupo mostra o **+ verde**; de perto a vítima aparece solta e diminui a cada nível, como os demais ícones; binômio, drone/água e pontos importados também agrupam e diminuem |
+| 40zb | Agrupar no mapa (zoom 14) duas vítimas registradas a ~200 m uma da outra, com outros pontos perto | o grupo tem borda verde pulsante, **+2** e a etiqueta **2 VÍTIMAS** ao lado |
+| 40zc | **☂ Meteorologia**: deixar **Satélite** ligado, afastar até ver o Brasil; tocar em **▶**; trocar a **Área** para Paraná e Brasil | nuvens de chuva coloridas em todo o país, com o horário da imagem; a animação passa pelas últimas 2 h; a chuva/vento/temperatura cobrem o estado ou o país |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |

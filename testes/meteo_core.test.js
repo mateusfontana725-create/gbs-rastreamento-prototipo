@@ -225,5 +225,16 @@ teste('chuva prevista: período já iniciado é diferente de chegada futura', ()
   assert.strictEqual(r.iniciada, true);
 });
 
+teste('mapa de chuva: cores de radar e transparência pela intensidade', () => {
+  assert.strictEqual(M.corChuva(0), null);
+  assert.strictEqual(M.corChuva(0.05), null);
+  assert.strictEqual(M.corChuva(null), null);
+  assert.deepStrictEqual(M.corChuva(0.1), [147, 197, 253]);
+  assert.deepStrictEqual(M.corChuva(2.5), [34, 197, 94]);
+  assert.deepStrictEqual(M.corChuva(80), [192, 38, 211]);
+  const fraca = M.opacidadeChuva(0.5), forte = M.opacidadeChuva(20);
+  assert.ok(M.opacidadeChuva(0) === 0 && fraca > 0.3 && forte > fraca && forte <= 0.75 && M.opacidadeChuva(500) <= 0.75);
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes de meteorologia passaram.');

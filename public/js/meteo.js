@@ -1,7 +1,8 @@
 /* =====================================================================
  * meteo.js — painel "Meteorologia" do responsável.
  *   - alertas: chuva na área (distância e direção), previsão e alertas oficiais
- *   - camadas no mapa: Radar (RainViewer, desligado por padrão), Vento e Temperatura (previsão de modelo: MET Norway)
+ *   - camadas no mapa: Chuva (mapa de chuva em cores de radar, da grade de previsão), Radar (RainViewer, desligado
+ *     por padrão), Vento e Temperatura (previsão de modelo: MET Norway)
  *   - aviso no mapa que pode ser ocultado sem parar o monitoramento; som só para Alerta e Crítico
  * Dados sempre de /api/meteo (servidor). Se uma fonte falhar, o painel diz qual; o mapa e o GPS seguem.
  * ===================================================================== */
@@ -12,7 +13,7 @@
   function $(id) { return document.getElementById(id); }
 
   var CHAVE_LIG = 'gbs-meteo-ligada', CHAVE_SOM = 'gbs-meteo-som';
-  var CHAVE_RADAR = 'gbs-meteo-radar', CHAVE_VENTO = 'gbs-meteo-vento', CHAVE_TEMP = 'gbs-meteo-temp';
+  var CHAVE_RADAR = 'gbs-meteo-radar', CHAVE_VENTO = 'gbs-meteo-vento', CHAVE_TEMP = 'gbs-meteo-temp', CHAVE_CHUVA = 'gbs-meteo-chuva';
   var CHAVE_HIST = 'gbs-meteo-historico:';
   var INTERVALO_MS = 5 * 60e3, LIMITE_DESATUALIZADO_MIN = 20, MIN_ENTRE_SONS_MS = 10 * 60e3;
   var NIVEIS = { informativo: 'Informativo', atencao: 'Atenção', alerta: 'Alerta', critico: 'Crítico' };
@@ -29,12 +30,13 @@
     radar: lerLocal(CHAVE_RADAR, true) !== false,
     vento: Boolean(lerLocal(CHAVE_VENTO, false)),
     temp: Boolean(lerLocal(CHAVE_TEMP, false)),
+    chuva: lerLocal(CHAVE_CHUVA, true) !== false,   // ligada por padrão: é o "radar" visual disponível sempre
     som: lerLocal(CHAVE_SOM, true) !== false,
     opId: null, alertas: [], estados: [], historico: [], chuvaHist: [], previsao: null,
     quadros: [], host: null, quadro: 0, tocando: null,
     atualizadoEm: null, fontes: null, erro: null, buscando: false,
     grade: null, gradeEm: null, gradeErro: null,
-    camadaRadar: null, camadaVento: null, camadaTemp: null,
+    camadaRadar: null, camadaVento: null, camadaTemp: null, camadaChuva: null,
     tilesOk: 0, tilesErro: 0, ultimoSom: {}, ctx: null, avisoOculto: false, verTodos: false,
   };
 
@@ -45,7 +47,7 @@
   function atualizarBotoes() {
     var b = $('opt-meteo');
     if (b) b.setAttribute('aria-pressed', String(est.ligada));
-    [['meteo-radar', est.radar], ['meteo-vento', est.vento], ['meteo-temp', est.temp], ['meteo-som', est.som]].forEach(function (x) {
+    [['meteo-radar', est.radar], ['meteo-chuva', est.chuva], ['meteo-vento', est.vento], ['meteo-temp', est.temp], ['meteo-som', est.som]].forEach(function (x) {
       var el = $(x[0]);
       if (el) el.setAttribute('aria-pressed', String(x[1]));
     });
@@ -89,7 +91,11 @@
 
     if (!est.camadaVento) est.camadaVento = MeteoMapa.criarVento();
     if (!est.camadaTemp) est.camadaTemp = MeteoMapa.criarTemperatura();
-    [[est.camadaVento, est.ligada && est.vento], [est.camadaTemp, est.ligada && est.temp]].forEach(function (par) {
+    if (!est.camadaChuva && MeteoMapa.criarChuva) est.camadaChuva = MeteoMapa.criarChuva();
+    // Chuva da grade: com o radar real ligado e carregado, ele substitui (não sobrepõe duas camadas de chuva)
+    var querChuva = est.ligada && est.chuva && !quer;
+    [[est.camadaChuva, querChuva], [est.camadaVento, est.ligada && est.vento], [est.camadaTemp, est.ligada && est.temp]].forEach(function (par) {
+      if (!par[0]) return;
       var camada = par[0], quer2 = par[1];
       if (quer2 && !m.hasLayer(camada)) camada.addTo(m);
       if (!quer2 && m.hasLayer(camada)) m.removeLayer(camada);
@@ -380,11 +386,14 @@
     var bloco = $('meteo-legenda');
     var partes = [];
     if (est.ligada && est.radar && est.quadros.length) partes.push('<div class="meteo-legenda-bloco"><strong>Radar · intensidade da chuva</strong><p class="meteo-legenda-linha"><span class="meteo-swatch meteo-swatch-radar"></span>tons claros = fraca; escuros e vermelhos = intensa</p></div>');
+    if (est.ligada && est.chuva && !(est.radar && est.quadros.length)) partes.push('<div class="meteo-legenda-bloco"><strong>Chuva · intensidade (mm/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-chuva"></div><div class="meteo-escala-rotulos"><span>0,1</span><span>2,5</span><span>10</span><span>50+ mm/h</span></div></div><p class="meteo-legenda-linha muted">Previsão de modelo para agora (grade de ~40 km): mostra onde chove, não substitui o radar.</p></div>');
     if (est.ligada && est.vento) partes.push('<div class="meteo-legenda-bloco"><strong>Vento · velocidade (km/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-vento"></div><div class="meteo-escala-rotulos"><span>0</span><span>25</span><span>50+ km/h</span></div></div></div>');
     if (est.ligada && est.temp) partes.push('<div class="meteo-legenda-bloco"><strong>Temperatura (°C)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-temp"></div><div class="meteo-escala-rotulos"><span>-5 °C</span><span>16 °C</span><span>38 °C</span></div></div></div>');
     bloco.innerHTML = partes.join('');
     bloco.hidden = !partes.length;
-    var barraT = bloco.querySelector('#meteo-barra-temp'), barraV = bloco.querySelector('#meteo-barra-vento');
+    var barraT = bloco.querySelector('#meteo-barra-temp'), barraV = bloco.querySelector('#meteo-barra-vento'), barraC = bloco.querySelector('#meteo-barra-chuva');
+    if (barraC) barraC.style.background = 'linear-gradient(to right, ' + Core.PARADAS_CHUVA.map(function (p, i) {
+      return 'rgb(' + p[1].join(',') + ') ' + (i / (Core.PARADAS_CHUVA.length - 1) * 100).toFixed(1) + '%'; }).join(', ') + ')';
     if (barraT) barraT.style.background = 'linear-gradient(to right, ' +
       Core.PARADAS_TEMP.map(function (p) { return 'rgb(' + p[1].join(',') + ') ' + ((p[0] + 5) / 43 * 100).toFixed(1) + '%'; }).join(', ') + ')';
     if (barraV) barraV.style.background = 'linear-gradient(to right, ' +
@@ -485,6 +494,7 @@
     $('meteo-radar').addEventListener('click', function () { alternar({ nome: 'radar', chave: CHAVE_RADAR }); });
     $('meteo-vento').addEventListener('click', function () { alternar({ nome: 'vento', chave: CHAVE_VENTO }); });
     $('meteo-temp').addEventListener('click', function () { alternar({ nome: 'temp', chave: CHAVE_TEMP }); });
+    $('meteo-chuva').addEventListener('click', function () { alternar({ nome: 'chuva', chave: CHAVE_CHUVA }); });
     $('meteo-som').addEventListener('click', function () { est.som = !est.som; gravarLocal(CHAVE_SOM, est.som); if (est.som) prepararSom(); desenharSituacao(); });
     $('meteo-atualizar').addEventListener('click', function () { consultar(); });
 

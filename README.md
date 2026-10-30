@@ -744,6 +744,12 @@ e o mapa e o rastreamento continuam funcionando.
 > **não foi verificado contra as APIs reais** (o ambiente de desenvolvimento não tinha acesso a elas). Confirme a
 > resposta real de cada fonte depois de publicar, em Preview, antes de usar em operação.
 
+- **Mapa de chuva (estilo radar)**: botão **Chuva** no painel da Meteorologia, **ligado por padrão**. Pinta sobre o mapa a
+  intensidade da chuva de agora em cada lugar da região (240 km), com as cores dos radares — azul-claro (garoa), azul, verde,
+  amarelo, laranja, vermelho e magenta (acima de 50 mm/h) — e transparência pela intensidade (garoa quase transparente). Vem
+  da mesma grade de previsão do vento e da temperatura (MET Norway, licença livre com atribuição), com legenda em mm/h. É
+  **previsão de modelo** com pontos a ~40 km (manchas suaves, não ecos de radar); a legenda diz isso. Com o radar RainViewer
+  ligado no servidor, ele aparece no lugar (as duas camadas de chuva não se sobrepõem).
 - **Radar de precipitação** (RainViewer): **desligado por padrão**, porque a licença do RainViewer é só pessoal e
   educacional. Liga-se com `METEO_RADAR=rainviewer` (só para testes). Não há radar gratuito com licença comercial que cubra
   o Brasil; a alternativa profissional é um provedor pago (ver a seção de licenças).
@@ -1932,6 +1938,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40r3 | No celular do civil, tocar **COMEÇAR** | aparece "Começar a enviar sua localização?"; **Agora não** não envia nada; **Começar** entra no rastreamento |
 | 40r4 | **Trilha → • Ponto a ponto**, tocar 4 pontos, arrastar o mapa, **Desfazer ponto**, **✔ Concluir** | os pontos aparecem ligados por retas; arrastar só move o mapa; a trilha é salva como planejada ("Trilha N · hora") sem abrir janelas |
 | 40r5 | Abrir o painel com trilhas no computador e no celular (e girar o celular) | no celular as trilhas ficam mais finas; no computador, iguais às de antes |
+| 40r6 | Ligar **☂ Meteorologia** num dia com chuva na região e afastar o mapa | o botão **Chuva** vem aceso; manchas coloridas (azul a vermelho) mostram onde chove, com a legenda em mm/h; tocar em **Chuva** tira a camada |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |

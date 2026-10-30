@@ -1,5 +1,5 @@
 /* =====================================================================
- * meteo-mapa.js — desenho do vento (partículas animadas) e da temperatura (campo colorido)
+ * meteo-mapa.js — desenho do vento (partículas animadas), da temperatura e da chuva (campos coloridos)
  * sobre o mapa do Leaflet, no estilo dos mapas de vento. Os dados vêm da grade de /api/meteo?tipo=grade.
  * O desenho acontece num canvas próprio; a grade é interpolada com MeteoCore.
  * ===================================================================== */
@@ -28,12 +28,17 @@
       { lat0: g.lat0, lng0: g.lng0, dlat: g.dlat, dlng: g.dlng, nLin: g.nLin, nCol: g.nCol });
   }
 
+  function gradeChuva(g) {
+    return Object.assign({ valores: g.pontos.map(function (p) { return p.precipitacao == null ? null : Math.max(0, p.precipitacao); }) },
+      { lat0: g.lat0, lng0: g.lng0, dlat: g.dlat, dlng: g.dlng, nLin: g.nLin, nCol: g.nCol });
+  }
+
   // Camada base: canvas posicionado no painel de sobreposição, redesenhado conforme o mapa muda.
   var Camada = L.Layer.extend({
     initialize: function (tipo) { this._tipo = tipo; this._grade = null; this._part = []; this._quadro = null; },
 
     setGrade: function (g) {
-      this._grade = g ? (this._tipo === 'vento' ? gradeVento(g) : gradeTemperatura(g)) : null;
+      this._grade = g ? (this._tipo === 'vento' ? gradeVento(g) : this._tipo === 'chuva' ? gradeChuva(g) : gradeTemperatura(g)) : null;
       this._part = [];
       if (this._map) this._pintarCampo();
     },
@@ -70,7 +75,8 @@
       this._dimensionar();
       var ctx = this._canvas.getContext('2d');
       ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
-      if (!this._grade || this._tipo !== 'temperatura') return;
+      if (!this._grade || this._tipo === 'vento') return;
+      if (this._tipo === 'chuva') { this._pintarChuva(ctx); return; }
       var m = this._map, bloco = 6, g = this._grade;
       for (var y = 0; y < this._canvas.height; y += bloco) {
         for (var x = 0; x < this._canvas.width; x += bloco) {
@@ -79,6 +85,22 @@
           var cor = Core.corTemperatura(t);
           if (!cor) continue;
           ctx.fillStyle = 'rgba(' + cor[0] + ',' + cor[1] + ',' + cor[2] + ',0.42)';
+          ctx.fillRect(x, y, bloco, bloco);
+        }
+      }
+    },
+
+    // Chuva no estilo de radar: blocos coloridos pela intensidade (mm/h), mais opacos onde chove mais.
+    // A grade tem pontos a ~40 km: a interpolação dá manchas suaves (é previsão de modelo, não eco de radar).
+    _pintarChuva: function (ctx) {
+      var m = this._map, bloco = 5, g = this._grade;
+      for (var y = 0; y < this._canvas.height; y += bloco) {
+        for (var x = 0; x < this._canvas.width; x += bloco) {
+          var ll = m.containerPointToLatLng([x + bloco / 2, y + bloco / 2]);
+          var mm = Core.interpolar(g, ll.lat, ll.lng);
+          var cor = Core.corChuva(mm);
+          if (!cor) continue;
+          ctx.fillStyle = 'rgba(' + cor[0] + ',' + cor[1] + ',' + cor[2] + ',' + Core.opacidadeChuva(mm).toFixed(2) + ')';
           ctx.fillRect(x, y, bloco, bloco);
         }
       }
@@ -134,5 +156,6 @@
   window.MeteoMapa = {
     criarVento: function () { return new Camada('vento'); },
     criarTemperatura: function () { return new Camada('temperatura'); },
+    criarChuva: function () { return new Camada('chuva'); },
   };
 })();

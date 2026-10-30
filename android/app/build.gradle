@@ -6,7 +6,9 @@ plugins {
 // Vazio: o aplicativo aceita o servidor do primeiro link "Abrir no aplicativo" (sempre https).
 def origem = (findProperty('gbsOrigem') ?: System.getenv('GBS_ORIGEM') ?: '').toString().trim().replaceAll('/+$', '')
 def versaoCodigo = (findProperty('versaoCodigo') ?: System.getenv('VERSAO_CODIGO') ?: '1').toString().toInteger()
-def assinatura = System.getenv('ANDROID_KEYSTORE_ARQUIVO')
+// Assinatura oficial só com os quatro valores; sem eles, a chave de teste (o celular só atualiza desinstalando).
+def assinatura = ['ANDROID_KEYSTORE_ARQUIVO', 'ANDROID_KEYSTORE_SENHA', 'ANDROID_CHAVE_ALIAS', 'ANDROID_CHAVE_SENHA']
+    .every { System.getenv(it) } ? System.getenv('ANDROID_KEYSTORE_ARQUIVO') : null
 
 android {
   namespace 'br.gbs.busca'

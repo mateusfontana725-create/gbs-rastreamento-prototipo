@@ -40,12 +40,21 @@ jobs:
       - name: Chave de assinatura
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_SENHA }}
+          ANDROID_CHAVE_ALIAS: ${{ secrets.ANDROID_CHAVE_ALIAS }}
+          ANDROID_CHAVE_SENHA: ${{ secrets.ANDROID_CHAVE_SENHA }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
+          faltam=""
+          for v in KEYSTORE_BASE64 ANDROID_KEYSTORE_SENHA ANDROID_CHAVE_ALIAS ANDROID_CHAVE_SENHA; do
+            [ -n "${!v}" ] || faltam="$faltam ${v/KEYSTORE_BASE64/ANDROID_KEYSTORE_BASE64}"
+          done
+          if [ -z "$faltam" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/gbs-busca.jks"
             echo "ANDROID_KEYSTORE_ARQUIVO=$RUNNER_TEMP/gbs-busca.jks" >> "$GITHUB_ENV"
+            echo "ASSINADO=true" >> "$GITHUB_ENV"
           else
-            echo "::warning::Sem a chave ANDROID_KEYSTORE_BASE64: o APK sai assinado com uma chave de teste, diferente a cada build. Para atualizar o aplicativo nos celulares sem desinstalar, cadastre a chave (README, Aplicativo Android)."
+            echo "ASSINADO=false" >> "$GITHUB_ENV"
+            echo "::warning::Assinatura oficial incompleta (falta:$faltam). O APK sai assinado com uma chave de teste, diferente a cada build: para atualizar o aplicativo nos celulares sem desinstalar, cadastre os 4 secrets (README, Aplicativo Android)."
           fi
 
       - name: Testes, verificação e APK
@@ -73,7 +82,6 @@ jobs:
       - name: Publicar no Release "app-android"
         env:
           GH_TOKEN: ${{ github.token }}
-          ASSINADO: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         run: |
           VERSAO="1.0.${{ github.run_number }}"
           NOTAS="GBS Busca $VERSAO (branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA::7}). SHA-256: $(cut -d' ' -f1 gbs-busca.apk.sha256)."

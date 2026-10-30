@@ -99,6 +99,7 @@
     sci_ja_iniciado: 'O modo teste só pode ser ligado com o quadro vazio (sem vítimas nem registros).',
     imagem_nao_enviada: 'A imagem ainda não chegou ao servidor. Tente de novo.',
     telefone_convite_invalido: 'Confira o celular do convidado (DDD e número).',
+    link_publico_invalido: 'Este link do dashboard não funciona mais: foi trocado ou desligado. Peça o link novo a quem enviou.',
     tipo_ponto_inexistente: 'Este tipo de ponto não existe mais ou foi desativado.',
     tipo_ponto_existente: 'Já existe um tipo de ponto com este nome.',
     operacao_com_registros: 'O servidor ainda recusa excluir operação com atividade: falta executar a migração 041 no Supabase.',

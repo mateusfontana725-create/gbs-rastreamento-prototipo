@@ -914,6 +914,13 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .dash-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--borda-forte);
   font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
 .dash-chip-aberta { color: #34d399; border-color: rgba(52, 211, 153, .45); background: rgba(52, 211, 153, .12); }
+.dash-chip-publico { color: #93c5fd; border-color: rgba(147, 197, 253, .45); background: rgba(147, 197, 253, .1); }
+/* atualização automática (sem botão "Atualizar") */
+.dash-auto { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--texto-2); }
+.dash-auto-ponto { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, .6); animation: dash-pulso 2.4s ease-out infinite; }
+@keyframes dash-pulso { 0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .55); } 70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
+@media (prefers-reduced-motion: reduce) { .dash-auto-ponto { animation: none; } }
+.dash-vitima strong { margin-right: 4px; }
 
 .dash-kpis-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
 .dash-kpis-6 .dash-kpi { grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 12px 14px; }
@@ -931,6 +938,7 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .dash-tab { display: grid; align-items: center; gap: 8px 12px; font-size: .84rem; }
 .dash-tab-grupos { grid-template-columns: minmax(0, 1.4fr) 60px minmax(60px, 1fr) 60px 60px; }
 .dash-tab-setores { grid-template-columns: minmax(0, 1.2fr) 74px minmax(60px, 1fr) 70px 120px; }
+.dash-tab-vitimas { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 64px; }
 .dash-tab .dash-cab { text-align: left; }
 .dash-tab .dash-cab-num { text-align: right; }
 .dash-tab .dash-linha-rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

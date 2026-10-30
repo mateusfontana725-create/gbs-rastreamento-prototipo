@@ -1276,13 +1276,18 @@ dado de participante sai do banco nesses painéis.
   - Dashboard da operação: os números abrem as pessoas (efetivo, km e horas por pessoa), os setores e a duração;
     uma coluna do gráfico mostra quem estava em campo naquele intervalo; um grupo, os integrantes; um setor, a
     cobertura, quem passou e **Ver setor no mapa**. Tocar numa pessoa mostra a pessoa no mapa e abre a ficha.
-    Pedidos de ajuda, relatos e ordens abrem as mensagens; retornos atrasados, os alertas; o diário, o diário.
+    **Pedidos de ajuda, pistas, vestígios, objetos, obstáculos e ordens mostram a lista deles ali mesmo** (não abrem a área
+    de mensagens); no painel, tocar num relato abre o detalhe dele. Retornos atrasados abrem os alertas; o diário, o diário.
+    Uma vítima abre os dados dela (situação, hora, tempo, distância do ULV e situação no SCI).
 - **Operação → Dashboard da operação** (janela larga; no celular, uma coluna):
   - seis números: duração, efetivo (e quantos em campo agora), km percorridos, esforço em pessoa·hora,
-    setores (com a % da área coberta) e se a vítima foi localizada;
-  - **pessoas em campo** ao longo do tempo (uma coluna por intervalo de 15 min a 1 dia), com a hora da
-    localização da vítima marcada;
-  - **vítima**: condição, hora, tempo após o início, distância do ULV e perfis das fichas;
+    setores (com a % da área coberta) e vítimas localizadas (**"2 de 3"** quando há mais de uma);
+  - **pessoas em campo** ao longo do tempo (uma coluna por intervalo de 15 min a 1 dia), com a hora em que **cada
+    vítima** foi localizada marcada;
+  - **vítimas** (migração 048): **várias por ocorrência**, cada uma com os próprios dados — V-01, V-02… (o nome aparece só
+    no painel, com login), situação (procurando / com vida / em óbito, com a hora), distância do ULV, tempo após o início,
+    idade, perfil e a fase e a triagem no SCI. Cada ficha conta a localização ligada a ela; uma localização registrada sem
+    ficha vira uma vítima própria ("Vítima sem ficha"). Com uma só vítima, o cartão continua como antes;
   - **esforço por grupo** (pessoas, km e horas com GPS) e **cobertura dos setores** (% da área por onde passou
     alguma trilha, em quadrados de ~30 m, e a última passagem; os menos cobertos primeiro);
   - **ocorrências**: pedidos de ajuda, pistas, vestígios, objetos, obstáculos, fotos, pontos marcados, ordens
@@ -1290,8 +1295,22 @@ dado de participante sai do banco nesses painéis.
   Esforço, setores e ocorrências são calculados no navegador com o que o painel já carregou (trilhas filtradas
   pelo mesmo critério do mapa). Só a parte da vítima vem do banco (`estudo_operacao`, migração 023); sem ela, o
   restante aparece mesmo assim.
+  - **Atualiza sozinho** (sem botão Atualizar): o dashboard da operação a cada 30 s e o geral a cada 2 min, com a tela
+    visível, sem piscar nem perder a rolagem ("● atualiza sozinho" no topo).
+  - **↗ Abrir em outra janela** (`dashboard.html?op=…`): agora lê do banco os mesmos dados do painel
+    (`dashboard_operacao_dados`, migração 048: participantes com a trilha resumida a um ponto a cada 30 s, grupos,
+    setores, ocorrências e vítimas) — antes a janela abria sem as trilhas e mostrava números errados (efetivo e km zerados).
+  - **🔗 Link público** (no topo do dashboard da operação, para quem pode alterar a operação): cria um endereço
+    `dashboard.html?p=<token>` para acompanhar **sem login e só visualizando** (familiares, imprensa, outros órgãos, sala de
+    situação). Mostra os mesmos números e gráficos, **sem nomes** (pessoas viram "Bombeiro 1", "Civil 2"; vítimas, "V-01"),
+    sem textos de relatos, sem fotos e sem telefones; não há nenhum botão de alteração e o banco não aceita escrita pelo
+    link (`dashboard_publico`, a única função liberada sem login). **Copiar**, **Enviar pelo WhatsApp**, **Trocar link** (o
+    anterior para de funcionar na hora) e **Desligar**; criar, trocar e desligar entram no diário. Link trocado ou
+    desligado mostra "Este link não funciona mais".
 - **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro
-  registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
+  registro de localização **daquela vítima** (o ligado à ficha; sem ficha, cada registro é uma vítima). **Distância** =
+  Haversine entre os dois. No Dashboard geral (`estudo_geral`, migração 048) **cada vítima localizada é um caso** (antes,
+  só a primeira de cada operação); o perfil conta a distância da própria vítima.
 - **Perfil da vítima** = uma lista de seleção na ficha ("Perfil da vítima (para estudos)"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
   Alzheimer/demência, autismo, deficiência intelectual, transtorno mental, outro). Não é calculado pela idade.
 - **Qualidade dos dados** (cartão no fim do Dashboard, migração 043, função `estudo_qualidade`): diz **sobre o que** os
@@ -1304,8 +1323,6 @@ dado de participante sai do banco nesses painéis.
   como denominador (a oculta não conta como zero).
 - **Sigilo dos números:** grupos com **menos de 5 casos** chegam ocultos ("oculto (menos de 5 casos)"), no banco
   (`estudo_geral`, `estudo_operacao`), não só na tela.
-- **Limitação conhecida:** a localização não está ligada a uma ficha específica. Com duas vítimas na mesma operação,
-  a distância conta para as duas. Ligar a localização à ficha é o próximo passo, se o estudo precisar disso.
 - Exportar os dados para pesquisa **não está implementado**: depende de decisão sobre dados de saúde (LGPD) e de
   aprovação ética, antes de qualquer conjunto de dados sair do sistema.
 
@@ -1939,6 +1956,10 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40r4 | **Trilha → • Ponto a ponto**, tocar 4 pontos, arrastar o mapa, **Desfazer ponto**, **✔ Concluir** | os pontos aparecem ligados por retas; arrastar só move o mapa; a trilha é salva como planejada ("Trilha N · hora") sem abrir janelas |
 | 40r5 | Abrir o painel com trilhas no computador e no celular (e girar o celular) | no celular as trilhas ficam mais finas; no computador, iguais às de antes |
 | 40r6 | Ligar **☂ Meteorologia** num dia com chuva na região e afastar o mapa | o botão **Chuva** vem aceso; manchas coloridas (azul a vermelho) mostram onde chove, com a legenda em mm/h; tocar em **Chuva** tira a camada |
+| 40r7 | Operação com 2 fichas de vítima e 2 registros de "vítima encontrada" (um ligado à ficha, outro sem ficha) → **Dashboard** | "Localizadas 2 de 3"; o cartão Vítimas lista V-01, V-02, V-03 com a situação de cada uma; o gráfico marca as duas horas; tocar numa vítima mostra os dados dela |
+| 40r8 | No dashboard da operação, tocar em **Vestígios**; deixar o dashboard aberto 1 min enquanto chega um relato | abre a lista dos vestígios (a área de mensagens não abre); o número muda sozinho, sem tocar em nada |
+| 40r9 | **↗ Abrir em outra janela** com trilhas na operação | efetivo, km, esforço e setores iguais aos do painel |
+| 40r10 | **🔗 Link público → Criar**, abrir o link num celular sem login; depois **Trocar link** | o celular mostra o dashboard sem nomes e sem botões; depois da troca, o link antigo diz "Este link não funciona mais" |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |
@@ -1946,6 +1967,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 
 ### Testes já realizados no desenvolvimento
 
+- **Dashboard em outra janela e por link público; várias vítimas (migração 048)**: banco — 912 verificações (estudo com cada vítima e a própria localização, dados da janela iguais aos do painel, link público sem nomes nem textos, troca e desligamento do link, nada gravável sem login, estudo geral por vítima); navegador — painel, janela própria, link público e link inválido, atualização automática e lista de vestígios.
 - **Convites por categoria/WhatsApp e tipos de ponto (migração 047)**: banco — 889 verificações (convite por WhatsApp com telefone normalizado, link por categoria, tipos de ponto com permissão de edição, pontos acompanhando o tipo, relatório com nome/ícone/cor do tipo); navegador — convites por WhatsApp/e-mail com categoria e tipos de ponto (criar, marcar, voltar à categoria fixa) a 1280 e 390 px.
 - **SCI integrado (migração 046)**: banco — 868 verificações (vítima encontrada entra sozinha no quadro, com os dados da ficha, completando
   a que já estava lançada, óbito como cinza, sem duplicar no diário; `sci_contexto` com comando, briefing, fichas, localizações, equipes,

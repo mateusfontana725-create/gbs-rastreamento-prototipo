@@ -2204,3 +2204,6 @@ html[data-fonte="menor"] { font-size: 93.75%; }
 .tipo-ponto-previa .mk-poi { align-self: flex-start; margin-top: 4px; }
 .tipo-ponto-item { display: flex; align-items: center; gap: 8px; }
 .tipo-ponto-item .item-area-txt { flex: 1; }
+
+/* Fileira de botões que quebra linha (ex.: link público do dashboard) */
+.linha-botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

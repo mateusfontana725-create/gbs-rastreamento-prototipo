@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2104,5 +2104,62 @@ console.log('Convites por categoria e WhatsApp; tipos de ponto (migração 047)'
   await rpc(resp1, 'excluir_operacao', { p_operacao: opC.id });
 }
 
-console.log('\nMigrações 007–047 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Dashboard em outra janela e por link público; várias vítimas (migração 048)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opD = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 048', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre', local_lat: -25.43, local_lng: -49.27, acionado_em: new Date(Date.now() - 3 * 3600e3).toISOString() }) });
+  const uD = await usuario(null, true), uD2 = await usuario(null, true);
+  const pD = await rpc(uD, 'ingressar', { p_token: opD.token_militar, p_nome: 'Sd Dados', p_tipo: 'militar', p_cpf: null, p_telefone: null });
+  const pD2 = await rpc(uD2, 'ingressar', { p_token: opD.token_civil, p_nome: 'Carla Civil', p_tipo: 'civil', p_cpf: null, p_telefone: '41999990000' });
+  const gD = await rpc(resp1, 'salvar_grupo', { p_operacao: opD.id, p_id: null, p_dados: J({ nome: 'Alfa', cor: '#22c55e' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: gD.id, p_participante: pD.participante_id, p_papel: 'membro' });
+  // 10 min de trilha, um ponto a cada 10 s (fica um a cada 30 s)
+  const t0 = Date.now() - 20 * 60e3;
+  await db.query(`update public.operacoes set criada_em = now() - interval '1 hour' where id = $1`, [opD.id]);
+  const pts = Array.from({ length: 60 }, (_, i) => ({ id: '00000000-0000-4000-8048-' + String(i).padStart(12, '0'), lat: -25.43 + i * 0.0001, lng: -49.27, prec: 8, t: t0 + i * 10e3 }));
+  const lt = await rpc(uD, 'enviar_posicoes_lote', { p_participante: pD.participante_id, p_gps: 'ok', p_pontos: J(pts) });
+  await rpc(resp1, 'salvar_setor', { p_operacao: opD.id, p_id: null, p_dados: J({ nome: 'S1', forma: 'circulo', centro_lat: -25.43, centro_lng: -49.27, raio_m: 300 }) });
+  // três vítimas: duas fichas (uma localizada) e uma localização sem ficha
+  const f1 = await rpc(resp1, 'salvar_vitima', { p_operacao: opD.id, p_id: null, p_dados: J({ nome: 'Ana Vítima', idade: 70, perfil: ['idoso'] }) });
+  const f2 = await rpc(resp1, 'salvar_vitima', { p_operacao: opD.id, p_id: null, p_dados: J({ nome: 'Bruno Vítima', idade: 9, perfil: ['crianca'] }) });
+  await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opD.id, p_dados: J({ condicao: 'viva', lat: -25.44, lng: -49.27, vitima_id: f2.id }) });
+  await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opD.id, p_dados: J({ condicao: 'obito', lat: -25.45, lng: -49.27 }) });
+  const est = await rpc(resp1, 'estudo_operacao', { p_operacao: opD.id });
+  chk(est.vitimas_total === 3 && est.vitimas_localizadas === 2 && est.fichas === 2, 'estudo: três vítimas (duas fichas e uma sem ficha), duas localizadas', { t: est.vitimas_total, l: est.vitimas_localizadas });
+  const v1 = est.vitimas.find((x) => x.vitima_id === f1.id), v2 = est.vitimas.find((x) => x.vitima_id === f2.id), v3 = est.vitimas.find((x) => x.sem_ficha);
+  chk(v1 && !v1.localizada && v1.rotulo === 'V-01' && v1.nome === null && v1.idade === 70 && v1.perfil[0] === 'idoso', 'ficha sem localização: V-01, não localizada, com idade e perfil (sem nome)', v1);
+  chk(v2 && v2.localizada && v2.condicao === 'viva' && v2.distancia_km > 1 && v2.distancia_km < 1.2 && v2.minutos_ate >= 170, 'cada vítima com a própria condição, distância do ULV e tempo', v2);
+  chk(v3 && v3.condicao === 'obito' && v3.rotulo === 'V-03' && v3.distancia_km > 2, 'localização sem ficha vira uma vítima própria', v3);
+  chk(est.localizacao && est.localizacao.condicao === 'viva', 'compatibilidade: "localizacao" continua sendo a primeira');
+  const dd = await rpc(resp1, 'dashboard_operacao_dados', { p_operacao: opD.id });
+  const pdd = dd.participantes.find((x) => x.id === pD.participante_id);
+  chk(dd.publico === false && pdd && pdd.nome === 'Sd Dados' && pdd.grupo && pdd.grupo.nome === 'Alfa', 'janela do dashboard: participantes com nome e grupo', pdd && { n: pdd.nome, g: pdd.grupo });
+  chk(pdd.pontos.length >= 19 && pdd.pontos.length <= 21 && pdd.pontos[0].length === 4, 'trilha resumida: um ponto a cada 30 s', pdd.pontos.length);
+  chk(dd.setores.length === 1 && dd.estudo.vitimas_total === 3 && dd.ocorrencias.VESTIGIO === 0, 'janela do dashboard: setores, estudo e ocorrências');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'dashboard_operacao_dados', { p_operacao: opD.id }))), 'responsável de outra operação não lê os dados do dashboard');
+  chk(/permission denied/.test(await erroDe(como(uD, `select public.dashboard_dados($1, false)`, [opD.id]))), 'função interna não é chamável direto');
+  // link público
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'dashboard_publico_gerar', { p_operacao: opD.id }))), 'só responsável da operação cria o link público');
+  const lk = await rpc(resp1, 'dashboard_publico_gerar', { p_operacao: opD.id });
+  chk(/^[0-9a-f]{48}$/.test(lk.token), 'link público: token de 48 caracteres');
+  const pub = await rpc(null, 'dashboard_publico', { p_token: lk.token });
+  chk(pub.publico === true && pub.operacao.codigo === 'OP 048' && pub.participantes.length === 3, 'sem login, o link mostra o dashboard (bombeiro, civil e o responsável que registrou a vítima)');
+  chk(pub.participantes.every((x) => /^(Bombeiro|Civil|Responsável) \d+$/.test(x.nome)) && !JSON.stringify(pub).includes('Sd Dados') && !JSON.stringify(pub).includes('Carla'), 'link público: sem nomes de participantes', pub.participantes.map((x) => x.nome));
+  chk(!JSON.stringify(pub).includes('Ana Vítima') && pub.estudo.vitimas.every((x) => x.nome === null), 'link público: sem nomes de vítimas');
+  chk(!JSON.stringify(pub).includes('41999990000') && !('token_civil' in pub.operacao), 'link público: sem telefone nem tokens');
+  const lk2 = await rpc(resp1, 'dashboard_publico_gerar', { p_operacao: opD.id });
+  chk(/link_publico_invalido/.test(await erroDe(rpc(null, 'dashboard_publico', { p_token: lk.token }))) && (await rpc(null, 'dashboard_publico', { p_token: lk2.token })).publico, 'trocar o link invalida o anterior');
+  chk(/link_publico_invalido/.test(await erroDe(rpc(null, 'dashboard_publico', { p_token: 'x' }))), 'token mal formado: recusado');
+  await rpc(resp1, 'dashboard_publico_desligar', { p_operacao: opD.id });
+  chk(/link_publico_invalido/.test(await erroDe(rpc(null, 'dashboard_publico', { p_token: lk2.token }))), 'desligar o link: deixa de funcionar');
+  const dlog = (await db.query(`select titulo from public.diario where operacao_id = $1 and tipo = 'dashboard_publico' order by id`, [opD.id])).rows.map((r) => r.titulo);
+  chk(dlog.length === 3 && /criado/.test(dlog[0]) && /trocado/.test(dlog[1]) && /desligado/.test(dlog[2]), 'criar, trocar e desligar o link entram no diário', dlog);
+  chk(/permission denied/.test(await erroDe(como(null, `update public.operacoes set dashboard_token = repeat('a', 48) where id = $1`, [opD.id], 'anon'))), 'sem login não grava nada');
+  // estudo geral: cada vítima localizada é um caso
+  const eg = await rpc(resp1, 'estudo_geral', {});
+  chk(eg.localizacoes.vitimas_localizadas >= eg.localizacoes.operacoes_com_localizacao + 1, 'estudo geral conta cada vítima localizada (não só a 1ª da operação)', eg.localizacoes);
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opD.id });
+}
+
+console.log('\nMigrações 007–048 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

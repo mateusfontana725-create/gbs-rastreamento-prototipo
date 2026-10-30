@@ -1139,10 +1139,13 @@
     var novaJanela = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-nova-janela', texto: '↗ Abrir em outra janela',
       title: 'Abre só o dashboard desta operação numa janela própria, para deixar o mapa em outra',
       onclick: function () { window.Dashboard.abrirJanela(est.op.id); } });
+    var linkPublico = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-link-publico', texto: '🔗 Link público',
+      title: 'Link para acompanhar a operação sem login, só visualização (sem nomes)', onclick: abrirLinkPublicoDashboard });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao modal-dashboard' }, [
       UI.el('div', { classe: 'modal-dashboard-topo' }, [
         UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
         UI.el('div', { classe: 'dash-acoes' }, [
+          podeAlterar() ? linkPublico : null,
           novaJanela,
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Fechar', texto: 'Fechar', onclick: function () { fechar(); } }),
         ]),
@@ -1154,8 +1157,62 @@
       verPessoa: function (id) { UI.fecharTodos(); selecionar(id); },
       verSetor: function (id) { var s = est.setores.get(id); UI.fecharTodos(); if (s) verSetorNoMapa(s.d); },
       abrirCentral: function (aba) { UI.fecharTodos(); abrirCentral(aba); },
+      abrirRelato: function (id) { UI.fecharTodos(); abrirRelato(id); },
       abrirDiario: function () { UI.fecharTodos(); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); },
     } });
+  }
+
+  // Link público do dashboard (migração 048): quem abre não precisa de login e só vê os números (sem nomes,
+  // sem textos de mensagens, sem fotos). Pode ser trocado (o anterior para de funcionar) ou desligado.
+  function urlDashboardPublico(token) { return location.origin + '/dashboard.html?p=' + token; }
+  function abrirLinkPublicoDashboard() {
+    var op = est.op;
+    if (!op) return;
+    var corpo = UI.el('div');
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Link público do dashboard' }),
+      UI.dica('Quem abre o link vê o dashboard desta operação sem entrar no sistema, só para acompanhar: números, gráficos, setores e vítimas (sem nomes). Não dá para alterar nada. Trocar o link faz o anterior parar de funcionar.'),
+      corpo,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]), { empilhar: true });
+    async function executar(fn, aviso) {
+      try {
+        var r = await C.rpc(fn, { p_operacao: op.id });
+        op.dashboard_token = r.token || null;
+        desenhar();
+        if (aviso) UI.aviso(aviso, 'ok');
+      } catch (e) { UI.aviso('Não foi possível: ' + e.message, 'erro', 7000); }
+    }
+    function desenhar() {
+      corpo.innerHTML = '';
+      if (!op.dashboard_token) {
+        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Esta operação ainda não tem link público.' }));
+        corpo.appendChild(UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dash-pub-criar', texto: 'Criar link público', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Criar o link público?', texto: 'Qualquer pessoa com o link poderá acompanhar o dashboard desta operação, sem login e sem poder alterar nada. Os nomes das pessoas não aparecem.', ok: 'Criar link', empilhar: true }))) return;
+          executar('dashboard_publico_gerar', 'Link público criado.');
+        } }));
+        return;
+      }
+      var url = urlDashboardPublico(op.dashboard_token);
+      var campo = UI.el('input', { classe: 'campo mono', id: 'dash-pub-url', readonly: true, value: url });
+      corpo.appendChild(UI.campo('Endereço', campo, { para: 'dash-pub-url' }));
+      corpo.appendChild(UI.el('div', { classe: 'linha-botoes' }, [
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dash-pub-copiar', texto: 'Copiar link', onclick: function () {
+          (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function () { UI.aviso('Link copiado.', 'ok'); }, function () { campo.select(); UI.aviso('Selecione e copie o endereço.', 'erro'); });
+        } }),
+        UI.el('a', { classe: 'btn', id: 'dash-pub-whatsapp', target: '_blank', rel: 'noopener', href: 'https://wa.me/?text=' + encodeURIComponent('Acompanhe a operação ' + op.codigo + ' (somente visualização): ' + url), texto: 'Enviar pelo WhatsApp' }),
+        UI.el('a', { classe: 'btn', target: '_blank', rel: 'noopener', href: url, texto: 'Abrir' }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'dash-pub-trocar', texto: 'Trocar link', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Trocar o link público?', texto: 'O link atual para de funcionar na hora. Quem estiver acompanhando precisará do novo.', ok: 'Trocar', empilhar: true }))) return;
+          executar('dashboard_publico_gerar', 'Link trocado. O anterior não funciona mais.');
+        } }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'dash-pub-desligar', texto: 'Desligar', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Desligar o link público?', texto: 'Quem tiver o link deixa de ver o dashboard.', ok: 'Desligar', perigo: true, empilhar: true }))) return;
+          executar('dashboard_publico_desligar', 'Link público desligado.');
+        } }),
+      ]));
+    }
+    desenhar();
   }
 
   // Retrato do que o painel já tem carregado, para o dashboard da operação (sem nova consulta ao banco):
@@ -1179,7 +1236,15 @@
       if (m.direcao !== 'entrada') o.ordens++;
     });
     est.alertas.forEach(function (a) { if (a.tipo === 'retorno_atrasado') o.retornosAtrasados++; });
-    return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: o };
+    // relatos e ordens, para a lista ao tocar numa ocorrência do dashboard
+    var relatos = [];
+    est.mensagens.forEach(function (m) {
+      var ajuda = m.categoria === 'AJUDA' || m.resposta === 'PRECISO_AJUDA';
+      if (m.direcao === 'entrada' && !ajuda && !(m.categoria && o[m.categoria] != null)) return;
+      relatos.push({ id: m.id, categoria: ajuda ? 'AJUDA' : m.categoria, direcao: m.direcao, criada_em: m.criada_em, texto: m.texto, autor: m.remetente_nome });
+    });
+    relatos.sort(function (a, b) { return String(b.criada_em).localeCompare(String(a.criada_em)); });
+    return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: o, relatos: relatos };
   }
 
   function abrirDadosOperacao() {

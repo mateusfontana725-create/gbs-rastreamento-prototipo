@@ -1357,13 +1357,30 @@ body.conversa-aberta { overflow: hidden; }
 .leaflet-marker-icon.destaque .mk-poi { animation: destaque-mk .7s ease-in-out 5; }
 .legenda .mk-poi-legenda { min-width: 18px; height: 15px; font-size: 0.5625rem; border-width: 1.5px; padding: 0 3px; }
 
-/* Barra do modo de desenho */
+/* Barra do modo de desenho: uma linha só — instrução, ↶, ⋯, ação principal e × */
 .barra-desenho {
-  position: absolute; z-index: 1200; left: 50%; top: 10px; transform: translateX(-50%); width: min(640px, calc(100% - 120px));
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
-  background: rgba(18, 23, 28, .96); border: 2px solid #facc15; box-shadow: var(--sombra); color: #fff;
+  position: absolute; z-index: 1200; left: 50%; top: 10px; transform: translateX(-50%); width: min(680px, calc(100% - 120px));
+  display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 8px;
+  background: rgba(14, 18, 22, .96); border: 1px solid rgba(250, 204, 21, .7); border-left: 4px solid #facc15; box-shadow: var(--sombra); color: #fff;
 }
-.barra-desenho-texto { flex: 1 1 220px; font-weight: 800; }
+.barra-desenho-texto {
+  flex: 1 1 auto; min-width: 0; font-weight: 600; font-size: .82rem; line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.barra-desenho-extra:empty { display: none; }
+.barra-desenho-botoes { display: flex; align-items: center; gap: 4px; flex: none; }
+.barra-desenho .btn { min-height: 34px; }
+.barra-desenho .barra-ico { min-width: 34px; padding: 0 8px; font-size: 1.05rem; line-height: 1; }
+.barra-desenho .barra-x { background: transparent; border-color: transparent; font-size: 1.35rem; color: var(--texto-2, #b4bfca); }
+.barra-desenho .barra-x:hover { color: #fff; }
+.barra-mais { position: relative; display: inline-flex; }
+.barra-mais-menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 5; min-width: 200px; display: flex; flex-direction: column; gap: 2px;
+  padding: 4px; border-radius: 8px; background: rgba(14, 18, 22, .98); border: 1px solid var(--borda-forte, #3d4a57); box-shadow: var(--sombra);
+}
+.barra-mais-menu[hidden] { display: none; }
+.barra-mais-menu .barra-mais-item { justify-content: flex-start; width: 100%; text-align: left; border-color: transparent; background: transparent; }
+.barra-mais-menu .barra-mais-item:hover:not(:disabled) { background: rgba(255, 255, 255, .08); }
 .barra-apoio {
   position: absolute; z-index: 1150; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(560px, calc(100% - 120px));
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; border-radius: 10px;
@@ -1449,10 +1466,12 @@ body.conversa-aberta { overflow: hidden; }
 .popup-3d .maplibregl-popup-tip { border-top-color: var(--superficie) !important; border-bottom-color: var(--superficie) !important; }
 .popup-3d .maplibregl-popup-close-button { color: var(--texto); font-size: 1.125rem; padding: 0 6px; }
 @media (max-width: 599px) {
-  .barra-desenho { left: 8px; right: 8px; transform: none; width: auto; top: 8px; }
+  .barra-desenho { left: 8px; right: 8px; transform: none; width: auto; top: 8px; flex-wrap: wrap; }
   .barra-apoio { left: 8px; right: 8px; transform: none; width: auto; bottom: 8px; }
-  .barra-desenho-botoes { width: 100%; }
-  .barra-desenho-botoes .btn { flex: 1 1 0; }
+  .barra-desenho-texto { flex-basis: 100%; font-size: .78rem; padding-right: 30px; }
+  .barra-desenho-botoes { flex: 1 1 100%; justify-content: flex-end; }
+  .barra-desenho .barra-x { position: absolute; top: 2px; right: 2px; }
+  .barra-desenho-botoes > .btn-ok { flex: 1 1 auto; }
   .acoes-detalhe .btn { flex: 1 1 45%; }
 }
 
@@ -1968,9 +1987,13 @@ body.gaveta .lateral-ferramentas .campo { min-height: 42px; }
 .titulo-com-dica .dica-texto { font-size: .82rem; }
 
 /* Tamanho do texto escolhido pelo usuário (Aparência). Tudo está em rem: o tamanho base do html muda a página inteira. */
-html[data-fonte="maior"] { font-size: 112.5%; }
-html[data-fonte="grande"] { font-size: 125%; }
-html[data-fonte="menor"] { font-size: 93.75%; }
+/* Tamanho do texto (Personalizar tela): escala sobre a base de cada página (o painel usa 15 px; as outras, 16 px).
+   Antes era um valor fixo: "Menor" (93,75%) dava os mesmos 15 px da base do painel e não mudava nada. */
+html { font-size: calc(var(--texto-base, 100%) * var(--texto-escala, 1)); }
+html[data-fonte="minimo"] { --texto-escala: .8; }
+html[data-fonte="menor"] { --texto-escala: .9; }
+html[data-fonte="maior"] { --texto-escala: 1.12; }
+html[data-fonte="grande"] { --texto-escala: 1.25; }
 
 /* =====================================================================
  * Modais: uma estrutura só em todo o app (js/interface.js → abrirModal)

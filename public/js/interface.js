@@ -277,7 +277,7 @@
    * O modo "Personalizar tela" (js/personalizar.js) muda isto arrastando os botões.
    */
   var CHAVE_APARENCIA = 'gbs-aparencia';
-  var FONTES = { menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
+  var FONTES = { minimo: 'Mínimo', menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
   var POSICOES_GRUPOS = { topright: 'Canto superior direito', topleft: 'Canto superior esquerdo', bottomright: 'Canto inferior direito', bottomleft: 'Canto inferior esquerdo' };
   function listaTexto(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : []; }
   function lerAparencia() {

@@ -1079,7 +1079,7 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { border-color: v
  * Painel enxuto: letras e botões menores, lista em uma linha, faixas compactas
  * (só no painel do responsável; a página do participante continua com alvos grandes)
  * ===================================================================== */
-html { font-size: 0.9375rem; }
+html { --texto-base: 93.75%; }   /* 15 px; o tamanho escolhido em Personalizar tela escala a partir daqui */
 body { font-size: 0.9375rem; }
 .btn { min-height: 38px; padding: 0 12px; border-width: 1.5px; font-size: .8rem; letter-spacing: .03em; }
 .btn-pequeno { min-height: 30px; padding: 0 9px; font-size: .72rem; }

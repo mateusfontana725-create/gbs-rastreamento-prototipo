@@ -5454,14 +5454,60 @@
 
 
   /* ---------- Modo de desenho (tocar no mapa) ------------------------ */
+  // Barra do desenho, sempre no mesmo formato (enxuta): instrução · [extra] · ↶ desfazer · ⋯ outras ações ·
+  // ação principal · ×. Quem chama só passa os botões; o papel de cada um sai da classe/texto:
+  //   btn-ok (ou Concluir/Salvar/Enviar) = principal; "Desfazer…" = ↶; "Cancelar"/"Sair" = ×;
+  //   data-fixo = fica à vista; o resto vai para o menu ⋯ (com uma só ação extra, ela fica à vista).
+  function papelBotao(b) {
+    var t = (b.textContent || '').trim(), id = b.id || '';
+    if (/^(cancelar|sair)$/i.test(t) || /-(cancelar|sair)$/.test(id)) return 'cancelar';
+    if (/^desfazer/i.test(t)) return 'desfazer';
+    if (b.classList.contains('btn-ok') || /^(✔ )?(concluir|salvar|enviar)/i.test(t)) return 'principal';
+    if (b.hasAttribute('data-fixo')) return 'fixo';
+    return 'outro';
+  }
   function mostrarBarraDesenho(texto, extra, botoes) {
     $('barra-desenho-texto').textContent = texto;
+    $('barra-desenho-texto').title = texto;
     var ex = $('barra-desenho-extra');
     ex.innerHTML = '';
     if (extra) ex.appendChild(extra);
     var bt = $('barra-desenho-botoes');
     bt.innerHTML = '';
-    (botoes || []).forEach(function (b) { if (b) bt.appendChild(b); });
+    var grupos = { cancelar: [], desfazer: [], principal: [], fixo: [], outro: [] };
+    (botoes || []).forEach(function (b) { if (b) grupos[papelBotao(b)].push(b); });
+    grupos.desfazer.forEach(function (b) {
+      var rot = b.textContent.trim();
+      b.textContent = '↶';
+      b.setAttribute('aria-label', rot); b.title = rot;
+      b.classList.add('barra-ico');
+      bt.appendChild(b);
+    });
+    grupos.fixo.forEach(function (b) { bt.appendChild(b); });
+    if (grupos.outro.length === 1) bt.appendChild(grupos.outro[0]);
+    else if (grupos.outro.length > 1) {
+      var menu = UI.el('div', { classe: 'barra-mais-menu', id: 'barra-mais-menu', role: 'menu', hidden: true });
+      grupos.outro.forEach(function (b) {
+        b.classList.add('barra-mais-item');
+        b.setAttribute('role', 'menuitem');
+        b.addEventListener('click', function () { menu.hidden = true; mais.setAttribute('aria-expanded', 'false'); });
+        menu.appendChild(b);
+      });
+      var mais = UI.el('button', { classe: 'btn btn-pequeno barra-ico', type: 'button', id: 'barra-mais', texto: '⋯', title: 'Mais ações', 'aria-label': 'Mais ações',
+        'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: function () {
+          menu.hidden = !menu.hidden;
+          mais.setAttribute('aria-expanded', String(!menu.hidden));
+        } });
+      bt.appendChild(UI.el('span', { classe: 'barra-mais' }, [mais, menu]));
+    }
+    grupos.principal.forEach(function (b) { b.classList.add('btn-ok'); bt.appendChild(b); });
+    grupos.cancelar.forEach(function (b) {
+      var rot = b.textContent.trim();
+      b.textContent = '×';
+      b.setAttribute('aria-label', rot); b.title = rot;
+      b.classList.add('barra-ico', 'barra-x');
+      bt.appendChild(b);
+    });
     $('barra-desenho').hidden = false;
   }
 
@@ -7247,7 +7293,7 @@
         : (traj ? 'Trajeto · ' : dz.trilhaId ? 'Editando o traçado · ' : 'Trilha · ') + compr + ' · continue arrastando a partir do círculo branco. Dois dedos: zoom.';
     var rapido = !traj && !dz.trilhaId;
     mostrarBarraDesenho(texto, null, [
-      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-modo', 'aria-pressed': String(pontos),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-modo', 'aria-pressed': String(pontos), 'data-fixo': true,
         title: pontos ? 'Voltar a desenhar à mão livre (segurar e arrastar)' : 'Marcar o caminho tocando ponto a ponto no mapa',
         texto: pontos ? '✎ Mão livre' : '• Ponto a ponto', onclick: function () {
           dz.modo = pontos ? 'livre' : 'pontos';

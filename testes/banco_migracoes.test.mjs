@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2062,5 +2062,47 @@ console.log('SCI integrado ao app (migração 046)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: opI.id });
 }
 
-console.log('\nMigrações 007–046 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Convites por categoria e WhatsApp; tipos de ponto (migração 047)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opC = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 047', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const cw = await rpc(resp1, 'criar_convite', { p_operacao: opC.id, p_dados: J({ nome: 'Sd Pereira', tipo: 'militar', canal: 'whatsapp', telefone: '(41) 99876-5432' }) });
+  chk(cw.telefone === '5541998765432' && cw.tipo === 'militar' && cw.canal === 'whatsapp' && cw.email === null, 'convite por WhatsApp para bombeiro, telefone com 55 + DDD', cw);
+  chk(/telefone_convite_invalido/.test(await erroDe(rpc(resp1, 'criar_convite', { p_operacao: opC.id, p_dados: J({ nome: 'X Y', canal: 'whatsapp', telefone: '123' }) }))), 'telefone curto: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'criar_convite', { p_operacao: opC.id, p_dados: J({ nome: 'X Y', tipo: 'chefe', canal: 'email', email: 'x@y.com' }) }))), 'categoria desconhecida: recusada');
+  const cw2 = await rpc(resp1, 'criar_convite', { p_operacao: opC.id, p_dados: J({ nome: 'Sd Pereira Jr', tipo: 'militar', canal: 'whatsapp', telefone: '5541998765432' }) });
+  chk(cw2.id === cw.id && cw2.nome === 'Sd Pereira Jr', 'mesmo telefone e categoria: reaproveita');
+  const cr = await rpc(resp1, 'criar_convite', { p_operacao: opC.id, p_dados: J({ nome: 'Ten Ramos', tipo: 'responsavel', canal: 'email', email: 'ramos@cbm.pr.gov.br' }) });
+  const de = await rpc(resp1, 'convite_dados_envio', { p_convite: cr.id });
+  chk(de.tipo === 'responsavel' && de.operacao_id === opC.id && de.token_militar === opC.token_militar, 'dados do envio trazem a categoria e o que o link precisa');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'convite_dados_envio', { p_convite: cw.id }))), 'convite de WhatsApp não é enviado pelo servidor');
+  const antigo = await rpc(resp1, 'criar_convite_participante', { p_operacao: opC.id, p_nome: 'Ana Civil', p_email: 'ana@x.com' });
+  chk(antigo.tipo === 'civil' && antigo.canal === 'email', 'função antiga continua criando convite civil por e-mail');
+  chk((await db.query(`select titulo from public.diario where operacao_id = $1 and tipo = 'convite_criado'`, [opC.id])).rows.some((r) => /WhatsApp \(bombeiro\): Sd Pereira/.test(r.titulo)), 'convite no diário com canal e categoria');
+
+  console.log('  tipos de ponto');
+  chk(/sem_permissao/.test(await erroDe(rpc(await usuario(null, true), 'salvar_tipo_ponto', { p_id: null, p_dados: J({ nome: 'Hospital', icone: '🏥', cor: '#ff0000' }) }))), 'participante não cria tipo');
+  const tH = await rpc(resp1, 'salvar_tipo_ponto', { p_id: null, p_dados: J({ nome: 'Hospital de campanha', icone: '🏥', cor: '#E11D48' }) });
+  chk(tH.icone === '🏥' && tH.cor === '#e11d48' && tH.ativo, 'tipo criado com ícone e cor', tH);
+  chk(/tipo_ponto_existente/.test(await erroDe(rpc(resp2, 'salvar_tipo_ponto', { p_id: null, p_dados: J({ nome: 'hospital de campanha', icone: 'H', cor: '#000000' }) }))), 'nome repetido: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_tipo_ponto', { p_id: null, p_dados: J({ nome: 'Barco', icone: '', cor: '#000000' }) }))), 'sem ícone: recusado');
+  chk((await como(resp2, `select count(*)::int n from public.tipos_ponto where id = $1`, [tH.id])).rows[0].n === 1, 'outros responsáveis usam o tipo (vale para todas as operações)');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_tipo_ponto', { p_id: tH.id, p_dados: J({ icone: 'X' }) }))), 'editar: só quem criou ou administrador');
+  const pt = await rpc(resp1, 'salvar_ponto', { p_operacao: opC.id, p_id: null, p_dados: J({ tipo_id: tH.id, titulo: 'Hospital Norte', lat: -25.4, lng: -49.2 }) });
+  chk(pt.categoria === 'OUTRO' && pt.tipo_id === tH.id && pt.icone === '🏥' && pt.cor === '#e11d48', 'ponto do tipo: categoria sem regra, com ícone e cor do tipo', pt);
+  await rpc(resp1, 'salvar_tipo_ponto', { p_id: tH.id, p_dados: J({ icone: '⛑', cor: '#0ea5e9' }) });
+  const pt2 = (await db.query(`select icone, cor from public.pontos_interesse where id = $1`, [pt.id])).rows[0];
+  chk(pt2.icone === '⛑' && pt2.cor === '#0ea5e9', 'mudar o tipo atualiza os pontos das operações ativas');
+  const rel047 = await rpc(resp1, 'relatorio_operacao', { p_operacao: opC.id });
+  const prel = rel047.pontos.find((x) => x.titulo === 'Hospital Norte');
+  chk(prel && prel.tipo_nome === 'Hospital de campanha' && prel.icone === '⛑' && prel.cor === '#0ea5e9' && rel047.operacao && 'ipo' in rel047.operacao, 'relatório traz o nome, o ícone e a cor do tipo (e mantém o IPO)', prel);
+  const pt3 = await rpc(resp1, 'salvar_ponto', { p_operacao: opC.id, p_id: pt.id, p_dados: J({ categoria: 'RISCO', raio_m: 50 }) });
+  chk(pt3.categoria === 'RISCO' && pt3.tipo_id === null && pt3.icone === null, 'voltar para uma categoria fixa tira o tipo');
+  chk(/tipo_ponto_inexistente/.test(await erroDe(rpc(resp1, 'salvar_ponto', { p_operacao: opC.id, p_id: null, p_dados: J({ tipo_id: '00000000-0000-4000-8000-000000000000', titulo: 'X', lat: -25.4, lng: -49.2 }) }))), 'tipo desconhecido: recusado');
+  await rpc(resp1, 'salvar_tipo_ponto', { p_id: tH.id, p_dados: J({ ativo: false }) });
+  chk(/tipo_ponto_inexistente/.test(await erroDe(rpc(resp1, 'salvar_ponto', { p_operacao: opC.id, p_id: null, p_dados: J({ tipo_id: tH.id, titulo: 'Y', lat: -25.4, lng: -49.2 }) }))), 'tipo desativado não serve para ponto novo');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opC.id });
+}
+
+console.log('\nMigrações 007–047 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

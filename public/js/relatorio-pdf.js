@@ -276,6 +276,12 @@
     var out = [secao(2, 'Setores varridos', true)];
     if (!d.setores.length) {
       out.push(nota('Nenhum setor de busca foi definido nesta operação.'));
+      // o mapa geral sai mesmo assim: trilhas, pontos, relatos e o local da operação
+      if (recursos.mapaGeral) {
+        out.push(subtitulo('Mapa geral da operação'));
+        out.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
+        out.push(legendaMapa());
+      }
       return out;
     }
     var concl = d.setores.filter(function (s) { return s.status === 'concluido'; });
@@ -334,8 +340,9 @@
   function legendaMapa() {
     function linha(cor, tracejado) { return { text: tracejado ? '- - - ' : '—— ', color: cor, bold: true }; }
     return { text: [
-      'Trilhas: ', linha('#dc2626'), 'militar    ', linha('#16a34a', true), 'civil    ', linha('#0891b2', true), 'responsável',
-      '        Marcadores: ★ local da operação · ! relato de campo · + vítima · B base · U última localização',
+      'Trilhas: ', linha('#dc2626'), 'militar    ', linha('#16a34a', true), 'civil    ', linha('#0891b2', true), 'responsável    ',
+      linha('#7c3aed', true), 'desenhada no mapa',
+      '        Marcadores: ★ local da operação · ! relato de campo · + vítima · B base · U última localização · F foto',
     ], fontSize: 7.5, color: COR.suave, margin: [0, 3, 0, 8] };
   }
 
@@ -373,7 +380,7 @@
     out.push(subtitulo('Pontos de interesse marcados no mapa'));
     if (!d.pontos.length) out.push(nota('Nenhum ponto de interesse marcado.'));
     else out.push(tabela(['Data e hora', 'Tipo', 'Título e descrição', 'Coordenadas', 'Por'], d.pontos.map(function (p) {
-      return [dataHoraCurta(p.criado_em), PONTO[p.categoria] || p.categoria,
+      return [dataHoraCurta(p.criado_em), p.tipo_nome || PONTO[p.categoria] || p.categoria,
         { stack: [{ text: p.titulo, style: 'td', bold: true }, vazio(p.descricao) ? null : { text: p.descricao, style: 'tdSuave' }].filter(Boolean) },
         { text: coord(p.lat, p.lng), style: 'tdMono' }, p.criado_por_nome];
     }), [56, 72, '*', 92, 70]));

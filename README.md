@@ -470,7 +470,18 @@ e os estados finais (confirmado, descartado, inconclusivo, contestado) **exigem 
 
 **Migrações 042 e 043**: rode no Supabase em ordem. Sem elas, cada janela avisa qual migração falta e o resto do painel segue normal.
 
-### Convidar por e-mail (migração 044)
+### Convidar por WhatsApp ou e-mail, por categoria (migrações 044 e 047)
+
+**Convidar** tem as abas **● Link para CIVIS**, **■ Link para BOMBEIROS**, **☎ WhatsApp** e **✉ E-mail**. Nas duas últimas, o
+responsável escolhe a **categoria** do convidado — **Civil**, **Bombeiro** ou **Responsável** — e o link enviado corresponde a ela:
+civil recebe o link dos civis, bombeiro o link dos bombeiros (pode escolher militar) e responsável o endereço do **painel da operação**
+(entra com a própria conta; precisa estar na Equipe de responsáveis).
+
+- **WhatsApp**: nome + celular com DDD → **Enviar pelo WhatsApp** abre a conversa direto com o número (`wa.me`), **sem salvar o
+  contato**, com a mensagem e o link prontos; é só tocar em enviar. Celular com 10 ou 11 dígitos ganha o 55 do Brasil.
+- **E-mail**: como abaixo, agora com a categoria. O mesmo celular + categoria (ou o mesmo e-mail) na mesma operação reaproveita o convite.
+- Banco: `criar_convite` (categoria, canal, e-mail ou telefone), erros `telefone_convite_invalido` e `nome_convite_invalido`.
+
 
 **Convidar → ✉ Convidar por e-mail**: o responsável digita o **nome** e o **e-mail** do participante e toca **Enviar convite**. O
 participante recebe um e-mail com o botão **Abrir e começar** (o link do `civil.html` da operação). Ao abrir no celular, o
@@ -660,9 +671,14 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 ### Pontos de interesse
 
 - **Ferramentas → Marcar ponto de interesse**: toque no local (ou **Usar minha posição**), escolha a
-  categoria e dê um nome. Categorias e ícones (placa com letra):
+  categoria e dê um nome. Categorias fixas (têm regras próprias: alarme de risco, raio da base, vítima) e ícones:
   **U** Última localização conhecida · **?** Possível localização da vítima · **V** Vestígio ou objeto
   encontrado · **!** Área de risco/perigo · **E** Ponto de encontro · **+** Vítima encontrada · **•** Outro.
+- **Tipos de ponto criados pelos usuários (migração 047)**: no formulário, **＋ Novo tipo** cria um tipo com **nome**, **ícone**
+  (letra, número ou emoji, com sugestões prontas) e **cor** (amostras ou cor personalizada). O tipo fica disponível para todos os
+  responsáveis, em qualquer operação, e aparece junto das categorias fixas. **Editar tipos** muda o ícone/cor (os pontos já marcados
+  acompanham) ou **deixa de usar** o tipo (some da lista; os pontos continuam). Só quem criou ou um administrador altera. Mapa, listas,
+  3D, relatório (mapa e tabela) e exportações usam o ícone, a cor e o nome do tipo.
 - Cada ponto guarda título, categoria, coordenadas (editáveis no formulário), descrição, data e hora, quem
   registrou e, se veio de um relato, **quem relatou** (botão **Registrar como ponto de interesse** na janela
   do relato). Os detalhes mostram a **altitude aproximada** (modelo digital de terreno).
@@ -1202,6 +1218,8 @@ chave própria).
 - **Gerar PDF** monta, no navegador: capa com natureza, números e datas, sumário, a ocorrência (o IPO, com cada dado
   uma só vez: tipo não aparece, a natureza diz o tipo), pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
   setor, início, fim, duração, área, deslocamentos e fotos tiradas dentro do setor), pontos e encontros,
+  **mapa geral da operação** com todos os elementos registrados (trilhas GPS, trilhas desenhadas, pontos com o ícone do tipo,
+  relatos, vítimas, fotos e o local) — **também quando não há setores cadastrados**,
   diário consolidado por dia (sem repetir os registros do IPO) e resultado (sem campos de assinatura). Cabeçalho e rodapé em todas as páginas
   ("DOCUMENTO RESTRITO", página X de Y).
 - O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios` (sem exclusão pelo app); a lista
@@ -1658,7 +1676,7 @@ Depois do deploy, o Vercel mostra o domínio do projeto, por exemplo `https://ra
 2. **Link do participante**: é gerado **por operação**, no botão **Convidar** do cabeçalho da operação. Há duas abas:
    - **Link para CIVIS** — `https://rastreamento-sar.vercel.app/civil.html#t=<token de 64 caracteres>`
      Quem entra por ele sempre aparece como **civil**.
-   - **Link para MILITARES** — outro token; permite escolher **militar** (ou civil). Compartilhe só com militares.
+   - **Link para BOMBEIROS** — outro token; permite escolher **militar** (ou civil). Compartilhe só com bombeiros.
 
    Cada aba tem **Copiar**, **Compartilhar** (WhatsApp etc., no celular) e **QR Code** para leitura na base.
 
@@ -1701,7 +1719,7 @@ de participantes tem os próprios botões de ocultar/mostrar.
 
 **Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **INICIAR RASTREAMENTO** → permite
 a localização. O **CPF é opcional** para todos (migração 029); se informado, é conferido pelos dígitos
-verificadores. O celular é obrigatório para civis e opcional para militares (link de militares). Deve manter a página aberta e a tela
+verificadores. O celular é obrigatório para civis e opcional para militares (link dos bombeiros). Deve manter a página aberta e a tela
 ligada (a opção "Manter a tela ligada" já vem marcada). Para sair, toca em **Solicitar encerramento**.
 
 **Na ficha do participante**, o CPF aparece mascarado (`***.456.789-**`, com o botão "mostrar") e
@@ -1903,10 +1921,14 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40p | No SCI: "duas vítimas localizadas na água", arrastar V-01 para a ACV, tocar e triar amarela; "V-02 na ACV, vermelha"; "segurança: Sgt Dinardi" | quadrados nos quadros certos, cor só depois da ACV, alerta crítico da V-02 vermelha e o de segurança some ao designar |
 | 40q | Abrir **↗ Outra janela** no celular de outro responsável, sem estar logado | pede o login; depois mostra o painel e se atualiza sozinho quando o PC registra algo |
 | 40r | Falar no 🎤 "SAMU no local com 5 pessoas" e conferir | órgão SAMU no local com 5 pessoas e hora de chegada; faixa de órgãos atualizada; entra na linha do tempo e no diário |
+| 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
+| 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
+| 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
 
+- **Convites por categoria/WhatsApp e tipos de ponto (migração 047)**: banco — 889 verificações (convite por WhatsApp com telefone normalizado, link por categoria, tipos de ponto com permissão de edição, pontos acompanhando o tipo, relatório com nome/ícone/cor do tipo); navegador — convites por WhatsApp/e-mail com categoria e tipos de ponto (criar, marcar, voltar à categoria fixa) a 1280 e 390 px.
 - **SCI integrado (migração 046)**: banco — 868 verificações (vítima encontrada entra sozinha no quadro, com os dados da ficha, completando
   a que já estava lançada, óbito como cinza, sem duplicar no diário; `sci_contexto` com comando, briefing, fichas, localizações, equipes,
   participantes, pontos, setores, alertas, decisões, verificação e diário, só para os responsáveis; instalação ligada a ponto); unitários —

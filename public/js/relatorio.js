@@ -449,6 +449,15 @@
       g.lineWidth = 2.6; g.strokeStyle = e[0]; g.setLineDash(e[1]); g.stroke();
       g.setLineDash([]);
     });
+    // trilhas desenhadas no mapa (planejadas tracejadas, percorridas contínuas)
+    (o.manuais || []).forEach(function (t) {
+      if (!t.pontos || t.pontos.length < 2) return;
+      caminho(t.pontos, false);
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.lineWidth = 5; g.strokeStyle = 'rgba(255,255,255,0.75)'; g.setLineDash([]); g.stroke();
+      g.lineWidth = 2.6; g.strokeStyle = '#7c3aed'; g.setLineDash(t.estado === 'percorrida' ? [] : [6, 6]); g.stroke();
+      g.setLineDash([]);
+    });
     // nomes dos setores: logo abaixo da borda de cima (o centro costuma ter marcadores)
     var nomes = [];
     (o.setores || []).forEach(function (s) {
@@ -470,7 +479,11 @@
       g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffffff';
       g.fillText(letra, q[0], q[1] + 1);
     }
-    (o.pontos || []).forEach(function (p) { marcador(p.lat, p.lng, LETRA[p.categoria] || '•', p.categoria === 'RISCO' ? '#d97706' : p.categoria === 'VITIMA_ENCONTRADA' ? '#a21caf' : '#334155'); });
+    (o.pontos || []).forEach(function (p) {
+      // tipo criado pelos usuários: o ícone e a cor dele
+      marcador(p.lat, p.lng, p.icone || LETRA[p.categoria] || '•', p.cor || (p.categoria === 'RISCO' ? '#d97706' : p.categoria === 'VITIMA_ENCONTRADA' ? '#a21caf' : '#334155'));
+    });
+    (o.fotos || []).forEach(function (f) { if (f.lat != null) marcador(f.lat, f.lng, 'F', '#475569', 8); });
     (o.achados || []).forEach(function (a) { marcador(a.lat, a.lng, a.letra || '!', a.cor || '#ea580c', a.raio || 11); });
     if (o.local) marcador(o.local[0], o.local[1], '★', '#b91c1c', 14);
     nomes.forEach(function (n) { rotulo(n[0], n[1], n[2], '#111827'); });
@@ -571,6 +584,13 @@
     return carregandoPdf;
   }
 
+  // Trilhas desenhadas no mapa (para o mapa geral). Banco sem a tabela: sem elas.
+  async function trilhasDesenhadas(opId) {
+    try {
+      return (await C.consultar(C.cliente.from('trilhas_manuais').select('nome,estado,pontos').eq('operacao_id', opId))) || [];
+    } catch (e) { return []; }
+  }
+
   // Monta todos os recursos (mapas e fotos) e o documento. progresso(texto)
   async function prepararDocumento(dados, opcoes, progresso) {
     var RP = window.RelatorioPDF;
@@ -588,11 +608,16 @@
     trilhas.forEach(function (t) { (t.pontos || []).forEach(function (p) { enquadrarTudo.push(p); }); });
     dados.pontos.forEach(function (p) { enquadrarTudo.push([p.lat, p.lng]); });
     achados.forEach(function (a) { enquadrarTudo.push([a.lat, a.lng]); });
+    var manuais = dados.trilhasManuais || [];
+    manuais.forEach(function (t) { (t.pontos || []).forEach(function (p) { enquadrarTudo.push(p); }); });
+    var fotosMapa = (dados.fotos || []).filter(function (f) { return f.lat != null && f.lng != null; });
+    fotosMapa.forEach(function (f) { enquadrarTudo.push([f.lat, f.lng]); });
     if (op.local_lat != null) enquadrarTudo.push([op.local_lat, op.local_lng]);
-    var base = { setores: dados.setores, trilhas: trilhas, pontos: dados.pontos, achados: achados, local: op.local_lat != null ? [op.local_lat, op.local_lng] : null, fundo: opcoes.fundo !== false };
+    var base = { setores: dados.setores, trilhas: trilhas, manuais: manuais, pontos: dados.pontos, achados: achados, local: op.local_lat != null ? [op.local_lat, op.local_lng] : null, fundo: opcoes.fundo !== false };
 
     progresso('Desenhando o mapa geral…');
-    recursos.mapaGeral = await desenharMapa(Object.assign({ largura: 1200, altura: 760, enquadrar: enquadrarTudo }, base));
+    // mapa geral: todos os elementos registrados (também as fotos), haja ou não setores
+    recursos.mapaGeral = await desenharMapa(Object.assign({ largura: 1200, altura: 760, enquadrar: enquadrarTudo, fotos: fotosMapa }, base));
     for (var i = 0; i < dados.setores.length; i++) {
       var s = dados.setores[i];
       progresso('Desenhando o mapa do setor ' + s.nome + ' (' + (i + 1) + '/' + dados.setores.length + ')…');
@@ -791,6 +816,7 @@
         var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
         // probabilidades de busca (cenários aprovados, buscas registradas): se falhar, o relatório sai sem a seção
         try { dados.busca = window.BuscaCenario ? await window.BuscaCenario.dadosRelatorio() : null; } catch (e) { dados.busca = null; }
+        dados.trilhasManuais = await trilhasDesenhadas(op.id);
         var doc = await prepararDocumento(dados, { fotos: selFotos.value, fundo: chkFundo.checked }, passo);
         passo('Gerando o PDF…');
         var r = await gerarBlob(pdfMake, doc);

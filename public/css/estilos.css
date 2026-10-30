@@ -2193,3 +2193,14 @@ html[data-fonte="menor"] { font-size: 93.75%; }
 .nota-rapido { border-left: 4px solid var(--alerta); padding: 8px 12px; background: var(--alerta-claro); color: var(--alerta-texto); border-radius: var(--raio); margin: 0 0 10px; }
 .form-rapido .campo { min-height: 46px; font-size: 1.05rem; }
 .abas { flex-wrap: wrap; }
+
+/* Tipos de ponto criados pelos responsáveis (ícone e cor próprios) */
+.mk-poi.poi-tipo { font-size: 12px; }
+.cat-ponto-novo { border-style: dashed; background: none; cursor: pointer; font: inherit; color: inherit; text-align: left; }
+.cat-ponto-novo .mk-poi { background: transparent; color: var(--texto, #fff); box-shadow: 0 0 0 1.5px currentColor; border-color: transparent; }
+.tipo-ponto-sugestoes { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 10px; }
+.tipo-ponto-sugestoes .btn { min-width: 36px; font-size: 1rem; }
+.tipo-ponto-previa { display: flex; flex-direction: column; gap: 6px; }
+.tipo-ponto-previa .mk-poi { align-self: flex-start; margin-top: 4px; }
+.tipo-ponto-item { display: flex; align-items: center; gap: 8px; }
+.tipo-ponto-item .item-area-txt { flex: 1; }

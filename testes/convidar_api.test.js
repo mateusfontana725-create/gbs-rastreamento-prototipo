@@ -76,6 +76,19 @@ function rede(rotas, chamadas) {
     const reg = c.find((x) => x.url.includes('convite_registrar_envio')).corpo;
     assert.strictEqual(reg.p_erro, null);
   });
+  await teste('bombeiro: link dos bombeiros (token militar) com o código do convite', async () => {
+    ambiente(); const c = []; rede({ dados: () => json(Object.assign({}, DADOS, { tipo: 'militar', token_militar: 'c'.repeat(64) })), email: () => json({}) }, c);
+    const r = resposta(); await carregar()(req({ convite: UUID }, 't'), r);
+    assert.strictEqual(r.code, 200);
+    assert.ok(c.find((x) => x.url.includes('resend')).corpo.text.includes('/civil.html#t=' + 'c'.repeat(64) + '&c=' + CODIGO));
+  });
+  await teste('responsável: link do painel da operação (pede login)', async () => {
+    ambiente(); const c = []; rede({ dados: () => json(Object.assign({}, DADOS, { tipo: 'responsavel', operacao_id: UUID })), email: () => json({}) }, c);
+    const r = resposta(); await carregar()(req({ convite: UUID }, 't'), r);
+    const e = c.find((x) => x.url.includes('resend')).corpo;
+    assert.strictEqual(r.code, 200); assert.ok(e.text.includes('/militar.html#op=' + UUID) && /responsável/.test(e.subject + e.text), e.text);
+    assert.ok(!e.text.includes('civil.html'));
+  });
   await teste('nome e operação com HTML são escapados na mensagem', async () => {
     ambiente(); const c = []; rede({ dados: () => json(DADOS), email: () => json({}) }, c);
     const r = resposta(); await carregar()(req({ convite: UUID }, 't'), r);

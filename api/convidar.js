@@ -46,7 +46,26 @@ function enderecoSite(req) {
   return (local ? 'http://' : 'https://') + host;
 }
 
+// Link de cada categoria: civil e bombeiro entram pela página do participante (com o código do convite, que
+// preenche o nome); responsável entra pelo painel da operação (pede o login de responsável).
+function linkDoConvite(site, d) {
+  if (d.tipo === 'responsavel') return `${site}/militar.html#op=${d.operacao_id}`;
+  const token = d.tipo === 'militar' ? d.token_militar : d.token_civil;
+  return `${site}/civil.html#t=${token}&c=${d.codigo}`;
+}
+
 function montarMensagem(d, link) {
+  if (d.tipo === 'responsavel') {
+    const assunto = 'Painel da operação "' + d.operacao + '"';
+    const texto = ['Olá, ' + d.nome + '!', '', d.responsavel + ' convidou você para acompanhar como responsável a operação "' + d.operacao + '".', '',
+      'Abra o painel e entre com a sua conta de responsável:', link, '', 'Se ainda não tiver acesso a esta operação, peça para ser incluído na Equipe de responsáveis.'].join('\n');
+    const html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#111;line-height:1.5">' +
+      '<h2 style="margin:0 0 12px">Painel da operação “' + esc(d.operacao) + '”</h2><p>Olá, <strong>' + esc(d.nome) + '</strong>!</p>' +
+      '<p>' + esc(d.responsavel) + ' convidou você para acompanhar esta operação como responsável.</p>' +
+      '<p style="margin:22px 0"><a href="' + esc(link) + '" style="background:#111;color:#fff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:bold">Abrir o painel</a></p>' +
+      '<p style="font-size:13px;color:#555">Entre com a sua conta de responsável. Se ainda não tiver acesso a esta operação, peça para ser incluído na Equipe de responsáveis.</p></div>';
+    return { assunto, texto, html };
+  }
   const assunto = 'Convite para a busca "' + d.operacao + '"';
   const texto = [
     'Olá, ' + d.nome + '!',
@@ -102,7 +121,10 @@ module.exports = async (req, res) => {
       return res.status(502).json({ erro: 'falha_supabase' });
     }
     const d = await dr.json();
-    if (!d || !TOKEN_RE.test(String(d.token_civil || '')) || !CODIGO_RE.test(String(d.codigo || ''))) {
+    if (!d) return res.status(502).json({ erro: 'falha_supabase' });
+    d.tipo = d.tipo || 'civil';
+    const tokenOk = d.tipo === 'responsavel' ? UUID_RE.test(String(d.operacao_id || '')) : TOKEN_RE.test(String(d.tipo === 'militar' ? d.token_militar : d.token_civil || ''));
+    if (!d || !tokenOk || !CODIGO_RE.test(String(d.codigo || ''))) {
       return res.status(502).json({ erro: 'falha_supabase' });
     }
 
@@ -112,7 +134,7 @@ module.exports = async (req, res) => {
     if (!chaveEmail || !remetente) return res.status(501).json({ erro: 'email_nao_configurado' });
     const site = enderecoSite(req);
     if (!site) return res.status(400).json({ erro: 'endereco_invalido' });
-    const link = `${site}/civil.html#t=${d.token_civil}&c=${d.codigo}`;
+    const link = linkDoConvite(site, d);
     const m = montarMensagem(d, link);
 
     let ok = false, erro = null;

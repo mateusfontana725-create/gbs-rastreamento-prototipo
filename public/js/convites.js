@@ -1,8 +1,10 @@
 /* =====================================================================
- * convites.js — convite de participante por e-mail (migração 044, api/convidar.js)
- *   O responsável cadastra o nome e o e-mail; o servidor envia uma mensagem com o link do civil.html
- *   (com o código do convite, que preenche o nome na página do participante).
- *   Sem o provedor de e-mail configurado no servidor, o painel oferece "Abrir no meu e-mail" e "Copiar link".
+ * convites.js — convite de participante por WhatsApp ou e-mail (migrações 044 e 047, api/convidar.js)
+ *   O responsável escolhe a categoria (Civil, Bombeiro ou Responsável), digita o nome e o celular (WhatsApp) ou o
+ *   e-mail. O link corresponde à categoria: civil → link dos civis; bombeiro → link dos bombeiros; responsável →
+ *   painel da operação (pede o login de responsável). Civil e bombeiro levam o código do convite, que preenche o nome.
+ *   WhatsApp: abre a conversa com a mensagem pronta (wa.me), sem salvar o contato. E-mail: o servidor envia; sem o
+ *   provedor configurado, o painel oferece "Abrir no meu e-mail" e "Copiar link".
  *   Usa a interface window.Painel (militar.js).
  * ===================================================================== */
 (function () {
@@ -12,9 +14,28 @@
   var el = UI.el;
   var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   var MAX_ENVIOS = 5;
+  var CATEGORIAS = [['civil', 'Civil', 'voluntário, morador'], ['militar', 'Bombeiro', 'militar da operação'], ['responsavel', 'Responsável', 'acompanha pelo painel']];
+  var ROTULO = { civil: 'civil', militar: 'bombeiro', responsavel: 'responsável' };
 
   function podeAlterar() { return Boolean(P.podeAlterar && P.podeAlterar()); }
-  function linkDo(c) { return P.linkCivil(c.codigo); }
+  function linkDo(c) { return P.linkConvite ? P.linkConvite(c.tipo || 'civil', c.codigo) : P.linkCivil(c.codigo); }
+
+  // Celular brasileiro → só dígitos com 55 (o banco faz a mesma conta)
+  function telefoneWhatsApp(v) {
+    var d = String(v || '').replace(/\D/g, '');
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    return /^\d{12,13}$/.test(d) ? d : null;
+  }
+  function textoConvite(c) {
+    var op = P.op(), link = linkDo(c);
+    if (c.tipo === 'responsavel') {
+      return 'Olá, ' + c.nome + '! Você foi convidado para acompanhar como responsável a operação "' + op.codigo + '" do Corpo de Bombeiros.\n' +
+        'Abra o painel e entre com a sua conta de responsável:\n' + link;
+    }
+    return 'Olá, ' + c.nome + '! Você foi convidado para participar da operação de busca "' + op.codigo + '" do Corpo de Bombeiros' +
+      (c.tipo === 'militar' ? ' (link para bombeiros)' : '') + '.\nAbra o link no celular, toque em COMEÇAR e permita a localização:\n' + link;
+  }
+  function linkWhatsApp(c) { return 'https://wa.me/' + c.telefone + '?text=' + encodeURIComponent(textoConvite(c)); }
 
   async function copiar(texto) {
     try { await navigator.clipboard.writeText(texto); UI.aviso('Link copiado.', 'ok'); }
@@ -23,13 +44,11 @@
 
   function mailto(c) {
     var op = P.op();
-    var assunto = 'Convite para a busca "' + op.codigo + '"';
-    var corpo = 'Olá, ' + c.nome + '!\n\nVocê foi convidado para participar da operação de busca "' + op.codigo + '".\n' +
-      'Abra o link no celular, toque em COMEÇAR e permita a localização:\n' + linkDo(c) + '\n\nSe você não esperava este convite, ignore esta mensagem.';
-    return 'mailto:' + encodeURIComponent(c.email) + '?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(corpo);
+    var assunto = c.tipo === 'responsavel' ? 'Painel da operação "' + op.codigo + '"' : 'Convite para a busca "' + op.codigo + '"';
+    return 'mailto:' + encodeURIComponent(c.email) + '?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(textoConvite(c) + '\n\nSe você não esperava este convite, ignore esta mensagem.');
   }
 
-  // Pede ao servidor para enviar. Devolve { ok } ou { erro, texto }.
+  // Pede ao servidor para enviar o e-mail. Devolve { ok } ou { erro, texto }.
   async function enviar(convite) {
     var s = await C.cliente.auth.getSession();
     var token = s && s.data && s.data.session ? s.data.session.access_token : null;
@@ -53,23 +72,37 @@
     return { erro: j.erro || 'falha', texto: textos[j.erro] || 'Não foi possível enviar o e-mail agora.' };
   }
 
+  // WhatsApp: abre a conversa com a mensagem pronta e anota no convite que foi aberto
+  function abrirWhatsApp(c) {
+    window.open(linkWhatsApp(c), '_blank', 'noopener');
+    C.rpc('convite_registrar_envio', { p_convite: c.id, p_erro: null }).catch(function () { /* o convite segue valendo */ });
+  }
+
   function situacao(c) {
     if (c.aceito_em) return { rot: 'Entrou', classe: 'selo-ok', det: 'entrou às ' + C.hora(c.aceito_em, false) };
     if (c.envio_erro) return { rot: 'Falha no envio', classe: 'selo-perigo', det: c.envio_erro };
-    if (c.enviado_em) return { rot: 'Enviado', classe: 'selo-neutro', det: 'enviado às ' + C.hora(c.enviado_em, false) + (c.envios > 1 ? ' (' + c.envios + ' envios)' : '') };
+    if (c.enviado_em) return { rot: c.canal === 'whatsapp' ? 'Aberto no WhatsApp' : 'Enviado', classe: 'selo-neutro', det: (c.canal === 'whatsapp' ? 'aberto às ' : 'enviado às ') + C.hora(c.enviado_em, false) + (c.envios > 1 ? ' (' + c.envios + ' vezes)' : '') };
     return { rot: 'Não enviado', classe: 'selo-alerta', det: 'ainda não saiu' };
   }
+  function contato(c) { return c.canal === 'whatsapp' ? '+' + c.telefone : c.email; }
 
-  // Seção para dentro do modal "Convidar". Sozinha: busca a lista e atualiza enquanto estiver na tela.
-  function painel() {
+  // Seção do modal "Convidar". canal: 'whatsapp' | 'email'. Busca a lista e atualiza enquanto estiver na tela.
+  function painel(canal) {
+    canal = canal === 'whatsapp' ? 'whatsapp' : 'email';
+    var porWhats = canal === 'whatsapp';
     var op = P.op();
+    var pre = 'conv-' + (porWhats ? 'w' : 'e') + '-';
     var lista = el('ul', { classe: 'lista-convites' });
-    var vazio = el('p', { classe: 'muted', texto: 'Nenhum convite por e-mail ainda.' });
+    var vazio = el('p', { classe: 'muted', texto: porWhats ? 'Nenhum convite por WhatsApp ainda.' : 'Nenhum convite por e-mail ainda.' });
     var aviso = el('div', { classe: 'convite-aviso', hidden: true });
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var nome = el('input', { classe: 'campo', id: 'conv-nome', maxlength: '40', autocomplete: 'off', placeholder: 'Nome de quem vai participar' });
-    var email = el('input', { classe: 'campo', id: 'conv-email', type: 'email', maxlength: '200', autocomplete: 'off', inputmode: 'email', placeholder: 'email@exemplo.com' });
-    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'conv-enviar', texto: 'Enviar convite' });
+    var tipo = 'civil';
+    var categorias = UI.escolhas(pre + 'tipo', CATEGORIAS.map(function (x) { return { valor: x[0], rotulo: x[1], sub: x[2], marcado: x[0] === 'civil' }; }), function (v) { tipo = v; });
+    var nome = el('input', { classe: 'campo', id: pre + 'nome', maxlength: '40', autocomplete: 'off', placeholder: 'Nome de quem vai participar' });
+    var contatoIn = porWhats
+      ? el('input', { classe: 'campo', id: pre + 'tel', type: 'tel', maxlength: '20', autocomplete: 'off', inputmode: 'tel', placeholder: '(41) 99999-9999' })
+      : el('input', { classe: 'campo', id: pre + 'email', type: 'email', maxlength: '200', autocomplete: 'off', inputmode: 'email', placeholder: 'email@exemplo.com' });
+    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', id: pre + 'enviar', texto: porWhats ? 'Abrir no WhatsApp' : 'Enviar convite' });
     var itens = [], ausente = false, timer = null;
 
     function mostrarAviso(c, texto) {
@@ -83,19 +116,22 @@
 
     function desenhar() {
       lista.innerHTML = '';
-      vazio.hidden = itens.length > 0;
-      itens.forEach(function (c) {
+      var meus = itens.filter(function (c) { return (c.canal || 'email') === canal; });
+      vazio.hidden = meus.length > 0;
+      meus.forEach(function (c) {
         var s = situacao(c);
         var acoes = [];
         if (podeAlterar() && !c.aceito_em) {
-          acoes.push(el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.enviado_em ? 'Reenviar' : 'Enviar', disabled: c.envios >= MAX_ENVIOS ? true : null, title: c.envios >= MAX_ENVIOS ? 'Limite de ' + MAX_ENVIOS + ' envios' : null,
-            onclick: function () { reenviar(c); } }));
+          acoes.push(porWhats
+            ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.enviado_em ? 'Abrir de novo' : 'Abrir no WhatsApp', onclick: function () { abrirWhatsApp(c); setTimeout(carregar, 800); } })
+            : el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.enviado_em ? 'Reenviar' : 'Enviar', disabled: c.envios >= MAX_ENVIOS ? true : null,
+              title: c.envios >= MAX_ENVIOS ? 'Limite de ' + MAX_ENVIOS + ' envios' : null, onclick: function () { reenviar(c); } }));
         }
         acoes.push(el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Copiar link', onclick: function () { copiar(linkDo(c)); } }));
         if (podeAlterar() && !c.aceito_em) acoes.push(el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Cancelar', onclick: function () { cancelar(c); } }));
         lista.appendChild(el('li', { classe: 'convite-item', 'data-convite': c.id }, [
-          el('div', { classe: 'convite-topo' }, [el('strong', { texto: c.nome }), el('span', { classe: 'selo ' + s.classe, texto: s.rot })]),
-          el('small', { classe: 'muted', texto: c.email + ' · ' + s.det }),
+          el('div', { classe: 'convite-topo' }, [el('strong', { texto: c.nome }), el('span', { classe: 'selo selo-neutro', texto: ROTULO[c.tipo || 'civil'] }), el('span', { classe: 'selo ' + s.classe, texto: s.rot })]),
+          el('small', { classe: 'muted', texto: contato(c) + ' · ' + s.det }),
           el('div', { classe: 'acoes-linha' }, acoes),
         ]));
       });
@@ -109,7 +145,7 @@
       } catch (e) {
         if (/convites_participante/.test(String(e.message)) || e.codigo === 'funcao_ausente') {
           ausente = true; vazio.hidden = false;
-          vazio.textContent = 'O convite por e-mail ainda não está no servidor: rode a migração 044 no Supabase.';
+          vazio.textContent = 'O convite ainda não está no servidor: rode as migrações 044 e 047 no Supabase.';
           form.hidden = true;
         }
       }
@@ -130,9 +166,10 @@
     }
 
     var form = el('form', { classe: 'form-convite', novalidate: true }, [
+      UI.campo('Categoria', categorias, { dica: 'O link enviado corresponde à categoria: civis e bombeiros entram pela página do participante; responsável, pelo painel (com login).' }),
       el('div', { classe: 'form-grade' }, [
-        UI.campo('Nome', nome, { para: 'conv-nome' }),
-        UI.campo('E-mail', email, { para: 'conv-email' }),
+        UI.campo('Nome', nome, { para: pre + 'nome' }),
+        UI.campo(porWhats ? 'Celular (WhatsApp)' : 'E-mail', contatoIn, { para: contatoIn.id, ajuda: porWhats ? 'Com DDD. Não precisa salvar o contato.' : null }),
       ]),
       erro, aviso,
       el('div', { classe: 'acoes-linha' }, [btn]),
@@ -140,30 +177,50 @@
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       erro.hidden = true; aviso.hidden = true;
-      var n = nome.value.replace(/\s+/g, ' ').trim(), em = email.value.trim().toLowerCase();
-      if (n.length < 2) { erro.textContent = 'Informe o nome do participante.'; erro.hidden = false; nome.focus(); return; }
-      if (!EMAIL_RE.test(em)) { erro.textContent = 'Confira o e-mail.'; erro.hidden = false; email.focus(); return; }
-      btn.disabled = true; btn.textContent = 'Enviando…';
+      var n = nome.value.replace(/\s+/g, ' ').trim();
+      if (n.length < 2) { erro.textContent = 'Informe o nome.'; erro.hidden = false; nome.focus(); return; }
+      var dados = { nome: n, tipo: tipo, canal: canal };
+      if (porWhats) {
+        var tel = telefoneWhatsApp(contatoIn.value);
+        if (!tel) { erro.textContent = 'Confira o celular (DDD e número).'; erro.hidden = false; contatoIn.focus(); return; }
+        dados.telefone = tel;
+      } else {
+        var em = contatoIn.value.trim().toLowerCase();
+        if (!EMAIL_RE.test(em)) { erro.textContent = 'Confira o e-mail.'; erro.hidden = false; contatoIn.focus(); return; }
+        dados.email = em;
+      }
+      // a janela do WhatsApp precisa abrir no clique (senão o navegador bloqueia): abre já e depois põe o endereço
+      var janela = porWhats ? window.open('', '_blank') : null;
+      btn.disabled = true;
       try {
-        var c = await C.rpc('criar_convite_participante', { p_operacao: op.id, p_nome: n, p_email: em });
-        var r = await enviar(c);
-        if (r.ok) {
-          UI.aviso('Convite enviado para ' + em + '.', 'ok');
-          nome.value = ''; email.value = ''; nome.focus();
+        var c = await C.rpc('criar_convite', { p_operacao: op.id, p_dados: dados });
+        if (porWhats) {
+          if (janela) { try { janela.opener = null; janela.location.href = linkWhatsApp(c); } catch (x) { window.open(linkWhatsApp(c), '_blank', 'noopener'); } }
+          else window.open(linkWhatsApp(c), '_blank', 'noopener');
+          C.rpc('convite_registrar_envio', { p_convite: c.id, p_erro: null }).catch(function () { /* segue */ });
+          UI.aviso('Conversa do WhatsApp aberta com a mensagem e o link de ' + ROTULO[tipo] + '. Toque em enviar lá.', 'ok', 7000);
+          nome.value = ''; contatoIn.value = ''; nome.focus();
         } else {
-          erro.textContent = r.texto; erro.hidden = false;
-          if (r.erro === 'email_nao_configurado' || r.erro === 'falha_envio') mostrarAviso(c, 'O convite foi cadastrado, mas o e-mail não saiu. Envie pelo seu e-mail ou copie o link.');
+          var r = await enviar(c);
+          if (r.ok) { UI.aviso('Convite enviado para ' + dados.email + '.', 'ok'); nome.value = ''; contatoIn.value = ''; nome.focus(); }
+          else {
+            erro.textContent = r.texto; erro.hidden = false;
+            if (r.erro === 'email_nao_configurado' || r.erro === 'falha_envio') mostrarAviso(c, 'O convite foi cadastrado, mas o e-mail não saiu. Envie pelo seu e-mail ou copie o link.');
+          }
         }
         await carregar();
       } catch (e) {
-        erro.textContent = e.message; erro.hidden = false;
+        if (janela) try { janela.close(); } catch (x) { /* ignora */ }
+        erro.textContent = e.codigo === 'funcao_ausente' ? 'Rode a migração 047 no Supabase para convidar por categoria e pelo WhatsApp.' : e.message; erro.hidden = false;
       } finally {
-        btn.disabled = false; btn.textContent = 'Enviar convite';
+        btn.disabled = false;
       }
     });
 
     var raiz = el('div', { classe: 'convites-painel' }, [
-      el('p', { classe: 'nota', texto: 'A pessoa recebe um e-mail com o link. Ao abrir no celular, o nome já vem preenchido e basta tocar em COMEÇAR.' }),
+      el('p', { classe: 'nota', texto: porWhats
+        ? 'Abre a conversa do WhatsApp com a mensagem e o link da categoria, sem precisar salvar o contato. Para civis e bombeiros o nome já vem preenchido na página.'
+        : 'A pessoa recebe um e-mail com o link da categoria. Para civis e bombeiros, o nome já vem preenchido e basta tocar em COMEÇAR.' }),
       podeAlterar() ? form : el('p', { classe: 'muted', texto: 'Operação encerrada: só consulta.' }),
       el('h3', { classe: 'convites-titulo', texto: 'Convidados' }),
       vazio, lista,
@@ -174,5 +231,5 @@
     return raiz;
   }
 
-  window.Convites = { painel: painel, _teste: { situacao: situacao, mailto: mailto } };
+  window.Convites = { painel: painel, _teste: { situacao: situacao, mailto: mailto, telefoneWhatsApp: telefoneWhatsApp, textoConvite: textoConvite } };
 })();

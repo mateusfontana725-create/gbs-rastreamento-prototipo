@@ -155,6 +155,7 @@
     // setores, pontos de interesse e destinos
     setores: new Map(),         // id → { d: dados, camada }
     pontosInt: new Map(),       // id → { d: dados, marcador }
+    tiposPonto: new Map(),      // id → tipo de ponto criado pelos responsáveis (nome, ícone, cor)
     destinos: new Map(),        // participante_id → destino ativo
     rotasFicha: new Map(),      // destino:modo → { rota, origem, em, calculando, erro }
     camadaRotaFicha: null,
@@ -2329,6 +2330,7 @@
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'setores', filter: filtro }, agendarAreas)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pontos_interesse', filter: filtro }, agendarAreas)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tipos_ponto' }, agendarAreas)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'destinos', filter: filtro }, agendarAreas)
       .subscribe(function (status) {
         if (geracao !== est.geracaoCanal) return;
@@ -4024,31 +4026,33 @@
     var qr = UI.el('div', { classe: 'qr', 'aria-label': 'QR Code do link' });
     var nota = UI.el('p', { classe: 'nota' });
     var abaCivil = UI.el('button', { classe: 'btn btn-ativo', type: 'button', texto: '● Link para CIVIS' });
-    var abaMil = UI.el('button', { classe: 'btn', type: 'button', texto: '■ Link para MILITARES' });
-    var abaEmail = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-email', texto: '✉ Convidar por e-mail' }) : null;
+    var abaMil = UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-bombeiros', texto: '■ Link para BOMBEIROS' });
+    var abaWhats = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-whatsapp', texto: '☎ WhatsApp' }) : null;
+    var abaEmail = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-email', texto: '✉ E-mail' }) : null;
     var caixaLink = UI.el('div', { classe: 'link-caixa' });
-    var painelEmail = abaEmail ? window.Convites.painel() : null;
-    if (painelEmail) painelEmail.hidden = true;
+    var paineis = { whatsapp: abaWhats ? window.Convites.painel('whatsapp') : null, email: abaEmail ? window.Convites.painel('email') : null };
+    Object.keys(paineis).forEach(function (k) { if (paineis[k]) paineis[k].hidden = true; });
 
     function mostrar(tipo) {
-      var porEmail = tipo === 'email';
-      if (!porEmail) atual = tipo;
-      if (!porEmail) entrada.value = links[tipo];
+      var convite = tipo === 'email' || tipo === 'whatsapp';
+      if (!convite) atual = tipo;
+      if (!convite) entrada.value = links[tipo];
       abaCivil.className = 'btn' + (tipo === 'civil' ? ' btn-ativo' : '');
       abaMil.className = 'btn' + (tipo === 'militar' ? ' btn-ativo' : '');
-      if (abaEmail) abaEmail.className = 'btn' + (porEmail ? ' btn-ativo' : '');
-      caixaLink.hidden = qr.hidden = nota.hidden = porEmail;
-      if (painelEmail) painelEmail.hidden = !porEmail;
-      if (porEmail) return;
+      if (abaWhats) abaWhats.className = 'btn' + (tipo === 'whatsapp' ? ' btn-ativo' : '');
+      if (abaEmail) abaEmail.className = 'btn' + (tipo === 'email' ? ' btn-ativo' : '');
+      caixaLink.hidden = qr.hidden = nota.hidden = convite;
+      Object.keys(paineis).forEach(function (k) { if (paineis[k]) paineis[k].hidden = k !== tipo; });
+      if (convite) return;
       nota.textContent = tipo === 'civil'
         ? 'Quem entrar por este link aparece como civil.'
-        : 'Só para militares: quem entrar por este link se identifica como militar.';
+        : 'Só para bombeiros: quem entrar por este link se identifica como militar.';
       if (window.qrcode) {
         try {
           var q = window.qrcode(0, 'M');
           q.addData(links[tipo]);
           q.make();
-          qr.innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true, title: 'QR Code — link para ' + (tipo === 'civil' ? 'civis' : 'militares') });
+          qr.innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true, title: 'QR Code — link para ' + (tipo === 'civil' ? 'civis' : 'bombeiros') });
         } catch (e) { qr.textContent = 'Não foi possível gerar o QR Code.'; }
       } else {
         qr.textContent = 'QR Code indisponível (biblioteca não carregada).';
@@ -4078,18 +4082,20 @@
     abaCivil.addEventListener('click', function () { mostrar('civil'); });
     abaMil.addEventListener('click', function () { mostrar('militar'); });
     if (abaEmail) abaEmail.addEventListener('click', function () { mostrar('email'); });
+    if (abaWhats) abaWhats.addEventListener('click', function () { mostrar('whatsapp'); });
 
     var botoes = [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Copiar', onclick: copiar })];
     if (navigator.share) botoes.push(UI.el('button', { classe: 'btn', type: 'button', texto: 'Compartilhar', onclick: compartilhar }));
     [entrada].concat(botoes).forEach(function (n) { caixaLink.appendChild(n); });
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links não dão acesso ao painel. Só servem para entrar na operação como participante.')]),
-      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil, abaEmail]),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links de civis e de bombeiros não dão acesso ao painel: só servem para entrar na operação como participante. Responsável convidado entra pelo painel, com a própria conta.')]),
+      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil, abaWhats, abaEmail]),
       caixaLink,
       qr,
       nota,
-      painelEmail,
+      paineis.whatsapp,
+      paineis.email,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
     mostrar(atual);
@@ -5073,6 +5079,7 @@
         C.consultar(C.cliente.from('setores').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true })),
         C.consultar(C.cliente.from('pontos_interesse').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true })),
         C.consultar(C.cliente.from('destinos').select('*').eq('operacao_id', opId).is('encerrado_em', null)),
+        carregarTiposPonto(),
       ]);
       if (!est.op || est.op.id !== opId) return;
       aplicarSetores(r[0] || [], true);
@@ -5085,6 +5092,16 @@
       est.erroAreas = true;
     }
     await carregarTrilhasManuais();   // trata os próprios erros (banco sem a migração 028 não derruba setores)
+  }
+
+  // Tipos de ponto criados pelos responsáveis (valem para todas as operações). Banco sem a migração 047: só as categorias fixas.
+  async function carregarTiposPonto() {
+    try {
+      var lista = await C.consultar(C.cliente.from('tipos_ponto').select('*').order('nome', { ascending: true }));
+      est.tiposPonto = new Map((lista || []).map(function (t) { return [t.id, t]; }));
+    } catch (e) {
+      est.tiposPonto = new Map();
+    }
   }
 
   function agendarAreas() {
@@ -5276,11 +5293,35 @@
   }
 
   /* ---------- Pontos de interesse ----------------------------------- */
+  // Categoria para mostrar: uma das fixas (com regras próprias: risco, base, vítima…) ou um tipo criado
+  // pelos responsáveis, com ícone e cor próprios (o ponto guarda uma cópia, para aparecer mesmo sem o tipo).
+  function catDoPonto(d) {
+    var t = d && d.tipo_id ? est.tiposPonto.get(d.tipo_id) : null;
+    if (d && (d.tipo_id || d.icone)) {
+      return { rotulo: t ? t.nome : 'Outro ponto', letra: (t && t.icone) || d.icone || '•', cor: (t && t.cor) || d.cor || null, tipo: true };
+    }
+    return CAT_PONTO[d && d.categoria] || CAT_PONTO.OUTRO;
+  }
+  function estiloCorPonto(cor) {
+    return cor ? 'background:' + cor + ';color:' + window.Cores.textoSobre(cor) : '';
+  }
+  function htmlMarcaPonto(d) {
+    var cat = catDoPonto(d);
+    var est_ = estiloCorPonto(cat.cor);
+    return '<div class="mk-poi poi-' + C.esc(d.categoria) + (cat.tipo ? ' poi-tipo' : '') + '"' + (est_ ? ' style="' + est_ + '"' : '') +
+      '><span>' + C.esc(cat.letra) + '</span></div>';
+  }
+  // Marca do ponto como elemento (listas, detalhes, formulário)
+  function elMarcaPonto(d, extra) {
+    var cat = catDoPonto(d);
+    return UI.el('span', Object.assign({ classe: 'mk-poi poi-' + d.categoria + (cat.tipo ? ' poi-tipo' : ''), style: estiloCorPonto(cat.cor) || null }, extra || {}),
+      [UI.el('span', { texto: cat.letra })]);
+  }
+
   function iconePontoInt(d) {
-    var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
     return L.divIcon({
       className: 'mk-poi-wrap',
-      html: '<div class="mk-poi poi-' + C.esc(d.categoria) + '"><span>' + C.esc(cat.letra) + '</span></div>' +
+      html: htmlMarcaPonto(d) +
         '<div class="mk-poi-rotulo">' + C.esc(d.titulo) + '</div>',
       iconSize: [0, 0],
     });
@@ -5296,11 +5337,11 @@
     if (!est.mapa || !est.camadaPontosInt) return;
     var d = p.d;
     // A sincronização redesenha a lista inteira: só refaz quando o ponto mudou (evita refazer o agrupamento)
-    var assinatura = [d.lat, d.lng, d.categoria, d.titulo, d.raio_m].join('|');
+    var cat = catDoPonto(d);
+    var assinatura = [d.lat, d.lng, d.categoria, d.titulo, d.raio_m, d.tipo_id, cat.letra, cat.cor, cat.rotulo].join('|');
     if (p.marcador && p._assinatura === assinatura) return;
     tirarPontoInt(p);
     p._assinatura = assinatura;
-    var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
     // Área de risco: círculo do alarme de proximidade (quem entra é avisado).
     if (d.categoria === 'RISCO') {
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 1.5, opacity: 0.7, dashArray: '6 6',
@@ -5813,13 +5854,54 @@
   function abrirFormPontoInt(base) {
     var novo = !base.id;
     var d = Object.assign({ categoria: 'OUTRO', titulo: '', descricao: '' }, base);
-    var grade = UI.el('div', { classe: 'cat-pontos', role: 'radiogroup', 'aria-label': 'Categoria' }, Object.keys(CAT_PONTO).map(function (k) {
-      return UI.el('label', { classe: 'cat-ponto' }, [
-        UI.el('input', { type: 'radio', name: 'ponto-cat', value: k, checked: k === d.categoria ? true : null }),
-        UI.el('span', { classe: 'mk-poi poi-' + k }, [UI.el('span', { texto: CAT_PONTO[k].letra })]),
-        UI.el('span', { classe: 'cat-ponto-txt', texto: CAT_PONTO[k].rotulo }),
+    // Categorias fixas (com regras: risco, base, vítima…) e, depois, os tipos criados pelos responsáveis.
+    // Valor do rádio: a categoria ('RISCO'…) ou 'tipo:<id>'.
+    var marcadoInicial = d.tipo_id ? 'tipo:' + d.tipo_id : d.categoria;
+    var grade = UI.el('div', { classe: 'cat-pontos', role: 'radiogroup', 'aria-label': 'Categoria' });
+    function rotuloDaOpcao(v) {
+      if (!v) return '';
+      if (v.indexOf('tipo:') === 0) { var t = est.tiposPonto.get(v.slice(5)); return t ? t.nome : ''; }
+      return CAT_PONTO[v] ? CAT_PONTO[v].rotulo : '';
+    }
+    function rotulosConhecidos() {
+      var r = Object.keys(CAT_PONTO).map(function (c) { return CAT_PONTO[c].rotulo; });
+      est.tiposPonto.forEach(function (t) { r.push(t.nome); });
+      return r;
+    }
+    function opcaoCat(valor, marca, rotulo, extra) {
+      return UI.el('label', { classe: 'cat-ponto' + (extra ? ' ' + extra : '') }, [
+        UI.el('input', { type: 'radio', name: 'ponto-cat', value: valor, checked: valor === marcadoInicial ? true : null }),
+        marca,
+        UI.el('span', { classe: 'cat-ponto-txt', texto: rotulo }),
       ]);
-    }));
+    }
+    function desenharGrade(marcar) {
+      var atual = marcar || (grade.querySelector('input:checked') || {}).value || marcadoInicial;
+      marcadoInicial = atual;
+      grade.innerHTML = '';
+      Object.keys(CAT_PONTO).forEach(function (k) {
+        grade.appendChild(opcaoCat(k, UI.el('span', { classe: 'mk-poi poi-' + k }, [UI.el('span', { texto: CAT_PONTO[k].letra })]), CAT_PONTO[k].rotulo));
+      });
+      var tipos = Array.from(est.tiposPonto.values()).filter(function (t) { return t.ativo || 'tipo:' + t.id === atual; })
+        .sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+      tipos.forEach(function (t) {
+        grade.appendChild(opcaoCat('tipo:' + t.id, elMarcaPonto({ categoria: 'OUTRO', tipo_id: t.id, icone: t.icone, cor: t.cor }), t.nome, 'cat-ponto-tipo'));
+      });
+      // tipo que o ponto usa mas não está carregado (ex.: banco sem permissão de leitura): mantém a escolha
+      if (atual.indexOf('tipo:') === 0 && !est.tiposPonto.has(atual.slice(5))) {
+        grade.appendChild(opcaoCat(atual, elMarcaPonto(d), d.titulo || 'Tipo do ponto', 'cat-ponto-tipo'));
+      }
+      grade.appendChild(UI.el('button', { classe: 'cat-ponto cat-ponto-novo', type: 'button', id: 'ponto-novo-tipo',
+        title: 'Criar um tipo de ponto com nome, ícone e cor próprios (fica disponível para todos os responsáveis)', onclick: function () {
+          abrirTipoPonto(null, function (t) { desenharGrade('tipo:' + t.id); aoMudarCat(); });
+        } }, [UI.el('span', { classe: 'mk-poi', 'aria-hidden': 'true' }, [UI.el('span', { texto: '＋' })]), UI.el('span', { classe: 'cat-ponto-txt', texto: 'Novo tipo' })]));
+      if (tipos.length) {
+        grade.appendChild(UI.el('button', { classe: 'cat-ponto cat-ponto-novo', type: 'button', id: 'ponto-gerir-tipos', onclick: function () {
+          abrirGerirTiposPonto(function () { desenharGrade(); aoMudarCat(); });
+        } }, [UI.el('span', { classe: 'mk-poi', 'aria-hidden': 'true' }, [UI.el('span', { texto: '✎' })]), UI.el('span', { classe: 'cat-ponto-txt', texto: 'Editar tipos' })]));
+      }
+    }
+    desenharGrade();
     var titulo = UI.el('input', { classe: 'campo', id: 'ponto-titulo', maxlength: '80', value: d.titulo, placeholder: 'Ex.: Última vez vista na trilha da cachoeira' });
     var desc = UI.el('textarea', { classe: 'campo', id: 'ponto-desc', maxlength: '1000', rows: '3', placeholder: 'Opcional' });
     desc.value = d.descricao || '';
@@ -5849,16 +5931,19 @@
         : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.'));
     }
     ajustarRaio(d.categoria);
-    grade.addEventListener('change', function () {
+    var rotuloAnterior = '';
+    function aoMudarCat() {
       var k = (grade.querySelector('input:checked') || {}).value;
       if (k === 'BASE' && !d.raio_m && Number(raio.value) === RAIO_ALERTA_PADRAO) raio.value = String(RAIO_BASE_PADRAO);
       ajustarRaio(k);
-    });
-    grade.addEventListener('change', function () {
-      var k = (grade.querySelector('input:checked') || {}).value;
-      if (k && (!titulo.value.trim() || Object.keys(CAT_PONTO).some(function (c) { return CAT_PONTO[c].rotulo === titulo.value.trim(); }))) titulo.value = CAT_PONTO[k].rotulo;
-    });
-    if (!d.titulo) titulo.value = CAT_PONTO[d.categoria].rotulo;
+      // nome ainda é o rótulo de uma categoria (ou vazio): acompanha a escolha
+      var atual = titulo.value.trim();
+      if (k && (!atual || atual === rotuloAnterior || rotulosConhecidos().indexOf(atual) !== -1)) titulo.value = rotuloDaOpcao(k);
+      rotuloAnterior = rotuloDaOpcao(k);
+    }
+    grade.addEventListener('change', aoMudarCat);
+    if (!d.titulo) titulo.value = rotuloDaOpcao(marcadoInicial) || CAT_PONTO.OUTRO.rotulo;
+    rotuloAnterior = rotuloDaOpcao(marcadoInicial);
     var salvo = false;
     var form = UI.el('form', { classe: 'form-ponto form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Marcar ponto' : 'Editar ponto' }),
@@ -5885,8 +5970,9 @@
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       erro.hidden = true;
+      var escolha = (grade.querySelector('input:checked') || {}).value;
       var dados = {
-        categoria: (grade.querySelector('input:checked') || {}).value,
+        categoria: escolha && escolha.indexOf('tipo:') === 0 ? 'OUTRO' : escolha,
         titulo: titulo.value.replace(/\s+/g, ' ').trim(),
         descricao: desc.value.trim(),
         lat: Number(lat.value),
@@ -5898,6 +5984,8 @@
         erro.textContent = 'Coordenadas inválidas.'; erro.hidden = false; return;
       }
       if (novo && d.mensagem_id) dados.mensagem_id = d.mensagem_id;
+      if (escolha.indexOf('tipo:') === 0) dados.tipo_id = escolha.slice(5);
+      else if (d.tipo_id) dados.tipo_id = null;   // voltou para uma categoria fixa
       if (dados.categoria === 'RISCO' || dados.categoria === 'BASE') {
         var r = Number(raio.value);
         if (!isFinite(r) || r < 10 || r > 5000) { erro.textContent = 'Raio: de 10 m a 5.000 m.'; erro.hidden = false; return; }
@@ -5950,18 +6038,113 @@
     destacarNoMapa(mk && camadaDoPonto(mk), mk, d.lat, d.lng);
   }
 
+  /* ---------- Tipos de ponto criados pelos responsáveis ------------- */
+  var ICONES_TIPO = ['🚁', '🚑', '🐕', '🚒', '⛺', '💧', '🔦', '📡', '🛶', '🅿', '⚑', '★', '✚', '⚠', '◆', '●'];
+  var CORES_TIPO = ['#64748b', '#2563eb', '#16a34a', '#f59e0b', '#7c3aed', '#0891b2', '#db2777', '#92400e'];
+
+  // Criar ou editar um tipo (nome, ícone, cor). Abre por cima do formulário do ponto. aoSalvar(tipo)
+  function abrirTipoPonto(t, aoSalvar) {
+    var nome = UI.el('input', { classe: 'campo', id: 'tipo-ponto-nome', maxlength: '40', value: t ? t.nome : '', placeholder: 'Ex.: Pouso de helicóptero' });
+    var icone = UI.el('input', { classe: 'campo tipo-ponto-icone', id: 'tipo-ponto-icone', maxlength: '8', value: t ? t.icone : 'H', autocomplete: 'off', placeholder: 'Letra ou emoji' });
+    var previa = UI.el('span', { classe: 'mk-poi poi-tipo', 'aria-hidden': 'true' }, [UI.el('span')]);
+    var cor = t ? t.cor : CORES_TIPO[est.tiposPonto.size % CORES_TIPO.length];
+    function pintar() {
+      previa.firstChild.textContent = icone.value.trim() || '•';
+      previa.setAttribute('style', estiloCorPonto(cor));
+    }
+    var cores = UI.seletorCor({ rotulo: 'Cor do tipo', valor: cor, padroes: CORES_TIPO, aoMudar: function (c) { cor = c; pintar(); } });
+    var sugestoes = UI.el('div', { classe: 'tipo-ponto-sugestoes', role: 'group', 'aria-label': 'Ícones prontos' }, ICONES_TIPO.map(function (i) {
+      return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: i, 'aria-label': 'Usar o ícone ' + i, onclick: function () { icone.value = i; pintar(); } });
+    }));
+    icone.addEventListener('input', pintar);
+    pintar();
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'tipo-ponto-salvar', texto: t ? 'Salvar tipo' : 'Criar tipo' });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: t ? 'Editar tipo de ponto' : 'Novo tipo de ponto' }),
+      UI.dica('O tipo fica disponível para todos os responsáveis, em qualquer operação. Pontos já marcados com ele acompanham as mudanças de ícone e cor.'),
+      UI.secao('Tipo', [
+        UI.campo('Nome', nome, { para: 'tipo-ponto-nome' }),
+        UI.grade([UI.campo('Ícone', icone, { para: 'tipo-ponto-icone', dica: 'Uma letra, número ou emoji (até 8 caracteres).' }), UI.el('div', { classe: 'campo-bloco tipo-ponto-previa' }, [UI.el('span', { classe: 'rotulo', texto: 'Prévia' }), previa])]),
+        sugestoes,
+        cores,
+      ]),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var dados = { nome: nome.value.replace(/\s+/g, ' ').trim(), icone: icone.value.trim(), cor: cores.valor() || cor };
+      if (dados.nome.length < 2) { erro.textContent = 'Informe o nome do tipo (2 a 40 letras).'; erro.hidden = false; return; }
+      if (!dados.icone) { erro.textContent = 'Escolha um ícone.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var res = await C.rpc('salvar_tipo_ponto', { p_id: t ? t.id : null, p_dados: dados });
+        est.tiposPonto.set(res.id, res);
+        fechar();
+        UI.aviso(t ? 'Tipo "' + res.nome + '" salvo.' : 'Tipo "' + res.nome + '" criado.', 'ok');
+        est.pontosInt.forEach(function (p) { if (p.d.tipo_id === res.id) { p.d.icone = res.icone; p.d.cor = res.cor; desenharPontoInt(p); } });
+        renderizarAreas();
+        if (aoSalvar) aoSalvar(res);
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { empilhar: true, fecharNoFundo: false });
+    setTimeout(function () { nome.focus(); }, 30);
+  }
+
+  // Lista dos tipos criados: editar ou deixar de usar (quem criou ou administrador). aoMudar()
+  function abrirGerirTiposPonto(aoMudar) {
+    var lista = UI.el('ul', { classe: 'lista-areas' });
+    function desenhar() {
+      lista.innerHTML = '';
+      var tipos = Array.from(est.tiposPonto.values()).filter(function (t) { return t.ativo; }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+      if (!tipos.length) lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhum tipo criado.' }));
+      tipos.forEach(function (t) {
+        var meu = (est.usuario && t.criado_por === est.usuario.id) || (est.responsavel && est.responsavel.admin);
+        lista.appendChild(UI.el('li', { classe: 'item-area tipo-ponto-item' }, [
+          elMarcaPonto({ categoria: 'OUTRO', tipo_id: t.id, icone: t.icone, cor: t.cor }),
+          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: t.nome }), UI.el('small', { classe: 'muted', texto: 'Criado por ' + t.criado_por_nome })]),
+          meu ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () {
+            abrirTipoPonto(t, function () { desenhar(); if (aoMudar) aoMudar(); });
+          } }) : null,
+          meu ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Deixar de usar', title: 'Some da lista de categorias; pontos já marcados continuam no mapa', onclick: async function () {
+            if (!(await UI.confirmar({ titulo: 'Deixar de usar "' + t.nome + '"?', texto: 'O tipo some da lista de categorias. Os pontos já marcados com ele continuam no mapa, com o mesmo ícone.', ok: 'Deixar de usar', empilhar: true }))) return;
+            try {
+              var res = await C.rpc('salvar_tipo_ponto', { p_id: t.id, p_dados: { ativo: false } });
+              est.tiposPonto.set(res.id, res);
+              desenhar();
+              if (aoMudar) aoMudar();
+            } catch (e) { UI.aviso('Não foi possível alterar: ' + e.message, 'erro', 7000); }
+          } }) : null,
+        ]));
+      });
+    }
+    desenhar();
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Tipos de ponto' }),
+      UI.dica('Tipos criados pelos responsáveis, além das categorias fixas. Só quem criou (ou um administrador) altera.'),
+      lista,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]), { empilhar: true });
+  }
+
   function abrirPontoInt(id) {
     var p = est.pontosInt.get(id);
     if (!p) return;
     var d = p.d;
-    var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+    var cat = catDoPonto(d);
     var alt = UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' });
     var foto = d.foto_id && est.fotos.get(d.foto_id);
     var ativa = est.op.status === 'ativa';
     var editavel = podeAlterar();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-ponto' }, [
       cabecaDetalhe({
-        marca: UI.el('span', { classe: 'mk-poi poi-' + d.categoria, 'aria-hidden': 'true' }, [UI.el('span', { texto: cat.letra })]),
+        marca: elMarcaPonto(d, { 'aria-hidden': 'true' }),
         tipo: 'Ponto de interesse · ' + cat.rotulo, titulo: d.titulo,
         extra: [editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-renomear', type: 'button', id: 'ponto-renomear', title: 'Renomear o ponto', 'aria-label': 'Renomear o ponto', texto: '✎',
           onclick: function () { fechar(); renomearPonto(d); } }) : null],
@@ -6306,10 +6489,10 @@
             UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: (STATUS_SETOR[d.status] || STATUS_SETOR.pendente).rotulo })])])]);
         })) : UI.el('p', { classe: 'muted', texto: 'Nenhum setor.' })], { dica: 'O centro do setor é o destino.' }),
         UI.secao('Pontos de interesse', [pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
-          var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+          var cat = catDoPonto(d);
           return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
             fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes, grupo_id: grupoId });
-          } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
+          } }, [elMarcaPonto(d),
             UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
         })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto marcado.' })]),
       ]),
@@ -6607,9 +6790,9 @@
     $('pontos-int-vazio').hidden = est.pontosInt.size > 0;
     est.pontosInt.forEach(function (p) {
       var d = p.d;
-      var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+      var cat = catDoPonto(d);
       ulP.appendChild(UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', 'data-ponto': d.id, onclick: function () { abrirPontoInt(d.id); } }, [
-        UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
+        elMarcaPonto(d),
         UI.el('span', { classe: 'item-area-txt' }, [
           UI.el('strong', { texto: d.titulo }),
           UI.el('small', { classe: 'muted', texto: cat.rotulo + ' · ' + C.hora(d.criado_em, false) + ' · ' + d.criado_por_nome }),
@@ -7500,10 +7683,10 @@
       v.marcadores.push(new window.maplibregl.Marker({ element: el }).setLngLat([pos.lng, pos.lat]).addTo(m));
     });
     est.pontosInt.forEach(function (pi) {
-      var d = pi.d, cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+      var d = pi.d, cat = catDoPonto(d);
       var el = document.createElement('div');
       el.className = 'mk3d mk3d-poi';
-      el.innerHTML = '<div class="mk-poi poi-' + C.esc(d.categoria) + '"><span>' + C.esc(cat.letra) + '</span></div>';
+      el.innerHTML = htmlMarcaPonto(d);
       el.title = cat.rotulo + ': ' + d.titulo;
       v.marcadores.push(new window.maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([d.lng, d.lat]).addTo(m));
     });
@@ -10006,6 +10189,7 @@
     missoes: function () { return Array.from(est.missoes.values()); },
     camadaProbabilidade: camadaProbabilidade,
     categorias: CAT_PONTO,
+    categoriaDoPonto: catDoPonto,   // { rotulo, letra, cor? } — fixa ou tipo criado pelos usuários
     raioAlertaPadrao: RAIO_ALERTA_PADRAO,
     formatoCoord: function () { return est.prefsMapa.coord || 'dec'; },
     minhaPosicao: function () { return obterMinhaPosicao(); },
@@ -10040,6 +10224,12 @@
     abrirCentral: function (aba) { abrirCentral(aba); },
     // link do civil.html da operação (com o código de um convite por e-mail, quando houver)
     linkCivil: function (codigo) { return est.op ? linkPara(est.op.token_civil) + (codigo ? '&c=' + codigo : '') : ''; },
+    // link de cada categoria de convite: civil e bombeiro (com o código do convite) ou o painel da operação (responsável)
+    linkConvite: function (tipo, codigo) {
+      if (!est.op) return '';
+      if (tipo === 'responsavel') { var u = new URL('militar.html', location.href); u.search = ''; u.hash = 'op=' + est.op.id; return u.href; }
+      return linkPara(tipo === 'militar' ? est.op.token_militar : est.op.token_civil) + (codigo ? '&c=' + codigo : '');
+    },
     atualizarCentral: function () { if (est.op) agendarCentral(); },
     abrirRelato: function (id) { abrirRelato(id); },
     mensagens: function () { return Array.from(est.mensagens.values()); },

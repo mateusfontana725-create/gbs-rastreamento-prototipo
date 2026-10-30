@@ -15,6 +15,11 @@
   var C = window.Comunicacao, UI = window.UI, P = window.Painel, Co = window.Coords, G = window.GPS;
   if (!P || !Co || !G) return;
   function $(id) { return document.getElementById(id); }
+  // Nome da categoria do ponto (fixa ou tipo criado pelos responsáveis)
+  function rotuloCategoria(P, d) {
+    var c = P.categoriaDoPonto ? P.categoriaDoPonto(d) : P.categorias[d.categoria];
+    return (c && c.rotulo) || d.categoria;
+  }
   function dist(a, b) { return G.distancia(a[0], a[1], b[0], b[1]); }
   function fmtDist(m) {
     if (m < 1000) return Math.round(m) + ' m';
@@ -247,7 +252,7 @@
     });
     P.pontosInteresse().forEach(function (d) {
       if (!escolhido(o.pontos, d.id)) return;
-      dados.pontos.push({ nome: d.titulo, lat: d.lat, lng: d.lng, descricao: d.descricao, categoria: (P.categorias[d.categoria] || {}).rotulo || d.categoria });
+      dados.pontos.push({ nome: d.titulo, lat: d.lat, lng: d.lng, descricao: d.descricao, categoria: rotuloCategoria(P, d) });
     });
     dados.setores = P.setores().filter(function (s) { return escolhido(o.setores, s.id); });
     return dados;
@@ -290,7 +295,7 @@
       return { id: p.id, rotulo: P.nome(p) + ' (' + P.tipo(p) + ')', marcado: participanteId ? p.id === participanteId : true };
     }));
     var gPontos = grupoEscolha('Pontos de interesse', P.pontosInteresse().map(function (d) {
-      return { id: d.id, rotulo: d.titulo + ' · ' + ((P.categorias[d.categoria] || {}).rotulo || d.categoria), marcado: !participanteId };
+      return { id: d.id, rotulo: d.titulo + ' · ' + rotuloCategoria(P, d), marcado: !participanteId };
     }));
     var gSetores = grupoEscolha('Setores de busca', P.setores().map(function (s) {
       return { id: s.id, rotulo: s.nome, marcado: !participanteId };

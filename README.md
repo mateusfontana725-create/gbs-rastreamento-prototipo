@@ -1056,8 +1056,11 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     fotos); um **!** vermelho avisa que há área de risco ou pedido de ajuda dentro. Passar o mouse diz quantos de
     cada; tocar aproxima; vários no mesmo lugar abrem em leque. O agrupamento já funciona na escala de 200 m e de 100 m (raio de
     40 a 50 px) e só diminui de muito perto (zoom 19+).
-    **Vítima encontrada** (ponto ou relato) nunca entra no grupo, e os círculos das áreas de risco e da base
-    continuam sempre visíveis. **Ver no mapa** de um ponto agrupado aproxima até ele aparecer e pisca. As camadas
+    **Vítima encontrada** (ponto ou relato) agrupa como os demais, mas o grupo ganha um **+ verde** no canto (e o
+    tooltip diz "inclui vítima localizada"), então ela não passa despercebida; de perto ela diminui junto com os outros
+    ícones (só o pedido de ajuda mantém um tamanho mínimo). **Indicações a verificar** (binômio, drone e água, em amarelo
+    no anel) e **pontos importados** (verde-limão) também entram no agrupamento e diminuem com o zoom, assim como o
+    marcador de destino. Os círculos das áreas de risco e da base continuam sempre visíveis. **Ver no mapa** de um ponto agrupado aproxima até ele aparecer e pisca. As camadas
     e os modos (Pontos, Relatos, Fotos) continuam ligando e desligando cada tipo. A legenda mostra os dois
     agrupamentos.
   - **Trilhas finas de longe**: a espessura (e o tracejado dos civis, o contorno claro e as marcas de falha)
@@ -1997,6 +2000,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40x | **Ferramentas → Ajustes → Personalizar tela**: Texto **Menor** e depois **Mínimo**; Letra **Técnica** e **Do aparelho** | o texto do painel diminui a cada passo; a letra muda na hora e fica lembrada ao recarregar |
 | 40y | **Ferramentas**: digitar "rela" na busca e Enter; recolher a seção **Equipes** e reabrir o menu | só "Relatório" aparece e Enter abre; Equipes continua recolhida |
 | 40z | **Trilha**: desenhar, abrir **⋯** e escolher **Limpar**; depois **×** | a barra fica numa linha (↶, ⋯, Concluir, ×); o menu ⋯ mostra Limpar, Mover mapa e Mais opções |
+| 40za | Marcar uma **Vítima encontrada** perto de outros pontos; afastar o mapa (zoom 14) e depois aproximar até o zoom 20 | de longe, o grupo mostra o **+ verde**; de perto a vítima aparece solta e diminui a cada nível, como os demais ícones; binômio, drone/água e pontos importados também agrupam e diminuem |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |

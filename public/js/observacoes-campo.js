@@ -36,7 +36,7 @@
   var FONTES_VENTO = [['', 'Não informado'], ['medido', 'Medido no local (anemômetro)'], ['previsao', 'Previsão (meteorologia do app)'], ['estimado', 'Estimado pela equipe'], ['desconhecido', 'Desconhecido']];
   var MAX_PTS = 5000;
 
-  var est = { opId: null, itens: new Map(), ausente: false, erro: null, canal: null, timer: null, camada: null, renderAtual: null, aba: 'drone', ouvintes: [] };
+  var est = { marcadores: [], opId: null, itens: new Map(), ausente: false, erro: null, canal: null, timer: null, camada: null, renderAtual: null, aba: 'drone', ouvintes: [] };
 
   function podeAlterar() { return Boolean(P.podeAlterar && P.podeAlterar()); }
 
@@ -86,6 +86,8 @@
     clearTimeout(est.timer);
     if (est.canal) { try { C.cliente.removeChannel(est.canal); } catch (e) { /* ignora */ } }
     if (est.camada) { try { est.camada.remove(); } catch (e) { /* ignora */ } }
+    if (P.desagruparMarcadores) P.desagruparMarcadores(est.marcadores);
+    est.marcadores = [];
     est.canal = null; est.camada = null; est.opId = null; est.itens = new Map(); est.ausente = false; est.erro = null; est.renderAtual = null;
   }
 
@@ -127,6 +129,8 @@
   function desenharMapa() {
     if (!est.camada || !window.L) return;
     est.camada.clearLayers();
+    if (P.desagruparMarcadores) P.desagruparMarcadores(est.marcadores);
+    est.marcadores = [];
     est.itens.forEach(function (o) {
       var cor = CORES[o.tipo] || '#94a3b8', t = TIPOS[o.tipo];
       var apagado = o.estado === 'descartado';
@@ -139,13 +143,16 @@
       var camada;
       if (g.tipo === 'ponto') {
         camada = L.marker(g.pts[0], { icon: L.divIcon({ className: 'mk-obs-wrap', html: '<div class="mk-obs mk-obs-' + o.tipo + ' mk-obs-' + o.estado + '">' + t.ico + '</div>', iconSize: [0, 0] }), title: titulo });
+        est.marcadores.push(camada);   // pontos (focos, indicações) entram no agrupamento do mapa
       } else if (g.tipo === 'linha') {
         camada = L.polyline(g.pts, { color: cor, weight: o.tipo === 'telemetria' ? 3 : 2.5, opacity: apagado ? 0.35 : 0.9, dashArray: o.tipo === 'plano_voo' ? '10 8' : null });
       } else {
         camada = L.polygon(g.pts, { color: cor, weight: 2, opacity: apagado ? 0.35 : 0.9, fillOpacity: apagado ? 0.04 : 0.15, dashArray: o.tipo === 'plano_voo' ? '10 8' : null });
       }
-      camada.bindPopup(function () { return popup(o); }).addTo(est.camada);
+      camada.bindPopup(function () { return popup(o); });
+      if (g.tipo !== 'ponto') camada.addTo(est.camada);
     });
+    if (P.agruparMarcadores) P.agruparMarcadores(est.marcadores, 'verif'); else est.marcadores.forEach(function (mk) { mk.addTo(est.camada); });
   }
 
   function popup(o) {

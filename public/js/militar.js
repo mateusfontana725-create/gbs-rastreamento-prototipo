@@ -1759,8 +1759,10 @@
   // O círculo mostra quantos são e um anel com a proporção de cada tipo; "!" vermelho quando
   // há área de risco ou pedido de ajuda dentro. De perto o raio diminui; vários no mesmo
   // lugar se abrem em leque ao tocar.
-  var COR_TIPO_PONTO = { poi: '#38bdf8', relato: '#f97316', foto: '#a855f7' };
-  var ROTULO_TIPO_PONTO = { poi: ['ponto de interesse', 'pontos de interesse'], relato: ['relato', 'relatos'], foto: ['foto', 'fotos'] };
+  var COR_TIPO_PONTO = { poi: '#38bdf8', relato: '#f97316', foto: '#a855f7', verif: '#fbbf24', import: '#84cc16' };
+  var ROTULO_TIPO_PONTO = { poi: ['ponto de interesse', 'pontos de interesse'], relato: ['relato', 'relatos'], foto: ['foto', 'fotos'],
+    verif: ['indicação a verificar', 'indicações a verificar'], import: ['ponto importado', 'pontos importados'] };
+  var TIPOS_PONTO_ORDEM = ['poi', 'relato', 'foto', 'verif', 'import'];
   function criarGrupo() {
     if (!L.markerClusterGroup) return L.featureGroup();   // biblioteca indisponível: sem agrupamento
     return L.markerClusterGroup({
@@ -1772,22 +1774,23 @@
       zoomToBoundsOnClick: true,
       iconCreateFunction: function (grupo) {
         var filhos = grupo.getAllChildMarkers();
-        var cont = { poi: 0, relato: 0, foto: 0 }, critico = false;
+        var cont = { poi: 0, relato: 0, foto: 0, verif: 0, import: 0 }, critico = false, vitima = 0;
         filhos.forEach(function (m) {
           var t = cont[m.options.tipoPonto] != null ? m.options.tipoPonto : 'poi';
           cont[t]++;
           if (m.options.critico) critico = true;
+          if (m.options.vitima) vitima++;
         });
         var cores = [];
-        ['poi', 'relato', 'foto'].forEach(function (t) { for (var i = 0; i < cont[t]; i++) cores.push(COR_TIPO_PONTO[t]); });
+        TIPOS_PONTO_ORDEM.forEach(function (t) { for (var i = 0; i < cont[t]; i++) cores.push(COR_TIPO_PONTO[t]); });
         var anel = window.MapaRotulos ? window.MapaRotulos.fatiasDeCor(cores) : cores[0] + ' 0deg 360deg';
-        var dica = ['poi', 'relato', 'foto'].filter(function (t) { return cont[t]; })
+        var dica = TIPOS_PONTO_ORDEM.filter(function (t) { return cont[t]; })
           .map(function (t) { return cont[t] + ' ' + ROTULO_TIPO_PONTO[t][cont[t] === 1 ? 0 : 1]; }).join(', ') +
-          (critico ? ' · inclui área de risco ou pedido de ajuda' : '') + '. Toque para aproximar.';
+          (vitima ? ' · inclui vítima localizada' : '') + (critico ? ' · inclui área de risco ou pedido de ajuda' : '') + '. Toque para aproximar.';
         return L.divIcon({
           className: 'cluster-wrap',
-          html: '<div class="cluster cluster-pontos' + (critico ? ' cluster-critico' : '') + '" style="background:conic-gradient(' + anel + ')" title="' + C.esc(dica) + '">' +
-            '<b>' + filhos.length + '</b>' + (critico ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') + '</div>',
+          html: '<div class="cluster cluster-pontos' + (critico ? ' cluster-critico' : '') + (vitima ? ' cluster-vitima' : '') + '" style="background:conic-gradient(' + anel + ')" title="' + C.esc(dica) + '">' +
+            '<b>' + filhos.length + '</b>' + (critico ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') + (vitima ? '<i class="cl-vitima" aria-hidden="true">+</i>' : '') + '</div>',
           iconSize: [38, 38],
           iconAnchor: [19, 19],
         });
@@ -1798,6 +1801,19 @@
   // Cada marcador de ponto vai para o agrupamento, exceto os "fixos" (vítima encontrada),
   // que ficam sempre soltos e por cima.
   function camadaDoPonto(mk) { return mk.options.fixo ? est.camadaPontosFixos : est.camadaPontos; }
+
+  // Marcadores de outros módulos (binômio, drone e água, camadas importadas) entram no mesmo agrupamento e
+  // diminuem com o zoom como os demais. Cada módulo guarda a própria lista e a tira antes de redesenhar.
+  // tipo: 'verif' (indicações a verificar) ou 'import' (pontos importados).
+  function agruparMarcadores(lista, tipo) {
+    if (!est.camadaPontos || !lista || !lista.length) return;
+    lista.forEach(function (mk) { mk.options.tipoPonto = tipo; mk.options.pane = 'pontos'; });
+    if (est.camadaPontos.addLayers) est.camadaPontos.addLayers(lista); else lista.forEach(function (mk) { est.camadaPontos.addLayer(mk); });
+  }
+  function desagruparMarcadores(lista) {
+    if (!est.camadaPontos || !lista || !lista.length) return;
+    if (est.camadaPontos.removeLayers) est.camadaPontos.removeLayers(lista); else lista.forEach(function (mk) { est.camadaPontos.removeLayer(mk); });
+  }
   function mostrarPonto(mk, visivel) {
     var c = mk && camadaDoPonto(mk);
     if (!c) return;
@@ -4368,7 +4384,7 @@
       pane: 'pontos',        // participantes ficam por cima
       tipoPonto: 'relato',
       critico: m.categoria === 'AJUDA',
-      fixo: m.categoria === 'VITIMA',   // vítima localizada: nunca some dentro de um grupo
+      vitima: m.categoria === 'VITIMA',   // vítima localizada: agrupa como os demais, mas o grupo mostra a marca de vítima
     });
     ligarCliquesMapa(mk, {
       info: function () {
@@ -5459,7 +5475,7 @@
     // O marcador entra no agrupamento junto com relatos e fotos (o círculo de risco/base continua sempre à vista).
     var mk = L.marker([d.lat, d.lng], {
       icon: iconePontoInt(d), keyboard: true, riseOnHover: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo,
-      pane: 'pontos', tipoPonto: 'poi', critico: d.categoria === 'RISCO', fixo: d.categoria === 'VITIMA_ENCONTRADA',
+      pane: 'pontos', tipoPonto: 'poi', critico: d.categoria === 'RISCO', vitima: d.categoria === 'VITIMA_ENCONTRADA',
     });
     ligarCliquesMapa(mk, {
       noDesenho: function () { aoClicarNoMapa({ latlng: mk.getLatLng() }); },
@@ -10536,6 +10552,8 @@
     podeAlterar: podeAlterar,
     missoes: function () { return Array.from(est.missoes.values()); },
     camadaProbabilidade: camadaProbabilidade,
+    agruparMarcadores: agruparMarcadores,
+    desagruparMarcadores: desagruparMarcadores,
     categorias: CAT_PONTO,
     categoriaDoPonto: catDoPonto,   // { rotulo, letra, cor? } — fixa ou tipo criado pelos usuários
     raioAlertaPadrao: RAIO_ALERTA_PADRAO,

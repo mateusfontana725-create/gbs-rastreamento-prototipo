@@ -29,7 +29,7 @@
   var METODOS = ['Equipe no local', 'Busca visual', 'Drone', 'Outro cão (independente)', 'Mergulho / sonar', 'Outro'];
   var COR_TRILHA = '#a855f7';
 
-  var est = { opId: null, sessoes: new Map(), eventos: new Map(), ausente: false, erro: null, canal: null, timer: null, timerMapa: null,
+  var est = { marcadores: [], opId: null, sessoes: new Map(), eventos: new Map(), ausente: false, erro: null, canal: null, timer: null, timerMapa: null,
     camada: null, renderAtual: null, ouvintes: [] };
 
   function podeAlterar() { return Boolean(P.podeAlterar && P.podeAlterar()); }
@@ -93,6 +93,8 @@
     clearTimeout(est.timer); clearInterval(est.timerMapa);
     if (est.canal) { try { C.cliente.removeChannel(est.canal); } catch (e) { /* ignora */ } }
     if (est.camada) { try { est.camada.remove(); } catch (e) { /* ignora */ } }
+    if (P.desagruparMarcadores) P.desagruparMarcadores(est.marcadores);
+    est.marcadores = [];
     est.canal = null; est.camada = null; est.opId = null; est.sessoes = new Map(); est.eventos = new Map();
     est.ausente = false; est.erro = null; est.renderAtual = null;
   }
@@ -155,6 +157,8 @@
   function desenharMapa() {
     if (!est.camada || !window.L) return;
     est.camada.clearLayers();
+    if (P.desagruparMarcadores) P.desagruparMarcadores(est.marcadores);
+    est.marcadores = [];
     est.sessoes.forEach(function (s) {
       var rot = '🐕 ' + C.esc(s.cao_nome) + ' · GPS do condutor' + (s.cao_gps === 'sem_dispositivo' ? ' (o cão não tem GPS)' : '');
       trilhaCondutor(s).forEach(function (seg) {
@@ -164,12 +168,14 @@
       eventosDa(s).forEach(function (e) {
         if (e.lat == null) return;
         var cls = 'mk-binomio mk-binomio-' + e.tipo + ' mk-binomio-' + e.estado;
-        L.marker([e.lat, e.lng], { icon: L.divIcon({ className: 'mk-binomio-wrap', html: '<div class="' + cls + '">' + C.esc(e.codigo) + '</div>', iconSize: [0, 0] }),
+        var mk = L.marker([e.lat, e.lng], { icon: L.divIcon({ className: 'mk-binomio-wrap', html: '<div class="' + cls + '">' + C.esc(e.codigo) + '</div>', iconSize: [0, 0] }),
           title: (e.tipo === 'indicacao' ? 'Indicação ' : 'Confirmação ') + e.codigo + ' — ' + ESTADOS_EVENTO[e.estado].rotulo })
-          .bindPopup(function () { return popupEvento(s, e); })
-          .addTo(est.camada);
+          .bindPopup(function () { return popupEvento(s, e); });
+        est.marcadores.push(mk);
       });
     });
+    // as marcas entram no agrupamento do mapa (junto com pontos, relatos e fotos)
+    if (P.agruparMarcadores) P.agruparMarcadores(est.marcadores, 'verif'); else est.marcadores.forEach(function (mk) { mk.addTo(est.camada); });
   }
 
   function popupEvento(s, e) {

@@ -2241,8 +2241,20 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
 .convite-item { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
 .convite-topo { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .convite-item small { overflow-wrap: anywhere; }
-/* de muito perto os ícones diminuem, mas a vítima localizada e o pedido de ajuda continuam fáceis de tocar */
-.mapa-adaptativo .mk-relato.cat-VITIMA, .mapa-adaptativo .mk-relato.cat-AJUDA { scale: max(var(--esc-mapa), .8); }
+/* de muito perto os ícones diminuem; o pedido de ajuda continua fácil de tocar (a vítima diminui como os demais,
+   mas segue com opacidade cheia e a marca verde quando está dentro de um grupo) */
+.mapa-adaptativo .mk-relato.cat-AJUDA { scale: max(var(--esc-mapa), .8); }
+/* marcas dos outros módulos (binômio, drone e água, importados, destino) acompanham a escala do zoom */
+.mapa-adaptativo .mk-binomio, .mapa-adaptativo .mk-obs, .mapa-adaptativo .mk-import, .mapa-adaptativo .mk-destino { scale: var(--esc-mapa); transition: scale .15s; }
+.mapa-adaptativo .mk-binomio, .mapa-adaptativo .mk-obs, .mapa-adaptativo .mk-import { opacity: .85; }
+.mapa-adaptativo .leaflet-marker-icon:hover .mk-binomio, .mapa-adaptativo .leaflet-marker-icon:hover .mk-obs, .mapa-adaptativo .leaflet-marker-icon:hover .mk-import { opacity: 1; }
+/* grupo com vítima localizada: marca verde "+" no canto (o "!" vermelho de risco/ajuda fica no outro) */
+.cl-vitima {
+  position: absolute; top: -4px; left: -4px; width: 16px; height: 16px; display: grid; place-items: center;
+  border-radius: 50%; background: #10b981; color: #052e16; font: 900 12px/1 var(--fonte); font-style: normal;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px #000;
+}
+.mapa-adaptativo .cluster.cluster-vitima { opacity: 1; }
 
 /* =====================================================================
  * Painel de comando SCI (js/sci.js, sci.html)

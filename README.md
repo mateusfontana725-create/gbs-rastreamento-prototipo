@@ -996,10 +996,13 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - **Topo do painel**: as ações mais usadas ficam à vista — **Marcar ponto**, **Foto**, **Setor** (pergunta: desenhar a
   área ou por raio), **Trilha** (desenhar trilha/trajeto) e **Dashboard**. No notebook aparecem só os ícones (o nome
   vem ao passar o mouse); no celular e no tablet em pé, numa faixa logo abaixo do título, dividindo a largura.
-- O menu **Ferramentas** é **uma lista só, sem subgrupos**: Vítima encontrada, Enviar destino, Setores, trilhas e
-  pontos, Grupos, Deslocamentos de grupos, Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis,
-  Ir para coordenada, Medir distância e área, Importar arquivo, Exportar, Diagnóstico do GPS, Formato das
-  coordenadas e **Tema**;
+- O menu **Ferramentas** tem uma **busca** no topo ("Buscar função…": filtra pelo nome; Enter abre a primeira) e as funções
+  em **seções recolhíveis** (tocar no título recolhe/abre; fica lembrado neste aparelho):
+  **Em campo** (Registrar minha trilha, Vítima encontrada, Cadastro rápido, Enviar destino, Pedidos de ajuda) ·
+  **Equipes** (Grupos, Deslocamentos, Binômio, Drone e água, Equipe de responsáveis) ·
+  **Mapa e arquivos** (Setores, trilhas e pontos, Ir para coordenada, Medir, Régua, Importar, Exportar) ·
+  **Comando e registros** (Briefing e passagem, Dados da operação, Diário, Relatório) ·
+  **Ajustes** (Personalizar tela, Diagnóstico do GPS, Formato das coordenadas, Tema);
   - **Ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
     quem pode; confirmação reforçada: lista o que será apagado e exige **digitar o nome da operação**).
@@ -1074,9 +1077,13 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **qualquer função das Ferramentas** (Grupos, Diário, Enviar destino, Vítima encontrada, Exportar…) pode ir para o
     topo: arraste da bandeja **Em Ferramentas** até o lugar desejado, ou toque nela para pôr no fim;
   - o painel **Grupos** do mapa pode ser arrastado para qualquer canto (ou escolhido no quadradinho);
-  - **tamanho do texto** (Menor, Normal, Maior, Grande) muda o painel todo na hora;
+  - **tamanho do texto** (Mínimo, Menor, Normal, Maior, Grande) muda o painel todo na hora (escala sobre a base de cada
+    página; antes "Menor" ficava igual ao normal no painel);
   - **Padrão** volta tudo como era; **Concluir** (ou Esc) sai do modo. No teclado: ← → mudam a ordem do botão em foco e
     Delete tira do topo. No modo de edição os botões não executam a ação, só se movem.
+- **Barra de desenho** (marcar ponto, setor, trilha, medir, vítima…), sempre no mesmo formato e numa linha: a instrução,
+  **↶** (desfazer), **⋯** (as ações secundárias: limpar, mover mapa, mais opções…), a ação principal (**Concluir**) e **×**
+  (cancelar). Uma ação extra só (ex.: "Usar minha posição") fica à vista.
 - **Modais e formulários** (padrão único, `UI.abrirModal` em `js/interface.js`): cabeçalho fixo com o título, o **i**
   (explicação, em vez de parágrafos de texto) e o **×**; corpo que rola; rodapé com as ações sempre à vista. Campos
   agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo

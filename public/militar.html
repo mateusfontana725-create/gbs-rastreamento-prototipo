@@ -269,43 +269,70 @@
             </div>
             <!-- Pontos pendentes, gravação no aparelho, última sincronização confirmada e falhas da "Minha posição" (js/fila-estado.js) -->
             <div class="fila-estado" id="fila-estado-meu" hidden></div>
-            <!-- Uma lista só, sem subgrupos. Marcar ponto, foto, setor, trilha e dashboard ficam no topo da tela. -->
+            <!-- Busca: filtra as funções pelo nome (as seções sem resultado somem) -->
+            <div class="menu-busca"><input class="campo campo-pequeno" type="search" id="menu-filtro" placeholder="Buscar função…" autocomplete="off" aria-label="Buscar função no menu"></div>
+            <!-- Funções em seções (recolhíveis; o estado fica neste aparelho). Marcar ponto, foto, setor, trilha e dashboard ficam no topo da tela. -->
             <nav class="menu-lista" aria-label="Funções">
-              <button class="menu-item menu-minha-trilha" type="button" id="menu-minha-trilha" aria-pressed="false" title="Liga ou desliga o registro da sua posição e da sua trilha (sempre com confirmação)"><span class="ico-item" aria-hidden="true">◉</span><span>Registrar minha trilha</span><small class="menu-estado" id="menu-minha-trilha-estado">desligado</small></button>
-              <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
-              <button class="menu-item" type="button" id="menu-vitima-rapida"><span class="ico-item" aria-hidden="true">⚡</span><span>Cadastro rápido de vítima</span></button>
-              <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
-              <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
-              <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-ajuda"><span class="ico-item" aria-hidden="true">🆘</span><span>Pedidos de ajuda</span><small class="menu-estado" id="menu-ajuda-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-binomio"><span class="ico-item" aria-hidden="true">🐕</span><span>Binômio (cão e condutor)</span><small class="menu-estado" id="menu-binomio-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-drone-agua"><span class="ico-item" aria-hidden="true">✈</span><span>Drone e água</span><small class="menu-estado" id="menu-obs-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-briefing"><span class="ico-item" aria-hidden="true">★</span><span>Briefing e passagem de comando</span></button>
-              <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
-              <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
-              <button class="menu-item" type="button" id="menu-relatorio"><span class="ico-item" aria-hidden="true">▤</span><span>Relatório final (PDF)</span></button>
-              <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
-              <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
-              <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
-              <button class="menu-item" type="button" id="menu-aparencia"><span class="ico-item" aria-hidden="true">✎</span><span>Personalizar tela</span></button>
-              <button class="menu-item" type="button" id="menu-regua" aria-pressed="false"><span class="ico-item" aria-hidden="true">◎</span><span>Régua circular</span></button>
-              <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
-              <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar</span></button>
-              <button class="menu-item" type="button" id="menu-diag-gps"><span class="ico-item" aria-hidden="true">⌁</span><span>Diagnóstico do GPS</span></button>
-              <label class="menu-item menu-select" for="opt-coord"><span class="ico-item" aria-hidden="true">#</span><span>Formato das coordenadas</span>
-                <select id="opt-coord" class="campo campo-pequeno" aria-label="Formato das coordenadas">
-                  <option value="dec">Graus decimais</option><option value="gms">Graus, min, seg</option><option value="gmd">Graus e min decimais</option>
-                  <option value="utm">UTM</option><option value="mgrs">MGRS</option>
-                </select></label>
-              <div class="menu-tema" role="group" aria-label="Tema do aplicativo">
-                <span class="menu-tema-rotulo">Tema</span>
-                <div class="seg">
-                  <button class="seg-opcao" type="button" data-tema="escuro" aria-pressed="true">Escuro</button>
-                  <button class="seg-opcao" type="button" data-tema="claro" aria-pressed="false">Claro</button>
+              <section class="menu-secao" data-secao="campo">
+                <button class="menu-secao-titulo" type="button" aria-expanded="true">Em campo</button>
+                <div class="menu-secao-itens">
+                <button class="menu-item menu-minha-trilha" type="button" id="menu-minha-trilha" aria-pressed="false" title="Liga ou desliga o registro da sua posição e da sua trilha (sempre com confirmação)"><span class="ico-item" aria-hidden="true">◉</span><span>Registrar minha trilha</span><small class="menu-estado" id="menu-minha-trilha-estado">desligado</small></button>
+                <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
+                <button class="menu-item" type="button" id="menu-vitima-rapida"><span class="ico-item" aria-hidden="true">⚡</span><span>Cadastro rápido de vítima</span></button>
+                <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
+                <button class="menu-item" type="button" id="menu-ajuda"><span class="ico-item" aria-hidden="true">🆘</span><span>Pedidos de ajuda</span><small class="menu-estado" id="menu-ajuda-qtd"></small></button>
                 </div>
-              </div>
-              <p class="menu-sol" id="menu-sol" hidden></p>
+              </section>
+              <section class="menu-secao" data-secao="equipes">
+                <button class="menu-secao-titulo" type="button" aria-expanded="true">Equipes</button>
+                <div class="menu-secao-itens">
+                <button class="menu-item" type="button" id="menu-grupos"><span class="ico-item" aria-hidden="true">⚑</span><span>Grupos</span><small class="menu-estado" id="menu-grupos-qtd"></small></button>
+                <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
+                <button class="menu-item" type="button" id="menu-binomio"><span class="ico-item" aria-hidden="true">🐕</span><span>Binômio (cão e condutor)</span><small class="menu-estado" id="menu-binomio-qtd"></small></button>
+                <button class="menu-item" type="button" id="menu-drone-agua"><span class="ico-item" aria-hidden="true">✈</span><span>Drone e água</span><small class="menu-estado" id="menu-obs-qtd"></small></button>
+                <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
+                </div>
+              </section>
+              <section class="menu-secao" data-secao="mapa">
+                <button class="menu-secao-titulo" type="button" aria-expanded="true">Mapa e arquivos</button>
+                <div class="menu-secao-itens">
+                <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
+                <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
+                <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
+                <button class="menu-item" type="button" id="menu-regua" aria-pressed="false"><span class="ico-item" aria-hidden="true">◎</span><span>Régua circular</span></button>
+                <button class="menu-item" type="button" id="menu-importar"><span class="ico-item" aria-hidden="true">⤒</span><span>Importar arquivo</span><small class="menu-estado" id="menu-importados-qtd"></small></button>
+                <button class="menu-item" type="button" id="menu-exportar"><span class="ico-item" aria-hidden="true">⤓</span><span>Exportar</span></button>
+                </div>
+              </section>
+              <section class="menu-secao" data-secao="comando">
+                <button class="menu-secao-titulo" type="button" aria-expanded="true">Comando e registros</button>
+                <div class="menu-secao-itens">
+                <button class="menu-item" type="button" id="menu-briefing"><span class="ico-item" aria-hidden="true">★</span><span>Briefing e passagem de comando</span></button>
+                <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
+                <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
+                <button class="menu-item" type="button" id="menu-relatorio"><span class="ico-item" aria-hidden="true">▤</span><span>Relatório final (PDF)</span></button>
+                </div>
+              </section>
+              <section class="menu-secao" data-secao="ajustes">
+                <button class="menu-secao-titulo" type="button" aria-expanded="true">Ajustes</button>
+                <div class="menu-secao-itens">
+                <button class="menu-item" type="button" id="menu-aparencia"><span class="ico-item" aria-hidden="true">✎</span><span>Personalizar tela</span></button>
+                <button class="menu-item" type="button" id="menu-diag-gps"><span class="ico-item" aria-hidden="true">⌁</span><span>Diagnóstico do GPS</span></button>
+                <label class="menu-item menu-select" for="opt-coord"><span class="ico-item" aria-hidden="true">#</span><span>Formato das coordenadas</span>
+                  <select id="opt-coord" class="campo campo-pequeno" aria-label="Formato das coordenadas">
+                    <option value="dec">Graus decimais</option><option value="gms">Graus, min, seg</option><option value="gmd">Graus e min decimais</option>
+                    <option value="utm">UTM</option><option value="mgrs">MGRS</option>
+                  </select></label>
+                <div class="menu-tema" role="group" aria-label="Tema do aplicativo">
+                  <span class="menu-tema-rotulo">Tema</span>
+                  <div class="seg">
+                    <button class="seg-opcao" type="button" data-tema="escuro" aria-pressed="true">Escuro</button>
+                    <button class="seg-opcao" type="button" data-tema="claro" aria-pressed="false">Claro</button>
+                  </div>
+                </div>
+                <p class="menu-sol" id="menu-sol" hidden></p>
+                </div>
+              </section>
             </nav>
             <!-- Ações que não podem ser desfeitas: sempre no fim, separadas, com confirmação -->
             <section class="menu-grupo menu-zona-perigo" id="menu-zona-perigo" aria-label="Ações definitivas">

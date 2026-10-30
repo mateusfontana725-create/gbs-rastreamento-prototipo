@@ -1594,9 +1594,23 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
   .btn-acao-topo .rotulo-acao { display: none; }
 }
 
-/* Menu Ferramentas: uma lista só */
-.menu-lista { display: grid; padding: 4px 0; }
+/* Menu Ferramentas: busca e funções em seções recolhíveis */
+.menu-busca { padding: 8px 12px 4px; }
+.menu-busca .campo { width: 100%; min-height: 34px; }
+.menu-lista { display: grid; padding: 2px 0 4px; }
 .menu-lista .menu-tema { padding: 6px 12px; }
+.menu-secao { display: grid; border-top: 1px solid var(--borda); }
+.menu-secao:first-of-type { border-top: 0; }
+.menu-secao-titulo {
+  display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px 12px 4px; border: 0; background: none; cursor: pointer;
+  font: 700 .66rem/1.2 var(--fonte-titulo); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-3);
+}
+.menu-secao-titulo::after { content: "▾"; font-size: .8rem; transition: transform .15s; }
+.menu-secao.fechada .menu-secao-titulo::after { transform: rotate(-90deg); }
+.menu-secao-titulo:hover { color: var(--texto); }
+.menu-secao-itens { display: grid; padding-bottom: 4px; }
+.menu-secao.fechada .menu-secao-itens { display: none; }
+.menu-lista .filtrado { display: none !important; }
 
 /* Novo setor: escolher desenhar a área ou por raio */
 .opcoes-setor { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

@@ -418,6 +418,7 @@
     $('opt-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
     $('menu-diag-gps').addEventListener('click', function () { fecharMenu(false); abrirDiagnosticoGps(); });
     $('menu-minha-trilha').addEventListener('click', function () { fecharMenu(false); alternarMinhaTrilha(); });
+    iniciarSecoesMenu();
     // Tema escuro ou claro (Ferramentas → Configurações). Os botões marcam o tema atual e o menu continua aberto.
     document.querySelectorAll('.menu-tema [data-tema]').forEach(function (b) {
       b.addEventListener('click', function () { definirTema(b.getAttribute('data-tema')); });
@@ -1988,6 +1989,8 @@
     menu.hidden = true;
     $('btn-ferramentas').setAttribute('aria-expanded', 'false');
     document.body.classList.remove('menu-aberto');
+    var filtro = $('menu-filtro');
+    if (filtro && filtro.value) { filtro.value = ''; filtro.dispatchEvent(new Event('input')); }
     if (devolverFoco) $('btn-ferramentas').focus();
   }
 
@@ -8031,6 +8034,47 @@
   }
 
   // Registro da trilha do responsável: opcional, liga e desliga só pelo botão, sempre com confirmação.
+  // Menu Ferramentas em seções recolhíveis (o estado fica neste aparelho) e busca pelo nome da função.
+  var CHAVE_SECOES_MENU = 'gbs-menu-secoes-fechadas';
+  function iniciarSecoesMenu() {
+    var menu = $('menu-ferramentas'), filtro = $('menu-filtro');
+    if (!menu || !filtro) return;
+    var fechadas = new Set(C.local.ler(CHAVE_SECOES_MENU, []) || []);
+    var secoes = Array.prototype.slice.call(menu.querySelectorAll('.menu-secao'));
+    function aplicarSecao(sec) {
+      var aberta = !fechadas.has(sec.getAttribute('data-secao')) || Boolean(filtro.value.trim());
+      sec.classList.toggle('fechada', !aberta);
+      sec.querySelector('.menu-secao-titulo').setAttribute('aria-expanded', String(aberta));
+    }
+    secoes.forEach(function (sec) {
+      sec.querySelector('.menu-secao-titulo').addEventListener('click', function () {
+        if (filtro.value.trim()) return;
+        var id = sec.getAttribute('data-secao');
+        if (fechadas.has(id)) fechadas.delete(id); else fechadas.add(id);
+        C.local.gravar(CHAVE_SECOES_MENU, Array.from(fechadas));
+        aplicarSecao(sec);
+      });
+      aplicarSecao(sec);
+    });
+    function semAcento(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    filtro.addEventListener('input', function () {
+      var q = semAcento(filtro.value.trim());
+      Array.prototype.forEach.call(menu.querySelectorAll('.menu-lista .menu-item, .menu-lista .menu-tema'), function (it) {
+        it.classList.toggle('filtrado', Boolean(q) && semAcento(it.textContent + ' ' + (it.title || '')).indexOf(q) === -1);
+      });
+      secoes.forEach(function (sec) {
+        aplicarSecao(sec);
+        sec.hidden = Boolean(q) && !sec.querySelector('.menu-secao-itens > :not(.filtrado):not([hidden]):not(.menu-sol)');
+      });
+    });
+    // Enter: abre a primeira função encontrada
+    filtro.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter') return;
+      var it = menu.querySelector('.menu-lista .menu-item:not(.filtrado):not([hidden]):not(.fora-do-menu)');
+      if (it && it.tagName === 'BUTTON') { ev.preventDefault(); it.click(); }
+    });
+  }
+
   function chaveMinhaTrilha() { return 'gbs-minha-trilha:' + (est.op ? est.op.id : ''); }
   function acharMeuRegistro() {
     if (est.meuPart || !est.usuario) return;

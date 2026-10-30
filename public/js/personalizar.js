@@ -106,7 +106,8 @@
     // atalhos no menu na ordem padrão, antes do resto
     PADRAO.forEach(function (id) {
       var a = copias[id];
-      if (a && a.parentNode) a.parentNode.insertBefore(a, a.parentNode.querySelector('.menu-item:not(.atalho-menu)'));
+      // antes da primeira seção (ou item) que não seja atalho
+      if (a && a.parentNode) a.parentNode.insertBefore(a, Array.prototype.filter.call(a.parentNode.children, function (x) { return !x.classList.contains('atalho-menu'); })[0] || null);
     });
     var ctl = window.Painel && window.Painel.controleGrupos && window.Painel.controleGrupos();
     if (ctl && ctl.getPosition() !== ap.posicaoGrupos()) ctl.setPosition(ap.posicaoGrupos());

@@ -968,9 +968,11 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 ### Organização do painel
 
 - **Identidade visual** do painel do responsável (`public/css/militar.css`, só na página militar):
-  tipografia **IBM Plex** (Sans, Sans Condensed e Mono, arquivos locais em `public/vendor/fontes`, licença
-  OFL — sem CDN de fontes), cantos retos, sombras discretas, vermelho só para o crítico e âmbar para o que
-  está selecionado/ligado. A página do participante não muda.
+  tipografia **Barlow** (estilo DIN, de sinalização; Barlow no texto, Barlow Condensed nos títulos) e **IBM Plex Mono** nos
+  números — arquivos locais em `public/vendor/fontes`, licença OFL, sem CDN de fontes —, cantos retos, sombras discretas,
+  vermelho só para o crítico e âmbar para o que está selecionado/ligado. Em **Personalizar tela → Letra** dá para trocar
+  por **Técnica** (IBM Plex, a anterior) ou **Do aparelho** (a letra do sistema). Vale também no SCI e no dashboard em
+  janela própria. A página do participante não muda.
 - A barra superior tem só **Mensagens** e **Ferramentas** (☰).
 - **Brasão** do Corpo de Bombeiros Militar do Paraná no cabeçalho do painel (login, operações e responsáveis), no lugar da antiga marca "GBS" (`public/img/brasao-cbmpr.png`). A página do participante não muda.
 - **Filtros nas listas** (muito dado, então dá para reduzir a tela): em **operações**, busca por nome, local ou descrição (sem acento), situação (ativas ou encerradas), criador (**criadas por mim** ou **por outros**; só aparece para administrador, que enxerga todas) e período do acionamento, com **Limpar**; em **responsáveis**, busca por nome ou e-mail, situação (com acesso ou desativados), papel (administradores ou responsáveis comuns) e **Limpar**. O contador mostra quantos itens aparecem.
@@ -1992,6 +1994,9 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40r12 | **Passar o comando** e, no outro aparelho, **Aceitar**; depois **Histórico de passagens → Relatório (PDF)** | a lista de relatórios ganha "Passagem de comando"; o PDF tem quem passou, quem recebeu, as horas e o briefing entregue |
 | 40v | **Marcar ponto → ✎ Ícones e tipos → Base → Trocar ícone**, buscar "barraca", escolher, cor azul, **Salvar** | o ponto Base do mapa muda para ⛺ azul em todas as operações; **Voltar ao padrão** traz o B de volta |
 | 40w | **Grupos → Novo grupo**, **Escolher ícone** → "serviço" → 🐕‍🦺 | o grupo aparece com 🐕‍🦺 dentro da cor na lista, na legenda e no painel de grupos do mapa |
+| 40x | **Ferramentas → Ajustes → Personalizar tela**: Texto **Menor** e depois **Mínimo**; Letra **Técnica** e **Do aparelho** | o texto do painel diminui a cada passo; a letra muda na hora e fica lembrada ao recarregar |
+| 40y | **Ferramentas**: digitar "rela" na busca e Enter; recolher a seção **Equipes** e reabrir o menu | só "Relatório" aparece e Enter abre; Equipes continua recolhida |
+| 40z | **Trilha**: desenhar, abrir **⋯** e escolher **Limpar**; depois **×** | a barra fica numa linha (↶, ⋯, Concluir, ×); o menu ⋯ mostra Limpar, Mover mapa e Mais opções |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |

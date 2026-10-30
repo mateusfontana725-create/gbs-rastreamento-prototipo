@@ -2,12 +2,20 @@
  * Rastreamento GBS — identidade do painel do responsável (comando)
  * Carregado só por militar.html, DEPOIS de estilos.css: ajusta os tokens e
  * a composição sem mexer na página do participante (civil.html).
- * Linguagem: técnica e sóbria — tipografia IBM Plex (local, sem CDN),
+ * Linguagem: técnica e sóbria — tipografia Barlow (estilo DIN, de sinalização; local, sem CDN;
+ * IBM Plex e a letra do aparelho continuam como opção em Personalizar tela),
  * cantos retos, sombras discretas, vermelho só para o que é crítico e
  * âmbar para seleção/estado ativo. O mapa é a área principal.
  * ===================================================================== */
 
-/* Fontes locais (SIL Open Font License — ver vendor/fontes/LICENSE-IBM-Plex-OFL.txt) */
+/* Fontes locais (SIL Open Font License — ver vendor/fontes/LICENSE-Barlow-OFL.txt e LICENSE-IBM-Plex-OFL.txt) */
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 400; font-display: swap; src: url("../vendor/fontes/barlow-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 500; font-display: swap; src: url("../vendor/fontes/barlow-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 600; font-display: swap; src: url("../vendor/fontes/barlow-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 700 900; font-display: swap; src: url("../vendor/fontes/barlow-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 400 500; font-display: swap; src: url("../vendor/fontes/barlow-condensed-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 600; font-display: swap; src: url("../vendor/fontes/barlow-condensed-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 700 900; font-display: swap; src: url("../vendor/fontes/barlow-condensed-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 600; font-display: swap; src: url("../vendor/fontes/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
@@ -33,10 +41,21 @@
   --barra: #080b0d;
   --raio: 4px;
   --sombra: 0 1px 2px rgba(0, 0, 0, .45), 0 6px 18px rgba(0, 0, 0, .32);
-  --fonte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --fonte-titulo: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --fonte: "Barlow", "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --fonte-titulo: "Barlow Condensed", "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --vidro: rgba(14, 18, 22, .94);     /* fundo dos controles sobre o mapa */
+}
+
+/* Letra (Personalizar tela): Industrial = Barlow (padrão), Técnica = IBM Plex, Do aparelho = a do sistema */
+html[data-letra="tecnica"] {
+  --fonte: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --fonte-titulo: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+}
+html[data-letra="sistema"] {
+  --fonte: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Ubuntu, Arial, sans-serif;
+  --fonte-titulo: "Roboto Condensed", "sans-serif-condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Roboto Mono", monospace;
 }
 
 body {

@@ -11,6 +11,10 @@
 
   var C = window.Comunicacao;
   var UI = window.UI;
+  // Dentro do aplicativo Android (js/app-nativo.js): o GPS é lido e enviado pelo serviço do aplicativo,
+  // que continua com a tela apagada; a página mostra o mapa, as mensagens e o estado.
+  var APP = window.GBSApp || { disponivel: false };
+  var NATIVO = Boolean(APP.disponivel);
   function $(id) { return document.getElementById(id); }
 
   var CHAVE_PART = 'sar-civil-participacao';
@@ -163,6 +167,7 @@
     }
     // Guarda a página e o mapa no aparelho já na primeira visita (abre de novo mesmo sem internet)
     registrarServiceWorker();
+    if (NATIVO) ouvirApp();
 
     try {
       estado.info = await C.rpc('info_operacao', { p_token: estado.token });
@@ -249,11 +254,18 @@
     });
     $('btn-notif').addEventListener('click', ativarNotificacoes);
     $('perm-verificar').addEventListener('click', verificarPermissaoDeNovo);
-    $('perm-recarregar').addEventListener('click', function () { location.reload(); });
+    $('perm-recarregar').addEventListener('click', function () { if (NATIVO) APP.configuracoes(); else location.reload(); });
     $('status-acao').addEventListener('click', mostrarComoResolver);
     $('btn-voltar-busca').addEventListener('click', voltarParaBusca);
     $('btn-diag').addEventListener('click', abrirDiagnostico);
     $('btn-diag').hidden = !/(^|[&#?])diag=1(&|$)/.test(location.hash + '&' + location.search);
+    $('btn-app').addEventListener('click', abrirBaixarApp);
+    $('btn-app-inicio').addEventListener('click', abrirBaixarApp);
+    if (!NATIVO) oferecerApp();
+
+    // Aberto pelo botão "Abrir no aplicativo": a participação do navegador passa para o aplicativo, sem cadastro novo
+    var codigoApp = NATIVO ? lerCodigoApp() : null;
+    if (codigoApp && await vincularPeloApp(codigoApp)) return;
 
     await acompanharPermissao();
     if (estado.permissao === 'denied') mostrarPermissao('navegador');
@@ -348,7 +360,7 @@
 
   // problema: 'navegador' | 'sistema' | 'sinal'
   function mostrarPermissao(problema) {
-    var inst = window.GPS.instrucoesLocalizacao(problema);
+    var inst = NATIVO ? instrucoesApp(problema === 'sistema' ? 'indisponivel' : 'negado') : window.GPS.instrucoesLocalizacao(problema);
     $('perm-titulo').textContent = inst.titulo;
     $('perm-texto').textContent = problema === 'navegador'
       ? 'Sem a localização os bombeiros não conseguem ver onde você está. Para liberar:'
@@ -357,7 +369,8 @@
     var ol = $('perm-passos');
     ol.innerHTML = '';
     inst.passos.forEach(function (p) { ol.appendChild(UI.el('li', { texto: p })); });
-    $('perm-recarregar').hidden = !(problema === 'navegador' && window.GPS.ambiente().so === 'ios');
+    $('perm-recarregar').hidden = !(problema === 'navegador' && (NATIVO || window.GPS.ambiente().so === 'ios'));
+    if (NATIVO) $('perm-recarregar').textContent = 'Abrir configurações do aplicativo';
     $('ini-permissao').hidden = false;
     $('ini-permissao').scrollIntoView({ block: 'start' });
   }
@@ -382,6 +395,7 @@
 
   // Durante a busca: explica como liberar/ligar e tenta de novo.
   function mostrarComoResolver() {
+    if (NATIVO && (estado.gps === 'negado' || estado.gps === 'indisponivel')) return comoResolverNoApp();
     var problema = estado.gps === 'negado' ? 'navegador' : estado.gps === 'indisponivel' ? 'sistema' : 'sinal';
     var inst = window.GPS.instrucoesLocalizacao(problema);
     var ol = UI.el('ol', { classe: 'perm-passos' }, inst.passos.map(function (p) { return UI.el('li', { texto: p }); }));
@@ -453,6 +467,12 @@
   }
 
   function obterPosicaoInicial() {
+    if (NATIVO) {
+      return APP.permissao().then(function (p) {
+        if (p.localizacao !== 'concedida') return { ok: false, codigo: 1 };
+        return APP.posicao().then(function (r) { return r.erro ? { ok: false, codigo: r.erro } : { ok: true, pos: posicaoDoApp(r) }; });
+      }).catch(function () { return { ok: false, codigo: 3 }; });
+    }
     return new Promise(function (resolve) {
       navigator.geolocation.getCurrentPosition(
         function (pos) { resolve({ ok: true, pos: pos }); },
@@ -634,7 +654,7 @@
   async function baixarAreaMapa(alvo) {
     var M = window.MapaOffline;
     estado.mapaBaixando = true;
-    var plano = M.planejarArea(alvo.lat, alvo.lng);
+    var plano = M.planejarArea(alvo.lat, alvo.lng, alvo.raioM);
     mostrarMapaOffline('Guardando o mapa para usar sem internet… 0 de ' + plano.urls.length, false);
     try {
       var areas = areasMapa();
@@ -680,10 +700,10 @@
     estado.ultimoTique = Date.now();
     estado.filtro.reiniciar();
     salvarParticipacao(true);
-    abrirTrilha();
+    if (!NATIVO) abrirTrilha();
     if (posInicial) processarPosicao(posInicial);
     iniciarWatch();
-    pedirTelaLigada();
+    if (NATIVO) ligarNativo(); else pedirTelaLigada();
     conectarMensagens();
 
     if (!estado.timerSinal) estado.timerSinal = setInterval(enviarSinal, CFG.sinalVidaMs);
@@ -713,6 +733,7 @@
   function iniciarWatch() {
     if (estado.watchId != null) return;
     estado.watchIniciadoEm = Date.now();
+    if (NATIVO) { estado.watchId = 'nativo'; return; }   // as leituras chegam pelo evento "leitura" do aplicativo
     estado.watchId = navigator.geolocation.watchPosition(processarPosicao, erroGps, {
       enableHighAccuracy: true,   // usa o GPS (não só Wi-Fi/antenas)
       maximumAge: 0,              // nunca aceitar posição guardada em cache
@@ -722,7 +743,7 @@
 
   function pararWatch() {
     if (estado.watchId != null) {
-      navigator.geolocation.clearWatch(estado.watchId);
+      if (estado.watchId !== 'nativo') navigator.geolocation.clearWatch(estado.watchId);
       estado.watchId = null;
     }
   }
@@ -731,6 +752,7 @@
   // ou quando o navegador para de entregar leituras).
   function religarGps(avisar) {
     if (!estado.rastreando) return;
+    if (NATIVO) { ligarNativo(); return; }
     pararWatch();
     navigator.geolocation.getCurrentPosition(function (pos) {
       processarPosicao(pos);
@@ -758,7 +780,9 @@
       agendarNavegacao();
       if (a.prec == null || a.prec <= 150) verificarRisco(a);
     }
-    if (r.pontos.length) {
+    if (r.pontos.length && NATIVO) {
+      estado.ultimoAceito = r.ponto;   // a trilha é gravada e desenhada pelo que o aplicativo guardou (evento "pontos")
+    } else if (r.pontos.length) {
       estado.ultimoAceito = r.ponto;
       atualizarMinhaTrilha(r.pontos);
       var rapido = r.rapido;
@@ -845,13 +869,15 @@
   }
 
   function qtdPendentes() {
-    return (estado.trilha ? estado.trilha.qtdPendentes() : 0) + estado.bufferPontos.length;
+    return (estado.trilha ? estado.trilha.qtdPendentes() : 0) + estado.bufferPontos.length + pendentesNoApp();
   }
 
   // o que ainda precisa ser enviado agora (com servidor antigo, o já entregue sem confirmação espera)
   function qtdParaEnviar() {
-    return (estado.trilha ? estado.trilha.qtdParaEnviar() : 0) + estado.bufferPontos.length;
+    return (estado.trilha ? estado.trilha.qtdParaEnviar() : 0) + estado.bufferPontos.length + pendentesNoApp();
   }
+
+  function pendentesNoApp() { return NATIVO && estado.nativo ? estado.nativo.pendentes || 0 : 0; }
 
   // O GPS que parou e voltou também é registrado no aparelho (só a mudança, não cada leitura)
   function registrarGpsNaFila() {
@@ -1376,6 +1402,7 @@
     if (!estado.mapa || !dados) return;
     desenharEquipe(dados.equipe || []);
     desenharExtras(dados.setores || [], dados.pontos || []);
+    if (NATIVO) guardarMapaDaOperacao(dados.setores || [], dados.pontos || []);
     if (estado.destinoSemFuncao) definirDestino(dados.destino || null);   // servidor sem a migração 004
   }
 
@@ -2408,6 +2435,12 @@
   function chamarAtencao() {
     try { if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 800]); } catch (e) { /* ignora */ }
     bipe();
+    if (NATIVO && document.hidden) {
+      var pa = pendentesDeConfirmacao()[0];
+      var ta = pa ? (C.TIPOS_MENSAGEM[pa.tipo] || C.TIPOS_MENSAGEM.PERSONALIZADA) : null;
+      APP.notificar('Bombeiros: ' + (ta && pa.tipo !== 'PERSONALIZADA' ? ta.titulo : 'nova mensagem'), pa ? (pa.texto || ta.padrao) : 'Abra o aplicativo.').catch(function () { /* sem aviso */ });
+      return;
+    }
     if (document.hidden && estado.swReg && window.Notification && Notification.permission === 'granted') {
       var pend = pendentesDeConfirmacao();
       var m = pend[0];
@@ -2449,7 +2482,7 @@
   /* Tela ligada (Wake Lock)                                              */
   /* ------------------------------------------------------------------ */
   async function pedirTelaLigada() {
-    if (!estado.rastreando || !$('opt-tela').checked || estado.wakeLock || !('wakeLock' in navigator)) return;
+    if (NATIVO || !estado.rastreando || !$('opt-tela').checked || estado.wakeLock || !('wakeLock' in navigator)) return;
     if (document.visibilityState !== 'visible') return;
     try {
       estado.wakeLock = await navigator.wakeLock.request('screen');
@@ -2478,6 +2511,7 @@
     var agora = Date.now();
     var gap = agora - estado.ultimoTique;
     estado.ultimoTique = agora;
+    if (NATIVO) { tiqueApp(agora); return; }
     if (estado.rastreando && gap > 30000) {
       avisarPausa(gap);
       enviarSinal();
@@ -2529,7 +2563,7 @@
   window.addEventListener('offline', function () { atualizarUI(); });
   window.addEventListener('pagehide', function () { if (estado.trilha) estado.trilha.persistirPendentes(); });
   window.addEventListener('beforeunload', function (ev) {
-    if (estado.rastreando && !window.GBS_RECARREGANDO) {
+    if (estado.rastreando && !window.GBS_RECARREGANDO && !NATIVO) {
       ev.preventDefault();
       ev.returnValue = '';
     }
@@ -2573,6 +2607,10 @@
   }
 
   function finalizar(motivo) {
+    // o código do aplicativo foi pedido aqui e a participação sumiu desta sessão: o aplicativo assumiu
+    if (motivo === 'inexistente' && estado.appVinculoPedidoEm && !NATIVO) motivo = 'aplicativo';
+    if (motivo === 'inexistente' && NATIVO) motivo = 'aparelho';   // aberta em outro celular (ou operação excluída)
+    if (NATIVO) APP.parar(motivo).catch(function () { /* o aplicativo já parou */ });
     estado.finalizado = true;
     pararColeta();
     estado.filtro.reiniciar();
@@ -2609,6 +2647,8 @@
       removido: ['Participação encerrada', 'Os bombeiros encerraram a sua participação nesta busca.'],
       liberado: ['Saída liberada', 'Os bombeiros liberaram a sua saída. Obrigado pela sua ajuda!'],
       inexistente: ['Participação encerrada', 'A operação foi excluída pelos bombeiros. Este link não funciona mais.'],
+      aplicativo: ['O registro passou para o aplicativo', 'Sua localização agora vai para os bombeiros pelo aplicativo GBS Busca, neste celular. Esta página parou de enviar.'],
+      aparelho: ['Participação encerrada neste celular', 'A participação foi aberta em outro aparelho ou a operação foi excluída pelos bombeiros. Este celular parou de enviar a localização.'],
     };
     var t = textos[motivo] || textos.encerrada;
     estado.motivoFim = motivo;
@@ -2697,6 +2737,248 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Aplicativo Android (js/app-nativo.js)                                 */
+  /* ------------------------------------------------------------------ */
+  function posicaoDoApp(d) {
+    return { coords: { latitude: d.lat, longitude: d.lng, accuracy: d.prec, speed: d.vel, heading: d.rumo == null ? null : d.rumo }, timestamp: d.t };
+  }
+
+  function lerCodigoApp() {
+    var v = (new URLSearchParams(location.hash.replace(/^#/, '')).get('v') || '').trim().toLowerCase();
+    return /^[0-9a-f]{32}$/.test(v) ? v : null;
+  }
+
+  // O serviço do aplicativo é quem lê e envia o GPS: a página recebe as leituras (mapa, navegação, alerta de risco),
+  // os pontos guardados (trilha no mapa) e o estado (pendentes, último envio, situação do GPS).
+  function ouvirApp() {
+    APP.ao('leitura', function (d) { if (estado.rastreando && !estado.finalizado) processarPosicao(posicaoDoApp(d)); });
+    APP.ao('pontos', function (d) { if (estado.rastreando && !estado.finalizado) desenharPontosApp(d.pontos); });
+    APP.ao('estado', function (d) {
+      estado.nativo = d;
+      if (estado.rastreando && ['ok', 'fraco', 'sem_sinal', 'negado', 'indisponivel'].indexOf(d.gps) !== -1) estado.gps = d.gps;
+      if (d.ultimoEnvioEm && (!estado.ultimoEnviadoT || d.ultimoEnvioEm > estado.ultimoEnviadoT)) estado.ultimoEnviadoT = d.ultimoEnvioEm;
+      if (d.ultimoContatoEm && d.ultimoContatoEm > estado.ultimoSucesso) estado.ultimoSucesso = d.ultimoContatoEm;
+      atualizarUI();
+    });
+    APP.ao('finalizado', function (d) { if (estado.part && !estado.finalizado) finalizar(d.motivo || 'encerrada'); });
+  }
+
+  // Trilha no mapa com o que o aplicativo guardou: cada ponto uma vez e sempre em ordem (o histórico e os pontos novos
+  // podem chegar ao mesmo tempo ao reabrir o aplicativo).
+  function desenharPontosApp(pontos) {
+    var vistos = estado.idsTrilhaApp = estado.idsTrilhaApp || new Set();
+    var novos = (pontos || []).filter(function (q) {
+      if (!q || vistos.has(q.id) || (estado.ultimoTMinha != null && q.t <= estado.ultimoTMinha)) return false;
+      vistos.add(q.id);
+      return true;
+    }).sort(function (a, b) { return a.t - b.t; });
+    if (novos.length) atualizarMinhaTrilha(novos);
+  }
+
+  // Aberto pelo botão "Abrir no aplicativo": resgata o código de uso único (a participação passa para a sessão do
+  // aplicativo) e entra na busca com o mesmo cadastro. Sem sucesso, segue o caminho normal da página.
+  async function vincularPeloApp(codigo) {
+    try { history.replaceState(null, '', location.pathname + location.search + '#t=' + estado.token + '&app=1'); } catch (e) { /* segue */ }
+    APP.vinculoUsado().catch(function () { /* o código vence sozinho */ });
+    mostrarTela('carregando');
+    var r;
+    try {
+      await garantirSessao();
+      try {
+        r = await C.rpc('app_vinculo_resgatar', { p_codigo: codigo });
+      } catch (e) {
+        if (e.codigo !== 'sessao_app_ocupada') throw e;
+        // este aplicativo já tinha entrado na busca por conta própria: fica com a participação que veio do navegador
+        try { await C.cliente.auth.signOut({ scope: 'local' }); } catch (x) { /* sem sessão */ }
+        await garantirSessao();
+        r = await C.rpc('app_vinculo_resgatar', { p_codigo: codigo });
+      }
+    } catch (e) {
+      UI.aviso(e.rede ? 'Sem internet para trazer o seu cadastro do navegador. Conecte-se e toque de novo em "Abrir no aplicativo".' : e.message, 'erro', 8000);
+      return false;
+    }
+    C.local.gravar(CHAVE_PART, { token: estado.token, participante_id: r.participante_id, nome: r.nome, tipo: r.tipo, operacao: r.operacao,
+      grupo: r.grupo || null, cpf: r.cpf || '', telefone: r.telefone || '', ativo: true, removido: false });
+    $('ini-nome').value = r.nome || '';
+    $('ini-cpf').value = mascararCpf(r.cpf || '');
+    $('ini-tel').value = mascararTelefone(r.telefone || '');
+    $('btn-iniciar').textContent = 'CONTINUAR';
+    mostrarTela('inicio');
+    UI.aviso('Cadastro trazido do navegador. Permita a localização para o aplicativo.', 'ok', 5000);
+    await entrarNaBusca({ nome: r.nome, tipo: r.tipo, cpf: r.cpf, tel: r.telefone });
+    return true;
+  }
+
+  // Entrega ao aplicativo o que o serviço precisa para enviar sozinho. O segredo do aparelho é pedido ao servidor uma vez
+  // por participação e fica só no aplicativo (a página não guarda).
+  async function ligarNativo() {
+    if (!NATIVO || !estado.part || estado.finalizado || !estado.rastreando || estado.ligandoNativo) return;
+    estado.ligandoNativo = true;
+    estado.nativoTentadoEm = Date.now();
+    try {
+      var info = await APP.info();
+      estado.appInfo = info;
+      estado.appInfoEm = Date.now();
+      var cfgApp = window.APP_CONFIG || {};
+      var dados = {
+        supabaseUrl: cfgApp.supabaseUrl, supabaseKey: cfgApp.supabaseKey, participanteId: estado.part.participante_id,
+        intervaloParadoMs: estado.filtro.cfg.intervaloParadoMs, nome: estado.part.nome, operacao: estado.part.operacao || '',
+      };
+      if (!(info.participante === estado.part.participante_id && info.temAparelho)) {
+        var d = await C.rpc('app_dispositivo_registrar', { p_participante: estado.part.participante_id, p_modelo: info.modelo || '' });
+        dados.dispositivoId = d.dispositivo_id;
+        dados.segredo = d.segredo;
+      }
+      if (!estado.trilhaDoAppCarregada) {
+        // o que o serviço já guardou (aplicativo reaberto com o registro em andamento)
+        estado.trilhaDoAppCarregada = true;
+        desenharPontosApp((await APP.pontos()).pontos);
+      }
+      var r = await APP.iniciar(dados);
+      estado.nativoErro = r.ok ? null : r.erro || 'falha';
+      if (r.erro === 'negado') estado.gps = 'negado';
+    } catch (e) {
+      if (!tratarErroFatal(e)) estado.nativoErro = e.rede ? 'rede' : e.codigo || 'falha';
+    } finally {
+      estado.ligandoNativo = false;
+      atualizarUI();
+    }
+  }
+
+  function tiqueApp(agora) {
+    if (estado.rastreando && !estado.finalizado && (estado.nativoErro || !estado.nativo || !estado.nativo.rastreando) &&
+        agora - (estado.nativoTentadoEm || 0) > 15000) ligarNativo();
+    if (estado.rastreando && agora - (estado.appInfoEm || 0) > 30000) {
+      estado.appInfoEm = agora;
+      APP.info().then(function (i) { estado.appInfo = i; }).catch(function () { /* tenta depois */ });
+    }
+    atualizarUI();
+    agendarNavegacao();
+  }
+
+  function mostrarEstadoApp() {
+    var el = $('fila-estado');
+    if (!el) return;
+    var txt = APP.textoEstado(estado.nativo);
+    if (estado.nativoErro && estado.nativoErro !== 'negado') {
+      txt = '📱 O aplicativo ainda não começou a registrar (' + (estado.nativoErro === 'rede' ? 'sem internet para ativar' : estado.nativoErro) + '). Tentando de novo…';
+    }
+    var bateria = Boolean(estado.appInfo && estado.appInfo.bateriaLiberada === false);
+    var chave = txt + '|' + bateria;
+    if (el._chave === chave) return;
+    el._chave = chave;
+    el.textContent = '';
+    el.hidden = !txt;
+    el.appendChild(UI.el('span', { texto: txt }));
+    if (bateria) {
+      el.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-bateria', type: 'button', texto: 'Liberar a bateria (recomendado)', title: 'Tira o aplicativo da economia de bateria do Android: o envio não atrasa com a tela apagada.',
+        onclick: function () { APP.bateria().then(function (r) { if (estado.appInfo) estado.appInfo.bateriaLiberada = Boolean(r.ignorando); atualizarUI(); }).catch(function () { /* nada */ }); } }));
+    }
+  }
+
+  function instrucoesApp(problema) {
+    if (problema === 'indisponivel') {
+      return { titulo: 'Ligue a localização do celular', passos: ['Toque em "Abrir configurações".', 'Ligue a "Localização" (ou "Usar localização").', 'Volte para o aplicativo.'] };
+    }
+    return { titulo: 'Permita a localização para o aplicativo', passos: ['Toque em "Abrir configurações".', 'Entre em "Permissões" e depois em "Localização".',
+      'Escolha "Permitir durante o uso do app" e deixe "Usar local exato" ligado.', 'Volte para o aplicativo.'] };
+  }
+
+  function comoResolverNoApp() {
+    var problema = estado.gps;
+    var inst = instrucoesApp(problema);
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: inst.titulo }),
+      UI.el('ol', { classe: 'perm-passos' }, inst.passos.map(function (p) { return UI.el('li', { texto: p }); })),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Verificar de novo', onclick: function () { fechar(); ligarNativo(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Abrir configurações', onclick: function () {
+          fechar();
+          (problema === 'indisponivel' ? APP.localizacaoDoCelular() : APP.configuracoes()).catch(function () { /* nada */ });
+        } }),
+      ]),
+    ]));
+  }
+
+  // No aplicativo, o mapa da região da operação (setores e pontos) é guardado no celular logo ao entrar, além da área
+  // em volta da posição (que a página já guarda): o mapa funciona sem internet onde a busca acontece.
+  function guardarMapaDaOperacao(setores, pontos) {
+    var M = window.MapaOffline;
+    if (estado.mapaOperacaoFeito || !M || !M.disponivel() || estado.mapaBaixando || navigator.onLine === false) return;
+    var lats = [], lngs = [];
+    setores.forEach(function (st) {
+      if (st.forma === 'circulo' && st.centro_lat != null) { lats.push(st.centro_lat); lngs.push(st.centro_lng); }
+      (st.pontos || []).forEach(function (q) { if (q && q.length === 2) { lats.push(q[0]); lngs.push(q[1]); } });
+    });
+    pontos.forEach(function (q) { if (q.lat != null) { lats.push(q.lat); lngs.push(q.lng); } });
+    estado.mapaOperacaoFeito = true;
+    if (!lats.length) return;   // operação sem setores nem pontos: fica a área em volta da posição
+    var la0 = Math.min.apply(null, lats), la1 = Math.max.apply(null, lats), ln0 = Math.min.apply(null, lngs), ln1 = Math.max.apply(null, lngs);
+    var c = { lat: (la0 + la1) / 2, lng: (ln0 + ln1) / 2 };
+    var raio = Math.max(M.RAIO_PADRAO_M, Math.min(15000, M.distanciaM(la0, ln0, la1, ln1) / 2 + 500));
+    if (M.precisaArea(areasMapa(), c.lat, c.lng)) baixarAreaMapa({ lat: c.lat, lng: c.lng, raioM: raio, motivo: 'operação' });
+  }
+
+  /* ---------- Navegador: oferecer o aplicativo ---------- */
+  function oferecerApp() {
+    if (!APP.ehAndroid(navigator.userAgent) || APP.ehApp(navigator.userAgent) || !window.fetch) return;
+    fetch('/api/app', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.disponivel) return;
+      estado.appBaixar = j.baixar;
+      $('ini-app').hidden = false;
+      $('btn-app').hidden = false;
+    }).catch(function () { /* sem o botão */ });
+  }
+
+  // Passo a passo: baixar, instalar e abrir o aplicativo já nesta busca. Quem já está participando leva o cadastro
+  // por um código de uso único (30 min); o aplicativo assume e esta página para de enviar (evita trilha em dobro).
+  async function abrirBaixarApp() {
+    if (estado.abrindoApp) return;
+    estado.abrindoApp = true;
+    var participando = Boolean(estado.part && !estado.finalizado);
+    var codigo = null, aviso = null;
+    try {
+      if (participando) {
+        try { if (estado.trilha && qtdParaEnviar()) await enviarFila(); } catch (e) { /* o que faltar fica na fila */ }
+        try {
+          codigo = (await C.rpc('app_vinculo_criar', { p_participante: estado.part.participante_id }, 12000)).codigo;
+          estado.appVinculoPedidoEm = Date.now();
+        } catch (e) {
+          if (tratarErroFatal(e)) return;
+          aviso = e.rede ? 'Sem internet agora. Baixe e instale; para abrir o aplicativo já com o seu cadastro, toque em "Tentar de novo" com internet.' : e.message;
+        }
+      }
+    } finally {
+      estado.abrindoApp = false;
+    }
+    var origem = location.origin;
+    var link = APP.linkApp(origem, estado.token, codigo);
+    var intent = APP.linkIntent(origem, estado.token, codigo, origem + (estado.appBaixar || '/api/app?baixar=1'));
+    // O aplicativo, ao abrir pela primeira vez, lê este link da área de transferência e já entra na busca.
+    var copiar = function () { try { if (navigator.clipboard) navigator.clipboard.writeText(link).catch(function () { /* sem permissão */ }); } catch (e) { /* segue */ } };
+    var baixar = UI.el('a', { classe: 'btn btn-primario', href: estado.appBaixar || '/api/app?baixar=1', rel: 'noopener', texto: '⬇ Baixar o aplicativo', onclick: copiar });
+    var abrir = UI.el('a', { classe: 'btn btn-escuro', href: intent, texto: '📱 Abrir no aplicativo', onclick: copiar });
+    var podeAbrir = !participando || Boolean(codigo);
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao modal-app' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Aplicativo para Android' }, [UI.dica(
+        'É a mesma página da busca, com o GPS lido pelo próprio celular: a localização continua indo com a tela apagada e, sem internet, ' +
+        'fica guardada no celular e vai sozinha quando o sinal voltar. O arquivo vem do servidor dos bombeiros (não da Play Store), ' +
+        'por isso o Android pede para permitir a instalação.')]),
+      UI.secao('1. Baixar', [UI.el('p', { classe: 'ajuda', texto: 'Se o Chrome avisar que o arquivo pode ser perigoso, toque em "Baixar mesmo assim".' }), baixar]),
+      UI.secao('2. Instalar', [UI.el('p', { classe: 'ajuda', texto: 'Quando terminar, toque em "Abrir" (ou abra gbs-busca.apk em Downloads). ' +
+        'Se o Android pedir, permita "Instalar apps desconhecidos" para o Chrome, volte e toque em "Instalar".' })]),
+      UI.secao('3. Abrir nesta busca', [
+        UI.el('p', { classe: 'ajuda', texto: codigo
+          ? 'Depois de instalar, toque abaixo: o aplicativo abre nesta busca com o seu cadastro, sem preencher nada. Quando ele assumir, esta página para de enviar.'
+          : 'Depois de instalar, toque abaixo: o aplicativo abre nesta busca.' }),
+        podeAbrir ? abrir : null,
+      ]),
+      aviso ? UI.el('p', { classe: 'erro-form', role: 'alert', texto: aviso }) : null,
+      aviso ? UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Tentar de novo', onclick: function () { fechar(); abrirBaixarApp(); } })]) : null,
+    ]));
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Atualização da interface                                             */
   /* ------------------------------------------------------------------ */
   function atualizarUI() {
@@ -2706,7 +2988,8 @@
     if ($('st-nome').textContent !== quem) $('st-nome').textContent = quem;
 
     registrarGpsNaFila();
-    if (!estado.filaUI && $('fila-estado') && window.FilaEstado) {
+    if (NATIVO) mostrarEstadoApp();
+    else if (!estado.filaUI && $('fila-estado') && window.FilaEstado) {
       estado.filaUI = window.FilaEstado.montar($('fila-estado'), {
         fila: function () { return estado.trilha; },
         extra: function () { return { pendentes: estado.bufferPontos.length, naoDuraveis: estado.bufferPontos.length }; },
@@ -2733,7 +3016,8 @@
     } else if (net === 'conectando' && !estado.ultimoEnviadoT) {
       cod = 'sem-gps'; titulo = 'Conectando com os bombeiros…'; sub = 'Só um instante.';
     } else {
-      cod = 'ok'; titulo = 'Os bombeiros estão vendo onde você está'; sub = 'Deixe esta tela aberta.';
+      cod = 'ok'; titulo = 'Os bombeiros estão vendo onde você está';
+      sub = NATIVO ? 'Pode bloquear a tela: o aplicativo continua enviando.' : 'Deixe esta tela aberta.';
     }
     var acao = $('status-acao');
     var precisaAjuda = estado.rastreando && (estado.gps === 'negado' || estado.gps === 'indisponivel' ||

@@ -1,0 +1,70 @@
+plugins {
+  id 'com.android.application'
+}
+
+// Servidor da operação (ex.: https://rastreamento-sar.vercel.app). Com ele fixado, o aplicativo só abre esse servidor.
+// Vazio: o aplicativo aceita o servidor do primeiro link "Abrir no aplicativo" (sempre https).
+def origem = (findProperty('gbsOrigem') ?: System.getenv('GBS_ORIGEM') ?: '').toString().trim().replaceAll('/+$', '')
+def versaoCodigo = (findProperty('versaoCodigo') ?: System.getenv('VERSAO_CODIGO') ?: '1').toString().toInteger()
+def assinatura = System.getenv('ANDROID_KEYSTORE_ARQUIVO')
+
+android {
+  namespace 'br.gbs.busca'
+  compileSdk 35
+
+  defaultConfig {
+    applicationId 'br.gbs.busca'
+    minSdk 24
+    targetSdk 35
+    versionCode versaoCodigo
+    versionName "1.0.${versaoCodigo}"
+    buildConfigField 'String', 'ORIGEM', "\"${origem}\""
+  }
+
+  buildFeatures {
+    buildConfig true
+  }
+
+  signingConfigs {
+    if (assinatura) {
+      oficial {
+        storeFile file(assinatura)
+        storePassword System.getenv('ANDROID_KEYSTORE_SENHA')
+        keyAlias System.getenv('ANDROID_CHAVE_ALIAS')
+        keyPassword System.getenv('ANDROID_CHAVE_SENHA')
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled true
+      shrinkResources true
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      signingConfig assinatura ? signingConfigs.oficial : signingConfigs.debug
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  testOptions {
+    unitTests.returnDefaultValues = true
+  }
+
+  lint {
+    abortOnError true
+    checkReleaseBuilds true
+    disable 'GradleDependency', 'NewerVersionAvailable', 'OldTargetApi', 'SetTextI18n', 'ObsoleteSdkInt'
+  }
+}
+
+dependencies {
+  implementation 'androidx.core:core:1.13.1'
+  implementation 'androidx.webkit:webkit:1.12.1'
+  implementation 'com.google.android.gms:play-services-location:21.3.0'
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20240303'
+}

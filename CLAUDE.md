@@ -4,8 +4,9 @@ App de rastreamento GPS de equipes em buscas (Bombeiros). Sem build: HTML/JS/CSS
 
 ## Estrutura
 - `public/` páginas (`militar.html` painel do responsável, `civil.html` página do participante, `sci.html` painel de comando SCI, `index.html`), `js/` (lógica, sem bundler), `css/` (`estilos.css` base, `militar.css` painel).
-- `api/` endpoints serverless (`rota.js`, `meteo.js`, `poa-ia.js`, `sci-ia.js`, `convidar.js`, `responsaveis.js`, `config.js`, `limpeza.js`).
-- `supabase/schema.sql` instalação completa e idempotente; `supabase/migracoes/NNN_*.sql` migrações numeradas (a última é a 050).
+- `api/` endpoints serverless (`rota.js`, `meteo.js`, `poa-ia.js`, `sci-ia.js`, `convidar.js`, `responsaveis.js`, `config.js`, `limpeza.js`, `app.js`).
+- `android/` aplicativo Android do participante (Java, sem Kotlin): WebView da `civil.html` + serviço de GPS em primeiro plano (`FiltroGps` é porta do `gps.js`; ao mudar o `gps.js`, rodar `node android/ferramentas/gerar-casos-filtro.js`). Ponte com a página em `public/js/app-nativo.js` (`window.GBSApp`, só existe dentro do app). APK gerado por `.github/workflows/apk.yml`.
+- `supabase/schema.sql` instalação completa e idempotente; `supabase/migracoes/NNN_*.sql` migrações numeradas (a última é a 051).
 - `testes/` testes unitários e `banco_migracoes.test.mjs` (banco real em PGlite).
 - `README.md` documenta funcionalidades e o roteiro de testes manuais.
 
@@ -13,6 +14,7 @@ App de rastreamento GPS de equipes em buscas (Bombeiros). Sem build: HTML/JS/CSS
 - `npm test`: unitários (Node puro, sem dependências).
 - `npm run test:banco`: schema e migrações num PostgreSQL real (PGlite). Precisa das dependências do `/tmp/.../pglite-check`; ver README.
 - Testes de navegador (Playwright) ficam fora do repositório, no scratchpad da sessão. Rodar só os afetados pela mudança.
+- App Android: em `android/`, `./gradlew testReleaseUnitTest lintRelease assembleRelease` (precisa do Android SDK e JDK 17+).
 
 ## Convenções
 - Português em textos, comentários e mensagens de erro para o usuário. Código com nomes em português.

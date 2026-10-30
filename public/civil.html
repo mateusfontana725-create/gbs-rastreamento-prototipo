@@ -90,6 +90,13 @@
           <button class="btn btn-primario btn-gigante" type="submit" id="btn-iniciar">COMEÇAR</button>
           <p class="erro-form" id="ini-erro" role="alert" hidden></p>
         </form>
+
+        <!-- Aplicativo Android (aparece só no Android, fora do aplicativo) -->
+        <section class="cartao secao app-oferta" id="ini-app" hidden>
+          <h2>📱 Aplicativo para Android</h2>
+          <p>Com o aplicativo, sua localização continua indo para os bombeiros com a tela apagada, e sem internet fica guardada no celular.</p>
+          <button class="btn btn-escuro" type="button" id="btn-app-inicio">Baixar aplicativo</button>
+        </section>
       </section>
 
       <!-- Rastreamento: tela simples, com o essencial -->
@@ -201,6 +208,7 @@
             <strong>Pedido para sair enviado às <span id="saida-hora"></span>.</strong>
             Aguarde os bombeiros liberarem. Até lá, deixe esta tela aberta.
           </div>
+          <button class="btn btn-app" type="button" id="btn-app" hidden>📱 Baixar aplicativo</button>
           <button class="btn btn-saida" type="button" id="btn-saida">Quero sair da busca</button>
           <button class="btn btn-pequeno btn-link" type="button" id="btn-diag" hidden>Diagnóstico do GPS</button>
         </div>
@@ -266,6 +274,7 @@
   <script src="js/rotas.js"></script>
   <script src="js/coords.js"></script>
   <script src="js/mapa-offline.js"></script>
+  <script src="js/app-nativo.js"></script>
   <script src="js/civil.js"></script>
 </body>
 </html>

@@ -2253,3 +2253,11 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 @media (max-width: 599px) { .icones-topo { grid-template-columns: 1fr; } .icones-livre { flex: 1; } }
 /* Grupo com ícone: o ícone vai dentro do quadradinho da cor */
 .chip-cor.chip-icone { width: auto; min-width: 18px; height: 18px; padding: 0 2px; display: inline-grid; place-items: center; font-size: 11px; line-height: 1; font-weight: 900; }
+
+/* Aplicativo Android: oferta na página do participante (navegador) e estado do registro dentro do aplicativo */
+.app-oferta h2 { font-size: 1.05rem; margin: 0 0 6px; }
+.app-oferta p { margin: 0 0 12px; color: var(--texto-3); font-size: .9rem; }
+.rodape-civil .btn-app { display: block; width: 100%; min-height: 44px; margin-bottom: 10px; text-transform: none; letter-spacing: 0; }
+.modal-app .secao-form .btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; margin-top: 6px; }
+.modal-app .ajuda { margin: 0; }
+.fila-estado .btn-bateria { display: block; width: 100%; margin-top: 6px; white-space: normal; text-transform: none; letter-spacing: 0; }

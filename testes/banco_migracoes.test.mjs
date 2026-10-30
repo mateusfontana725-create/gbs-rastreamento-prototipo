@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2225,5 +2225,77 @@ console.log('Ícones de grupos e das categorias fixas de ponto (migração 050)'
   await rpc(resp1, 'excluir_operacao', { p_operacao: opI.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–050 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Aplicativo Android: passagem do navegador para o app e aparelho com segredo (migração 051)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opA = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 051', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const nav = await usuario(null, true), app = await usuario(null, true), app2 = await usuario(null, true), outro = await usuario(null, true);
+  const p = await rpc(nav, 'ingressar', { p_token: opA.token_civil, p_nome: 'Duda', p_tipo: 'civil', p_cpf: '52998224725', p_telefone: '21998765432' });
+  const q = await rpc(outro, 'ingressar', { p_token: opA.token_civil, p_nome: 'Edu', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765433' });
+  const pid = p.participante_id;
+  await rpc(nav, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: J([pt(5101, -22.9, -43.2)]) });
+
+  chk(/participante_invalido/.test(await erroDe(rpc(outro, 'app_vinculo_criar', { p_participante: pid }))), 'código: só o dono da participação pede');
+  const v1 = await rpc(nav, 'app_vinculo_criar', { p_participante: pid });
+  chk(/^[0-9a-f]{32}$/.test(v1.codigo) && new Date(v1.expira_em) > new Date(), 'código de 32 caracteres com validade', v1);
+  const guardado = (await db.query(`select codigo_hash from public.app_vinculos where participante_id = $1`, [pid])).rows;
+  chk(guardado.length === 1 && guardado[0].codigo_hash !== v1.codigo && guardado[0].codigo_hash.length === 64, 'o banco guarda só o resumo do código');
+  chk(/permission denied/.test(await erroDe(como(nav, `select * from public.app_vinculos`))), 'ninguém lê a tabela de códigos direto');
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app, 'app_vinculo_resgatar', { p_codigo: 'f'.repeat(32) }))), 'código inexistente: recusado');
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app, 'app_vinculo_resgatar', { p_codigo: 'x' }))), 'código malformado: recusado');
+  chk(/sessao_app_ocupada/.test(await erroDe(rpc(outro, 'app_vinculo_resgatar', { p_codigo: v1.codigo }))), 'sessão que já participa da operação não resgata (sem misturar dois participantes)');
+
+  const r = await rpc(app, 'app_vinculo_resgatar', { p_codigo: v1.codigo.toUpperCase() });
+  chk(r.participante_id === pid && r.nome === 'Duda' && r.telefone === '21998765432' && r.operacao === 'OP 051', 'app resgata: mesma participação, com nome e celular', r);
+  chk((await db.query(`select user_id from public.participantes where id = $1`, [pid])).rows[0].user_id === app, 'a participação passa para a sessão do aplicativo');
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app2, 'app_vinculo_resgatar', { p_codigo: v1.codigo }))), 'código já usado: recusado (uso único)');
+  const svNav = await rpc(nav, 'sinal_vida', { p_participante: pid, p_rastreando: true, p_gps: 'ok' });
+  chk(svNav.status === 'inexistente', 'o navegador perde o acesso (sinal_vida responde inexistente)', svNav);
+  chk(/participante_invalido/.test(await erroDe(rpc(nav, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: J([pt(5102, -22.9, -43.2)]) }))), 'o navegador não envia mais pontos');
+  const re = await rpc(app, 'ingressar', { p_token: opA.token_civil, p_nome: 'Duda', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765432' });
+  chk(re.participante_id === pid, 'no app, ingressar volta para a mesma participação (sem cadastro novo)');
+  chk((await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [pid])).rows[0].n === 1, 'a trilha já enviada continua da mesma participação');
+
+  chk(/participante_invalido/.test(await erroDe(rpc(nav, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'X' }))), 'aparelho: só o dono registra');
+  const d1 = await rpc(app, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Moto G' });
+  chk(d1.dispositivo_id && /^[0-9a-f]{64}$/.test(d1.segredo), 'aparelho registrado com segredo de 64 caracteres');
+  chk((await db.query(`select segredo_hash from public.app_dispositivos where id = $1`, [d1.dispositivo_id])).rows[0].segredo_hash !== d1.segredo, 'o banco guarda só o resumo do segredo');
+  const envia = (d, s, ids, role) => como(null, `select public.app_enviar_posicoes($1, $2, $3::jsonb, 'ok') r`, [d, s, J(ids.map((i) => pt(i, -22.9 + i * 1e-6, -43.2)))], role || 'anon').then((x) => x.rows[0].r);
+  const e1 = await envia(d1.dispositivo_id, d1.segredo, [5110, 5111]);
+  chk(e1.confirmados.length === 2 && e1.inseridos === 2 && e1.status === 'ativa', 'serviço do app envia sem sessão (só a chave pública) e recebe a confirmação por ponto', e1);
+  const e2 = await envia(d1.dispositivo_id, d1.segredo, [5111]);
+  chk(e2.confirmados.length === 1 && e2.inseridos === 0, 'reenvio pelo app não duplica');
+  chk((await db.query(`select ultimo_contato_em is not null and rastreando as ok from public.participantes where id = $1`, [pid])).rows[0].ok, 'envio pelo app atualiza o último contato do participante');
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d1.dispositivo_id, 'a'.repeat(64), [5112]))), 'segredo errado: recusado');
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d1.dispositivo_id, 'curto', [5112]))), 'segredo malformado: recusado');
+  const sv = (await como(null, `select public.app_sinal_vida($1, $2, 'fraco') r`, [d1.dispositivo_id, d1.segredo], 'anon')).rows[0].r;
+  chk(sv.status === 'ativa' && sv.gps_intervalo_s === 15, 'sinal de vida pelo app', sv);
+  chk((await db.query(`select gps_estado from public.participantes where id = $1`, [pid])).rows[0].gps_estado === 'fraco', 'sinal pelo app grava o estado do GPS');
+  chk(/permission denied/.test(await erroDe(como(null, `select public.app_dono_do_dispositivo($1, $2)`, [d1.dispositivo_id, d1.segredo], 'anon'))), 'função interna não é chamável de fora');
+  chk((await como(null, `select auth.uid() u`, [], 'anon')).rows[0].u === null, 'a identidade usada pelo serviço não sobra para a próxima chamada');
+
+  const d2 = await rpc(app, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Moto G (reinstalado)' });
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d1.dispositivo_id, d1.segredo, [5113]))), 'registrar de novo revoga o aparelho anterior');
+  chk((await envia(d2.dispositivo_id, d2.segredo, [5113])).inseridos === 1, 'o aparelho novo envia');
+
+  const v2 = await rpc(app, 'app_vinculo_criar', { p_participante: pid });
+  await rpc(app2, 'app_vinculo_resgatar', { p_codigo: v2.codigo });
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d2.dispositivo_id, d2.segredo, [5114]))), 'passar a participação para outro aparelho revoga o segredo do anterior');
+  const d3 = await rpc(app2, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Outro' });
+
+  const v3 = await rpc(app2, 'app_vinculo_criar', { p_participante: pid });
+  await db.query(`update public.app_vinculos set expira_em = now() - interval '1 minute' where codigo_hash = public.app_resumo($1)`, [v3.codigo]);
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app, 'app_vinculo_resgatar', { p_codigo: v3.codigo }))), 'código vencido (30 min): recusado');
+
+  await rpc(resp1, 'liberar_participante', { p_participante: pid }).catch(async () => {
+    await db.query(`update public.participantes set liberado_em = now() where id = $1`, [pid]);
+  });
+  chk(/participante_liberado/.test(await erroDe(envia(d3.dispositivo_id, d3.segredo, [5115]))), 'participante liberado: o app recebe o código e para');
+  chk(/participante_liberado/.test(await erroDe(rpc(app2, 'app_vinculo_criar', { p_participante: pid }))), 'participante liberado não gera código');
+  const svQ = await rpc(outro, 'sinal_vida', { p_participante: q.participante_id, p_rastreando: true, p_gps: 'ok' });
+  chk(svQ.status === 'ativa', 'os outros participantes não são afetados');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opA.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–051 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

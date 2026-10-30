@@ -1468,6 +1468,7 @@ rastreamento-sar/
 │       ├── arquivos.js         exportar e importar GPX, KML/KMZ, GeoJSON e CSV
 │       ├── ferramentas.js      ferramentas de mapa do painel (medir, ir para coordenada, estatísticas…)
 │       ├── trilha-local.js     fila offline dos pontos (IndexedDB) e envio com confirmação por ponto
+│       ├── app-nativo.js       ligação com o aplicativo Android (ponte GBSNativo) e links "Abrir no aplicativo"
 │       ├── cadastro.js         cadastro da operação, escolha de ponto no mapa e fichas das vítimas
 │       ├── relatorio.js        diário da operação, resultado, mapas em canvas e geração do relatório final
 │       ├── relatorio-pdf.js    monta o documento do relatório final (pdfmake), sem rede nem tela
@@ -1529,6 +1530,11 @@ rastreamento-sar/
 │   ├── coords.test.js          teste das conversões de coordenadas (UTM, MGRS, GMS, rumo, sol)
 │   ├── trilha_local.test.js    teste da fila offline (pendentes, confirmação, reenvio sem duplicar)
 │   └── banco_migracoes.test.mjs  schema e migrações num PostgreSQL real (PGlite): RLS e fluxos (npm run test:banco)
+├── android/                    aplicativo Android do participante (GBS Busca): WebView da página + serviço de GPS
+│   ├── app/src/main/java/br/gbs/busca/   MainActivity (página e ponte), RastreioService, FiltroGps, FilaPontos, Sincronizador
+│   ├── app/src/test/           testes do filtro (casos do gps.js), da fila e do envio
+│   └── ferramentas/gerar-casos-filtro.js  casos do teste do filtro gerados a partir do public/js/gps.js
+├── .github/workflows/apk.yml   gera o APK e publica no Release "app-android"
 ├── vercel.json                 diretório publicado, agendamento da limpeza e cabeçalhos de segurança
 ├── .env.example                nomes das variáveis de ambiente
 └── package.json
@@ -1715,6 +1721,7 @@ rastreamento-sar/
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
+   | `APP_ANDROID_URL` | (opcional) endereço do APK do aplicativo Android. Padrão: o Release `app-android` deste repositório. `desligado` esconde o botão "Baixar aplicativo" |
    | `EMAIL_REMETENTE` | (com a chave acima) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
    | `SITE_URL` | (opcional) endereço público do site, ex.: `https://busca.seudominio.com.br`. Sem ela, o link do e-mail usa o endereço da requisição |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
@@ -1872,7 +1879,7 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 1. **Tela apagada / outro aplicativo aberto — não é possível com uma página web.** Quando a página
    sai da tela, o Chrome do Android (e o Safari do iPhone) **param de entregar o GPS** para ela, e
    não existe permissão que um site possa pedir para mudar isso. Por isso o rastreamento contínuo
-   em segundo plano **exige um aplicativo instalado** (ver a proposta abaixo). Na versão web:
+   em segundo plano **exige um aplicativo instalado**: o **aplicativo Android** (ver abaixo). Na versão web:
    - a página pede para **manter a tela ligada** (Screen Wake Lock API, suportada no Chrome para Android);
    - ao voltar para a página, a posição é retomada, a fila é enviada e o participante vê um aviso
      informando por quanto tempo a página ficou pausada;
@@ -1909,22 +1916,96 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 8. **Lida por**: indica que algum responsável abriu a central ou a conversa; não garante que a
    pessoa leu com atenção.
 
-### Solução para segundo plano: aplicativo Android (rastreamento com a tela apagada)
+### Aplicativo Android do participante (rastreamento com a tela apagada, migração 051)
 
-Para o rastreamento continuar com a tela apagada ou com outro aplicativo aberto, o caminho é um
-aplicativo Android instalado no celular do participante, **reaproveitando todo este backend**
-(mesmas tabelas, funções, regras de segurança e o mesmo painel; o participante entra pelo mesmo
-link/QR Code e informa nome, CPF e celular):
+A página do participante tem o botão **📱 Baixar aplicativo** (só aparece no Android, fora do aplicativo). O aplicativo
+**GBS Busca** (pasta `android/`) é a própria página do participante, aberta numa WebView presa ao servidor da operação,
+com o GPS lido e enviado por um serviço do Android. Funciona com a tela apagada, com o aplicativo minimizado ou fechado
+da lista de recentes, e sem internet.
 
-- **Foreground Service** do tipo `location` com notificação permanente ("Rastreamento GBS ativo"),
-  que o Android não encerra em segundo plano;
-- **FusedLocationProviderClient** (Google Play Services), com intervalo de 5–10 s e prioridade de alta precisão;
-- fila local em **Room/SQLite** e envio com **WorkManager** quando houver rede (mesma RPC `enviar_posicoes`, com o mesmo identificador por ponto para não duplicar);
-- **Firebase Cloud Messaging** (prioridade alta) para entregar os comandos mesmo com o app fechado,
-  disparado por um gatilho no banco ao inserir em `mensagens`;
-- permissões `ACCESS_FINE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE_LOCATION` e
-  `POST_NOTIFICATIONS`, além de orientação para retirar o app da otimização de bateria.
-  Para publicar na Play Store, o uso de localização em segundo plano passa por declaração e revisão do Google. Para uso interno, o app também pode ser distribuído direto (APK ou gerenciamento de dispositivos).
+**Como o participante instala e entra sem novo cadastro**
+
+1. Na página da busca (Chrome no Android), **📱 Baixar aplicativo** abre o passo a passo: **Baixar** → **Instalar** →
+   **Abrir nesta busca**. O navegador não instala o APK sozinho (o Android não deixa): o Chrome baixa o arquivo, a pessoa
+   toca em **Abrir** e permite **Instalar apps desconhecidos** para o Chrome uma única vez.
+2. Quem já está participando leva o cadastro por um **código de uso único** (válido por 30 min, só o resumo SHA-256 fica no
+   banco): **Abrir no aplicativo** usa um link `intent:` que só abre o pacote `br.gbs.busca` (sem o aplicativo, baixa o APK).
+   O aplicativo resgata o código com a sessão dele (`app_vinculo_resgatar`): a participação passa para o aplicativo, com a
+   mesma trilha, as mesmas mensagens e o mesmo cadastro. A página do navegador para de enviar e mostra **"O registro passou
+   para o aplicativo"** (evita a trilha em dobro). Antes de pedir o código, a página envia o que tinha na fila.
+3. O botão **Baixar** também deixa o link na área de transferência: na primeira abertura, o aplicativo o lê (e apaga) e já
+   abre na busca, mesmo que a pessoa não volte ao navegador. Quem ainda não tinha entrado abre o aplicativo só com a
+   operação e preenche o cadastro nele. Também dá para colar o link da operação na tela inicial do aplicativo.
+
+**Arquitetura**
+
+- **Página**: o aplicativo carrega `https://servidor/civil.html#t=…&app=1`. Atualizações do site chegam sem reinstalar; o
+  service worker guarda a página e o mapa para abrir sem internet. A página fala com o aplicativo pelo objeto `GBSNativo`
+  (`js/app-nativo.js`), criado com `addWebMessageListener` **só para a origem do servidor**; links para outros sites abrem
+  fora do aplicativo. Fora do aplicativo `window.GBSApp.disponivel` é falso e a página funciona exatamente como antes.
+- **Serviço de GPS** (`RastreioService`, serviço em primeiro plano do tipo `location`, com aviso fixo): uma leitura por
+  segundo (serviço de localização do Google; sem ele, o GPS do Android) → **o mesmo filtro da página** (`FiltroGps`, porta
+  do `gps.js`, conferida leitura a leitura pelo teste `FiltroGpsTest` com casos gerados do próprio `gps.js`) → **fila no
+  aparelho** (`FilaPontos`: cada ponto gravado e sincronizado com o disco antes de seguir; remoção por troca atômica do
+  arquivo; nada é descartado por falta de internet) → **envio com confirmação por ponto** (`Sincronizador`). O GPS e a fila
+  rodam numa linha de execução e o envio em outra (a rede lenta nunca atrasa a gravação). Volta a enviar sozinho quando a
+  conexão volta; sem sinal, tenta de novo em 2, 4, 8, 16 e 30 s. Sinal de vida a cada 30 s (o painel vê o participante
+  ativo mesmo parado). Horário dos pontos convertido para o do servidor quando o relógio do celular erra mais de 30 s.
+- **Credencial do aparelho**: o serviço envia sem a sessão do navegador, com um **segredo do aparelho** (`app_dispositivo_registrar`,
+  64 caracteres, mostrado uma vez; o banco guarda só o resumo). `app_enviar_posicoes` e `app_sinal_vida` conferem o segredo e
+  fazem exatamente o que `enviar_posicoes_lote` e `sinal_vida` fazem (operação encerrada, participante removido ou liberado,
+  horário dos pontos, sem duplicar). Registrar de novo ou passar a participação para outro aparelho revoga o segredo anterior.
+  Fim da participação: o serviço para, apaga a fila e o segredo, e a página mostra a tela de fim.
+- **Dados no celular**: só na memória interna do aplicativo, **fora de backup e da transferência entre aparelhos**; HTTPS
+  obrigatório. A página não guarda o segredo.
+- **Mapa sem internet**: ao entrar, o aplicativo guarda o mapa da **região da operação** (setores e pontos, raio de até
+  15 km, dentro do limite do OpenStreetMap), além da área em volta da posição que a página já guarda.
+- **Mensagens**: com o aplicativo em segundo plano, mensagem dos bombeiros vira notificação do Android (som e vibração).
+- **Bateria**: a página oferece **Liberar a bateria (recomendado)**, que tira o aplicativo da economia de bateria do Android
+  (alguns fabricantes encerram serviços de fundo mesmo assim; o aviso fixo e a liberação reduzem isso).
+- Permissões: localização precisa (durante o uso basta, pois o registro começa com o aplicativo aberto e segue pelo serviço
+  em primeiro plano), avisos (Android 13+), serviço de localização, internet. **Não** pede localização "o tempo todo" nem câmera
+  (a foto usa o aplicativo de câmera do celular).
+
+**Gerar e publicar o APK** (`.github/workflows/apk.yml`)
+
+- A cada mudança em `android/` (branches `main` e `v3-apk`) ou pelo botão **Run workflow** em Actions, o GitHub roda os
+  testes do aplicativo, a verificação do Android (lint) e gera o APK, publicado no Release **app-android** do repositório
+  (`gbs-busca.apk` e o SHA-256). O botão da página baixa por `/api/app?baixar=1`, que redireciona para esse arquivo.
+  `APP_ANDROID_URL` (Vercel) troca o endereço; `APP_ANDROID_URL=desligado` esconde o botão.
+- **Assinatura (faça uma vez)**: sem ela, cada build sai com uma chave de teste diferente e o celular só atualiza
+  desinstalando a versão anterior. Gere a chave e guarde-a em lugar seguro (perdeu a chave, os celulares precisam
+  desinstalar para receber versões novas):
+
+  ```bash
+  keytool -genkeypair -v -keystore gbs-busca.jks -alias gbs-busca -keyalg RSA -keysize 4096 -validity 10000
+  ```
+
+  ```bash
+  base64 -w0 gbs-busca.jks
+  ```
+
+  Em **Settings → Secrets and variables → Actions → Secrets**, cadastre `ANDROID_KEYSTORE_BASE64` (o texto do segundo
+  comando), `ANDROID_KEYSTORE_SENHA`, `ANDROID_CHAVE_ALIAS` (`gbs-busca`) e `ANDROID_CHAVE_SENHA`.
+- **Servidor fixo (recomendado)**: em **Variables**, `GBS_ORIGEM` = endereço do site (ex.: `https://rastreamento-sar.vercel.app`).
+  Com ele, o aplicativo só abre esse servidor. Sem ele, o aplicativo aceita o servidor do primeiro link de abertura
+  (sempre https) e pede confirmação antes de trocar de busca enquanto registra.
+- **Compilar no computador** (Android Studio ou Android SDK + JDK 17), na pasta `android/`:
+
+  ```bash
+  ./gradlew testReleaseUnitTest lintRelease assembleRelease
+  ```
+
+- Depois de mudar o filtro da página (`public/js/gps.js`), gere de novo os casos do teste do aplicativo (o `npm test` acusa):
+
+  ```bash
+  node android/ferramentas/gerar-casos-filtro.js
+  ```
+
+Limitações: o Android só instala o APK com o toque da pessoa (não há instalação automática pelo navegador); o serviço precisa
+ser iniciado com o aplicativo aberto (o Android não deixa começar a localização em segundo plano sem a permissão "o tempo todo");
+se o sistema encerrar o aplicativo, o registro volta ao abri-lo, e os pontos que estavam na fila continuam guardados.
+Não é distribuído pela Play Store.
 
 ---
 
@@ -2018,9 +2099,24 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |
+| 42a | No Chrome do Android, já na busca: **📱 Baixar aplicativo → Baixar o aplicativo**, instalar e tocar em **Abrir no aplicativo** | o aplicativo abre direto na busca, sem cadastro; o painel continua mostrando a mesma pessoa e a mesma trilha; a página do navegador mostra "O registro passou para o aplicativo" |
+| 42b | No aplicativo, apagar a tela e andar 10 min; depois deixar o celular na mesa 5 min | a trilha aparece no painel durante a caminhada, sem pausas; parado, um ponto a cada intervalo da operação; a barra de notificações mostra "Enviando sua localização aos bombeiros" |
+| 42c | Modo avião por 15 min andando com a tela apagada; depois religar | a notificação passa a "Sem internet: N ponto(s) guardado(s)"; ao religar, todos chegam ao painel, na ordem, sem duplicar |
+| 42d | No modo avião, abrir o aplicativo | a página abre (guardada) e o mapa mostra a região da operação |
+| 42e | Liberar a saída do participante no painel | o aplicativo para de registrar, o aviso fixo some e a tela mostra "Saída liberada" |
+| 42f | Abrir **📱 Baixar aplicativo** de novo em outro celular e abrir no aplicativo de lá | o primeiro aplicativo para ("Participação encerrada neste celular"); o segundo continua a mesma trilha |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Aplicativo Android (migração 051)**: banco — 972 verificações (código de uso único só do dono, resumo no banco, vencido e
+  já usado recusados, participação passa para o aplicativo e o navegador perde o acesso, segredo do aparelho com resumo, envio
+  e sinal sem sessão, reenvio sem duplicar, segredo errado ou revogado recusado, troca de aparelho, participante liberado);
+  aplicativo (JUnit) — filtro igual ao `gps.js` em 3.100 leituras, fila que sobrevive a queda no meio da gravação, envio em
+  lotes só com confirmação, sem internet nada sai, recusados, fim da participação, função ausente, relógio do celular errado;
+  verificação do Android (lint) e APK de release com R8; navegador (390 e 1280 px) — botão e passo a passo no Android,
+  código no link `intent:`, página para quando o aplicativo assume, aplicativo entra sem cadastro, segredo só no aplicativo,
+  página não envia pontos, estado do registro, mapa da operação guardado, reabertura sem novo aparelho, fim pelo serviço.
 
 - **Relatório diário e da passagem de comando (migração 049)**: banco — 926 verificações (reserva do dia, um diário por dia, reserva de outro responsável e expiração, passagem só da própria operação, diário da operação, relatórios antigos como "final"); unitários da montagem dos dois PDFs; navegador — diários dos dias terminados gerados e guardados sem baixar, sem repetir, relatório de hoje só baixado, relatório da passagem.
 - **Dashboard em outra janela e por link público; várias vítimas (migração 048)**: banco — 912 verificações (estudo com cada vítima e a própria localização, dados da janela iguais aos do painel, link público sem nomes nem textos, troca e desligamento do link, nada gravável sem login, estudo geral por vítima); navegador — painel, janela própria, link público e link inválido, atualização automática e lista de vestígios.

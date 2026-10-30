@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">GBS Busca</string>
+  <string name="canal_rastreio">Registro da localização</string>
+  <string name="canal_rastreio_desc">Aviso fixo enquanto a sua localização é enviada aos bombeiros.</string>
+  <string name="canal_mensagens">Mensagens dos bombeiros</string>
+  <string name="notif_titulo">Busca %1$s</string>
+  <string name="notif_ok">Enviando sua localização aos bombeiros</string>
+  <string name="notif_sem_internet">Sem internet: %1$d ponto(s) guardado(s) no celular, enviados quando o sinal voltar</string>
+  <string name="notif_sem_gps">Procurando o sinal de GPS…</string>
+  <string name="notif_negado">Localização bloqueada para o aplicativo: abra e toque em Como resolver</string>
+  <string name="notif_desligada">A localização do celular está desligada</string>
+  <string name="boas_vindas_titulo">Abra pela página da busca</string>
+  <string name="boas_vindas_texto">Abra o link da busca que os bombeiros enviaram (ou leia o QR Code) e toque em \"Abrir no aplicativo\". O aplicativo já abre com a operação e os seus dados.\n\nSe você copiou o link da busca, toque abaixo.</string>
+  <string name="colar_link">Usar o link copiado</string>
+  <string name="sem_link_copiado">Nenhum link da busca copiado. Abra o link enviado pelos bombeiros.</string>
+  <string name="link_invalido">Link inválido para este aplicativo. Abra de novo pela página da busca.</string>
+  <string name="link_colado">Busca encontrada no link copiado.</string>
+  <string name="trocar_titulo">Trocar de busca?</string>
+  <string name="trocar_texto">Este celular já está enviando a localização para outra busca. Trocar para a nova?</string>
+  <string name="trocar_sim">Trocar</string>
+  <string name="cancelar">Cancelar</string>
+  <string name="sem_pagina_titulo">Sem internet</string>
+  <string name="sem_pagina_texto">A página da busca ainda não foi guardada neste celular. Ela abre quando a internet voltar.</string>
+  <string name="sem_pagina_registrando">O registro continua: %1$d ponto(s) guardado(s) no celular, enviados quando o sinal voltar.</string>
+  <string name="tentar_de_novo">Tentar de novo</string>
+  <string name="sem_app_para_abrir">Nenhum aplicativo para abrir este link.</string>
+  <string name="webview_antiga_titulo">Atualize o Android System WebView</string>
+  <string name="webview_antiga_texto">Este aplicativo precisa de uma versão mais nova do componente de páginas do Android.</string>
+  <string name="atualizar_webview">Atualizar</string>
+</resources>

@@ -1338,6 +1338,7 @@ html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; backgroun
 /* desenho de trilha à mão livre: o arrasto desenha (não rola a página nem move o mapa) */
 #mapa.desenho-livre, #mapa.desenho-livre * { touch-action: none; }
 #mapa.desenho-livre, #mapa.desenho-livre .leaflet-interactive { cursor: crosshair; }
+#mapa.desenho-pontos, #mapa.desenho-pontos .leaflet-grab, #mapa.desenho-pontos .leaflet-interactive { cursor: crosshair; }
 #mapa.desenho-mover, #mapa.desenho-mover .leaflet-interactive { cursor: grab; }
 #trilha-mover[aria-pressed="true"] { border-color: var(--acento); color: var(--acento); }
 

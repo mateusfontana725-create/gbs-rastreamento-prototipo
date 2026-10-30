@@ -2974,7 +2974,13 @@
   // em relação ao mapa e cobre tudo. De perto fica como antes; afastando, afina.
   function fatorZoomTrilha() {
     var z = est.mapa ? est.mapa.getZoom() : 17;
-    return z >= 18 ? 1 : z >= 17 ? 0.85 : z >= 16 ? 0.7 : z >= 15 ? 0.55 : z >= 14 ? 0.45 : 0.38;
+    return (z >= 18 ? 1 : z >= 17 ? 0.85 : z >= 16 ? 0.7 : z >= 15 ? 0.55 : z >= 14 ? 0.45 : 0.38) * fatorTelaTrilha();
+  }
+  // Espessura pela largura da tela: em telas grandes (≥ 1280 px) fica como sempre foi; em telas menores
+  // afina na proporção (até 60% num celular de 360 px), para não cobrir o mapa. Nunca passa do tamanho atual.
+  function fatorTelaTrilha() {
+    var w = window.innerWidth || 1280;
+    return Math.max(0.6, Math.min(1, 0.6 + 0.4 * (w - 360) / (1280 - 360)));
   }
   // linha fina (2,5 px de perto; ~1 px de longe); a selecionada um pouco mais grossa
   function pesoTrilha(p) {
@@ -3076,6 +3082,16 @@
     });
   }
 
+  // A tela mudou de tamanho (girou o celular, redimensionou a janela): espessuras acompanham.
+  var ultimoFatorTela = null;
+  function ajustarTrilhasATela() {
+    var f = fatorTelaTrilha();
+    if (f === ultimoFatorTela) return;
+    ultimoFatorTela = f;
+    estilizarTrilhas();
+    est.trilhasManuais.forEach(function (t) { if (t.camada && t.fatorTela !== f) desenharTrilhaManual(t); });
+  }
+
   // Ocultar a trilha afeta só o mapa: os pontos continuam chegando e sendo guardados.
   function alternarTrilha(id, valor) {
     var p = est.participantes.get(id);
@@ -3171,7 +3187,7 @@
       else if (gaveta.mq.addListener) gaveta.mq.addListener(avaliarGaveta);
     }
     var tAjuste = null;
-    window.addEventListener('resize', function () { clearTimeout(tAjuste); tAjuste = setTimeout(function () { if (gaveta.ativa) aplicarGaveta(); }, 120); });
+    window.addEventListener('resize', function () { clearTimeout(tAjuste); tAjuste = setTimeout(function () { if (gaveta.ativa) aplicarGaveta(); ajustarTrilhasATela(); }, 120); });
     alca.addEventListener('click', function () {
       if (gaveta.arrastou) { gaveta.arrastou = false; return; }
       definirGaveta({ mini: 'meia', meia: 'cheia', cheia: 'mini' }[gaveta.estado]);
@@ -5431,6 +5447,10 @@
         L.polyline(dz.pontos, { color: '#0b1220', weight: 7, opacity: 0.6, interactive: false, className: 'trilha-rascunho-contorno' }).addTo(dz.camadaTemp);
         L.polyline(dz.pontos, { color: dz.tipo === 'trajeto' ? '#3b82f6' : '#facc15', weight: 3, interactive: false, className: 'trilha-rascunho' + (dz.tipo === 'trajeto' ? ' trajeto-rascunho' : '') }).addTo(dz.camadaTemp);
       }
+      // ponto a ponto: cada ponto marcado aparece (até 400, para não pesar)
+      if (dz.modo === 'pontos' && dz.pontos.length > 2 && dz.pontos.length <= 400) {
+        dz.pontos.slice(1, -1).forEach(function (p) { L.circleMarker(p, { radius: 3.5, color: '#0b1220', weight: 1, fillColor: dz.tipo === 'trajeto' ? '#93c5fd' : '#fde68a', fillOpacity: 1, interactive: false, className: 'trilha-rascunho-vertice' }).addTo(dz.camadaTemp); });
+      }
       if (dz.pontos.length) {
         L.circleMarker(dz.pontos[0], { radius: 5, color: '#0b1220', weight: 1.5, fillColor: '#22c55e', fillOpacity: 1, interactive: false, className: 'trilha-rascunho-inicio' }).addTo(dz.camadaTemp);
         L.circleMarker(dz.pontos[dz.pontos.length - 1], { radius: 8, color: '#0b1220', weight: 2, fillColor: '#ffffff', fillOpacity: 1, interactive: false, className: 'trilha-rascunho-fim' }).addTo(dz.camadaTemp);
@@ -6859,12 +6879,14 @@
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
     var g = L.featureGroup();
     var opc = { pane: 'trilhasDesenhadas', lineJoin: 'round', lineCap: 'round' };
-    L.polyline(d.pontos, Object.assign({ color: '#0b1220', weight: 5, opacity: 0.4, className: 'trilha-desenhada-contorno' }, opc)).addTo(g);
+    var ft = fatorTelaTrilha();   // mais discreta em telas pequenas
+    t.fatorTela = ft;
+    L.polyline(d.pontos, Object.assign({ color: '#0b1220', weight: 5 * ft, opacity: 0.4, className: 'trilha-desenhada-contorno' }, opc)).addTo(g);
     var cor = d.cor || e.cor;   // cor própria da trilha (ex.: a do arquivo importado) ou a da situação
-    L.polyline(d.pontos, Object.assign({ color: cor, weight: 2.5, opacity: 0.85, dashArray: e.traco, className: 'trilha-desenhada trilha-desenhada-' + d.estado }, opc)).addTo(g);
+    L.polyline(d.pontos, Object.assign({ color: cor, weight: Math.max(1.5, 2.5 * ft), opacity: 0.85, dashArray: e.traco, className: 'trilha-desenhada trilha-desenhada-' + d.estado }, opc)).addTo(g);
     var ini = d.pontos[0], fim = d.pontos[d.pontos.length - 1];
-    L.circleMarker(ini, Object.assign({ radius: 3.5, color: '#0b1220', weight: 1.5, fillColor: cor, fillOpacity: 0.9 }, opc)).addTo(g);
-    L.circleMarker(fim, Object.assign({ radius: 4, color: cor, weight: 2, fillColor: '#0b1220', fillOpacity: 0.9 }, opc)).addTo(g);
+    L.circleMarker(ini, Object.assign({ radius: Math.max(2.5, 3.5 * ft), color: '#0b1220', weight: 1.5, fillColor: cor, fillOpacity: 0.9 }, opc)).addTo(g);
+    L.circleMarker(fim, Object.assign({ radius: Math.max(3, 4 * ft), color: cor, weight: 2, fillColor: '#0b1220', fillOpacity: 0.9 }, opc)).addTo(g);
     ligarCliquesMapa(g, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante um desenho o toque é do mapa
       info: function () { return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') }; },
@@ -6977,6 +6999,7 @@
         else apagarRascunhoTrilha();
       }
     }
+    opc.modo = modoDesenhoTrilha();
     iniciarDesenho('trilha', opc);
     if (!est.desenho || est.desenho.tipo !== 'trilha') return;
     if (trilhaId) desenharTrilhaManual(est.trilhasManuais.get(trilhaId));   // esconde o traçado antigo enquanto edita
@@ -6994,15 +7017,23 @@
   function simplificarIdx(pts, tol) { return window.Rotas.simplificarIndices(pts, tol); }
   function arredLL(ll) { return [Math.round(ll.lat * 1e7) / 1e7, Math.round(ll.lng * 1e7) / 1e7]; }
 
+  // Modo do desenho de trilha/trajeto: 'livre' (segurar e arrastar, como caneta) ou 'pontos' (cada toque
+  // no mapa marca um ponto, ligado ao anterior por uma reta; o mapa continua arrastável). Lembrado no aparelho.
+  var CHAVE_MODO_DESENHO = 'gbs-desenho-modo';
+  function modoDesenhoTrilha() { return C.local.ler(CHAVE_MODO_DESENHO, 'livre') === 'pontos' ? 'pontos' : 'livre'; }
+
   // Liga o desenho por arrasto no mapa. "Mover mapa" (dz.mover) devolve o arrasto ao mapa sem sair do desenho.
   // Dois dedos: o traço em andamento é descartado e o gesto fica para o zoom do mapa.
+  // No modo ponto a ponto o arrasto é sempre do mapa e o toque (sem arrastar) acrescenta um ponto.
   function ligarDesenhoLivre(dz) {
     var mapa = est.mapa, cont = mapa.getContainer();
-    var ativos = new Set(), traco = null;
+    var ativos = new Set(), traco = null, toque = null;
     function ehControle(t) { return t && t.closest && t.closest('.leaflet-control-container, .leaflet-control, .leaflet-popup'); }
-    function desenhando() { return est.desenho === dz && !dz.mover && !dz.pausado; }
+    function porPontos() { return dz.modo === 'pontos'; }
+    function desenhando() { return est.desenho === dz && !dz.mover && !dz.pausado && !porPontos(); }
     function aplicarModo() {
-      var livre = est.desenho === dz && !dz.mover;
+      var livre = est.desenho === dz && !dz.mover && !porPontos();
+      cont.classList.toggle('desenho-pontos', est.desenho === dz && porPontos() && !dz.mover);
       cont.classList.toggle('desenho-livre', livre);
       cont.classList.toggle('desenho-mover', est.desenho === dz && Boolean(dz.mover));
       if (livre) { mapa.dragging.disable(); mapa.doubleClickZoom.disable(); mapa.boxZoom.disable(); }
@@ -7013,6 +7044,7 @@
       traco = null;
     }
     function aoDescer(ev) {
+      if (est.desenho === dz && porPontos() && !dz.mover && !ehControle(ev.target)) toque = { x: ev.clientX, y: ev.clientY, n: (toque && toque.ativo ? 2 : 1), ativo: true, id: ev.pointerId };
       if (!desenhando() || ehControle(ev.target) || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
       ativos.add(ev.pointerId);
       if (ativos.size > 1) { largar(); return; }   // pinça: zoom do mapa
@@ -7035,6 +7067,7 @@
       });
     }
     function aoSubir(ev) {
+      if (toque && toque.id === ev.pointerId) toque.ativo = false;
       ativos.delete(ev.pointerId);
       if (!traco || ev.pointerId !== traco.id) return;
       var t = traco;
@@ -7044,7 +7077,13 @@
     }
     // em modo desenho, toques e cliques no mapa não abrem nada (só os controles do mapa respondem)
     function aoClicar(ev) {
-      if (est.desenho === dz && !dz.mover && !ehControle(ev.target)) { ev.stopPropagation(); ev.preventDefault(); }
+      if (est.desenho !== dz || dz.mover || ehControle(ev.target)) return;
+      ev.stopPropagation(); ev.preventDefault();
+      if (!porPontos()) return;
+      // ponto a ponto: só um toque parado vale (arrastar ou pinçar move o mapa)
+      var t = toque; toque = null;
+      if (!t || t.n > 1 || Math.abs(ev.clientX - t.x) + Math.abs(ev.clientY - t.y) > 8) return;
+      acrescentarPonto(dz, arredLL(mapa.mouseEventToLatLng(ev)));
     }
     cont.addEventListener('pointerdown', aoDescer, true);
     cont.addEventListener('pointermove', aoMover, true);
@@ -7059,7 +7098,7 @@
       cont.removeEventListener('pointerup', aoSubir, true);
       cont.removeEventListener('pointercancel', aoSubir, true);
       cont.removeEventListener('click', aoClicar, true);
-      cont.classList.remove('desenho-livre', 'desenho-mover');
+      cont.classList.remove('desenho-livre', 'desenho-mover', 'desenho-pontos');
       mapa.dragging.enable(); mapa.doubleClickZoom.enable(); mapa.boxZoom.enable();
     };
     aplicarModo();
@@ -7096,6 +7135,22 @@
     atualizarBarraTrilha();
   }
 
+  // Ponto a ponto: o ponto entra no fim da linha (cada ponto é um "traço" de 1, para o Desfazer).
+  function acrescentarPonto(dz, ll) {
+    if (est.desenho !== dz) return;
+    if (dz.pontos.length + 1 > MAX_PONTOS_TRILHA) {
+      UI.aviso('A linha chegou ao limite de detalhe (' + MAX_PONTOS_TRILHA + ' pontos). Conclua esta e desenhe a continuação separada.', 'erro', 8000);
+      return;
+    }
+    var u = dz.pontos[dz.pontos.length - 1];
+    if (u && u[0] === ll[0] && u[1] === ll[1]) return;
+    dz.pontos = dz.pontos.concat([ll]);
+    dz.tracos.push({ n: 1, inicio: false });
+    redesenharTemp();
+    if (dz.tipo === 'trilha') gravarRascunhoTrilha();
+    atualizarBarraTrilha();
+  }
+
   function desfazerTraco(dz) {
     var t = dz.tracos.pop();
     if (!t) return;
@@ -7113,21 +7168,37 @@
     var traj = dz.tipo === 'trajeto';
     var n = dz.pontos.length;
     var compr = n > 1 ? formatarComprimento(comprimentoLinhaM(dz.pontos)) : '';
+    var pontos = dz.modo === 'pontos';
     var texto = dz.mover
       ? 'Mover mapa: arraste e dê zoom. Toque em "Desenhar" para continuar.'
+      : pontos ? (n < 2 ? (traj ? 'Trajeto ponto a ponto: ' : dz.trilhaId ? 'Editando o traçado ponto a ponto: ' : 'Trilha ponto a ponto: ') +
+          'toque no mapa em cada ponto do caminho, na ordem; eles são ligados por retas. Arraste para mover o mapa.' + (n === 1 ? ' (1 ponto)' : '')
+        : (traj ? 'Trajeto · ' : dz.trilhaId ? 'Editando o traçado · ' : 'Trilha · ') + n + ' pontos · ' + compr + ' · toque para o próximo ponto.')
       : n < 2 ? (traj ? 'Trajeto para enviar: desenhe, na ordem, o caminho que a equipe deve fazer (segure e arraste).'
-        : (dz.trilhaId ? 'Editando o traçado: ' : 'Desenhar trilha ou trajeto: ') + 'segure e arraste sobre o mapa, como uma caneta. Ao concluir, escolha: trilha feita, planejada ou enviar para alguém percorrer.')
+        : (dz.trilhaId ? 'Editando o traçado: ' : 'Desenhar trilha ou trajeto: ') + 'segure e arraste sobre o mapa, como uma caneta. "✔ Concluir" salva como trilha planejada; "Mais opções…" escolhe trilha feita ou enviar para alguém.')
         : (traj ? 'Trajeto · ' : dz.trilhaId ? 'Editando o traçado · ' : 'Trilha · ') + compr + ' · continue arrastando a partir do círculo branco. Dois dedos: zoom.';
+    var rapido = !traj && !dz.trilhaId;
     mostrarBarraDesenho(texto, null, [
-      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-desfazer', texto: 'Desfazer traço', disabled: dz.tracos.length ? null : true, onclick: function () { desfazerTraco(dz); } }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-modo', 'aria-pressed': String(pontos),
+        title: pontos ? 'Voltar a desenhar à mão livre (segurar e arrastar)' : 'Marcar o caminho tocando ponto a ponto no mapa',
+        texto: pontos ? '✎ Mão livre' : '• Ponto a ponto', onclick: function () {
+          dz.modo = pontos ? 'livre' : 'pontos';
+          C.local.gravar(CHAVE_MODO_DESENHO, dz.modo);
+          dz.mover = false;
+          if (dz.aplicarModo) dz.aplicarModo();
+          atualizarBarraTrilha();
+        } }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-desfazer', texto: pontos ? 'Desfazer ponto' : 'Desfazer traço', disabled: dz.tracos.length ? null : true, onclick: function () { desfazerTraco(dz); } }),
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-limpar', texto: 'Limpar', disabled: n ? null : true, onclick: async function () {
         if (n >= 2 && !(await UI.confirmar({ titulo: 'Apagar o desenho?', texto: 'O traçado em andamento recomeça do zero (a trilha salva não muda).', ok: 'Limpar', perigo: true }))) return;
         if (est.desenho !== dz) return;
         dz.pontos = []; dz.tracos = []; redesenharTemp(); gravarRascunhoTrilha(); atualizarBarraTrilha();
       } }),
-      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-mover', 'aria-pressed': String(Boolean(dz.mover)),
+      pontos ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-mover', 'aria-pressed': String(Boolean(dz.mover)),
         texto: dz.mover ? '✎ Desenhar' : '✋ Mover mapa', onclick: function () { dz.mover = !dz.mover; if (dz.aplicarModo) dz.aplicarModo(); atualizarBarraTrilha(); } }),
-      UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'trilha-concluir', texto: traj ? 'Enviar trajeto…' : dz.trilhaId ? 'Salvar traçado' : 'Concluir…',
+      rapido ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'trilha-concluir-rapido', texto: '✔ Concluir',
+        title: 'Salvar já como trilha planejada, com nome automático (dá para editar depois)', disabled: n >= 2 ? null : true, onclick: concluirTrilhaRapido }) : null,
+      UI.el('button', { classe: 'btn btn-pequeno' + (rapido ? '' : ' btn-ok'), type: 'button', id: 'trilha-concluir', texto: traj ? 'Enviar trajeto…' : dz.trilhaId ? 'Salvar traçado' : 'Mais opções…',
         disabled: n >= 2 ? null : true, onclick: traj ? concluirTrajeto : concluirTrilha }),
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-cancelar', texto: 'Cancelar', onclick: cancelarDesenhoTrilha }),
     ]);
@@ -7149,7 +7220,7 @@
   // a um grupo; o celular segue a linha como foi desenhada (rotas.js → Rotas.deTracado).
   function iniciarDesenhoTrajeto(participantes, grupoId) {
     if (!est.mapa || !podeAlterar()) return;
-    iniciarDesenho('trajeto', { pontos: [], tracos: [], participantes: participantes || [], grupo_id: grupoId || null });
+    iniciarDesenho('trajeto', { pontos: [], tracos: [], participantes: participantes || [], grupo_id: grupoId || null, modo: modoDesenhoTrilha() });
     if (!est.desenho || est.desenho.tipo !== 'trajeto') return;
     ligarDesenhoLivre(est.desenho);
     redesenharTemp();
@@ -7166,6 +7237,29 @@
       aoCancelar: function () { if (est.desenho === dz) atualizarBarraTrilha(); },   // fechou sem enviar: volta ao desenho
       aoEnviar: function () { if (est.desenho === dz) cancelarDesenho(); },
     });
+  }
+
+  // Concluir sem formulário: salva como trilha planejada, com nome automático ("Trilha 3 · 14:05").
+  // Nome, situação, grupo e cor podem ser ajustados depois em Setores, trilhas e pontos.
+  async function concluirTrilhaRapido() {
+    var dz = est.desenho;
+    if (!dz || dz.tipo !== 'trilha' || dz.trilhaId || dz.pontos.length < 2) return;
+    var usados = new Set(Array.from(est.trilhasManuais.values()).map(function (t) { return t.d.nome.trim().toLowerCase(); }));
+    var n = est.trilhasManuais.size + 1, nome;
+    do { nome = 'Trilha ' + n + ' · ' + C.hora(new Date().toISOString(), false); n++; } while (usados.has(nome.toLowerCase()));
+    var btn = $('trilha-concluir-rapido');
+    if (btn) btn.disabled = true;
+    try {
+      var res = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: null,
+        p_dados: { client_id: dz.client_id, nome: nome, estado: 'planejada', meio: 'equipe', pontos: dz.pontos.slice() } });
+      apagarRascunhoTrilha();
+      cancelarDesenho();
+      aplicarTrilhasManuais([res]);
+      UI.aviso('Trilha "' + res.nome + '" salva como planejada. Para mudar nome ou situação, abra-a em Setores, trilhas e pontos.', 'ok');
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      UI.aviso('Trilha não salva: ' + e.message + ' O desenho continua na tela: tente de novo.', 'erro', 9000);
+    }
   }
 
   async function concluirTrilha() {
@@ -8963,7 +9057,7 @@
         // trajeto desenhado: a linha a seguir (uma vez por trajeto); senão, a direção em linha reta
         if (window.Rotas.temTrajeto(d)) {
           var chave = JSON.stringify(d.trajeto[0]) + d.trajeto.length;
-          if (!vistos[chave]) { vistos[chave] = 1; L.polyline(d.trajeto, { color: g.cor, weight: 3, opacity: 0.85, interactive: false, className: 'trajeto-grupo' }).addTo(camada); }
+          if (!vistos[chave]) { vistos[chave] = 1; L.polyline(d.trajeto, { color: g.cor, weight: Math.max(1.5, 3 * fatorTelaTrilha()), opacity: 0.85, interactive: false, className: 'trajeto-grupo' }).addTo(camada); }
         } else if (pos) L.polyline([[pos.lat, pos.lng], [d.lat, d.lng]], { color: g.cor, weight: 2, dashArray: '4 8', opacity: 0.75, interactive: false }).addTo(camada);
       });
     });

@@ -1318,7 +1318,9 @@
       else { segs[0] = segs[0].slice(sobra); total = MAX_TRILHA_TELA; }
     }
     if (!estado.linhaMinha) {
-      estado.linhaMinha = L.polyline(segs, { color: corMinha(), weight: 4, opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
+      // mais fina em telas pequenas (até 60% num celular de 360 px), nunca mais grossa que antes
+      var ft = Math.max(0.6, Math.min(1, 0.6 + 0.4 * ((window.innerWidth || 1280) - 360) / (1280 - 360)));
+      estado.linhaMinha = L.polyline(segs, { color: corMinha(), weight: Math.max(2.5, 4 * ft), opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
       estado.linhaFalhaMinha = L.polyline(falhas, { color: corMinha(), weight: 2, opacity: 0.55, dashArray: '4 8', interactive: false }).addTo(estado.mapa);
     } else {
       estado.linhaMinha.setLatLngs(segs);

@@ -616,8 +616,13 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   traço começado longe das pontas é recusado com aviso. Tocar sem arrastar não marca nada. Enquanto desenha,
   o mapa fica parado; **dois dedos** dão zoom, a roda do mouse também, e **✋ Mover mapa** libera o arrasto do
   mapa (toque em **✎ Desenhar** para voltar). A barra mostra o comprimento e tem **Desfazer traço** (desfaz o
-  último traço inteiro), **Limpar** (pede confirmação), **Concluir…** e **Cancelar** (pede confirmação).
-- **Concluir…** pergunta o que é o desenho: **✔ Trilha já percorrida**, **📋 Trilha planejada** ou **➝ Enviar para
+  último traço inteiro), **Limpar** (pede confirmação), **✔ Concluir**, **Mais opções…** e **Cancelar** (pede confirmação).
+- **Ponto a ponto**: o botão **• Ponto a ponto** da barra troca o modo: cada **toque** no mapa marca um ponto, ligado ao
+  anterior por uma reta (os pontos aparecem como bolinhas); arrastar move o mapa normalmente e **Desfazer ponto** tira o último.
+  **✎ Mão livre** volta ao traço contínuo. O modo escolhido fica lembrado no aparelho e vale também para o trajeto a enviar.
+- **✔ Concluir** salva na hora, **sem formulário**, como **trilha planejada** com nome automático ("Trilha 3 · 14:05"); nome,
+  situação, grupo e cor podem ser ajustados depois na lista. **Mais opções…** abre a escolha completa abaixo.
+- **Mais opções…** pergunta o que é o desenho: **✔ Trilha já percorrida**, **📋 Trilha planejada** ou **➝ Enviar para
   alguém percorrer** (abre o envio de destino com o trajeto; **Guardar também no mapa como trilha planejada** vem
   marcado e registra a trilha com o nome do destino e quem recebeu). **Voltar ao desenho** não perde nada.
 - As duas primeiras abrem o formulário: **nome** (único na operação), **situação** (já marcada pela escolha),
@@ -1040,6 +1045,10 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Trilhas finas de longe**: a espessura (e o tracejado dos civis, o contorno claro e as marcas de falha)
     acompanha o zoom — de perto como antes (4 px; 6 px a da pessoa selecionada) e, afastando, afina até 1,5 px,
     para não cobrir o mapa.
+  - **Trilhas proporcionais à tela**: além do zoom, a espessura acompanha a largura da tela — igual à de sempre em
+    telas a partir de 1280 px e mais fina em telas menores (até 60% num celular de 360 px), nunca mais grossa que antes.
+    Vale para trilhas GPS, trilhas desenhadas, trajetos dos grupos e a trilha do próprio participante no celular; girar o
+    celular ou redimensionar a janela reajusta na hora.
   - **Camadas → Mostrar no mapa**: **um botão por camada** (aceso = aparece; apagado = riscado), agrupados em
     **Equipes** (Pessoas, Trilhas de GPS, Nomes), **Planejamento da busca** (Setores, Trilhas
     planejadas, Trilhas percorridas, Pontos de interesse, Local da operação) e **Registros do campo** (Relatos,
@@ -1921,6 +1930,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40r | Falar no 🎤 "SAMU no local com 5 pessoas" e conferir | órgão SAMU no local com 5 pessoas e hora de chegada; faixa de órgãos atualizada; entra na linha do tempo e no diário |
 | 40r2 | Abrir uma operação no celular do responsável; depois **Ferramentas → Registrar minha trilha** → **Iniciar registro**; andar 2 min; tocar de novo → **Interromper** | ao abrir, o responsável não aparece no mapa; só depois de confirmar ele aparece e a trilha é gravada; ao interromper, o envio para e o item volta a "desligado" |
 | 40r3 | No celular do civil, tocar **COMEÇAR** | aparece "Começar a enviar sua localização?"; **Agora não** não envia nada; **Começar** entra no rastreamento |
+| 40r4 | **Trilha → • Ponto a ponto**, tocar 4 pontos, arrastar o mapa, **Desfazer ponto**, **✔ Concluir** | os pontos aparecem ligados por retas; arrastar só move o mapa; a trilha é salva como planejada ("Trilha N · hora") sem abrir janelas |
+| 40r5 | Abrir o painel com trilhas no computador e no celular (e girar o celular) | no celular as trilhas ficam mais finas; no computador, iguais às de antes |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |

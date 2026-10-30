@@ -416,6 +416,7 @@
     $('ficha-exportar').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirExportar(est.selecionado); });
     $('opt-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
     $('menu-diag-gps').addEventListener('click', function () { fecharMenu(false); abrirDiagnosticoGps(); });
+    $('menu-minha-trilha').addEventListener('click', function () { fecharMenu(false); alternarMinhaTrilha(); });
     // Tema escuro ou claro (Ferramentas → Configurações). Os botões marcam o tema atual e o menu continua aberto.
     document.querySelectorAll('.menu-tema [data-tema]').forEach(function (b) {
       b.addEventListener('click', function () { definirTema(b.getAttribute('data-tema')); });
@@ -1336,19 +1337,20 @@
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
     iniciarPolling();
     if (op.status === 'ativa') {
-      await entrarComoResponsavel();
+      // O responsável só entra no mapa (e só registra posição) quando liga "Registrar minha trilha".
+      // Se já tem registro nesta operação (ligou antes), ele é reaproveitado para mensagens e fotos.
+      acharMeuRegistro();
       est.timerMeuSinal = setInterval(function () {
         if (!est.op || est.op.status !== 'ativa') return;
-        if (!est.meuPart) entrarComoResponsavel();
-        else enviarMeuSinal();
+        if (est.compartilhando && !est.meuPart) entrarComoResponsavel();
+        else if (est.meuPart) enviarMeuSinal();
         lerPosicaoSeParado();
         vigiarMeuGps();
         enviarMinhaFila();
         enviarFilaFotos();
       }, CFG_GPS.sinalVidaMs);
-      // A localização do responsável liga sozinha ao abrir (ou criar) a operação,
-      // respeitando a permissão do navegador e a escolha de desligar nesta operação.
-      iniciarMinhaPosicaoAuto();
+      // Estava registrando neste aparelho (a página recarregou)? Pergunta antes de retomar.
+      oferecerRetomarMinhaTrilha();
     }
     atualizarEstadoGps();
     if (est.abrirConvite) {
@@ -1524,6 +1526,7 @@
     $('btn-registrar-foto').hidden = op.status !== 'ativa';
     $('menu-vitima').hidden = op.status !== 'ativa';
     $('menu-vitima-rapida').hidden = op.status !== 'ativa';
+    $('menu-minha-trilha').hidden = op.status !== 'ativa';
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
@@ -7755,6 +7758,7 @@
     if (texto && est.avisoGpsFeito !== e) UI.aviso(texto, 'erro', 8000);
     est.avisoGpsFeito = texto ? e : null;
     atualizarFilaMinha();
+    atualizarBotaoMinhaTrilha();
   }
 
   function chaveMinhaPosAqui() { return 'gbs-minha-pos-aqui:' + (est.op ? est.op.id : ''); }
@@ -7771,28 +7775,55 @@
     return Boolean(d.rastreando && recente && !aqui);
   }
 
-  // Ao abrir (ou criar) uma operação ativa: a posição do responsável liga sempre
-  // (não há opção de desligar), a menos que o navegador bloqueie a localização.
-  async function iniciarMinhaPosicaoAuto() {
-    if (!est.op || est.op.status !== 'ativa') return;
+  // Registro da trilha do responsável: opcional, liga e desliga só pelo botão, sempre com confirmação.
+  function chaveMinhaTrilha() { return 'gbs-minha-trilha:' + (est.op ? est.op.id : ''); }
+  function acharMeuRegistro() {
+    if (est.meuPart || !est.usuario) return;
+    est.participantes.forEach(function (p) {
+      if (!est.meuPart && p.dados.user_id === est.usuario.id && p.dados.tipo === 'responsavel' && !p.dados.removido) est.meuPart = p.dados.id;
+    });
+    if (est.meuPart) verificarMensagensParaMim();
+  }
+  function atualizarBotaoMinhaTrilha() {
+    var b = $('menu-minha-trilha');
+    if (!b) return;
+    var ligado = est.compartilhando || est.iniciandoMinhaPos;
+    b.setAttribute('aria-pressed', String(Boolean(ligado)));
+    b.classList.toggle('btn-ativo', Boolean(ligado));
+    $('menu-minha-trilha-estado').textContent = est.iniciandoMinhaPos ? 'ligando…' : est.compartilhando ? (est.minhaPosEstado === 'ativa' ? 'gravando' : 'gravando · sem sinal') : 'desligado';
+  }
+  async function alternarMinhaTrilha() {
+    if (!est.op || est.op.status !== 'ativa' || est.iniciandoMinhaPos) return;
+    if (est.compartilhando) {
+      var parar = await UI.confirmar({ titulo: 'Interromper o registro da sua trilha?', ok: 'Interromper',
+        texto: 'Sua posição deixa de ser enviada à equipe e a sua trilha para de ser gravada. O que já foi gravado continua no mapa. Para voltar a gravar, toque de novo em "Registrar minha trilha".' });
+      if (!parar) return;
+      C.local.apagar(chaveMinhaTrilha());
+      pararMinhaPosicao(false);
+      UI.aviso('Registro da sua trilha interrompido.', 'ok');
+      return;
+    }
+    var iniciar = await UI.confirmar({ titulo: 'Iniciar o registro da sua trilha?', ok: 'Iniciar registro',
+      texto: 'Sua posição passa a aparecer no mapa para a equipe e a sua trilha é gravada até você interromper. Mantenha o painel aberto e a tela ligada.' });
+    if (!iniciar) return;
     if (!('geolocation' in navigator) || !window.isSecureContext) {
       est.minhaPosEstado = 'indisponivel';
       atualizarEstadoGps();
       return;
     }
     await verificarPermissaoMinha();
-    if (est.permissaoMinha === 'denied') {
-      est.minhaPosEstado = 'bloqueada';
-      atualizarEstadoGps();
-      return;
-    }
-    if (!est.meuPart) await entrarComoResponsavel();
-    if (outroAparelhoCompartilhando()) {
-      est.minhaPosEstado = 'outro_aparelho';
-      atualizarEstadoGps();
-      return;
-    }
-    ligarMinhaPosicao(true);
+    if (est.permissaoMinha === 'denied') { est.minhaPosEstado = 'bloqueada'; atualizarEstadoGps(); mostrarComoLiberarMinha(); return; }
+    C.local.gravar(chaveMinhaTrilha(), 1);
+    ligarMinhaPosicao(false);
+  }
+  async function oferecerRetomarMinhaTrilha() {
+    if (!Number(C.local.ler(chaveMinhaTrilha(), 0))) return;
+    var opId = est.op.id;
+    var sim = await UI.confirmar({ titulo: 'Retomar o registro da sua trilha?', ok: 'Retomar', cancelar: 'Não registrar',
+      texto: 'Você estava registrando a sua trilha neste aparelho quando o painel foi fechado. Quer continuar?' });
+    if (!est.op || est.op.id !== opId) return;
+    if (!sim) { C.local.apagar(chaveMinhaTrilha()); return; }
+    ligarMinhaPosicao(false);
   }
 
   // Permissions API: acompanha mudanças (ex.: o responsável liberou nas configurações).
@@ -7804,7 +7835,8 @@
       r.status.onchange = function () {
         est.permissaoMinha = r.status.state;
         if (!est.op || est.op.status !== 'ativa') return;
-        if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada') {
+        // liberou depois de tentar ligar: segue o pedido já confirmado
+        if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && Number(C.local.ler(chaveMinhaTrilha(), 0))) {
           ligarMinhaPosicao(true);
         } else if (est.permissaoMinha === 'denied' && est.compartilhando) {
           pararMinhaPosicao(true);
@@ -7813,7 +7845,7 @@
         }
       };
     }
-    if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && est.op && est.op.status === 'ativa') {
+    if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && est.op && est.op.status === 'ativa' && Number(C.local.ler(chaveMinhaTrilha(), 0))) {
       ligarMinhaPosicao(true);
     }
   }
@@ -7823,7 +7855,7 @@
   async function garantirMinhaPosicao() {
     if (est.iniciandoMinhaPos) return;
     if (est.compartilhando) {
-      UI.aviso('Sua posição está sendo compartilhada com a equipe (fica sempre ligada durante a operação).', 'ok');
+      UI.aviso('Sua posição está sendo compartilhada com a equipe. Para parar, use "Registrar minha trilha" em Ferramentas.', 'ok');
       return;
     }
     if (!est.op || est.op.status !== 'ativa') return;

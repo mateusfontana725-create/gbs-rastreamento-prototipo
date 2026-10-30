@@ -493,7 +493,23 @@
       $('ini-tel').focus();
       return;
     }
+    if (!(await confirmarInicio())) return;
     await entrarNaBusca({ nome: nome, tipo: tipo, cpf: cpf, tel: tel });
+  }
+
+  // O rastreamento só começa com o toque da pessoa e a confirmação (uma vez por abertura da página:
+  // se o navegador pedir a permissão de novo, não pergunta outra vez).
+  async function confirmarInicio() {
+    if (estado.inicioConfirmado) return true;
+    var ok = await UI.confirmar({
+      titulo: 'Começar a enviar sua localização?',
+      texto: 'Sua posição passa a aparecer para os bombeiros e o caminho que você fizer fica registrado. ' +
+        'O envio continua até os bombeiros liberarem a sua saída (toque em "Quero sair da busca" para pedir).',
+      ok: 'Começar',
+      cancelar: 'Agora não',
+    });
+    if (ok) estado.inicioConfirmado = true;
+    return Boolean(ok);
   }
 
   // Pede a localização pelo mecanismo oficial do navegador, entra na operação
@@ -2651,6 +2667,8 @@
     $('ini-tel').value = mascararTelefone(s.telefone || '');
     $('btn-iniciar').textContent = 'CONTINUAR';
     mostrarTela('inicio');
+    estado.inicioConfirmado = false;
+    if (!(await confirmarInicio())) return;
     await entrarNaBusca({ nome: s.nome, tipo: s.tipo, cpf: s.cpf, tel: s.telefone });
   }
 

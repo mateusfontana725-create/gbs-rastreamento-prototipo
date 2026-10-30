@@ -838,20 +838,18 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
   **"Reincluído · aguardando o celular voltar"**.
 - Sem reinclusão, quem foi removido não consegue voltar sozinho pelo link.
 
-### Localização do responsável (sempre ligada)
+### Localização e trilha do responsável (opcional, liga e desliga à mão)
 
-- Ao abrir ou criar uma operação ativa, **Minha posição liga automaticamente** — usando a permissão de
-  localização do navegador (se ela ainda não foi dada, o navegador pergunta).
-- O **estado** da localização não tem item no menu. Só aparece um aviso quando há problema real: *bloqueada no navegador* (o aviso traz **Como liberar**) ou *sem GPS neste aparelho*. O estado real continua o mesmo: *ligando…*, **ligada** (só depois de a
-  permissão ser concedida **e** chegar coordenada), *ligada · procurando sinal*, *bloqueada no navegador*
-  (tocar mostra como liberar) ou *sem envio · toque para tentar* (falha de conexão).
-- **Não existe desligar**: o item não é uma chave. Tocar nele com a posição ligada só confirma o estado;
-  com o envio parado (bloqueio ou falha), o aviso do menu oferece **Tentar de novo**. Escolhas
-  "desligada" guardadas por versões antigas do painel são ignoradas. Nunca há dois observadores de GPS nem
-  envios duplicados.
+- Ao abrir ou criar uma operação, **nada é registrado**: o responsável não entra no mapa e a posição dele não é enviada.
+- **Ferramentas → Registrar minha trilha** (o estado aparece ao lado: *desligado*, *ligando…*, *gravando*, *gravando · sem sinal*)
+  liga o registro **depois de uma confirmação** ("Iniciar o registro da sua trilha?"). Só então o responsável entra no mapa e a
+  trilha começa a ser gravada. Tocar de novo pede outra confirmação ("Interromper o registro da sua trilha?") e para o envio; o que
+  já foi gravado continua no mapa. O item pode ir para o topo pelo **Personalizar tela**.
+- Se a página recarregar (ou for reaberta) enquanto gravava neste aparelho, o painel **pergunta** se retoma — nunca liga sozinho.
+- Se o navegador bloqueia a localização, o aviso do menu traz **Como liberar**; ao liberar, o registro já confirmado continua.
 - Se o mesmo responsável está com o painel aberto em **dois aparelhos** e um deles já compartilha, o
-  outro mostra *enviada por outro aparelho seu* e não liga sozinho (a trilha não "pula" entre os dois);
-  o aviso do menu **Ferramentas** oferece **Usar este aparelho**, que passa o envio para este aparelho.
+  outro mostra *enviada por outro aparelho seu*; o aviso do menu **Ferramentas** oferece **Usar este aparelho**.
+- Fotos e mensagens do responsável continuam funcionando sem o registro da trilha (o cadastro no mapa é feito na hora, se preciso).
 - Limite: funciona com o painel **aberto e a tela ligada**. Em segundo plano ou com a tela bloqueada o
   navegador pode pausar o GPS (seção 8).
 
@@ -1717,7 +1715,7 @@ RETORNE, ATENÇÃO, MUDE A ROTA e PARE pedem confirmação antes do envio, e o t
 camadas (Mapa, Topográfico, Satélite), fotos e relatos ficam em **Ferramentas** (seção 1); a lista
 de participantes tem os próprios botões de ocultar/mostrar.
 
-**Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **INICIAR RASTREAMENTO** → permite
+**Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **COMEÇAR** → confirma ("Começar a enviar sua localização?") → permite
 a localização. O **CPF é opcional** para todos (migração 029); se informado, é conferido pelos dígitos
 verificadores. O celular é obrigatório para civis e opcional para militares (link dos bombeiros). Deve manter a página aberta e a tela
 ligada (a opção "Manter a tela ligada" já vem marcada). Para sair, toca em **Solicitar encerramento**.
@@ -1921,6 +1919,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40p | No SCI: "duas vítimas localizadas na água", arrastar V-01 para a ACV, tocar e triar amarela; "V-02 na ACV, vermelha"; "segurança: Sgt Dinardi" | quadrados nos quadros certos, cor só depois da ACV, alerta crítico da V-02 vermelha e o de segurança some ao designar |
 | 40q | Abrir **↗ Outra janela** no celular de outro responsável, sem estar logado | pede o login; depois mostra o painel e se atualiza sozinho quando o PC registra algo |
 | 40r | Falar no 🎤 "SAMU no local com 5 pessoas" e conferir | órgão SAMU no local com 5 pessoas e hora de chegada; faixa de órgãos atualizada; entra na linha do tempo e no diário |
+| 40r2 | Abrir uma operação no celular do responsável; depois **Ferramentas → Registrar minha trilha** → **Iniciar registro**; andar 2 min; tocar de novo → **Interromper** | ao abrir, o responsável não aparece no mapa; só depois de confirmar ele aparece e a trilha é gravada; ao interromper, o envio para e o item volta a "desligado" |
+| 40r3 | No celular do civil, tocar **COMEÇAR** | aparece "Começar a enviar sua localização?"; **Agora não** não envia nada; **Começar** entra no rastreamento |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |

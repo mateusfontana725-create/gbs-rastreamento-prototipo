@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2161,5 +2161,46 @@ console.log('Dashboard em outra janela e por link público; várias vítimas (mi
   await rpc(resp1, 'excluir_operacao', { p_operacao: opD.id });
 }
 
-console.log('\nMigrações 007–048 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Relatório diário e da passagem de comando (migração 049)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opR = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 049', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre', acionado_em: new Date(Date.now() - 50 * 3600e3).toISOString() }) });
+  const ontem = new Date(Date.now() - 86400e3).toISOString().slice(0, 10);
+  const r1 = await rpc(resp1, 'relatorio_diario_reservar', { p_operacao: opR.id, p_dia: ontem });
+  chk(r1.ok === true, 'reserva o relatório diário de ontem');
+  const caminho = opR.id + '/' + '11111111-2222-4333-8444-555555555555.pdf';
+  await db.query(`insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [caminho]);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opR.id, p_caminho: caminho, p_paginas: 3, p_bytes: 1000, p_sha256: null, p_tipo: 'diario', p_referencia: 'ontem' }))), 'diário sem a data: recusado');
+  const doc = await rpc(resp1, 'registrar_documento', { p_operacao: opR.id, p_caminho: caminho, p_paginas: 3, p_bytes: 1000, p_sha256: null, p_tipo: 'diario', p_referencia: ontem });
+  chk(doc.tipo === 'diario' && doc.referencia === ontem, 'registra o relatório diário com o dia');
+  const r2 = await rpc(resp1, 'relatorio_diario_reservar', { p_operacao: opR.id, p_dia: ontem });
+  chk(r2.ok === false && r2.motivo === 'ja_existe', 'dia com relatório: não gera de novo', r2);
+  const caminho2 = opR.id + '/' + '11111111-2222-4333-8444-555555555556.pdf';
+  await db.query(`insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [caminho2]);
+  const dup = await rpc(resp1, 'registrar_documento', { p_operacao: opR.id, p_caminho: caminho2, p_paginas: 3, p_bytes: 1000, p_sha256: null, p_tipo: 'diario', p_referencia: ontem });
+  chk(dup.id === doc.id, 'diário repetido do mesmo dia: devolve o que já existe (um por dia)');
+  const anteontem = new Date(Date.now() - 2 * 86400e3).toISOString().slice(0, 10);
+  await rpc(resp1, 'relatorio_diario_reservar', { p_operacao: opR.id, p_dia: anteontem });
+  await db.query(`update public.relatorio_diario_reservas set reservado_por = $1 where operacao_id = $2`, [resp2, opR.id]);
+  const r3 = await rpc(resp1, 'relatorio_diario_reservar', { p_operacao: opR.id, p_dia: anteontem });
+  chk(r3.ok === false && r3.motivo === 'outro_gerando', 'outro responsável gerando agora: este espera', r3);
+  await db.query(`update public.relatorio_diario_reservas set reservado_em = now() - interval '20 minutes' where operacao_id = $1`, [opR.id]);
+  chk((await rpc(resp1, 'relatorio_diario_reservar', { p_operacao: opR.id, p_dia: anteontem })).ok === true, 'reserva antiga (mais de 15 min) expira');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'relatorio_diario_reservar', { p_operacao: opR.id, p_dia: anteontem }))), 'responsável de outra operação não reserva');
+  chk(/permission denied/.test(await erroDe(como(resp1, `select * from public.relatorio_diario_reservas`))), 'tabela de reservas não é lida direto');
+  // passagem de comando
+  const caminho3 = opR.id + '/' + '11111111-2222-4333-8444-555555555557.pdf';
+  await db.query(`insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [caminho3]);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opR.id, p_caminho: caminho3, p_paginas: 2, p_bytes: 900, p_sha256: null, p_tipo: 'passagem', p_referencia: '00000000-0000-4000-8000-000000000000' }))), 'passagem que não é da operação: recusada');
+  const pas = (await db.query(`insert into public.passagens_comando (operacao_id, para_nome, resumo) values ($1, 'Ten Dois', '{}'::jsonb) returning id`, [opR.id])).rows[0];
+  const dp = await rpc(resp1, 'registrar_documento', { p_operacao: opR.id, p_caminho: caminho3, p_paginas: 2, p_bytes: 900, p_sha256: null, p_tipo: 'passagem', p_referencia: pas.id });
+  chk(dp.tipo === 'passagem' && dp.referencia === pas.id, 'registra o relatório da passagem de comando');
+  const dl = (await db.query(`select titulo from public.diario where operacao_id = $1 and tipo like 'relatorio_%' order by id`, [opR.id])).rows.map((r) => r.titulo);
+  chk(dl.some((t) => /Relatório diário de \d\d\/\d\d\/\d{4} gerado/.test(t)) && dl.some((t) => /passagem de comando/.test(t)), 'os relatórios entram no diário', dl);
+  const antigo = (await db.query(`select tipo from public.relatorios where operacao_id <> $1 limit 1`, [opR.id])).rows;
+  chk(antigo.every((x) => x.tipo === 'final'), 'relatórios antigos ficam como "final"');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opR.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–049 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

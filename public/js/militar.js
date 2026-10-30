@@ -1416,6 +1416,8 @@
       }, CFG_GPS.sinalVidaMs);
       // Estava registrando neste aparelho (a página recarregou)? Pergunta antes de retomar.
       oferecerRetomarMinhaTrilha();
+      // relatório diário: gerado e guardado sozinho para os dias que já terminaram (migração 049)
+      if (window.Relatorio && window.Relatorio.iniciarDiarios) window.Relatorio.iniciarDiarios();
     }
     atualizarEstadoGps();
     if (est.abrirConvite) {
@@ -1426,6 +1428,7 @@
 
   function fecharPainel() {
     carregandoPainel(false);
+    if (window.Relatorio && window.Relatorio.pararDiarios) window.Relatorio.pararDiarios();
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
     est.timerMeuSinal = null;
@@ -10365,6 +10368,7 @@
       abrirFormTrilha(null, null, extra);
     },
     admin: function () { return Boolean(est.responsavel && est.responsavel.admin); },
+    meuNome: function () { return (est.responsavel && est.responsavel.nome) || ''; },
     selecionado: function () { return est.selecionado; },
     participantes: function () { return Array.from(est.participantes.values()); },
     participante: function (id) { return est.participantes.get(id) || null; },

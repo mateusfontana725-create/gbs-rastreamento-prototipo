@@ -1239,6 +1239,20 @@ chave própria).
   **Relatórios já gerados** permite baixar de novo.
 - Ao **encerrar** a operação ou **apagar os dados**, se ainda não houver relatório, o painel oferece gerar antes
   (depois da retenção o relatório sai só com cadastro, diário e resultado).
+- **Relatório diário (migração 049)**: o painel aberto numa operação ativa **gera e guarda sozinho** o relatório de cada
+  dia que já terminou (e o de hoje a partir das 23h50), sem ninguém pedir: capa com o dia por extenso e o "Nº dia" da
+  operação, números do dia (registros no diário, encontros e relatos, setores concluídos, pessoas que entraram, fotos), mapa
+  geral com a situação até o fim do dia, setores, vítimas, encontros do dia, o diário do dia e os pontos marcados no dia.
+  Um por dia: com dois painéis abertos, o banco dá a vez a um só (`relatorio_diario_reservar`, reserva de 15 min); dia que
+  já tem relatório não é refeito. Na tela do relatório, **Relatório de hoje (PDF)** baixa o do dia até agora (sem ocupar o
+  lugar do dia completo). Na lista **Relatórios já gerados**, cada um mostra o tipo (Final, Diário de dd/mm/aaaa, Passagem
+  de comando). Cada relatório gerado entra no diário.
+- **Relatório da passagem de comando (migração 049)**: quando quem recebe **aceita** o comando, o relatório da passagem é
+  gerado e guardado sozinho; no **Histórico de passagens** (Briefing e passagem de comando), **Relatório (PDF)** baixa e
+  guarda de novo. Traz quem passou, quem recebeu, a hora do pedido e do aceite (ou recusa), o recado, a resposta e o
+  **briefing entregue** (objetivo, vítimas, último local visto, hipóteses, riscos, equipes, tarefas, comunicações e
+  decisões pendentes), como estava no momento da passagem.
+- Os avisos de "ainda não há relatório" antes de encerrar ou apagar contam só o **relatório final**.
 - Biblioteca: **pdfmake 0.2.23** (`public/vendor/pdfmake/`, licença MIT), carregada só ao gerar. Os mapas são
   desenhados em canvas com o OpenStreetMap de fundo; sem acesso ao fundo, o mapa sai sem ele (com escala).
 
@@ -1960,6 +1974,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40r8 | No dashboard da operação, tocar em **Vestígios**; deixar o dashboard aberto 1 min enquanto chega um relato | abre a lista dos vestígios (a área de mensagens não abre); o número muda sozinho, sem tocar em nada |
 | 40r9 | **↗ Abrir em outra janela** com trilhas na operação | efetivo, km, esforço e setores iguais aos do painel |
 | 40r10 | **🔗 Link público → Criar**, abrir o link num celular sem login; depois **Trocar link** | o celular mostra o dashboard sem nomes e sem botões; depois da troca, o link antigo diz "Este link não funciona mais" |
+| 40r11 | Deixar o painel aberto numa operação ativa acionada há 2 dias; abrir **Relatório final** depois de ~1 min | a lista mostra "Diário de dd/mm/aaaa" para cada dia já terminado (um por dia); abrir o painel em outro computador não duplica |
+| 40r12 | **Passar o comando** e, no outro aparelho, **Aceitar**; depois **Histórico de passagens → Relatório (PDF)** | a lista de relatórios ganha "Passagem de comando"; o PDF tem quem passou, quem recebeu, as horas e o briefing entregue |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |
@@ -1967,6 +1983,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 
 ### Testes já realizados no desenvolvimento
 
+- **Relatório diário e da passagem de comando (migração 049)**: banco — 926 verificações (reserva do dia, um diário por dia, reserva de outro responsável e expiração, passagem só da própria operação, diário da operação, relatórios antigos como "final"); unitários da montagem dos dois PDFs; navegador — diários dos dias terminados gerados e guardados sem baixar, sem repetir, relatório de hoje só baixado, relatório da passagem.
 - **Dashboard em outra janela e por link público; várias vítimas (migração 048)**: banco — 912 verificações (estudo com cada vítima e a própria localização, dados da janela iguais aos do painel, link público sem nomes nem textos, troca e desligamento do link, nada gravável sem login, estudo geral por vítima); navegador — painel, janela própria, link público e link inválido, atualização automática e lista de vestígios.
 - **Convites por categoria/WhatsApp e tipos de ponto (migração 047)**: banco — 889 verificações (convite por WhatsApp com telefone normalizado, link por categoria, tipos de ponto com permissão de edição, pontos acompanhando o tipo, relatório com nome/ícone/cor do tipo); navegador — convites por WhatsApp/e-mail com categoria e tipos de ponto (criar, marcar, voltar à categoria fixa) a 1280 e 390 px.
 - **SCI integrado (migração 046)**: banco — 868 verificações (vítima encontrada entra sozinha no quadro, com os dados da ficha, completando

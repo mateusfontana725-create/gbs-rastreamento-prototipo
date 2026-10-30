@@ -407,7 +407,13 @@
         if (await rpc('passagem_responder', { p_passagem: pas.id, p_aceitar: false, p_nota: r.texto }, 'Passagem recusada.')) fechar(true);
       } }));
       acoes.push(el('button', { classe: 'btn btn-escuro', type: 'button', id: 'pas-aceitar', texto: 'Aceitar o comando', onclick: async function () {
-        if (await rpc('passagem_responder', { p_passagem: pas.id, p_aceitar: true, p_nota: '' }, 'Você está no comando.')) fechar(true);
+        if (await rpc('passagem_responder', { p_passagem: pas.id, p_aceitar: true, p_nota: '' }, 'Você está no comando.')) {
+          fechar(true);
+          // relatório da passagem: gerado e guardado sozinho no aceite (migração 049)
+          if (window.Relatorio && window.Relatorio.gerarPassagem) {
+            window.Relatorio.gerarPassagem(P.op(), Object.assign({}, pas, { estado: 'aceita', respondida_em: new Date().toISOString() }), { baixar: false });
+          }
+        }
       } }));
     }
     corpo.appendChild(el('div', { classe: 'modal-acoes' }, acoes));
@@ -480,6 +486,9 @@
               C.hora(p.criada_em, false) + ' · ' + (p.de_nome || '—') + ' → ' + p.para_nome + ' · ' + ESTADOS_PASSAGEM[p.estado] + (p.respondida_em ? ' às ' + C.hora(p.respondida_em, false) : ''),
               p.motivo ? ' · motivo: ' + p.motivo : '', p.resposta_nota ? ' · resposta: ' + p.resposta_nota : '', p.nota ? el('div', { classe: 'muted', texto: 'Recado: ' + p.nota }) : null,
               el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver foto do briefing', onclick: function () { abrirRecebimento(Object.assign({}, p, { estado: 'visualizacao' })); } }),
+              window.Relatorio && window.Relatorio.gerarPassagem ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Relatório (PDF)',
+                title: 'PDF da passagem: quem passou, quem recebeu, horários e o briefing entregue. Fica guardado com os relatórios.',
+                onclick: function () { window.Relatorio.gerarPassagem(P.op(), p); } }) : null,
             ]);
           })),
         ]));

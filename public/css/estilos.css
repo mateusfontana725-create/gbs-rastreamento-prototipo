@@ -2230,3 +2230,26 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 
 /* Fileira de botões que quebra linha (ex.: link público do dashboard) */
 .linha-botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* Seletor de ícones (js/icones.js): botão com prévia e o catálogo inteiro numa janela */
+.icone-seletor { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.icone-escolher { display: inline-flex; align-items: center; gap: 10px; padding-left: 6px; }
+.icone-previa { display: inline-grid; place-items: center; min-width: 30px; height: 28px; padding: 0 5px; border-radius: 5px;
+  background: #64748b; color: #fff; border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; font-weight: 900; font-size: 15px; line-height: 1; }
+.icones-catalogo { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.icones-topo { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.icones-livre-linha { display: flex; gap: 6px; }
+.icones-livre { width: 110px; }
+.icones-abas { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.icones-aba { flex: none; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--borda-forte); background: transparent; color: var(--texto-2);
+  font: inherit; font-size: .78rem; cursor: pointer; white-space: nowrap; }
+.icones-aba[aria-selected="true"] { background: var(--acento); border-color: var(--acento); color: #0a0d10; font-weight: 700; }
+.icones-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 4px; max-height: min(52vh, 460px); overflow-y: auto; padding: 2px; }
+.icones-titulo { grid-column: 1 / -1; margin: 8px 0 2px; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-3, #8a95a1); }
+.icones-item { display: grid; place-items: center; height: 44px; border-radius: 6px; border: 1px solid transparent; background: rgba(255, 255, 255, .04);
+  font-size: 22px; line-height: 1; cursor: pointer; color: var(--texto); font-weight: 800; }
+.icones-item:hover, .icones-item:focus-visible { border-color: var(--acento); background: rgba(255, 255, 255, .1); }
+.icones-item.marcado { border-color: var(--acento); box-shadow: inset 0 0 0 1px var(--acento); }
+@media (max-width: 599px) { .icones-topo { grid-template-columns: 1fr; } .icones-livre { flex: 1; } }
+/* Grupo com ícone: o ícone vai dentro do quadradinho da cor */
+.chip-cor.chip-icone { width: auto; min-width: 18px; height: 18px; padding: 0 2px; display: inline-grid; place-items: center; font-size: 11px; line-height: 1; font-weight: 900; }

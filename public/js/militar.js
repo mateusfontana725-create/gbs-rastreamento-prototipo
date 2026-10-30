@@ -156,6 +156,7 @@
     setores: new Map(),         // id → { d: dados, camada }
     pontosInt: new Map(),       // id → { d: dados, marcador }
     tiposPonto: new Map(),      // id → tipo de ponto criado pelos responsáveis (nome, ícone, cor)
+    estilosCategoria: new Map(),  // categoria fixa → { icone, cor } escolhidos (migração 050)
     destinos: new Map(),        // participante_id → destino ativo
     rotasFicha: new Map(),      // destino:modo → { rota, origem, em, calculando, erro }
     camadaRotaFicha: null,
@@ -1853,7 +1854,7 @@
     var listaGrupos = grupos.length
       ? '<ul class="legenda-grupos">' + grupos.map(function (g) {
         var n = est.membros.has(g.id) ? est.membros.get(g.id).size : 0;
-        return '<li><span class="legenda-cor" style="background:' + C.esc(g.cor) + '"></span><span class="legenda-grupo-nome">' + C.esc(g.nome) + '</span><small class="muted">' + n + ' integrante' + (n === 1 ? '' : 's') + '</small></li>';
+        return '<li>' + htmlChipGrupo(g, 'legenda-cor') + '<span class="legenda-grupo-nome">' + C.esc(g.nome) + '</span><small class="muted">' + n + ' integrante' + (n === 1 ? '' : 's') + '</small></li>';
       }).join('') + '</ul>'
       : '<p class="muted legenda-vazio">Nenhum grupo cadastrado nesta operação.</p>';
     var noMapa = linhas('mapa');
@@ -2402,6 +2403,7 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'setores', filter: filtro }, agendarAreas)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pontos_interesse', filter: filtro }, agendarAreas)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tipos_ponto' }, agendarAreas)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'categorias_ponto_estilo' }, agendarAreas)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'destinos', filter: filtro }, agendarAreas)
       .subscribe(function (status) {
         if (geracao !== est.geracaoCanal) return;
@@ -3579,7 +3581,7 @@
     // Topo da ficha, em texto simples: tipo · grupo(s) · situação. CPF, coordenadas e
     // histórico ficam na aba "Dados".
     $('ficha-resumo').innerHTML = '<span>' + C.esc(TIPOS[tipoDe(d)].rotulo) + '</span>' + gruposDe(p.id).map(function (g) {
-      return '<span class="ficha-grupo"><i class="ficha-grupo-cor" style="background:' + C.esc(g.cor) + '"></i>' + (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
+      return '<span class="ficha-grupo">' + htmlChipGrupo(est.grupos.get(g.id) || g, 'ficha-grupo-cor', 'i') + (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
     }).join('') + '<span class="ficha-estado"><span class="ponto ponto-' + e.cod + '"></span>' + C.esc(e.rot) + '</span>';
     var posTxt;
     if (!pos) posTxt = 'Ainda sem posição';
@@ -5189,6 +5191,13 @@
     } catch (e) {
       est.tiposPonto = new Map();
     }
+    // ícone e cor escolhidos para as categorias fixas (sem a migração 050: as de sempre)
+    try {
+      var estilos = await C.consultar(C.cliente.from('categorias_ponto_estilo').select('*'));
+      est.estilosCategoria = new Map((estilos || []).map(function (x) { return [x.categoria, x]; }));
+    } catch (e) {
+      est.estilosCategoria = new Map();
+    }
   }
 
   function agendarAreas() {
@@ -5387,8 +5396,14 @@
     if (d && (d.tipo_id || d.icone)) {
       return { rotulo: t ? t.nome : 'Outro ponto', letra: (t && t.icone) || d.icone || '•', cor: (t && t.cor) || d.cor || null, tipo: true };
     }
-    return CAT_PONTO[d && d.categoria] || CAT_PONTO.OUTRO;
+    var k = CAT_PONTO[d && d.categoria] ? d.categoria : 'OUTRO';
+    var e = est.estilosCategoria.get(k);
+    if (e && (e.icone || e.cor)) return { rotulo: CAT_PONTO[k].rotulo, letra: e.icone || CAT_PONTO[k].letra, cor: e.cor || COR_CATEGORIA[k], tipo: true };
+    return CAT_PONTO[k];
   }
+  // Cores de sempre das categorias fixas (as mesmas do CSS .poi-*): ponto de partida ao escolher outra
+  var COR_CATEGORIA = { ULTIMA_LOCALIZACAO: '#f8fafc', POSSIVEL_LOCALIZACAO: '#fbbf24', VESTIGIO: '#ec4899', RISCO: '#dc2626',
+    ENCONTRO: '#2563eb', VITIMA_ENCONTRADA: '#10b981', BASE: '#0ea5e9', OUTRO: '#64748b' };
   function estiloCorPonto(cor) {
     return cor ? 'background:' + cor + ';color:' + window.Cores.textoSobre(cor) : '';
   }
@@ -6017,7 +6032,7 @@
       marcadoInicial = atual;
       grade.innerHTML = '';
       Object.keys(CAT_PONTO).forEach(function (k) {
-        grade.appendChild(opcaoCat(k, UI.el('span', { classe: 'mk-poi poi-' + k }, [UI.el('span', { texto: CAT_PONTO[k].letra })]), CAT_PONTO[k].rotulo));
+        grade.appendChild(opcaoCat(k, elMarcaPonto({ categoria: k }), CAT_PONTO[k].rotulo));
       });
       var tipos = Array.from(est.tiposPonto.values()).filter(function (t) { return t.ativo || 'tipo:' + t.id === atual; })
         .sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
@@ -6032,11 +6047,9 @@
         title: 'Criar um tipo de ponto com nome, ícone e cor próprios (fica disponível para todos os responsáveis)', onclick: function () {
           abrirTipoPonto(null, function (t) { desenharGrade('tipo:' + t.id); aoMudarCat(); });
         } }, [UI.el('span', { classe: 'mk-poi', 'aria-hidden': 'true' }, [UI.el('span', { texto: '＋' })]), UI.el('span', { classe: 'cat-ponto-txt', texto: 'Novo tipo' })]));
-      if (tipos.length) {
-        grade.appendChild(UI.el('button', { classe: 'cat-ponto cat-ponto-novo', type: 'button', id: 'ponto-gerir-tipos', onclick: function () {
-          abrirGerirTiposPonto(function () { desenharGrade(); aoMudarCat(); });
-        } }, [UI.el('span', { classe: 'mk-poi', 'aria-hidden': 'true' }, [UI.el('span', { texto: '✎' })]), UI.el('span', { classe: 'cat-ponto-txt', texto: 'Editar tipos' })]));
-      }
+      grade.appendChild(UI.el('button', { classe: 'cat-ponto cat-ponto-novo', type: 'button', id: 'ponto-gerir-tipos', title: 'Trocar o ícone e a cor de qualquer categoria, editar ou deixar de usar tipos', onclick: function () {
+        abrirGerirTiposPonto(function () { desenharGrade(); aoMudarCat(); });
+      } }, [UI.el('span', { classe: 'mk-poi', 'aria-hidden': 'true' }, [UI.el('span', { texto: '✎' })]), UI.el('span', { classe: 'cat-ponto-txt', texto: 'Ícones e tipos' })]));
     }
     desenharGrade();
     var titulo = UI.el('input', { classe: 'campo', id: 'ponto-titulo', maxlength: '80', value: d.titulo, placeholder: 'Ex.: Última vez vista na trilha da cachoeira' });
@@ -6176,25 +6189,15 @@
   }
 
   /* ---------- Tipos de ponto criados pelos responsáveis ------------- */
-  var ICONES_TIPO = ['🚁', '🚑', '🐕', '🚒', '⛺', '💧', '🔦', '📡', '🛶', '🅿', '⚑', '★', '✚', '⚠', '◆', '●'];
   var CORES_TIPO = ['#64748b', '#2563eb', '#16a34a', '#f59e0b', '#7c3aed', '#0891b2', '#db2777', '#92400e'];
 
   // Criar ou editar um tipo (nome, ícone, cor). Abre por cima do formulário do ponto. aoSalvar(tipo)
   function abrirTipoPonto(t, aoSalvar) {
     var nome = UI.el('input', { classe: 'campo', id: 'tipo-ponto-nome', maxlength: '40', value: t ? t.nome : '', placeholder: 'Ex.: Pouso de helicóptero' });
-    var icone = UI.el('input', { classe: 'campo tipo-ponto-icone', id: 'tipo-ponto-icone', maxlength: '8', value: t ? t.icone : 'H', autocomplete: 'off', placeholder: 'Letra ou emoji' });
-    var previa = UI.el('span', { classe: 'mk-poi poi-tipo', 'aria-hidden': 'true' }, [UI.el('span')]);
     var cor = t ? t.cor : CORES_TIPO[est.tiposPonto.size % CORES_TIPO.length];
-    function pintar() {
-      previa.firstChild.textContent = icone.value.trim() || '•';
-      previa.setAttribute('style', estiloCorPonto(cor));
-    }
-    var cores = UI.seletorCor({ rotulo: 'Cor do tipo', valor: cor, padroes: CORES_TIPO, aoMudar: function (c) { cor = c; pintar(); } });
-    var sugestoes = UI.el('div', { classe: 'tipo-ponto-sugestoes', role: 'group', 'aria-label': 'Ícones prontos' }, ICONES_TIPO.map(function (i) {
-      return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: i, 'aria-label': 'Usar o ícone ' + i, onclick: function () { icone.value = i; pintar(); } });
-    }));
-    icone.addEventListener('input', pintar);
-    pintar();
+    // ícone: o catálogo inteiro (Escolher ícone), ou qualquer letra/sigla/emoji digitado lá
+    var icone = UI.seletorIcone({ id: 'tipo-ponto-icone', rotulo: 'Ícone do tipo', valor: t ? t.icone : null, cor: cor });
+    var cores = UI.seletorCor({ rotulo: 'Cor do tipo', valor: cor, padroes: CORES_TIPO, aoMudar: function (c) { cor = c; icone.definirCor(c); } });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'tipo-ponto-salvar', texto: t ? 'Salvar tipo' : 'Criar tipo' });
     var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
@@ -6202,8 +6205,7 @@
       UI.dica('O tipo fica disponível para todos os responsáveis, em qualquer operação. Pontos já marcados com ele acompanham as mudanças de ícone e cor.'),
       UI.secao('Tipo', [
         UI.campo('Nome', nome, { para: 'tipo-ponto-nome' }),
-        UI.grade([UI.campo('Ícone', icone, { para: 'tipo-ponto-icone', dica: 'Uma letra, número ou emoji (até 8 caracteres).' }), UI.el('div', { classe: 'campo-bloco tipo-ponto-previa' }, [UI.el('span', { classe: 'rotulo', texto: 'Prévia' }), previa])]),
-        sugestoes,
+        UI.campo('Ícone', icone, { dica: '"Escolher ícone" abre todos os ícones, com busca. Também vale letra, sigla ou emoji digitado.' }),
         cores,
       ]),
       erro,
@@ -6212,7 +6214,7 @@
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       erro.hidden = true;
-      var dados = { nome: nome.value.replace(/\s+/g, ' ').trim(), icone: icone.value.trim(), cor: cores.valor() || cor };
+      var dados = { nome: nome.value.replace(/\s+/g, ' ').trim(), icone: icone.valor(), cor: cores.valor() || cor };
       if (dados.nome.length < 2) { erro.textContent = 'Informe o nome do tipo (2 a 40 letras).'; erro.hidden = false; return; }
       if (!dados.icone) { erro.textContent = 'Escolha um ícone.'; erro.hidden = false; return; }
       btn.disabled = true;
@@ -6234,10 +6236,52 @@
     setTimeout(function () { nome.focus(); }, 30);
   }
 
-  // Lista dos tipos criados: editar ou deixar de usar (quem criou ou administrador). aoMudar()
+  // Ícone e cor de uma categoria fixa (para todos os responsáveis; as regras da categoria não mudam). aoSalvar()
+  function abrirEstiloCategoria(k, aoSalvar) {
+    var e = est.estilosCategoria.get(k) || {};
+    var cor = e.cor || COR_CATEGORIA[k];
+    var icone = UI.seletorIcone({ id: 'estilo-cat-icone', rotulo: 'Ícone', valor: e.icone || CAT_PONTO[k].letra, cor: cor });
+    var cores = UI.seletorCor({ rotulo: 'Cor', valor: cor, padroes: [COR_CATEGORIA[k]].concat(CORES_TIPO), aoMudar: function (c) { cor = c; icone.definirCor(c); } });
+    async function salvar(ic, c) {
+      try {
+        var res = await C.rpc('salvar_estilo_categoria', { p_categoria: k, p_icone: ic, p_cor: c });
+        if (res && (res.icone || res.cor)) est.estilosCategoria.set(k, res); else est.estilosCategoria.delete(k);
+        fechar();
+        est.pontosInt.forEach(function (p) { if (p.d.categoria === k && !p.d.tipo_id) desenharPontoInt(p); });
+        renderizarAreas();
+        UI.aviso('Aparência de "' + CAT_PONTO[k].rotulo + '" salva.', 'ok');
+        if (aoSalvar) aoSalvar();
+      } catch (er) { UI.aviso('Não foi possível salvar: ' + er.message, 'erro', 7000); }
+    }
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: CAT_PONTO[k].rotulo }),
+      UI.dica('Muda só a aparência desta categoria, em todas as operações. As regras dela (alarme de risco, raio da base, vítima) continuam.'),
+      UI.secao('Aparência', [UI.campo('Ícone', icone), cores]),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'estilo-cat-padrao', texto: 'Voltar ao padrão', onclick: function () { salvar(null, null); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'estilo-cat-salvar', texto: 'Salvar', onclick: function () { salvar(icone.valor(), cores.valor() || cor); } }),
+      ]),
+    ]), { empilhar: true });
+  }
+
+  // Ícones das categorias fixas e tipos criados: trocar ícone/cor; editar ou deixar de usar tipos (quem criou ou administrador). aoMudar()
   function abrirGerirTiposPonto(aoMudar) {
+    var fixas = UI.el('ul', { classe: 'lista-areas' });
     var lista = UI.el('ul', { classe: 'lista-areas' });
     function desenhar() {
+      fixas.innerHTML = '';
+      Object.keys(CAT_PONTO).forEach(function (k) {
+        var e = est.estilosCategoria.get(k);
+        fixas.appendChild(UI.el('li', { classe: 'item-area tipo-ponto-item' }, [
+          elMarcaPonto({ categoria: k }),
+          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: CAT_PONTO[k].rotulo }),
+            UI.el('small', { classe: 'muted', texto: e ? 'Escolhido por ' + e.atualizado_por_nome : 'Padrão' })]),
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'data-categoria': k, texto: 'Trocar ícone', onclick: function () {
+            abrirEstiloCategoria(k, function () { desenhar(); if (aoMudar) aoMudar(); });
+          } }),
+        ]));
+      });
       lista.innerHTML = '';
       var tipos = Array.from(est.tiposPonto.values()).filter(function (t) { return t.ativo; }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
       if (!tipos.length) lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhum tipo criado.' }));
@@ -6263,11 +6307,14 @@
     }
     desenhar();
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Tipos de ponto' }),
-      UI.dica('Tipos criados pelos responsáveis, além das categorias fixas. Só quem criou (ou um administrador) altera.'),
-      lista,
+      UI.el('h2', { id: 'modal-titulo', texto: 'Ícones e tipos de ponto' }),
+      UI.dica('Qualquer categoria pode ter o ícone e a cor trocados (vale para todas as operações). Os tipos criados só são alterados por quem criou ou por um administrador.'),
+      UI.secao('Categorias', [fixas]),
+      UI.secao('Tipos criados', [lista, UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '＋ Novo tipo', onclick: function () {
+        abrirTipoPonto(null, function () { desenhar(); if (aoMudar) aoMudar(); });
+      } })]),
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
-    ]), { empilhar: true });
+    ]), { empilhar: true, tamanho: 'largo' });
   }
 
   function abrirPontoInt(id) {
@@ -9057,6 +9104,19 @@
   }
 
   // Grupos de um participante: [{ id, nome, cor, papel }]
+  // Quadradinho da cor do grupo, com o ícone dele dentro (quando tem)
+  function chipGrupo(g) {
+    var ic = g && g.icone;
+    if (!ic && g && g.id && est.grupos.get(g.id)) ic = est.grupos.get(g.id).icone;
+    var c = UI.el('span', { classe: 'chip-cor' + (ic ? ' chip-icone' : ''), style: 'background:' + g.cor + (ic ? ';color:' + window.Cores.textoSobre(g.cor) : '') }, ic ? [ic] : null);
+    return c;
+  }
+  function htmlChipGrupo(g, classe, tag) {
+    tag = tag || 'span';
+    var ic = g.icone;
+    return '<' + tag + ' class="' + classe + (ic ? ' chip-cor chip-icone' : '') + '" style="background:' + C.esc(g.cor) + (ic ? ';color:' + window.Cores.textoSobre(g.cor) : '') + '">' + (ic ? C.esc(ic) : '') + '</' + tag + '>';
+  }
+
   function gruposDe(pid) {
     var lista = [];
     est.membros.forEach(function (mapa, gid) {
@@ -9194,7 +9254,7 @@
       var n = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; }).length;
       var rot = ativo ? 'Mostrar todos de novo' : 'Mostrar só o grupo ' + g.nome + ' no mapa';
       return UI.el('li', { classe: ativo ? 'ativo' : '' }, [
-        UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
+        chipGrupo(g),
         UI.el('span', { classe: 'grupo-mapa-nome', texto: g.nome }),
         UI.el('small', { classe: 'muted', title: n + ' pessoa(s) ativa(s)', texto: String(n) }),
         UI.el('button', { classe: 'btn btn-pequeno btn-olho' + (ativo ? ' btn-ativo' : ''), type: 'button', 'data-grupo': g.id,
@@ -9227,7 +9287,7 @@
     caixa.innerHTML = '';
     if (!meus.length) caixa.appendChild(UI.el('p', { classe: 'muted ficha-sem-grupo', texto: 'Não está em nenhum grupo.' }));
     else caixa.appendChild(UI.el('ul', { classe: 'ficha-lista-grupos' }, meus.map(function (g) {
-      return UI.el('li', null, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), UI.el('strong', { texto: g.nome }),
+      return UI.el('li', null, [chipGrupo(g), UI.el('strong', { texto: g.nome }),
         UI.el('small', { classe: 'muted', texto: (g.papel === 'responsavel' ? '★ responsável' : 'membro') + (g.origem === 'link' ? ' · entrou pelo link' : '') })]);
     })));
     if (editavel && outros.length && !p.dados.removido) {
@@ -9244,7 +9304,7 @@
       var n = (est.membros.get(g.id) || new Map()).size;
       return UI.el('label', { classe: 'opcao-modo' }, [
         UI.el('input', { type: 'radio', name: 'add-grupo', value: g.id, checked: i === 0 ? true : null }),
-        UI.el('span', null, [UI.el('strong', null, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome]),
+        UI.el('span', null, [UI.el('strong', null, [chipGrupo(g), ' ' + g.nome]),
           UI.el('small', { texto: n + ' pessoa(s)' })]),
       ]);
     }));
@@ -9323,7 +9383,7 @@
         var ativo = est.filtroGrupos.has(g.id);
         return UI.el('li', { classe: 'item-grupo', 'data-grupo': g.id }, [
           UI.el('div', { classe: 'item-grupo-topo' }, [
-            UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
+            chipGrupo(g),
             UI.el('strong', { texto: g.nome }),
             UI.el('small', { classe: 'muted', texto: mem.length + ' pessoa(s)' + (resp.length ? ' · ★ ' + resp.join(', ') : ' · sem responsável') +
               ' · link: ' + (g.permite_militar ? 'militares ou civis' : 'civis') }),
@@ -9361,7 +9421,8 @@
     var novo = !g;
     var corPadrao = g ? g.cor : window.Cores.livre(GRUPO_CORES, Array.from(est.grupos.values()).map(function (x) { return x.cor; }));
     var nome = UI.el('input', { classe: 'campo', id: 'grupo-nome', maxlength: '60', value: g ? g.nome : '', placeholder: 'Ex.: Polícia Civil' });
-    var cores = UI.seletorCor({ rotulo: 'Cor do grupo', valor: corPadrao, padroes: GRUPO_CORES });
+    var icone = UI.seletorIcone({ id: 'grupo-icone', rotulo: 'Ícone do grupo', valor: g ? g.icone : null, cor: corPadrao, vazio: true });
+    var cores = UI.seletorCor({ rotulo: 'Cor do grupo', valor: corPadrao, padroes: GRUPO_CORES, aoMudar: function (c) { icone.definirCor(c); } });
     var mil = UI.el('input', { type: 'checkbox', id: 'grupo-militar', checked: g && g.permite_militar ? true : null });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'grupo-salvar', texto: novo ? 'Criar grupo' : 'Salvar' });
@@ -9371,6 +9432,7 @@
         UI.campo('Nome do grupo', nome, { para: 'grupo-nome', largo: true }),
       ]),
       UI.campo('Cor', cores, { largo: true }),
+      UI.campo('Ícone', icone, { largo: true, opcional: true, dica: 'Aparece junto da cor do grupo nas listas e no mapa (ex.: 🐕 canil, 🚤 embarcação, 🚁 aéreo).' }),
       UI.el('label', { classe: 'linha-opcao' }, [mil, ' Militar pelo link do grupo', UI.dica('Sem esta opção, quem entra pelo link do grupo aparece como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.')]),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
@@ -9383,6 +9445,7 @@
         cor: cores.valor() || corPadrao,
         permite_militar: Boolean(mil.checked),
       };
+      if (icone.valor() || (g && g.icone)) dados.icone = icone.valor() || '';   // sem a migração 050 o campo não vai
       if (!dados.nome) { erro.textContent = 'Informe o nome do grupo.'; erro.hidden = false; return; }
       btn.disabled = true;
       try {
@@ -9454,7 +9517,7 @@
     render();
     est.renderGruposAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-membros' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [chipGrupo(g), ' ' + g.nome,
         UI.dica('O responsável (★) pode receber o destino pelo grupo e avisar que a busca no setor terminou.')]),
       corpo,
       UI.rodape([
@@ -9495,7 +9558,7 @@
         .catch(function () { /* cancelado */ });
     } }));
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [chipGrupo(g), ' ' + g.nome,
         UI.dica('Quem abrir este link entra na operação e no grupo, como membro' + (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como civil.') + ' O link não dá acesso ao painel.')]),
       UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
       qr,

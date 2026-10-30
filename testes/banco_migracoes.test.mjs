@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2202,5 +2202,28 @@ console.log('Relatório diário e da passagem de comando (migração 049)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: opR.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–049 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Ícones de grupos e das categorias fixas de ponto (migração 050)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opI = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 050', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const g = await rpc(resp1, 'salvar_grupo', { p_operacao: opI.id, p_id: null, p_dados: J({ nome: 'Canil', cor: '#7c3aed', icone: '🐕‍🦺' }) });
+  chk(g.icone === '🐕‍🦺' && g.cor === '#7c3aed', 'grupo criado com ícone');
+  const g2 = await rpc(resp1, 'salvar_grupo', { p_operacao: opI.id, p_id: g.id, p_dados: J({ nome: 'Canil 1' }) });
+  chk(g2.icone === '🐕‍🦺' && g2.nome === 'Canil 1', 'editar sem mandar o ícone mantém o ícone');
+  const g3 = await rpc(resp1, 'salvar_grupo', { p_operacao: opI.id, p_id: g.id, p_dados: J({ icone: '' }) });
+  chk(g3.icone === null, 'ícone vazio tira o ícone');
+  chk(/icone_invalido/.test(await erroDe(rpc(resp1, 'salvar_grupo', { p_operacao: opI.id, p_id: g.id, p_dados: J({ icone: 'ABCDEFGHIJ' }) }))), 'ícone com mais de 8 caracteres: recusado');
+  const e1 = await rpc(resp2, 'salvar_estilo_categoria', { p_categoria: 'BASE', p_icone: '⛺', p_cor: '#0EA5E9' });
+  chk(e1.icone === '⛺' && e1.cor === '#0ea5e9' && e1.atualizado_por_nome === 'Sgt Dois', 'qualquer responsável escolhe o ícone e a cor de uma categoria fixa');
+  chk((await como(resp1, `select icone from public.categorias_ponto_estilo where categoria = 'BASE'`)).rows[0].icone === '⛺', 'outros responsáveis leem a aparência');
+  chk((await como(anA, `select count(*)::int n from public.categorias_ponto_estilo`)).rows[0].n === 0, 'participante não lê');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_estilo_categoria', { p_categoria: 'XYZ', p_icone: 'X', p_cor: null }))), 'categoria inexistente: recusada');
+  chk(/icone_invalido/.test(await erroDe(rpc(resp1, 'salvar_estilo_categoria', { p_categoria: 'BASE', p_icone: 'X', p_cor: 'azul' }))), 'cor inválida: recusada');
+  chk(/sem_permissao/.test(await erroDe(rpc(anA, 'salvar_estilo_categoria', { p_categoria: 'BASE', p_icone: 'X', p_cor: null }))), 'participante não muda');
+  await rpc(resp1, 'salvar_estilo_categoria', { p_categoria: 'BASE', p_icone: null, p_cor: null });
+  chk((await db.query(`select count(*)::int n from public.categorias_ponto_estilo where categoria = 'BASE'`)).rows[0].n === 0, 'sem ícone e sem cor: volta ao padrão');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opI.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–050 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

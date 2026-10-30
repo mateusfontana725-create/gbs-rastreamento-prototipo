@@ -481,7 +481,10 @@
     }
     (o.pontos || []).forEach(function (p) {
       // tipo criado pelos usuários: o ícone e a cor dele
-      marcador(p.lat, p.lng, p.icone || LETRA[p.categoria] || '•', p.cor || (p.categoria === 'RISCO' ? '#d97706' : p.categoria === 'VITIMA_ENCONTRADA' ? '#a21caf' : '#334155'));
+      // ícone e cor escolhidos para a categoria (migração 050), quando o painel está aberto
+      var c = !p.icone && P() && P().categoriaDoPonto ? P().categoriaDoPonto(p) : null;
+      marcador(p.lat, p.lng, p.icone || (c && c.cor ? c.letra : null) || LETRA[p.categoria] || '•',
+        p.cor || (c && c.cor) || (p.categoria === 'RISCO' ? '#d97706' : p.categoria === 'VITIMA_ENCONTRADA' ? '#a21caf' : '#334155'));
     });
     (o.fotos || []).forEach(function (f) { if (f.lat != null) marcador(f.lat, f.lng, 'F', '#475569', 8); });
     (o.achados || []).forEach(function (a) { marcador(a.lat, a.lng, a.letra || '!', a.cor || '#ea580c', a.raio || 11); });

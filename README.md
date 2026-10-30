@@ -679,6 +679,13 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   categoria e dê um nome. Categorias fixas (têm regras próprias: alarme de risco, raio da base, vítima) e ícones:
   **U** Última localização conhecida · **?** Possível localização da vítima · **V** Vestígio ou objeto
   encontrado · **!** Área de risco/perigo · **E** Ponto de encontro · **+** Vítima encontrada · **•** Outro.
+- **Ícones livres (migração 050)**: nada de lista fixa — **Escolher ícone** abre o **catálogo inteiro** (mais de 300 ícones por
+  assunto: resgate e emergência, pessoas, animais, veículos, terreno, água, construções, objetos e vestígios, equipamento,
+  sinais, letras e números), com **busca por palavra** ("cão", "barco", "base") e o campo **Ou digite** para qualquer letra,
+  sigla ou emoji (até 8 caracteres). Vale para os tipos criados, para as **categorias fixas** (no formulário, **✎ Ícones e
+  tipos → Trocar ícone**: ícone e cor de Última localização, Risco, Base etc. para todas as operações; as regras de cada
+  categoria continuam; **Voltar ao padrão** desfaz) e para os **grupos** (ícone opcional no formulário do grupo, mostrado
+  dentro do quadradinho da cor nas listas, na legenda, na ficha e no painel de grupos do mapa).
 - **Tipos de ponto criados pelos usuários (migração 047)**: no formulário, **＋ Novo tipo** cria um tipo com **nome**, **ícone**
   (letra, número ou emoji, com sugestões prontas) e **cor** (amostras ou cor personalizada). O tipo fica disponível para todos os
   responsáveis, em qualquer operação, e aparece junto das categorias fixas. **Editar tipos** muda o ícone/cor (os pontos já marcados
@@ -1976,6 +1983,8 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40r10 | **🔗 Link público → Criar**, abrir o link num celular sem login; depois **Trocar link** | o celular mostra o dashboard sem nomes e sem botões; depois da troca, o link antigo diz "Este link não funciona mais" |
 | 40r11 | Deixar o painel aberto numa operação ativa acionada há 2 dias; abrir **Relatório final** depois de ~1 min | a lista mostra "Diário de dd/mm/aaaa" para cada dia já terminado (um por dia); abrir o painel em outro computador não duplica |
 | 40r12 | **Passar o comando** e, no outro aparelho, **Aceitar**; depois **Histórico de passagens → Relatório (PDF)** | a lista de relatórios ganha "Passagem de comando"; o PDF tem quem passou, quem recebeu, as horas e o briefing entregue |
+| 40v | **Marcar ponto → ✎ Ícones e tipos → Base → Trocar ícone**, buscar "barraca", escolher, cor azul, **Salvar** | o ponto Base do mapa muda para ⛺ azul em todas as operações; **Voltar ao padrão** traz o B de volta |
+| 40w | **Grupos → Novo grupo**, **Escolher ícone** → "serviço" → 🐕‍🦺 | o grupo aparece com 🐕‍🦺 dentro da cor na lista, na legenda e no painel de grupos do mapa |
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |

@@ -38,7 +38,7 @@ public class RastreioService extends Service {
   static final String EXTRA_MOTIVO = "motivo";
   private static final String CANAL = "rastreio";
   private static final int NOTIF = 7;
-  private static final long SINAL_MS = 30000;
+  private static final long SINAL_MS = 15000;   // o painel marca "instável" com 35 s sem contato
   private static final long SEM_GPS_MS = 60000;
 
   private HandlerThread linhaGps, linhaRede;

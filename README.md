@@ -25,7 +25,7 @@ Realtime, Storage privado para as fotos) e **Vercel** (hospedagem e três funç�
    → fila local (localStorage)  ──RPC enviar_posicoes──►  posicoes   ──Realtime──►  mapa + trilhas
    ← alerta em tela cheia      ◄──Realtime / consulta──  mensagens  ◄──RPC enviar_mensagem──  comandos
    → confirmar_mensagem        ──────────────────────►  mensagens   ──Realtime──►  "confirmada"
-   → sinal_vida (a cada 15 s)  ──────────────────────►  participantes ─Realtime──►  conectado / instável
+   → sinal_vida (a cada 10 s)  ──────────────────────►  participantes ─Realtime──►  conectado / instável
    → participante_enviar_mensagem ───────────────────►  mensagens   ──Realtime──►  central + aviso
    → foto (Storage privado) + registrar_foto ────────►  fotos       ──Realtime──►  câmera no mapa
 ```
@@ -43,9 +43,9 @@ Realtime, Storage privado para as fotos) e **Vercel** (hospedagem e três funç�
 
 | Indicador | Significado |
 |---|---|
-| ● verde **Conectado** | contato do celular nos últimos 45 s |
-| ● amarelo **Sinal instável** | último contato entre 45 s e 2 min |
-| ● vermelho **Sem atualização** | sem contato há mais de 2 min (a última posição continua no mapa, marcada como antiga) |
+| ● verde **Conectado** | contato do celular nos últimos 35 s |
+| ● amarelo **Sinal instável** | último contato entre 35 s e 75 s |
+| ● vermelho **Sem atualização** | sem contato há mais de 75 s (a última posição continua no mapa, marcada como antiga) |
 | Selo âmbar **Pediu para sair** | o participante solicitou o encerramento; o rastreamento continua até o responsável decidir |
 | **Saída liberada às …** | o responsável liberou; o celular parou de enviar |
 | Marcador tracejado e desbotado | posição com mais de 2 min: **não é a localização atual** |
@@ -2022,8 +2022,8 @@ da lista de recentes, e sem internet.
   aparelho** (`FilaPontos`: cada ponto gravado e sincronizado com o disco antes de seguir; remoção por troca atômica do
   arquivo; nada é descartado por falta de internet) → **envio com confirmação por ponto** (`Sincronizador`). O GPS e a fila
   rodam numa linha de execução e o envio em outra (a rede lenta nunca atrasa a gravação). Volta a enviar sozinho quando a
-  conexão volta; sem sinal, tenta de novo em 2, 4, 8, 16 e 30 s. Sinal de vida a cada 30 s (o painel vê o participante
-  ativo mesmo parado). Horário dos pontos convertido para o do servidor quando o relógio do celular erra mais de 30 s.
+  conexão volta; sem sinal, tenta de novo em 2, 4, 8, 16 e 30 s. Sinal de vida a cada 15 s, também com a tela apagada (o painel vê o
+  participante ativo mesmo parado). Horário dos pontos convertido para o do servidor quando o relógio do celular erra mais de 30 s.
 - **Credencial do aparelho**: o serviço envia sem a sessão do navegador, com um **segredo do aparelho** (`app_dispositivo_registrar`,
   64 caracteres, mostrado uma vez; o banco guarda só o resumo). `app_enviar_posicoes` e `app_sinal_vida` conferem o segredo e
   fazem exatamente o que `enviar_posicoes_lote` e `sinal_vida` fazem (operação encerrada, participante removido ou liberado,

@@ -33,7 +33,7 @@
   var CFG = {
     envioRapidoMs: 1000,         // em veículo: envia 1 s depois do ponto
     envioPeMs: 1500,             // a pé/parado: envia 1,5 s depois (junta os pontos desse intervalo)
-    sinalVidaMs: 15000,          // "estou conectado" a cada 15 s
+    sinalVidaMs: 10000,          // "estou conectado" a cada 10 s (o painel marca instável com 35 s sem contato)
     semGpsMs: 60000,             // sem leitura por 60 s = "sem sinal"
     reiniciarGpsMs: 90000,       // sem leitura por 90 s com a tela aberta: reinicia a leitura do GPS
     reinclusaoMs: 20000,         // removido: verifica a cada 20 s se foi chamado de volta

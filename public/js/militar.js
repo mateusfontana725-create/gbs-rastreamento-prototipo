@@ -28,8 +28,10 @@
   }
 
   var LIM = {
-    conectadoMs: 45000,          // contato nos últimos 45 s = conectado
-    instavelMs: 120000,          // 45 s a 2 min = sinal instável; acima = sem atualização
+    // O sinal de vida chega a cada 10 s (página) ou 15 s (aplicativo, mesmo com a tela apagada):
+    // dois sinais perdidos já mostram "instável"; pouco mais de um minuto sem nada = "sem atualização".
+    conectadoMs: 35000,          // contato nos últimos 35 s = conectado
+    instavelMs: 75000,           // 35 s a 75 s = sinal instável; acima = sem atualização
     posicaoAntigaMs: 120000,     // posição com mais de 2 min = "antiga"
     precisaoTrilhaM: 150,        // pontos com precisão pior são só "posição aproximada" (fora da linha da trilha)
     pollingOkMs: 20000,          // conferência periódica com tempo real funcionando
@@ -61,7 +63,7 @@
   var COMANDOS_RESPONSAVEL = ['ATENCAO', 'CONFIRME', 'PERSONALIZADA'];
 
   // "Minha posição": o filtro das leituras está em gps.js (o mesmo da página do participante).
-  var CFG_GPS = { sinalVidaMs: 15000, envioRapidoMs: 1000, envioPeMs: 1500, reiniciarMs: 90000 };
+  var CFG_GPS = { sinalVidaMs: 10000, envioRapidoMs: 1000, envioPeMs: 1500, reiniciarMs: 90000 };
 
   var CHAVE_AJUDA_VISTA = 'sar-militar-ajuda-vista';
   var CHAVE_LATERAL = 'gbs-painel-lateral-oculta';
@@ -1499,7 +1501,7 @@
     });
     // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
     Promise.all(cargasModulos).then(function () { if (est.op && est.op.id === op.id) carregandoPainel(false); });
-    est.timerStatus = setInterval(atualizarEstados, 5000);
+    est.timerStatus = setInterval(vigiarEstados, 2000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
     iniciarPolling();
@@ -3645,6 +3647,18 @@
   }
 
   // Executado a cada 5 s: atualiza "há X s", estados e cores de conexão.
+  // A cada 2 s confere se alguém mudou de estado (conectado / instável / sem atualização): se mudou, o painel
+  // atualiza na hora; senão só a cada 6 s (os "há X s" da lista), como antes.
+  function vigiarEstados() {
+    est.tickEstados = (est.tickEstados || 0) + 1;
+    var mudou = false;
+    est.participantes.forEach(function (p) {
+      var cod = estadoDe(p).cod;
+      if (p.codEstadoVisto !== cod) { p.codEstadoVisto = cod; mudou = true; }
+    });
+    if (mudou || est.tickEstados % 3 === 0) atualizarEstados();
+  }
+
   function atualizarEstados() {
     est.participantes.forEach(atualizarAparenciaMarcador);
     renderizarLista();

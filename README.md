@@ -2000,7 +2000,7 @@ da lista de recentes, e sem internet.
 
 **Gerar e publicar o APK** (`.github/workflows/apk.yml`)
 
-- A cada mudança em `android/` (branches `main` e `v3-apk`) ou pelo botão **Run workflow** em Actions, o GitHub roda os
+- A cada mudança em `android/` (branches `v1`, `v3-economia` e `main`) ou pelo botão **Run workflow** em Actions, o GitHub roda os
   testes do aplicativo, a verificação do Android (lint) e gera o APK, publicado no Release **app-android** do repositório
   (`gbs-busca.apk` e o SHA-256). O botão da página baixa por `/api/app?baixar=1`, que redireciona para esse arquivo.
   `APP_ANDROID_URL` (Vercel) troca o endereço; `APP_ANDROID_URL=desligado` esconde o botão.

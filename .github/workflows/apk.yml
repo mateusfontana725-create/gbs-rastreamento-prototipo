@@ -4,7 +4,7 @@ name: Aplicativo Android (APK)
 # de onde o botão "Baixar aplicativo" da página do participante baixa (/api/app?baixar=1).
 on:
   push:
-    branches: [main, v3-apk]
+    branches: [main, v1, v3-economia]
     paths:
       - 'android/**'
       - 'public/js/gps.js'

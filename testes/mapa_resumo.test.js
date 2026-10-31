@@ -76,37 +76,37 @@ teste('distância: 0,001° de latitude são cerca de 111 m', () => {
 
 teste('selo com pessoas e pontos: dois símbolos lado a lado com as contagens', () => {
   const h = R.htmlResumo(R.resumir([it(0, 0), it(0, 0), it(0, 0, { familia: 'ponto', tipo: 'poi' })]));
-  assert.ok(/class="resumo[^"]*resumo-duplo/.test(h), 'duplo');
-  assert.ok(/class="resumo-pessoas"[^>]*><b>2<\/b>/.test(h));
-  assert.ok(/class="resumo-pontos"[^>]*><b>1<\/b>/.test(h));
-  assert.ok(!/cl-alerta|cl-vitima|resumo-rotulos/.test(h), 'sem alerta, vítima nem etiqueta quando não há');
+  assert.ok(/class="resumo-mapa[^"]*rm-duplo/.test(h), 'duplo');
+  assert.ok(/class="rm-pessoas"[^>]*><b>2<\/b>/.test(h));
+  assert.ok(/class="rm-pontos"[^>]*><b>1<\/b>/.test(h));
+  assert.ok(!/cl-alerta|cl-vitima|rm-rotulos/.test(h), 'sem alerta, vítima nem etiqueta quando não há');
 });
 
 teste('selo só de pessoas ou só de pontos: um símbolo só', () => {
   const so = R.htmlResumo(R.resumir([it(0, 0), it(0, 0)]));
-  assert.ok(/resumo-pessoas/.test(so) && !/resumo-pontos|resumo-duplo/.test(so));
+  assert.ok(/rm-pessoas/.test(so) && !/rm-pontos|rm-duplo/.test(so));
   const pt = R.htmlResumo(R.resumir([it(0, 0, { familia: 'ponto', tipo: 'foto' }), it(0, 0, { familia: 'ponto', tipo: 'foto' })]));
-  assert.ok(/resumo-pontos/.test(pt) && !/resumo-pessoas|resumo-duplo/.test(pt));
+  assert.ok(/rm-pontos/.test(pt) && !/rm-pessoas|rm-duplo/.test(pt));
 });
 
 teste('etiquetas: singular e plural, uma embaixo da outra, e o "!" quando há alerta', () => {
   const um = R.htmlResumo(R.resumir([it(0, 0, { ajuda: true }), it(0, 0, { familia: 'ponto', tipo: 'relato', vitima: true })]));
   assert.ok(/>VÍTIMA</.test(um) && /PEDE AJUDA</.test(um));
-  assert.ok(/cl-alerta/.test(um) && /cl-vitima/.test(um) && /resumo-vitima/.test(um) && /resumo-alerta/.test(um));
+  assert.ok(/cl-alerta/.test(um) && /cl-vitima/.test(um) && /rm-vitima/.test(um) && /rm-alerta/.test(um));
   const varios = R.htmlResumo(R.resumir([
     it(0, 0, { ajuda: true }), it(0, 0, { ajuda: true }),
     it(0, 0, { familia: 'ponto', tipo: 'relato', vitima: true, lat: -24.9, lng: -51.4 }),
     it(0, 0, { familia: 'ponto', tipo: 'relato', vitima: true, lat: -24.91, lng: -51.4 }),
   ]));
   assert.ok(/>2 VÍTIMAS</.test(varios) && />2 PEDEM AJUDA</.test(varios));
-  assert.ok(varios.indexOf('resumo-rotulo-vitima') < varios.indexOf('resumo-rotulo-ajuda'), 'vítima em cima, ajuda embaixo');
+  assert.ok(varios.indexOf('rm-rotulo-vitima') < varios.indexOf('rm-rotulo-ajuda'), 'vítima em cima, ajuda embaixo');
   assert.ok(/cl-vitima[^>]*>\+2</.test(varios), 'o "+" mostra a quantidade');
 });
 
 teste('pedir para sair ou risco dá o "!" mas não a etiqueta de ajuda', () => {
   const h = R.htmlResumo(R.resumir([it(0, 0, { saida: true }), it(0, 0, { familia: 'ponto', tipo: 'poi', critico: true })]));
   assert.ok(/cl-alerta/.test(h));
-  assert.ok(!/resumo-rotulo-ajuda/.test(h));
+  assert.ok(!/rm-rotulo-ajuda/.test(h));
 });
 
 teste('texto do balão: tudo que o selo resume, no singular e no plural', () => {

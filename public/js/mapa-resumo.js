@@ -147,21 +147,21 @@
     var tam = r.pessoas >= 20 ? 44 : r.pessoas >= 8 ? 40 : 36;
     var partes = '';
     if (r.pessoas) {
-      partes += '<div class="resumo-pessoas" style="width:' + tam + 'px;height:' + tam + 'px;background:conic-gradient(' + fatiasDeCor(r.coresPessoas) + ')"><b>' + r.pessoas + '</b></div>';
+      partes += '<div class="rm-pessoas" style="width:' + tam + 'px;height:' + tam + 'px;background:conic-gradient(' + fatiasDeCor(r.coresPessoas) + ')"><b>' + r.pessoas + '</b></div>';
     }
     if (r.pontos) {
       var cores = [];
       ORDEM_PONTO.forEach(function (t) { for (var k = 0; k < (r.porTipo[t] || 0); k++) cores.push(COR_PONTO[t]); });
-      partes += '<div class="resumo-pontos" style="background:conic-gradient(' + fatiasDeCor(cores) + ')"><b>' + r.pontos + '</b></div>';
+      partes += '<div class="rm-pontos" style="background:conic-gradient(' + fatiasDeCor(cores) + ')"><b>' + r.pontos + '</b></div>';
     }
     var rotulos = '';
-    if (r.vitimas) rotulos += '<span class="resumo-rotulo-vitima">' + (r.vitimas > 1 ? r.vitimas + ' VÍTIMAS' : 'VÍTIMA') + '</span>';
-    if (r.ajuda) rotulos += '<span class="resumo-rotulo-ajuda">' + (r.ajuda > 1 ? r.ajuda + ' PEDEM AJUDA' : 'PEDE AJUDA') + '</span>';
-    return '<div class="resumo' + (r.vitimas ? ' resumo-vitima' : '') + (r.alertas ? ' resumo-alerta' : '') + (r.pessoas && r.pontos ? ' resumo-duplo' : '') +
+    if (r.vitimas) rotulos += '<span class="rm-rotulo-vitima">' + (r.vitimas > 1 ? r.vitimas + ' VÍTIMAS' : 'VÍTIMA') + '</span>';
+    if (r.ajuda) rotulos += '<span class="rm-rotulo-ajuda">' + (r.ajuda > 1 ? r.ajuda + ' PEDEM AJUDA' : 'PEDE AJUDA') + '</span>';
+    return '<div class="resumo-mapa' + (r.vitimas ? ' rm-vitima' : '') + (r.alertas ? ' rm-alerta' : '') + (r.pessoas && r.pontos ? ' rm-duplo' : '') +
       '" title="' + esc(textoResumo(r)) + '">' + partes +
       (r.alertas ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') +
       (r.vitimas ? '<i class="cl-vitima" aria-hidden="true">+' + (r.vitimas > 1 ? r.vitimas : '') + '</i>' : '') +
-      (rotulos ? '<div class="resumo-rotulos">' + rotulos + '</div>' : '') + '</div>';
+      (rotulos ? '<div class="rm-rotulos">' + rotulos + '</div>' : '') + '</div>';
   }
 
   // Largura do selo, para o Leaflet centralizar o ícone
@@ -210,7 +210,7 @@
       var tam = tamanhoIcone(r);
       var centro = mapa.unproject(L.point(g.x, g.y), z);
       var m = L.marker(centro, {
-        icon: L.divIcon({ className: 'resumo-wrap', html: htmlResumo(r), iconSize: tam, iconAnchor: [tam[0] / 2, tam[1] / 2] }),
+        icon: L.divIcon({ className: 'rm-wrap', html: htmlResumo(r), iconSize: tam, iconAnchor: [tam[0] / 2, tam[1] / 2] }),
         pane: 'resumo', keyboard: true, riseOnHover: true, title: textoResumo(r), alt: plural(r.total, 'item', 'itens'),
         zIndexOffset: r.alertas ? 1000 : r.vitimas ? 500 : 0,
       });

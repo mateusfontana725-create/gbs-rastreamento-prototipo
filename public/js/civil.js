@@ -2012,14 +2012,14 @@
     var grade = UI.el('div', { classe: 'encontrei-opcoes' });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'encontrei' }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'O que você encontrou?' }),
-      UI.el('button', { classe: 'opcao-encontrei opcao-vitima', type: 'button', id: 'encontrei-vitima', onclick: function () { fechar(); escolherCondicaoVitima(); } }, [
+      UI.el('button', { classe: 'opcao-encontrei opcao-vitima', type: 'button', id: 'encontrei-vitima', onclick: function () { escolherCondicaoVitima(); } }, [
         UI.el('strong', { texto: 'Encontrei a vítima' }), UI.el('span', { texto: 'a pessoa que está sendo procurada' }),
       ]),
       grade,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
     opcoes.forEach(function (o) {
-      grade.appendChild(UI.el('button', { classe: 'opcao-encontrei', type: 'button', 'data-cat': o[0], onclick: function () { fechar(); detalharEncontrei(o); } }, [
+      grade.appendChild(UI.el('button', { classe: 'opcao-encontrei', type: 'button', 'data-cat': o[0], onclick: function () { detalharEncontrei(o); } }, [
         UI.el('strong', { texto: o[1] }), UI.el('span', { texto: o[2] }),
       ]));
     });
@@ -2034,7 +2034,7 @@
       UI.el('h2', { id: 'modal-titulo', texto: o[1] }),
       UI.campo('Explique (opcional)', area, { para: 'encontrei-texto', dica: 'Sua localização vai junto com o aviso.' }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar, comFoto]),
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); } })]),
     ]), { fecharNoFundo: false });
     var enviado = false;
     async function enviar() {
@@ -2072,7 +2072,7 @@
           UI.el('strong', { texto: 'Morta' }),
         ]),
       ]),
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); } })]),
     ]), { fecharNoFundo: false });
   }
 
@@ -2082,7 +2082,7 @@
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Confirmar envio?' }, [UI.dica('Sua localização vai junto. Depois, este celular mostra só "' + TEXTO_VITIMA + '".')]),
       UI.el('p', { classe: 'confirma-condicao', texto: 'Vítima: ' + rotulo }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar]),
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); } })]),
     ]), { fecharNoFundo: false });
     var enviado = false;
     btnEnviar.addEventListener('click', async function () {
@@ -2969,7 +2969,7 @@
         podeAbrir ? abrir : null,
       ]),
       aviso ? UI.el('p', { classe: 'erro-form', role: 'alert', texto: aviso }) : null,
-      aviso ? UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Tentar de novo', onclick: function () { fechar(); abrirBaixarApp(); } })]) : null,
+      aviso ? UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Tentar de novo', onclick: function () { abrirBaixarApp(); } })]) : null,
     ]));
   }
 

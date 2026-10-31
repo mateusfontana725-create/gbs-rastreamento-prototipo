@@ -269,7 +269,7 @@
       UI.grade([UI.campo('Quando', quando, { para: 'bin-quando' })]),
       UI.campo('Descrição', desc, { para: 'bin-desc', opcional: true }),
       erro,
-      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrir(s.id); } }), btnOk]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnOk]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -306,7 +306,7 @@
       UI.secao('Estado', [UI.escolhas('bin-estado', opcoes.map(function (k) { return { valor: k, rotulo: ESTADOS_EVENTO[k].rotulo, marcado: k === escolhido }; }), function (v) { escolhido = v; })]),
       UI.campo('Justificativa', nota, { para: 'bin-nota', ajuda: 'Obrigatória para confirmada, descartada ou inconclusiva.' }),
       erro,
-      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrir(s.id); } }), btnOk]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnOk]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -362,7 +362,7 @@
       ])], { dica: 'Em branco fica "não informado". Artigo contaminado ou de origem incerta muda a leitura das indicações.' }),
       UI.campo('Condições', cond, { para: 'bin-cond', opcional: true }),
       erro,
-      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrir(); } }), btnOk]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnOk]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -474,7 +474,7 @@
       corpo.appendChild(el('ul', { classe: 'ajuda-lista' }, lista.map(function (s) { return cartao(s, s.id === sessaoId); })));
       corpo.appendChild(UI.rodape([
         el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
-        podeAlterar() ? el('button', { classe: 'btn btn-escuro', type: 'button', id: 'bin-nova', texto: '+ Nova sessão', onclick: function () { fechar(); formSessao(null); } }) : null,
+        podeAlterar() ? el('button', { classe: 'btn btn-escuro', type: 'button', id: 'bin-nova', texto: '+ Nova sessão', onclick: function () { formSessao(null); } }) : null,
       ]));
     }
     est.renderAtual = desenhar;

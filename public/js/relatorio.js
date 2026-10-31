@@ -118,7 +118,7 @@
     // operação encerrada: diário só para leitura (o servidor também recusa, migração 026)
     var btnNova = op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-nova', texto: '+ Novo registro', onclick: function () { formObservacao(null); } }) : null;
     var btnAtualizar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Atualizar', onclick: function () { recarregar(); } });
-    var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatórios (PDF)', onclick: function () { fechar(); abrirRelatoriosOperacao(op); } });
+    var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatórios (PDF)', onclick: function () { abrirRelatoriosOperacao(op); } });
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diario' }, [
       UI.el('div', { classe: 'diario-topo' }, [
@@ -253,7 +253,7 @@
       UI.campo('Texto', texto, { para: 'obs-texto', largo: true }),
       erro,
       UI.rodape([
-        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirDiario(op); } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         salvar,
       ]),
     ]);
@@ -298,7 +298,7 @@
         UI.el('p', { texto: e.detalhe }),
       ]),
       ul,
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirDiario(op); } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); } })]),
     ]));
     try {
       var v = await C.consultar(C.cliente.from('diario_versoes').select('*').eq('diario_id', e.id).order('versao', { ascending: false }));
@@ -766,7 +766,7 @@
       UI.secao('Relatórios já gerados', [listaSalvos, UI.el('div', { classe: 'acoes-linha' }, [btnDiaHoje])],
         { dica: 'O relatório diário de cada dia da operação é gerado e guardado sozinho pelo painel aberto (dias já terminados; o de hoje a partir das 23h50). "Relatório de hoje" baixa agora o do dia, com o que houve até este momento.' }),
       UI.rodape([
-        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', onclick: function () { fechar(); abrirDiario(op); } }),
+        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', onclick: function () { abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });
@@ -996,51 +996,6 @@
     return 'Guardado em ' + dataHora(x.gerado_em) + (x.gerado_por_nome ? ' por ' + x.gerado_por_nome : '') + (x.paginas ? ' · ' + x.paginas + ' pág.' : '');
   }
 
-  // Desfecho da operação: registrado antes do relatório final (aparece na capa e no fim do PDF).
-  // Abre por cima do modal de Relatórios, sem tirá-lo da tela.
-  function abrirDesfecho(op, depois) {
-    var sel = UI.el('select', { classe: 'campo', id: 'des-resultado' }, [UI.el('option', { value: '', texto: '— escolha —' })].concat(RESULTADOS.map(function (r) {
-      return UI.el('option', { value: r[0], texto: r[1] });
-    })));
-    sel.value = op.resultado || '';
-    var txt = UI.el('textarea', { classe: 'campo', id: 'des-texto', rows: '4', maxlength: '4000', placeholder: 'Onde, quando e em que condições; encaminhamentos.' });
-    txt.value = op.resultado_texto || '';
-    var erro = UI.el('p', { classe: 'erro-form', hidden: true });
-    var btnCancelar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar' });
-    var btnOk = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'des-salvar', texto: 'Salvar desfecho' });
-    var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Desfecho da operação' }, [UI.dica(
-        'Registre o desfecho antes de gerar o relatório final: ele sai na capa e no fim do relatório.')]),
-      UI.secao('Desfecho', [
-        UI.campo('Resultado', sel, { para: 'des-resultado' }),
-        UI.campo('Descrição', txt, { para: 'des-texto', opcional: true }),
-        erro,
-      ]),
-    ]), {
-      empilhar: true,
-      tamanho: 'estreito',
-      fecharNoFundo: false,
-      rodape: UI.el('div', { classe: 'modal-rodape' }, [btnCancelar, btnOk]),
-    });
-    btnCancelar.addEventListener('click', function () { fechar(); });
-    btnOk.addEventListener('click', async function () {
-      if (!sel.value) { erro.textContent = 'Escolha o desfecho.'; erro.hidden = false; sel.focus(); return; }
-      btnOk.disabled = true;
-      try {
-        var r = await C.rpc('definir_resultado', { p_operacao: op.id, p_resultado: sel.value, p_texto: txt.value });
-        Object.assign(op, r);
-        UI.aviso('Desfecho registrado.', 'ok');
-        fechar();
-        if (depois) depois();
-      } catch (e) {
-        erro.textContent = e.message || String(e);
-        erro.hidden = false;
-        btnOk.disabled = false;
-      }
-    });
-    setTimeout(function () { sel.focus(); }, 40);
-  }
-
   // Relatório final: tudo da operação (cadastro, pessoas, setores, diário, desfecho e fotos).
   // Baixa o PDF e guarda uma cópia no servidor. passo(texto) mostra o andamento. Devolve o resultado.
   async function gerarFinal(op, opcoes, passo) {
@@ -1076,8 +1031,9 @@
     var hoje = diaLocal(Date.now());
     var primeiroDia = diaLocal(C.paraMs(op.acionado_em || op.criada_em) || Date.now());
     var corpo = UI.el('div', { classe: 'relatorios-operacao' });
-    var vista = 'tipos';   // 'tipos' ou o tipo cuja lista está aberta
-    var dados = null;      // o que está guardado e o que a operação tem (carregado do servidor)
+    var dados = null;        // o que está guardado e o que a operação tem (carregado do servidor)
+    var listaAberta = null;  // { tipo, box, fechar }: a lista de um tipo, aberta por cima desta tela
+
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Relatórios' }, [UI.dica(
         'Escolha o tipo e toque em Gerar. Em Ver lista estão os relatórios já gerados daquele tipo.')]),
@@ -1105,9 +1061,8 @@
       return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } });
     }
     function botaoExcluir(x) {
-      return ehAdmin ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { excluirRelatorio(x, op, desenhar); } }) : null;
+      return ehAdmin ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { excluirRelatorio(x, op, atualizar); } }) : null;
     }
-    function mudarVista(v) { vista = v; desenhar(); }
 
     async function carregar() {
       var [diarios, comandos, salvosComando, passagens, salvosPassagem, finais, imprensa] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
@@ -1118,8 +1073,24 @@
       dados = { diarios: diarios, comandos: comandos, passagens: passagens, finais: finais, imprensa: imprensa, porDia: porDia, porRef: porRef, porPas: porPas };
     }
 
-    // ----- vista "tipos": um cartão por tipo, com Gerar e Ver lista -----
+    // Quantos itens a lista do tipo tem (Ver lista só fica habilitado com pelo menos um)
+    function totalDoTipo(tipo) {
+      if (tipo === 'diario') return dados.diarios.length;
+      if (tipo === 'passagem') return dados.passagens.length;
+      if (tipo === 'comando') return dados.comandos.length;
+      if (tipo === 'final') return dados.finais.length;
+      return dados.imprensa.length;
+    }
+    // "1 diário guardado", "2 passagens guardadas" (concordância com o nome)
+    function contar(n, singular, plural, feminino) {
+      return n + ' ' + (n === 1 ? singular : plural) + ' ' + (feminino ? 'guardada' : 'guardado') + (n === 1 ? '' : 's');
+    }
+
+    // ----- cartão de cada tipo: Gerar e Ver lista -----
     function cartao(tipo, contagem, extra, acoes) {
+      var n = totalDoTipo(tipo);
+      var ver = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + n + ')', disabled: n ? null : true,
+        title: n ? null : 'Ainda não há relatórios deste tipo', onclick: function () { abrirLista(tipo); } });
       return UI.el('section', { classe: 'rel-card', 'data-tipo': tipo }, [
         UI.el('div', { classe: 'rel-card-topo' }, [
           UI.el('h3', { classe: 'rel-card-titulo', texto: TIPO_ROTULO[tipo] }),
@@ -1127,14 +1098,8 @@
           UI.el('small', { classe: 'muted rel-card-contagem', texto: contagem }),
         ]),
         extra || null,
-        UI.el('div', { classe: 'rel-card-acoes' }, acoes.concat([
-          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + listaDoTipo(tipo).n + ')', onclick: function () { mudarVista(tipo); } }),
-        ])),
+        UI.el('div', { classe: 'rel-card-acoes' }, acoes.concat([ver])),
       ]);
-    }
-    // "1 diário guardado", "2 passagens guardadas" (concordância com o nome)
-    function contar(n, singular, plural, feminino) {
-      return n + ' ' + (n === 1 ? singular : plural) + ' ' + (feminino ? 'guardada' : 'guardado') + (n === 1 ? '' : 's');
     }
 
     function cartoes() {
@@ -1149,7 +1114,7 @@
           var guardado = dados.porDia[dia];
           if (guardado) { await baixarSalvo(guardado, op); return; }
           await gerarDiarioEscolhido(op, dia);
-          await desenhar();
+          await atualizar();
         });
       });
       out.push(cartao('diario', contar(dados.diarios.length, 'diário', 'diários'),
@@ -1161,7 +1126,7 @@
         ? (dados.porPas[ultPas.id]
           ? botaoBaixar(dados.porPas[ultPas.id])
           : UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-pas-gerar', texto: 'Gerar', onclick: function (ev) {
-            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, ultPas); await desenhar(); });
+            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, ultPas); await atualizar(); });
           } }))
         : UI.el('button', { classe: 'btn', type: 'button', disabled: true, texto: 'Gerar' });
       out.push(cartao('passagem', contar(Object.keys(dados.porPas).length, 'passagem', 'passagens', true) + (ultPas ? '' : ' (nenhuma ainda)'),
@@ -1173,22 +1138,22 @@
       var botaoCmd = ultCmd && guardadoCmd && ultCmd.fim
         ? botaoBaixar(guardadoCmd)
         : UI.el('button', { classe: 'btn ' + (ultCmd && ultCmd.fim ? 'btn-primario' : ''), type: 'button', id: 'rel-cmd-gerar', texto: ultCmd && ultCmd.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
-          ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, ultCmd); await desenhar(); });
+          ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, ultCmd); await atualizar(); });
         } });
       out.push(cartao('comando', contar(dados.comandos.filter(function (c) { return dados.porRef[c.ref]; }).length, 'comando', 'comandos'),
         ultCmd ? UI.el('div', { classe: 'rel-card-extra', texto: 'Último: ' + ultCmd.rotulo + ' · ' + (ultCmd.fim ? 'encerrado' : 'em andamento') }) : null, [botaoCmd]));
 
-      // Final: usa o desfecho já registrado e todas as fotos. Sem desfecho, não gera: registra antes.
+      // Final: tudo da operação. Não pede desfecho: sai o que estiver registrado (ou "Não apurado").
       var progressoFinal = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
       var erroFinal = UI.el('p', { classe: 'erro-form', hidden: true });
-      var btnFinal = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-final-gerar', texto: 'Gerar', disabled: op.resultado ? null : true, onclick: async function () {
+      var btnFinal = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-final-gerar', texto: 'Gerar', onclick: async function () {
         btnFinal.disabled = true;
         erroFinal.hidden = true;
         progressoFinal.hidden = false;
         try {
           await gerarFinal(op, { fotos: 'todas', fundo: true }, function (t) { progressoFinal.textContent = t; });
           UI.aviso('Relatório final gerado.', 'ok');
-          await desenhar();
+          await atualizar();
         } catch (e) {
           progressoFinal.hidden = true;
           erroFinal.textContent = e.message || String(e);
@@ -1196,26 +1161,18 @@
           btnFinal.disabled = false;
         }
       } });
-      var desfecho = op.resultado
-        ? UI.el('div', { classe: 'rel-card-extra' }, [
-          UI.el('strong', { texto: 'Desfecho: ' + rotuloDesfecho(op.resultado) }),
-          UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Alterar', onclick: function () { abrirDesfecho(op, desenhar); } }),
-        ])
-        : UI.el('div', { classe: 'rel-aviso rel-desfecho-falta' }, [
-          UI.el('span', { texto: 'Registre o desfecho antes de gerar.' }),
-          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Registrar desfecho', onclick: function () { abrirDesfecho(op, desenhar); } }),
-        ]);
-      out.push(cartao('final', contar(dados.finais.length, 'relatório', 'relatórios'), UI.el('div', { classe: 'rel-card-extra' }, [desfecho, progressoFinal, erroFinal]), [btnFinal]));
+      out.push(cartao('final', contar(dados.finais.length, 'relatório', 'relatórios'),
+        UI.el('div', { classe: 'rel-card-extra' }, [progressoFinal, erroFinal]), [btnFinal]));
 
       // Imprensa: versão reduzida, para divulgação
       var btnImp = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-imprensa-gerar', texto: 'Gerar', onclick: function (ev) {
-        ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarImprensa(op); await desenhar(); });
+        ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarImprensa(op); await atualizar(); });
       } });
       out.push(cartao('imprensa', contar(dados.imprensa.length, 'relatório', 'relatórios'), null, [btnImp]));
       return out;
     }
 
-    // ----- lista de um tipo: a vista abre só essa lista, com "← Tipos" para voltar -----
+    // ----- lista de um tipo: modal por cima desta tela (Fechar volta para cá, como estava) -----
     function listaDoTipo(tipo) {
       var itens = [];
       if (tipo === 'diario') {
@@ -1226,7 +1183,7 @@
         itens = dados.passagens.map(function (p) {
           var x = dados.porPas[p.id];
           var acoes = x ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Gerar', onclick: function (ev) {
-            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
+            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await atualizar(); });
           } })];
           return itemRelatorio('passagem', (p.de_nome || '—') + ' → ' + p.para_nome, x ? quemQuando(x) : dataHora(p.respondida_em), acoes);
         });
@@ -1235,7 +1192,7 @@
           var quando = dataHora(c.ini) + ' até ' + (c.fim ? dataHora(c.fim) : 'agora') + (c.passadoA ? ' · passado a ' + c.passadoA : '');
           var x = dados.porRef[c.ref];
           var acoes = x && c.fim ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
-            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await desenhar(); });
+            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await atualizar(); });
           } })];
           var andamento = c.fim ? null : UI.el('span', { classe: 'selo selo-alerta', texto: 'em andamento' });
           return itemRelatorio('comando', c.rotulo + ' · ' + (c.comandante || '—'), quando, acoes, andamento);
@@ -1252,35 +1209,48 @@
       return { n: itens.length, itens: itens };
     }
 
-    function render() {
-      corpo.innerHTML = '';
-      if (vista === 'tipos') {
-        corpo.appendChild(UI.el('div', { classe: 'rel-tipos' }, cartoes()));
-        return;
-      }
-      var l = listaDoTipo(vista);
-      corpo.appendChild(UI.el('div', { classe: 'rel-lista-cabeca' }, [
-        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'rel-voltar-tipos', texto: '← Tipos', onclick: function () { mudarVista('tipos'); } }),
-        UI.el('h3', { classe: 'rel-lista-titulo', texto: TITULO_TIPO[vista] + ' (' + l.n + ')' }),
-        UI.dica(DICA_TIPO[vista]),
-      ]));
-      corpo.appendChild(UI.secao(null, [
-        l.n ? listaRelatorios(l.itens) : semRelatorios(vista === 'diario' ? 'Nenhum diário guardado ainda. Gere pelo cartão Diário.'
-          : vista === 'imprensa' ? 'Nenhum relatório para imprensa guardado ainda.'
-          : vista === 'final' ? 'Nenhum relatório final guardado ainda.' : 'Nada para listar ainda.'),
+    function preencherLista() {
+      if (!listaAberta) return;
+      var l = listaDoTipo(listaAberta.tipo);
+      listaAberta.box.innerHTML = '';
+      listaAberta.box.appendChild(UI.secao(null, [
+        l.n ? listaRelatorios(l.itens) : semRelatorios(listaAberta.tipo === 'diario' ? 'Nenhum diário guardado ainda. Gere pelo cartão Diário.'
+          : listaAberta.tipo === 'imprensa' ? 'Nenhum relatório para imprensa guardado ainda.'
+          : listaAberta.tipo === 'final' ? 'Nenhum relatório final guardado ainda.' : 'Nada para listar ainda.'),
       ], { classe: 'rel-lista-cartao' }));
     }
 
-    async function desenhar() {
+    function abrirLista(tipo) {
+      if (listaAberta) listaAberta.fechar();   // uma lista por vez
+      var box = UI.el('div', null);
+      var fecharLista = UI.abrirModal(UI.el('div', null, [
+        UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: TITULO_TIPO[tipo] }, [UI.dica(DICA_TIPO[tipo])]),
+        box,
+      ]), {
+        fecharNoFundo: false,
+        tamanho: 'largo',
+        aoFechar: function () { listaAberta = null; },
+        rodape: UI.el('div', { classe: 'modal-rodape' }, [
+          UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fecharLista(); } }),
+        ]),
+      });
+      listaAberta = { tipo: tipo, box: box, fechar: fecharLista };
+      preencherLista();
+    }
+
+    // Recarrega o que está guardado e redesenha os cartões e a lista aberta (se houver)
+    async function atualizar() {
       try {
         await carregar();
-        render();
+        corpo.innerHTML = '';
+        corpo.appendChild(UI.el('div', { classe: 'rel-tipos' }, cartoes()));
+        preencherLista();
       } catch (e) {
         corpo.innerHTML = '';
         corpo.appendChild(UI.el('p', { classe: 'erro-form', texto: 'Não foi possível carregar: ' + (e.message || e) }));
       }
     }
-    desenhar();
+    atualizar();
   }
 
   function diaBr(chave) { var p = chave.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }

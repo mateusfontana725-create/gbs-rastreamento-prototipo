@@ -334,7 +334,7 @@
     ].concat(extras).concat([
       UI.campo('Observação', nota, { para: 'obs-nota', opcional: true }),
       erro,
-      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrir(t.modalidade); } }), btnOk]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnOk]),
     ]));
     f.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -369,7 +369,7 @@
       UI.secao('Estado', [UI.escolhas('obs-estado', opcoes.map(function (k) { return { valor: k, rotulo: ESTADOS[k].rotulo, marcado: k === escolhido }; }), function (v) { escolhido = v; })]),
       UI.campo('Justificativa', nota, { para: 'obs-just', ajuda: 'Obrigatória para verificado, descartado ou inconclusivo.' }),
       erro,
-      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrir(t.modalidade, o.id); } }), btnOk]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnOk]),
     ]);
     f.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -471,7 +471,7 @@
         ? [['plano_voo', '+ Plano de voo'], ['telemetria', '+ Telemetria'], ['area_observada', '+ Área observada'], ['foco_termico', '+ Foco térmico']]
         : [['indicacao_aquatica', '+ Indicação na água']];
       corpo.appendChild(el('div', { classe: 'acoes-linha obs-novos' }, novos.map(function (n) {
-        return el('button', { classe: 'btn btn-pequeno', type: 'button', 'data-novo': n[0], texto: n[1], onclick: function () { fechar(); form(null, { tipo: n[0] }); } });
+        return el('button', { classe: 'btn btn-pequeno', type: 'button', 'data-novo': n[0], texto: n[1], onclick: function () { form(null, { tipo: n[0] }); } });
       })));
       corpo.appendChild(UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]));
     }

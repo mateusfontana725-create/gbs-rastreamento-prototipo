@@ -146,7 +146,7 @@
       return {
         table: { widths: ['*'], body: [[{ stack: [
           { text: 'RESULTADO', style: 'rotuloCaixa' },
-          { text: 'Resultado ainda não registrado', fontSize: 13, bold: true, color: COR.suave, margin: [0, 2, 0, 0] },
+          { text: 'Não apurado', fontSize: 13, bold: true, color: COR.suave, margin: [0, 2, 0, 0] },
         ], fillColor: COR.fundo, margin: [10, 8, 10, 8] }]] },
         layout: 'noBorders', margin: [0, 0, 0, 14],
       };
@@ -617,7 +617,7 @@
     var marcos = (d.diario || []).filter(function (e) {
       return e.origem !== 'manual' && (e.categoria === 'operacao' || e.categoria === 'setor');
     });
-    var resultado = op.resultado && RESULTADO[op.resultado] ? RESULTADO[op.resultado].rotulo : 'Ainda não definido';
+    var resultado = op.resultado && RESULTADO[op.resultado] ? RESULTADO[op.resultado].rotulo : 'Não apurado';
     var periodo = 'Início: ' + dataHora(op.acionado_em || op.criada_em) + '   ·   ' +
       (op.encerrada_em ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'em andamento');
     var conteudo = [

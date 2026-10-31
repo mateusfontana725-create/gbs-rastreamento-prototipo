@@ -4634,7 +4634,7 @@
       compactarAcoes(UI.rodape([
         revisavel && podeAlterar() ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'relato-revisar', texto: 'Revisar', onclick: function () { fechar(); RR.abrir(m, { aoSalvar: function () { abrirRelato(m.id); } }); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
-        p ? UI.el('button', { classe: 'btn' + (revisavel && podeAlterar() ? '' : ' btn-escuro'), type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
+        p ? UI.el('button', { classe: 'btn' + (revisavel && podeAlterar() ? '' : ' btn-escuro'), type: 'button', texto: 'Abrir conversa', onclick: function () { abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
@@ -5993,7 +5993,7 @@
       secaoDetalhe('Busca', UI.el('div', { classe: 'detalhe-busca' }, [caixaCob, window.BuscaCenario ? window.BuscaCenario.blocoSetor(d) : null])),
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verSetorNoMapa(d); } }),
-        podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormSetor(d); } }) : null,
+        podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { abrirFormSetor(d); } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', id: 'setor-ajustar', texto: 'Ajustar limites', onclick: function () { fechar(); ajustarLimites(d.id); } }) : null,
         podeEditar && est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', texto: '🧭 Enviar o centro como destino', onclick: function () {
           var c = centroSetor(d);
@@ -6443,8 +6443,8 @@
       foto ? secaoDetalhe('Foto', UI.el('div', { classe: 'ponto-foto' }, [miniatura(foto, [foto.id])])) : null,
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verPontoNoMapa(d); } }),
-        ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormPontoInt(d); } }) : null,
+        ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { abrirFormPontoInt(d); } }) : null,
         ativa ? UI.el('button', { classe: 'btn', type: 'button', texto: foto ? 'Trocar foto' : 'Anexar foto', onclick: function () { fechar(); anexarFotoPonto(d); } }) : null,
         window.Ferramentas ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-aneis', texto: window.Ferramentas.temAneis(d.id) ? '◎ Tirar anéis de distância' : '◎ Anéis de distância',
           onclick: function () { fechar(); window.Ferramentas.alternarAneis({ id: d.id, lat: d.lat, lng: d.lng, nome: d.titulo }); } }) : null,
@@ -6900,7 +6900,7 @@
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', id: 'rota-ate-enviar', texto: 'Mandar alguém até ela',
           title: 'Envia a posição atual da pessoa como destino para outra pessoa ou grupo',
-          onclick: function () { fechar(); abrirEnviarDestino({ nome: 'Apoio a ' + nomeCurto(p), lat: pos.lat, lng: pos.lng }); } }) : null,
+          onclick: function () { abrirEnviarDestino({ nome: 'Apoio a ' + nomeCurto(p), lat: pos.lat, lng: pos.lng }); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'rota-ate-tracar', texto: 'Traçar rota' }),
       ]),
     ]);
@@ -7778,8 +7778,8 @@
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verTrilhaNoMapa(d); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-ocultar', texto: oculta ? 'Mostrar no mapa' : 'Ocultar no mapa', onclick: function () { fechar(); alternarTrilhaOculta(d.id); } }),
-        editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { fechar(); abrirFormTrilha(d, 'percorrida'); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar', texto: 'Editar dados', onclick: function () { fechar(); abrirFormTrilha(d); } }) : null,
+        editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { abrirFormTrilha(d, 'percorrida'); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar', texto: 'Editar dados', onclick: function () { abrirFormTrilha(d); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar-tracado', texto: 'Editar traçado', onclick: function () { fechar(); iniciarDesenhoTrilha(d.id); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'trilha-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirTrilhaManual(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
@@ -9531,14 +9531,14 @@
           compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando no mapa' : '👁 Mostrar no mapa',
               onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { fechar(); abrirMembrosGrupo(g.id); } }),
-            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { fechar(); abrirLinkGrupo(g.id); } }) : null,
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { abrirMembrosGrupo(g.id); } }),
+            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { abrirLinkGrupo(g.id); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: async function () {
               if (window.RecursosEquipe && !(await window.RecursosEquipe.confirmarEnvio(g))) return;
               fechar(); escolherDestino([], g.id);
             } }) : null,
             window.RecursosEquipe ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Recursos', onclick: function () { window.RecursosEquipe.abrir(g.id); } }) : null,
-            editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormGrupo(g); } }) : null,
+            editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { abrirFormGrupo(g); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }) : null,
           ])),
         ]);
@@ -9550,7 +9550,7 @@
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Grupos' }, [UI.dica('Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.')]),
       corpo,
       UI.rodape([
-        editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { fechar(); abrirFormGrupo(null); } }) : null,
+        editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { abrirFormGrupo(null); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
@@ -9574,7 +9574,7 @@
       UI.campo('Ícone', icone, { largo: true, opcional: true, dica: 'Aparece junto da cor do grupo nas listas e no mapa (ex.: 🐕 canil, 🚤 embarcação, 🚁 aéreo).' }),
       UI.el('label', { classe: 'linha-opcao' }, [mil, ' Militar pelo link do grupo', UI.dica('Sem esta opção, quem entra pelo link do grupo aparece como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.')]),
       erro,
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -9660,7 +9660,7 @@
         UI.dica('O responsável (★) pode receber o destino pelo grupo e avisar que a busca no setor terminou.')]),
       corpo,
       UI.rodape([
-        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { tamanho: 'largo', aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
@@ -9712,7 +9712,7 @@
           } catch (e) { UI.aviso(e.message, 'erro'); }
           abrirLinkGrupo(gid);
         } }),
-        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]));

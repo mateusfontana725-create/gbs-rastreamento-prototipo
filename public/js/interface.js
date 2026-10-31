@@ -59,8 +59,8 @@
     return a;
   }
 
-  // Pilha de modais: normalmente só um aberto; opcoes.empilhar abre por cima
-  // (ex.: escolher um ponto no mapa sem perder o formulário que está embaixo).
+  // Pilha de modais: um modal aberto de dentro de outro fica POR CIMA dele. Ao fechar o de cima, volta o de baixo
+  // exatamente como estava (não fecha todos). opcoes.substituir: fecha os abertos antes (troca de tela inteira).
   var pilha = [];
 
   // Abre um modal genérico. "conteudo" é um nó DOM. Devolve função para fechar.
@@ -72,7 +72,7 @@
   // opcoes.travado: não fecha com × nem com Esc nem clicando fora (ex.: trocar a senha provisória no primeiro acesso).
   function abrirModal(conteudo, opcoes) {
     opcoes = opcoes || {};
-    if (!opcoes.empilhar) fecharTodos();
+    if (opcoes.substituir) fecharTodos();
     var anterior = document.activeElement;
     var btnX = el('button', { classe: 'modal-x', type: 'button', 'aria-label': 'Fechar', title: 'Fechar', texto: '×' });
     var cabeca = el('div', { classe: 'modal-cabeca' }, [btnX]);

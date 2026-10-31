@@ -1115,6 +1115,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - **Barra de desenho** (marcar ponto, setor, trilha, medir, vítima…), sempre no mesmo formato e numa linha: a instrução,
   **↶** (desfazer), **⋯** (as ações secundárias: limpar, mover mapa, mais opções…), a ação principal (**Concluir**) e **×**
   (cancelar). Uma ação extra só (ex.: "Usar minha posição") fica à vista.
+- **Modais empilhados** (todos): um modal aberto de dentro de outro fica **por cima** dele; ao fechar o de cima, volta
+  exatamente o de baixo (×, Cancelar, Voltar e Esc fecham só o de cima). Só `UI.abrirModal(…, { substituir: true })` fecha os
+  abertos antes. Botões **Voltar/Cancelar** fecham só o modal atual (o de baixo já está aberto).
 - **Modais e formulários** (padrão único, `UI.abrirModal` em `js/interface.js`): cabeçalho fixo com o título, o **i**
   (explicação, em vez de parágrafos de texto) e o **×**; corpo que rola; rodapé com as ações sempre à vista. Campos
   agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
@@ -1123,8 +1126,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - **Relatórios** (modal da operação): a tela mostra só os **tipos**, um cartão cada (Diário, Passagem, Comando, Final e
   **Imprensa**), com **Gerar** e **Ver lista (n)**. Ver lista abre só a lista daquele tipo, com **← Tipos** para voltar. Passagem
   e Comando geram o mais recente (as outras estão na lista); o Final usa o desfecho registrado e todas as fotos (sem desfecho,
-  o botão fica desabilitado e **Registrar desfecho** abre um formulário pequeno). Cada item tem o selo do tipo e o arquivo baixado
-  leva o tipo no nome. **Excluir** aparece só para o administrador.
+  não pede desfecho: sai o que estiver registrado, ou "Não apurado". **Ver lista** abre a lista por cima da tela (**Fechar** volta
+  para ela) e fica desabilitado quando o tipo não tem nenhum relatório. Cada item tem o selo do tipo e o arquivo baixado leva o
+  tipo no nome. **Excluir** aparece só para o administrador.
 - **Relatório para imprensa** (migração 054): versão de divulgação, com dados reduzidos: números gerais (pessoas de campo,
   setores, pessoas procuradas), desfecho geral e a linha do tempo só dos marcos automáticos da operação e dos setores. Sem nomes,
   documentos, telefones, fotos, trilhas, posições e observações; sem o autor no rodapé e nos metadados do PDF. O teste

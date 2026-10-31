@@ -72,6 +72,35 @@
     return { erro: j.erro || 'falha', texto: textos[j.erro] || 'Não foi possível enviar o e-mail agora.' };
   }
 
+  // Responsável: o servidor cria o acesso (login = e-mail, senha provisória no e-mail) e inclui na operação.
+  // Não passa pelo WhatsApp: o login é o e-mail, então o e-mail é obrigatório.
+  async function convidarResponsavel(d) {
+    var s = await C.cliente.auth.getSession();
+    var token = s && s.data && s.data.session ? s.data.session.access_token : null;
+    if (!token) return { erro: 'nao_autenticado', texto: 'Sua sessão expirou. Entre de novo.' };
+    var r;
+    try {
+      r = await fetch('/api/convidar-responsavel', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ operacao_id: P.op().id, nome: d.nome, email: d.email }) });
+    } catch (e) {
+      return { erro: 'rede', texto: 'Sem conexão com o servidor. Verifique a internet e tente de novo.' };
+    }
+    var j = await r.json().catch(function () { return {}; });
+    if (r.ok && j.ok) return { ok: true, contaCriada: j.conta_criada === true };
+    var textos = {
+      email_nao_configurado: 'O envio de e-mail ainda não está configurado no servidor. Nada foi criado.',
+      email_em_uso: 'Este e-mail já tem uma conta que não é de responsável. Peça a um administrador para verificar.',
+      conta_desativada: 'Este responsável está com o acesso desativado. Peça a um administrador para reativar.',
+      falha_envio: 'O provedor de e-mail recusou o envio' + (j.detalhe ? ' (' + j.detalhe + ')' : '') + '. Nada foi criado: tente de novo.',
+      operacao_encerrada: 'A operação foi encerrada.',
+      sem_permissao: 'Você não tem permissão para convidar nesta operação.',
+      nao_autenticado: 'Sua sessão expirou. Entre de novo.',
+      email_invalido: 'Confira o e-mail.',
+      nome_invalido: 'Informe o nome.',
+    };
+    return { erro: j.erro || 'falha', texto: textos[j.erro] || 'Não foi possível criar o acesso agora. Nada foi criado.' };
+  }
+
   // WhatsApp: abre a conversa com a mensagem pronta e anota no convite que foi aberto
   function abrirWhatsApp(c) {
     window.open(linkWhatsApp(c), '_blank', 'noopener');
@@ -97,7 +126,14 @@
     var aviso = el('div', { classe: 'convite-aviso', hidden: true });
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var tipo = 'civil';
-    var categorias = UI.escolhas(pre + 'tipo', CATEGORIAS.map(function (x) { return { valor: x[0], rotulo: x[1], sub: x[2], marcado: x[0] === 'civil' }; }), function (v) { tipo = v; });
+    // Responsável não entra por WhatsApp (o login é o e-mail)
+    var cats = porWhats ? CATEGORIAS.filter(function (x) { return x[0] !== 'responsavel'; }) : CATEGORIAS;
+    var categorias = UI.escolhas(pre + 'tipo', cats.map(function (x) { return { valor: x[0], rotulo: x[1], sub: x[2], marcado: x[0] === 'civil' }; }), function (v) { tipo = v; atualizarTipo(); });
+    var ajudaResp = el('p', { classe: 'nota convite-responsavel', hidden: true, texto: 'Cria o acesso de responsável: o login é o e-mail, e a senha provisória vai no próprio e-mail. A pessoa troca a senha no primeiro acesso.' });
+    function atualizarTipo() {
+      ajudaResp.hidden = porWhats || tipo !== 'responsavel';
+      btn.textContent = !porWhats && tipo === 'responsavel' ? 'Criar acesso e enviar' : (porWhats ? 'Abrir no WhatsApp' : 'Enviar convite');
+    }
     var nome = el('input', { classe: 'campo', id: pre + 'nome', maxlength: '40', autocomplete: 'off', placeholder: 'Nome de quem vai participar' });
     var contatoIn = porWhats
       ? el('input', { classe: 'campo', id: pre + 'tel', type: 'tel', maxlength: '20', autocomplete: 'off', inputmode: 'tel', placeholder: '(41) 99999-9999' })
@@ -121,13 +157,13 @@
       meus.forEach(function (c) {
         var s = situacao(c);
         var acoes = [];
-        if (podeAlterar() && !c.aceito_em) {
+        if (podeAlterar() && !c.aceito_em && c.tipo !== 'responsavel') {
           acoes.push(porWhats
             ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.enviado_em ? 'Abrir de novo' : 'Abrir no WhatsApp', onclick: function () { abrirWhatsApp(c); setTimeout(carregar, 800); } })
             : el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.enviado_em ? 'Reenviar' : 'Enviar', disabled: c.envios >= MAX_ENVIOS ? true : null,
               title: c.envios >= MAX_ENVIOS ? 'Limite de ' + MAX_ENVIOS + ' envios' : null, onclick: function () { reenviar(c); } }));
         }
-        acoes.push(el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Copiar link', onclick: function () { copiar(linkDo(c)); } }));
+        if (c.tipo !== 'responsavel') acoes.push(el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Copiar link', onclick: function () { copiar(linkDo(c)); } }));
         if (podeAlterar() && !c.aceito_em) acoes.push(el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Cancelar', onclick: function () { cancelar(c); } }));
         lista.appendChild(el('li', { classe: 'convite-item', 'data-convite': c.id }, [
           el('div', { classe: 'convite-topo' }, [el('strong', { texto: c.nome }), el('span', { classe: 'selo selo-neutro', texto: ROTULO[c.tipo || 'civil'] }), el('span', { classe: 'selo ' + s.classe, texto: s.rot })]),
@@ -171,7 +207,7 @@
         UI.campo('Nome', nome, { para: pre + 'nome' }),
         UI.campo(porWhats ? 'Celular (WhatsApp)' : 'E-mail', contatoIn, { para: contatoIn.id, ajuda: porWhats ? 'Com DDD. Não precisa salvar o contato.' : null }),
       ]),
-      erro, aviso,
+      ajudaResp, erro, aviso,
       el('div', { classe: 'acoes-linha' }, [btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
@@ -193,6 +229,19 @@
       var janela = porWhats ? window.open('', '_blank') : null;
       btn.disabled = true;
       try {
+        if (!porWhats && tipo === 'responsavel') {
+          var rr = await convidarResponsavel(dados);
+          if (rr.ok) {
+            UI.aviso(rr.contaCriada
+              ? 'Acesso criado para ' + dados.email + '. O login é o e-mail; a senha provisória foi enviada junto.'
+              : dados.email + ' já tinha conta de responsável: foi incluído na operação e recebeu o link.', 'ok', 7000);
+            nome.value = ''; contatoIn.value = ''; nome.focus();
+          } else {
+            erro.textContent = rr.texto; erro.hidden = false;
+          }
+          await carregar();
+          return;
+        }
         var c = await C.rpc('criar_convite', { p_operacao: op.id, p_dados: dados });
         if (porWhats) {
           if (janela) { try { janela.opener = null; janela.location.href = linkWhatsApp(c); } catch (x) { window.open(linkWhatsApp(c), '_blank', 'noopener'); } }
@@ -219,12 +268,13 @@
 
     var raiz = el('div', { classe: 'convites-painel' }, [
       el('p', { classe: 'nota', texto: porWhats
-        ? 'Abre a conversa do WhatsApp com a mensagem e o link da categoria, sem precisar salvar o contato. Para civis e bombeiros o nome já vem preenchido na página.'
+        ? 'Abre a conversa do WhatsApp com a mensagem e o link da categoria, sem precisar salvar o contato. Para civis e bombeiros o nome já vem preenchido na página. Responsável não entra por WhatsApp: use a aba E-mail.'
         : 'A pessoa recebe um e-mail com o link da categoria. Para civis e bombeiros, o nome já vem preenchido e basta tocar em COMEÇAR.' }),
       podeAlterar() ? form : el('p', { classe: 'muted', texto: 'Operação encerrada: só consulta.' }),
       el('h3', { classe: 'convites-titulo', texto: 'Convidados' }),
       vazio, lista,
     ]);
+    atualizarTipo();
     carregar();
     // atualiza enquanto a janela está aberta (quem entrou pelo convite, falhas de envio)
     timer = setInterval(function () { if (!document.body.contains(raiz)) { clearInterval(timer); return; } carregar(); }, 12000);

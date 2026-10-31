@@ -563,6 +563,43 @@
     $('btn-responsaveis').hidden = !resp.admin;
     C.sincronizarRelogio();
     rotear();
+    // Senha provisória (convite de responsável): o painel só segue depois que a pessoa cria a própria senha
+    if (usuario.user_metadata && usuario.user_metadata.senha_provisoria === true) trocarSenhaProvisoria();
+  }
+
+  // Primeiro acesso com senha provisória: pede uma senha nova. A janela não fecha sem ela (sem ×, sem Esc).
+  function trocarSenhaProvisoria() {
+    var s1 = UI.el('input', { classe: 'campo', type: 'password', id: 'prov-senha1', autocomplete: 'new-password', minlength: '8', maxlength: '72', autofocus: true });
+    var s2 = UI.el('input', { classe: 'campo', type: 'password', id: 'prov-senha2', autocomplete: 'new-password', minlength: '8', maxlength: '72' });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'prov-salvar', texto: 'Salvar nova senha' });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Crie a sua senha' }, [UI.dica('Você entrou com uma senha provisória, enviada por e-mail. Crie agora uma senha só sua para continuar.')]),
+      UI.secao('Nova senha', [
+        UI.campo('Nova senha', s1, { para: 'prov-senha1', ajuda: 'Pelo menos 8 caracteres, misturando letras e números.' }),
+        UI.campo('Repita a senha', s2, { para: 'prov-senha2' }),
+        erro,
+      ]),
+      UI.rodape([btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      if (s1.value.length < 8) { erro.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; erro.hidden = false; return; }
+      if (s1.value !== s2.value) { erro.textContent = 'As duas senhas não são iguais.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var r = await C.cliente.auth.updateUser({ password: s1.value, data: { senha_provisoria: false } });
+        if (r.error) throw C.criarErro(r.error);
+        fechar();
+        UI.aviso('Senha criada. Bem-vindo ao painel.', 'ok');
+      } catch (e) {
+        erro.textContent = /weak|password/i.test(String(e.original && e.original.message)) ? 'Senha fraca. Use pelo menos 8 caracteres, misturando letras e números.' : e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { travado: true, fecharNoFundo: false });
   }
 
   // Mensagem de quem entrou mas ainda não tem acesso: pedido pendente, recusado ou desativado.
@@ -8731,7 +8768,8 @@
       if (s1.value !== s2.value) { erro.textContent = 'As duas senhas não são iguais.'; erro.hidden = false; return; }
       btn.disabled = true;
       try {
-        var r = await C.cliente.auth.updateUser({ password: s1.value });
+        // trocar a senha tira o aviso de senha provisória (se houver)
+        var r = await C.cliente.auth.updateUser({ password: s1.value, data: { senha_provisoria: false } });
         if (r.error) throw C.criarErro(r.error);
         fechar();
         UI.aviso('Senha alterada.', 'ok');

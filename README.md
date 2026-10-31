@@ -473,7 +473,7 @@ e os estados finais (confirmado, descartado, inconclusivo, contestado) **exigem 
 ### Convidar por WhatsApp ou e-mail, por categoria (migrações 044 e 047)
 
 **Convidar** tem as abas **● Link para CIVIS**, **■ Link para BOMBEIROS**, **☎ WhatsApp** e **✉ E-mail**. Nas duas últimas, o
-responsável escolhe a **categoria** do convidado — **Civil**, **Bombeiro** ou **Responsável** — e o link enviado corresponde a ela:
+responsável escolhe a **categoria** do convidado — **Civil** ou **Bombeiro** (no WhatsApp e no e-mail) e **Responsável** (só por e-mail, abaixo) — e o link enviado corresponde a ela:
 civil recebe o link dos civis, bombeiro o link dos bombeiros (pode escolher militar) e responsável o endereço do **painel da operação**
 (entra com a própria conta; precisa estar na Equipe de responsáveis).
 
@@ -482,6 +482,20 @@ civil recebe o link dos civis, bombeiro o link dos bombeiros (pode escolher mili
 - **E-mail**: como abaixo, agora com a categoria. O mesmo celular + categoria (ou o mesmo e-mail) na mesma operação reaproveita o convite.
 - Banco: `criar_convite` (categoria, canal, e-mail ou telefone), erros `telefone_convite_invalido` e `nome_convite_invalido`.
 
+
+**Convidar como responsável** (aba ✉ E-mail, categoria **Responsável**, migração 053, `api/convidar-responsavel.js`): o e-mail é
+obrigatório, porque é o login. O servidor cria o acesso e inclui a pessoa na operação:
+- **E-mail sem conta**: cria o login (o próprio e-mail) com uma **senha provisória** gerada no servidor, cadastra como responsável
+  **comum** (nunca administrador) e envia o e-mail com o **login e a senha provisória**. No primeiro acesso o painel pede uma senha
+  nova e não deixa seguir até ela ser criada. A senha **não volta ao navegador**; só vai no e-mail.
+- **E-mail de responsável que já tem conta**: só inclui na operação e envia o link (sem senha).
+- **E-mail de outro tipo de conta, ou responsável desativado**: recusa (409) e não muda nada.
+- Se o e-mail não sair, a conta criada é apagada e a inclusão desfeita: não sobra login com senha que ninguém recebeu.
+- Quem convida precisa ser responsável da operação (a regra é conferida no banco com o login de quem convida).
+  **Atenção:** diferente do cadastro pelo administrador e do pedido de acesso, esse caminho cria um responsável **sem a aprovação
+  de um administrador** (como já acontece ao incluir um responsável cadastrado). Quem convida passa a ter esse poder.
+- A lista **Convidados** não tem **Reenviar** para responsável (reenviar sem a senha confundiria); o envio fica registrado.
+- Trocar a senha (no primeiro acesso ou em **Minha conta**) tira a marca de senha provisória.
 
 **Convidar → ✉ Convidar por e-mail**: o responsável digita o **nome** e o **e-mail** do participante e toca **Enviar convite**. O
 participante recebe um e-mail com o botão **Abrir e começar** (o link do `civil.html` da operação). Ao abrir no celular, o
@@ -1501,6 +1515,7 @@ rastreamento-sar/
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
 │   ├── sci-ia.js               assistente opcional do Posto de Comando: frase → ações para conferir (mesma chave do POA/POD)
 │   ├── convidar.js             envio do convite de participante por e-mail (chave RESEND_API_KEY só no servidor)
+│   ├── convidar-responsavel.js convite de responsável: cria o login com senha provisória e inclui na operação (053)
 │   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
 ├── supabase/
@@ -1728,7 +1743,7 @@ rastreamento-sar/
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
    | `APP_ANDROID_URL` | (opcional) endereço do APK do aplicativo Android. Padrão: o Release `app-android` deste repositório. `desligado` esconde o botão "Baixar aplicativo" |
-   | `EMAIL_REMETENTE` | (com a chave acima) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
+   | `EMAIL_REMETENTE` | (com a chave acima; também usado pelo convite de responsável) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
    | `SITE_URL` | (opcional) endereço público do site, ex.: `https://busca.seudominio.com.br`. Sem ela, o link do e-mail usa o endereço da requisição |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
    | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada por `/api/poa-ia` (botão "Sugerir com IA" do POA/POD) e por `/api/sci-ia` (botão "Entender com IA" do SCI). Sem ela, os botões avisam e o preenchimento manual (e a leitura de frases do próprio SCI) segue normal |

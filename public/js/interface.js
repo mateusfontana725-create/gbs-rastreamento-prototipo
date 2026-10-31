@@ -69,6 +69,7 @@
   // quando o conteúdo é redesenhado. No celular o modal vira uma folha que sobe de baixo.
   // opcoes.tamanho: 'estreito' | 'largo' | 'cheio' (padrão: médio).
   // opcoes.rodape: nó fixo embaixo do modal, fora da área que rola (ações sempre à vista).
+  // opcoes.travado: não fecha com × nem com Esc nem clicando fora (ex.: trocar a senha provisória no primeiro acesso).
   function abrirModal(conteudo, opcoes) {
     opcoes = opcoes || {};
     if (!opcoes.empilhar) fecharTodos();
@@ -79,13 +80,15 @@
     var caixa = el('div', { classe: 'modal form-padrao' + (opcoes.tamanho ? ' modal-' + opcoes.tamanho : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [cabeca, corpo].concat(opcoes.rodape ? [opcoes.rodape] : []));
     var fundo = el('div', { classe: 'modal-fundo' }, [caixa]);
     fundo.addEventListener('click', function (ev) {
-      if (ev.target === fundo && opcoes.fecharNoFundo !== false) fechar(null);
+      if (ev.target === fundo && opcoes.fecharNoFundo !== false && !opcoes.travado) fechar(null);
     });
     // × faz o mesmo que o "Fechar"/"Cancelar" do rodapé (quando há), senão só fecha
     btnX.addEventListener('click', function () {
+      if (opcoes.travado) return;
       var b = botaoDeSaida();
       if (b) b.click(); else fechar(null);
     });
+    if (opcoes.travado) btnX.hidden = true;
     function botaoDeSaida() {
       var f = corpo.querySelector('button.so-x');
       if (f) return f;
@@ -114,7 +117,7 @@
     if (obs) obs.observe(corpo, { childList: true, subtree: true });
     function tecla(ev) {
       // Esc fecha só o modal de cima
-      if (ev.key === 'Escape' && pilha.length && pilha[pilha.length - 1].fechar === fechar) { ev.preventDefault(); fechar(null); }
+      if (ev.key === 'Escape' && !opcoes.travado && pilha.length && pilha[pilha.length - 1].fechar === fechar) { ev.preventDefault(); fechar(null); }
     }
     document.addEventListener('keydown', tecla);
     document.body.appendChild(fundo);

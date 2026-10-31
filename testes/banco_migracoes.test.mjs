@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2328,5 +2328,35 @@ console.log('Relatório do comando (migração 052)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: opC.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–052 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Convite de responsável com acesso (migração 053)');
+{
+  const J = (o) => JSON.stringify(o);
+  const op53 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 053', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const d = await rpc(resp1, 'responsavel_convite_checar', { p_operacao: op53.id });
+  chk(d.codigo === 'OP 053' && d.quem === resp1 && d.convidado_por === 'Sgt Um', 'checar: quem convida (responsável da operação) recebe o código e o próprio nome');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'responsavel_convite_checar', { p_operacao: op53.id }))), 'checar: responsável de fora da operação é recusado');
+  const sit = (await como(null, 'select public.servidor_situacao_email($1) d', ['r1@cbm'], 'service_role')).rows[0].d;
+  chk(sit && sit.responsavel === true && sit.ativo === true, 'situação do e-mail: responsável ativo (só o servidor consulta)', sit);
+  const nenhum = (await como(null, 'select public.servidor_situacao_email($1) d', ['ninguem@cbm'], 'service_role')).rows[0].d;
+  chk(nenhum === null, 'situação do e-mail: sem login devolve vazio', nenhum);
+  chk(/permission denied/.test(await erroDe(como(resp1, 'select public.servidor_situacao_email($1)', ['r1@cbm']))), 'responsável comum não consulta a situação de e-mails');
+  chk(/permission denied/.test(await erroDe(como(resp1, 'select public.servidor_vincular_responsavel($1, $2, $3)', [op53.id, resp3, resp1]))), 'responsável comum não inclui ninguém pela função do servidor');
+  const v1 = (await como(null, 'select public.servidor_vincular_responsavel($1, $2, $3) v', [op53.id, resp3, resp1], 'service_role')).rows[0].v;
+  chk(v1 === true, 'servidor inclui um responsável ativo na operação', v1);
+  const v2 = (await como(null, 'select public.servidor_vincular_responsavel($1, $2, $3) v', [op53.id, resp3, resp1], 'service_role')).rows[0].v;
+  chk(v2 === false, 'incluir de novo quem já está na operação não duplica (devolve false)', v2);
+  chk(/responsavel_nao_encontrado/.test(await erroDe(como(null, 'select public.servidor_vincular_responsavel($1, $2, $3)', [op53.id, anA, resp1], 'service_role'))), 'não inclui quem não é responsável (login de participante)');
+  const quem = (await como(resp3, 'select count(*)::int n from public.operacao_responsaveis where operacao_id = $1 and user_id = $2', [op53.id, resp3])).rows[0].n;
+  chk(quem === 1, 'o responsável incluído passa a constar na equipe da operação');
+  const diarioInc = (await como(resp1, `select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'responsavel_adicionado'`, [op53.id])).rows[0].n;
+  chk(diarioInc >= 1, 'a inclusão fica registrada no diário');
+  await como(null, 'select public.servidor_desvincular_responsavel($1, $2)', [op53.id, resp3], 'service_role');
+  const depois = (await como(resp1, 'select count(*)::int n from public.operacao_responsaveis where operacao_id = $1 and user_id = $2', [op53.id, resp3])).rows[0].n;
+  chk(depois === 0, 'desfazer a inclusão (e-mail que não saiu) tira a pessoa da operação');
+  const op53b = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 053B', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op53b.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'responsavel_convite_checar', { p_operacao: op53b.id }))), 'operação encerrada: não se convida mais ninguém');
+}
+
+console.log('\nMigrações 007–053 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

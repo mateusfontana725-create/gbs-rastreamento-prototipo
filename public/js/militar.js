@@ -1695,9 +1695,9 @@
     $('menu-vitima').hidden = op.status !== 'ativa';
     $('menu-vitima-rapida').hidden = op.status !== 'ativa';
     $('menu-minha-trilha').hidden = op.status !== 'ativa';
+    $('menu-diag-gps').hidden = op.status !== 'ativa';   // diagnóstico do GPS deste aparelho: só serve com a operação em andamento
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
-    $('menu-destino').hidden = op.status !== 'ativa';
     ['menu-setor', 'menu-trilha', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
     // encerrada: painel só para consulta (botões de alteração somem; o servidor também recusa)
     $('tela-painel').classList.toggle('op-somente-leitura', op.status !== 'ativa');
@@ -3859,7 +3859,8 @@
         pd.estado === 'recebido' ? 'Ninguém assumiu há ' + AP.duracao(C.agora() - C.paraMs(pd.recebido_em)) + '. ' : (pd.assumido_por_nome ? 'Responsável: ' + pd.assumido_por_nome + '. ' : ''),
         pd.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { est.mapa.setView([pd.lat, pd.lng], Math.max(est.mapa.getZoom(), 17)); } }) : null,
         ' ',
-        UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: pd.estado === 'recebido' ? 'Assumir / tratar' : 'Abrir atendimento', onclick: function () { AP.abrir(pd.id); } }),
+        UI.el('button', { classe: 'btn btn-pequeno' + (podeAlterar() ? ' btn-escuro' : ''), type: 'button',
+          texto: !podeAlterar() ? 'Ver atendimento' : pd.estado === 'recebido' ? 'Assumir / tratar' : 'Abrir atendimento', onclick: function () { AP.abrir(pd.id); } }),
       ]));
     } else if (ajuda) {
       caixaAjuda.innerHTML = '';
@@ -3871,7 +3872,7 @@
         ajuda.direcao === 'entrada' && ajuda.lat != null
           ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verRelatoNoMapa(ajuda); } }) : null,
         ' ',
-        UI.el('button', {
+        !podeAlterar() ? null : UI.el('button', {
           classe: 'btn btn-pequeno', type: 'button', texto: 'Marcar como atendido',
           onclick: function () {
             est.ajudaVista.add(ajuda.id);
@@ -4905,9 +4906,12 @@
       ]);
       var acoes = UI.el('div', { classe: 'feed-acoes' }, [
         m.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verRelatoNoMapa(m); } }) : null,
-        p ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Responder', onclick: function () { abrirConversa(m.participante_id); } }) : null,
+        // só leitura (encerrada/arquivada) ou participante fora da operação: a conversa abre só para consulta
+        p ? (podeAlterar() && !p.dados.removido
+          ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Responder', onclick: function () { abrirConversa(m.participante_id); } })
+          : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver conversa', onclick: function () { abrirConversa(m.participante_id); } })) : null,
         m.categoria === 'VITIMA' || (relato && window.RelatosRevisao && window.RelatosRevisao.ehRelato(m) && window.RelatosRevisao.disponivel())
-          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: m.categoria === 'VITIMA' ? 'Detalhes' : 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
+          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: m.categoria === 'VITIMA' || !podeAlterar() ? 'Detalhes' : 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
       ]);
       ul.appendChild(UI.el('li', { classe: 'feed-item' + (relato ? ' relato' : '') + (est.destaqueNovas.has(m.id) || !jaLida(m) ? ' nova' : ''), 'data-id': m.id }, [
         topo,

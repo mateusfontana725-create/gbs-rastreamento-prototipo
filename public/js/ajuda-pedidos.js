@@ -132,7 +132,9 @@
     var r = resumo();
     var btn = document.getElementById('btn-ajuda');
     if (btn) {
-      btn.hidden = !r.abertos || est.ausente;
+      // operação encerrada/arquivada: nada mais a atender, a pílula de alarme some (o histórico continua no menu)
+      var opAtual = P.op && P.op();
+      btn.hidden = !r.abertos || est.ausente || !opAtual || opAtual.status !== 'ativa';
       btn.classList.toggle('ajuda-sem-atendimento', r.semAtendimento > 0);
       var n = document.getElementById('ajuda-qtd');
       if (n) n.textContent = String(r.abertos);

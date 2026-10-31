@@ -1707,8 +1707,9 @@
     var faixa = $('faixa-encerrada');
     faixa.hidden = op.status === 'ativa';
     if (op.status !== 'ativa') {
-      $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> ' + C.esc('Operação encerrada em ' + C.hora(op.encerrada_em) + '. ' +
-        (op.dados_apagados_em ? 'Os dados pessoais foram apagados (regra antiga de retenção); o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados continuam guardados para consulta e análise.'));
+      // no celular só a primeira frase aparece (.faixa-detalhe some): a faixa fica com uma linha
+      $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> ' + C.esc((op.arquivada_em ? 'Arquivada' : 'Encerrada') + ' em ' + C.hora(op.encerrada_em) + '.') +
+        ' <span class="faixa-detalhe">' + C.esc(op.dados_apagados_em ? 'Os dados pessoais foram apagados (regra antiga de retenção); o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados continuam guardados para consulta e análise.') + '</span>';
     }
     atualizarTitulo();
   }
@@ -1772,7 +1773,7 @@
       options: { position: 'bottomleft' },
       onAdd: function () {
         var div = L.DomUtil.create('div', 'legenda');
-        div.innerHTML = '<details class="legenda-det"><summary>▤ Legenda</summary><div class="legenda-corpo"></div></details>';
+        div.innerHTML = '<details class="legenda-det"><summary aria-label="Legenda">▤ <span class="rotulo-ctl">Legenda</span></summary><div class="legenda-corpo"></div></details>';
         est.legendaCorpo = div.querySelector('.legenda-corpo');
         L.DomEvent.disableClickPropagation(div);
         L.DomEvent.disableScrollPropagation(div);
@@ -1787,7 +1788,7 @@
       onAdd: function () {
         var div = L.DomUtil.create('div', 'controle-meteo');
         var ligada = window.MeteoPainel && window.MeteoPainel.estado ? Boolean(window.MeteoPainel.estado().ligada) : false;
-        div.innerHTML = '<button class="btn-meteo-mapa" type="button" id="opt-meteo" aria-pressed="' + ligada + '" title="Radar, previsão e alertas do tempo na área">☂ Meteorologia</button>';
+        div.innerHTML = '<button class="btn-meteo-mapa" type="button" id="opt-meteo" aria-pressed="' + ligada + '" title="Radar, previsão e alertas do tempo na área" aria-label="Meteorologia">☂ <span class="rotulo-ctl">Meteorologia</span></button>';
         L.DomEvent.disableClickPropagation(div);
         div.firstChild.addEventListener('click', function () { if (window.MeteoPainel && window.MeteoPainel.alternar) window.MeteoPainel.alternar(); });
         return div;

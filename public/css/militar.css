@@ -2588,3 +2588,39 @@ html.topo-oculto .btn-mostrar-topo { display: inline-flex; }
   html.acoes-lado-direita .camadas-mapa,
   html.acoes-lado-direita #mapa .leaflet-top.leaflet-right { margin-right: 116px; }
 }
+
+/* =====================================================================
+ * CELULAR (revisão de outubro/2026): menos poluição no painel
+ * - topo: uma faixa só de botões compactos que rola de lado (antes eram
+ *   duas linhas de cinco, ~100 px a menos de mapa);
+ * - controles do mapa só com ícone; filtros numa linha; faixa de
+ *   operação encerrada com uma linha; etiqueta de esconder o cabeçalho
+ *   pequena, no canto.
+ * ===================================================================== */
+@media (max-width: 860px) and (orientation: portrait) {
+  .acoes-topo {
+    display: flex; grid-auto-flow: unset; grid-template-columns: none; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity; padding-right: 18px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  }
+  .acoes-topo .btn-acao-topo { flex: 0 0 auto; min-width: 58px; max-width: 76px; min-height: 42px; padding: 3px 4px; font-size: .56rem; scroll-snap-align: start; }
+  .acoes-topo .btn-acao-topo .ico-acao { font-size: .9rem; height: 16px; line-height: 16px; }
+  .acoes-topo .btn-acao-topo .ico-camera { height: 14px; margin: 1px 0; }
+  .acoes-topo .btn-acao-topo .ico-msg { height: 13px; margin: 1.5px 0; }
+  body.personalizando .acoes-topo { -webkit-mask-image: none; mask-image: none; flex-wrap: wrap; }
+}
+@media (max-width: 600px) {
+  .rotulo-ctl { display: none; }
+  .btn-meteo-mapa { padding: 0 9px; letter-spacing: 0; font-size: 1rem; }
+  .legenda-det:not([open]) > summary { padding-left: 9px; padding-right: 9px; font-size: 1rem; letter-spacing: 0; }
+  .legenda-det[open] > summary .rotulo-ctl { display: inline; }
+  /* etiqueta "Esconder cabeçalho": só a seta, no canto direito (não cobre a faixa nem o centro do mapa) */
+  .btn-recolher-topo { left: auto; right: 8px; transform: none; padding: 0 10px; font-size: 0; gap: 0; }
+  .btn-recolher-topo span { font-size: .72rem; }
+  .faixa-encerrada { padding: 6px 48px 6px 10px; font-size: .8rem; }
+  .faixa-detalhe { display: none; }
+  /* filtros da central (Todas / Relatos / Mensagens) numa linha só */
+  #painel-msgs .filtros { flex-wrap: nowrap; }
+  #painel-msgs .filtros .btn { flex: 1 1 0; min-width: 0; }
+  .central-abas .btn { padding-left: 6px; padding-right: 6px; }
+}

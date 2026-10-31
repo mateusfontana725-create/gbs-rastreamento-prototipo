@@ -1309,8 +1309,14 @@
       var cri = (l || []).filter(function (r) { return r.criador; })[0] || (l || [])[0];
       resp.textContent = cri ? cri.nome + ((l || []).length > 1 ? ' (+' + (l.length - 1) + ')' : '') : 'não informado';
     }).catch(function () { resp.textContent = 'indisponível'; });
-    C.cliente.from('participantes').select('id', { count: 'exact', head: true }).eq('operacao_id', o.id).neq('tipo', 'responsavel').eq('removido', false)
-      .then(function (r) { part.textContent = r.error ? 'indisponível' : String(r.count == null ? '—' : r.count); }, function () { part.textContent = 'indisponível'; });
+    if (o.arquivada_em) {
+      // operação arquivada (migração 055): a contagem foi guardada no arquivamento
+      C.cliente.from('operacao_arquivos').select('resumo').eq('operacao_id', o.id).maybeSingle()
+        .then(function (r) { var n = r && r.data && r.data.resumo ? r.data.resumo.participantes : null; part.textContent = r.error || n == null ? 'indisponível' : String(n); }, function () { part.textContent = 'indisponível'; });
+    } else {
+      C.cliente.from('participantes').select('id', { count: 'exact', head: true }).eq('operacao_id', o.id).neq('tipo', 'responsavel').eq('removido', false)
+        .then(function (r) { part.textContent = r.error ? 'indisponível' : String(r.count == null ? '—' : r.count); }, function () { part.textContent = 'indisponível'; });
+    }
     return no;
   }
 
@@ -1353,10 +1359,17 @@
     m.sujo = false;
     var ops;
     try {
-      ops = await C.consultarTudo(function () {
-        return C.cliente.from('operacoes').select('id,codigo,tipo,tipo_outro,status,acionado_em,criada_em,encerrada_em,dados_apagados_em,local_lat,local_lng,local_endereco,descricao,ipo')
-          .order('criada_em', { ascending: false });
-      });
+      var colunasMapa = 'id,codigo,tipo,tipo_outro,status,acionado_em,criada_em,encerrada_em,dados_apagados_em,local_lat,local_lng,local_endereco,descricao,ipo';
+      try {
+        ops = await C.consultarTudo(function () {
+          return C.cliente.from('operacoes').select(colunasMapa + ',arquivada_em').order('criada_em', { ascending: false });
+        });
+      } catch (e) {
+        // banco sem a migração 055 (sem arquivada_em): as mesmas colunas de antes
+        ops = await C.consultarTudo(function () {
+          return C.cliente.from('operacoes').select(colunasMapa).order('criada_em', { ascending: false });
+        });
+      }
     } catch (e) {
       if (mapaDash !== m) return;
       m.aviso.hidden = false;

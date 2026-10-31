@@ -1268,6 +1268,37 @@ chave própria).
 - Continuam: **Relatório final (PDF)** e o resultado da operação e **Excluir operação** (para quem pode).
   Os dados não são apagados ao encerrar (migração 027).
 
+### Arquivamento de operações encerradas (migração 055)
+
+Para o histórico não estourar o banco do plano do Supabase, uma operação **encerrada** pode ser **arquivada**: todas as
+linhas dela saem do banco para **um arquivo JSON compactado (gzip) no Storage** (bucket privado `arquivos`,
+`<operação>/<uuid>.json.gz`). A operação continua na lista e abre só para consulta, como antes.
+
+- **Quando:** sozinho, todo dia (`/api/arquivar`, Vercel Cron às 7h30 UTC), para as encerradas há **`ARQUIVAR_APOS_DIAS`**
+  dias (padrão **7**; `0` arquiva no dia seguinte ao encerramento). Ou na hora: lista de operações → **⋮ → Arquivar agora
+  (liberar espaço)** (quem criou a operação ou administrador da equipe dela).
+- **O que sai do banco:** participantes, posições, trilhas, mensagens, fotos (as linhas; os arquivos ficam), setores,
+  pontos, grupos, missões, diário, SCI, buscas, pedidos de ajuda e demais registros. As tabelas vêm do catálogo do banco
+  (toda tabela com `operacao_id` e as ligadas só ao participante): uma tabela nova entra no arquivo sozinha.
+- **O que fica no banco:** a operação (com `arquivada_em`), a equipe de responsáveis, os relatórios, as vítimas e as
+  localizações de vítima (pequenas e usadas nas estatísticas gerais), e `operacao_arquivos` (caminho, SHA-256,
+  contagem de cada tabela, resumo da lista e os números prontos dos dashboards).
+- **Fotos, imagens do SCI, fichas e relatórios** continuam no Storage, nas mesmas pastas, e continuam abrindo.
+- **Sem perda de dados:** o servidor (1) conta as linhas de cada tabela, (2) exporta em páginas e confere a quantidade,
+  (3) compacta e envia, (4) **baixa de volta** e confere SHA-256, tamanho, formato e contagens, e só então (5) o banco
+  **reconta tudo** (tem de bater com o arquivo) e apaga, numa transação só, conferindo no fim que nada sobrou e que
+  nenhum arquivo do Storage foi para a fila de exclusão. Qualquer divergência desfaz tudo e remove o arquivo enviado.
+- **Consulta:** ao abrir o painel ou o SCI de uma operação arquivada, o arquivo é baixado uma vez, conferido e lido na
+  memória (`js/arquivo-local.js`). Mapa, trilhas, participantes, mensagens, diário, relatórios (diário, comando,
+  passagem, final e imprensa) e SCI funcionam como na operação encerrada. A pílula diz **Arquivada · só leitura**.
+- **Dashboards:** o da operação (janela própria e link público) usa os números guardados no arquivamento; o geral da
+  tela inicial continua igual (lê as vítimas, que ficam no banco). A lista e o mapa mostram o selo **Arquivada**.
+- **Excluir** uma operação arquivada apaga também o arquivo e as fotos (pela pasta da operação no Storage).
+- **Espaço:** o PostgreSQL reaproveita o espaço liberado para os dados novos (o banco para de crescer). Para o tamanho
+  mostrado no painel do Supabase cair de vez, rode `VACUUM FULL` nas tabelas grandes (ex.: `posicoes`) num horário sem
+  operação ativa (ele trava a tabela enquanto roda).
+- Variáveis: `ARQUIVAR_APOS_DIAS` (opcional), e as já usadas `SUPABASE_SECRET_KEY` e `CRON_SECRET`.
+
 ### Diário da operação
 
 - **Ferramentas → Diário da operação** (ou **Diário da operação** no menu **⋮** da linha na lista de operações): registro cronológico agrupado
@@ -1750,6 +1781,7 @@ rastreamento-sar/
    | `SUPABASE_PUBLISHABLE_KEY` | chave publishable (ou anon) |
    | `SUPABASE_SECRET_KEY` | chave secret (ou service_role) — usada na limpeza diária e no cadastro de responsáveis |
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
+   | `ARQUIVAR_APOS_DIAS` | (opcional) dias depois do encerramento para arquivar a operação sozinha (`/api/arquivar`, migração 055). Padrão 7; `0` arquiva no dia seguinte ao encerramento |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
    | `APP_ANDROID_URL` | (opcional) endereço do APK do aplicativo Android. Padrão: o Release `app-android` deste repositório. `desligado` esconde o botão "Baixar aplicativo" |
@@ -1848,6 +1880,7 @@ fichas e registros continuam guardados para consulta e análise, e o painel abre
 | Situação | O que acontece com os dados |
 |---|---|
 | Encerrar a operação | ficam guardados (painel só leitura) |
+| Arquivar (migração 055) | saem do banco para um arquivo compactado no Storage; a operação continua na lista e abre só para consulta |
 | Limpeza diária | não apaga dados de operação |
 | Excluir operação | apaga tudo **e a própria operação** (some da lista), na hora — ver seção 1. É o único jeito de apagar |
 

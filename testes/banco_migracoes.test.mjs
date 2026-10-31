@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2378,5 +2378,125 @@ console.log('Relatório para imprensa (migração 054)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: op54.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–054 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Arquivamento de operações encerradas (migração 055)');
+{
+  const J = (o) => JSON.stringify(o);
+  const svc = (sql, params) => como(null, sql, params, 'service_role');
+  const u55 = (n) => '55555555-0000-4000-8000-' + String(n).padStart(12, '0');
+  // operação que será arquivada, com dados em várias tabelas, e outra ativa que não pode ser tocada
+  const opA = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 055', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre', local_lat: -22.9, local_lng: -43.2 }) });
+  const opB = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 055 ATIVA', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2)`, [opA.id, resp2]);
+  const [a1, a2, b1] = [await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+  const p1 = await rpc(a1, 'ingressar', { p_token: opA.token_militar, p_nome: 'Cb Arquivo', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const p2 = await rpc(a2, 'ingressar', { p_token: opA.token_civil, p_nome: 'Civil Arquivo', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const pb = await rpc(b1, 'ingressar', { p_token: opB.token_civil, p_nome: 'Civil Ativa', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const t0 = Date.now() - 600e3;
+  const ptA = (n, lat, lng, t) => ({ id: u55(n), lat, lng, prec: 8, t });
+  await rpc(a1, 'enviar_posicoes_lote', { p_participante: p1.participante_id, p_gps: 'ok', p_pontos: J([1, 2, 3, 4, 5].map((i) => ptA(i, -22.9 + i * 1e-4, -43.2, t0 + i * 15e3))) });
+  await rpc(a2, 'enviar_posicoes_lote', { p_participante: p2.participante_id, p_gps: 'ok', p_pontos: J([6, 7, 8].map((i) => ptA(i, -22.91, -43.2 + i * 1e-4, t0 + i * 15e3))) });
+  await rpc(b1, 'enviar_posicoes_lote', { p_participante: pb.participante_id, p_gps: 'ok', p_pontos: J([9, 10].map((i) => ptA(i, -22.8, -43.1, t0 + i * 15e3))) });
+  await rpc(a2, 'participante_enviar_mensagem', { p_participante: p2.participante_id, p_categoria: 'PISTA', p_texto: 'Pegadas na trilha', p_lat: -22.91, p_lng: -43.2 });
+  await rpc(a1, 'participante_registrar_vitima', { p_participante: p1.participante_id, p_condicao: 'viva', p_lat: -22.905, p_lng: -43.205, p_precisao: 8, p_posicao_em: new Date().toISOString(), p_client_id: u55(20) });
+  const vit = await rpc(resp1, 'salvar_vitima', { p_operacao: opA.id, p_id: null, p_dados: J({ nome: 'Maria', idade: 70 }) });
+  await rpc(resp1, 'salvar_setor', { p_operacao: opA.id, p_id: null, p_dados: J({ nome: 'S-A', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 300 }) });
+  await rpc(resp1, 'salvar_ponto', { p_operacao: opA.id, p_id: null, p_dados: J({ categoria: 'BASE', titulo: 'Base A', lat: -22.9, lng: -43.2 }) });
+  await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opA.id, p_id: null, p_dados: J({ client_id: u55(30), nome: 'Trilha A', estado: 'planejada', pontos: [[-22.9, -43.2], [-22.901, -43.201]] }) });
+  const cFoto = u55(40);
+  const caminhoFoto = opA.id + '/' + p2.participante_id + '/' + cFoto + '.jpg';
+  await como(a2, `insert into storage.objects (bucket_id, name) values ('fotos', $1)`, [caminhoFoto]);
+  await rpc(a2, 'registrar_foto', { p_participante: p2.participante_id, p_client_id: cFoto, p_origem: 'gps', p_lat: -22.9, p_lng: -43.2, p_precisao: 6,
+    p_posicao_em: new Date().toISOString(), p_capturada_em: new Date().toISOString(), p_legenda: 'rastro', p_bytes: 1000, p_largura: 800, p_altura: 600 });
+  const contarOp = async (tb, id) => (await db.query(`select count(*)::int n from public.${tb} where operacao_id = $1`, [id])).rows[0].n;
+  const antesB = { participantes: await contarOp('participantes', opB.id), posicoes: await contarOp('posicoes', opB.id) };
+  chk(await contarOp('posicoes', opA.id) === 8 && await contarOp('fotos', opA.id) === 1 && await contarOp('vitima_localizacoes', opA.id) === 1, 'pré-condição: operação com posições, foto e localização de vítima');
+
+  chk(/operacao_ativa/.test(await erroDe(rpc(resp1, 'arquivo_pode_arquivar', { p_operacao: opA.id }))), 'operação ativa: não arquiva');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opA.id });
+  const estudoAntes = J(await rpc(resp1, 'estudo_geral', {}));
+  const dashAntes = await rpc(resp1, 'dashboard_operacao_dados', { p_operacao: opA.id });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'arquivo_pode_arquivar', { p_operacao: opA.id }))), 'responsável da equipe (sem ser criador nem administrador) não pede o arquivamento');
+  chk((await rpc(resp1, 'arquivo_pode_arquivar', { p_operacao: opA.id })).ok === true, 'quem criou pode pedir o arquivamento da operação encerrada');
+  chk(/permission denied/.test(await erroDe(como(resp1, 'select public.servidor_arquivo_preparar($1)', [opA.id]))), 'responsável não chama as funções do servidor');
+  const cand0 = (await svc('select public.servidor_arquivo_candidatas(0, 50) id')).rows.map((r) => r.id);
+  const cand7 = (await svc('select public.servidor_arquivo_candidatas(7, 50) id')).rows.map((r) => r.id);
+  chk(cand0.includes(opA.id) && !cand0.includes(opB.id) && !cand7.includes(opA.id), 'candidatas: só encerradas, e só depois do prazo em dias');
+
+  // 1. preparar
+  const prep = (await svc('select public.servidor_arquivo_preparar($1) d', [opA.id])).rows[0].d;
+  const totais = Object.fromEntries(prep.tabelas.map((t) => [t.tabela, Number(t.total)]));
+  chk(totais.posicoes === 8 && totais.participantes === 2 && totais.fotos === 1 && totais.app_vinculos === 0, 'preparar: contagem de cada tabela (inclusive as ligadas só ao participante)', totais);
+  chk(prep.leituras.relatorio_operacao && prep.leituras.relatorio_operacao.operacao.codigo === 'OP 055', 'preparar: relatório completo lido pela mesma função do painel');
+  chk(prep.storage.some((o) => o.bucket === 'fotos' && o.caminho === caminhoFoto), 'preparar: lista os arquivos do Storage da operação');
+  // 2. exportar em páginas pequenas (testa a paginação)
+  const exportado = {};
+  for (const t of prep.tabelas) {
+    exportado[t.tabela] = [];
+    for (let i = 0; ; i += 3) {
+      const pag = (await svc('select public.servidor_arquivo_tabela($1, $2, $3, 3) d', [opA.id, t.tabela, i])).rows[0].d;
+      exportado[t.tabela].push(...pag);
+      if (pag.length < 3) break;
+    }
+  }
+  const contagens = Object.fromEntries(Object.entries(exportado).map(([k, v]) => [k, v.length]));
+  chk(Object.keys(contagens).every((k) => contagens[k] === totais[k]), 'exportação em páginas: mesma quantidade de linhas que o preparar', contagens);
+  chk(new Set(exportado.posicoes.map((x) => x.id)).size === 8, 'exportação em páginas: nenhuma posição repetida nem perdida');
+  chk(/dados_invalidos/.test(await erroDe(svc('select public.servidor_arquivo_tabela($1, $2, 0, 10)', [opA.id, 'responsaveis']))), 'só exporta tabelas do arquivo');
+  // 3. arquivo no Storage (o servidor envia e confere antes)
+  const caminhoArq = opA.id + '/' + u55(50) + '.json.gz';
+  chk(/arquivamento_sem_arquivo/.test(await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'a'.repeat(64), J(contagens)]))), 'confirmar sem o arquivo no Storage: recusado');
+  // upload do servidor (no Supabase a chave secreta grava no Storage; aqui, o superusuário faz esse papel)
+  await db.query(`insert into storage.objects (bucket_id, name) values ('arquivos', $1)`, [caminhoArq]);
+  const errado = Object.assign({}, contagens, { posicoes: 7 });
+  const div = await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'a'.repeat(64), J(errado)]));
+  chk(/arquivo_divergente/.test(div), 'contagem do arquivo diferente da do banco: recusado', div);
+  chk(await contarOp('posicoes', opA.id) === 8 && !(await db.query('select arquivada_em from public.operacoes where id = $1', [opA.id])).rows[0].arquivada_em, 'recusado: nada foi apagado e a operação não ficou arquivada');
+  const semTabela = Object.assign({}, contagens); delete semTabela.fotos;
+  chk(/arquivo_divergente/.test(await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'a'.repeat(64), J(semTabela)]))), 'arquivo sem uma das tabelas: recusado');
+  // 4. confirmar de verdade
+  const pendAntes = (await db.query('select count(*)::int n from public.arquivos_pendentes where operacao_id = $1', [opA.id])).rows[0].n;
+  const conf = (await svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4) d', [opA.id, caminhoArq, 'b'.repeat(64), J(contagens)])).rows[0].d;
+  chk(conf.apagadas.posicoes === 8 && conf.apagadas.participantes === 2, 'confirmar: apaga as linhas da operação', conf.apagadas);
+  const sobrou = [];
+  for (const t of prep.tabelas.filter((x) => x.apagar && !['app_vinculos', 'permanencia_cursor'].includes(x.tabela))) if (await contarOp(t.tabela, opA.id)) sobrou.push(t.tabela);
+  chk(sobrou.length === 0, 'nenhuma linha da operação sobrou nas tabelas do arquivo', sobrou);
+  const vl = (await db.query('select participante_id, mensagem_id, condicao from public.vitima_localizacoes where operacao_id = $1', [opA.id])).rows;
+  chk(vl.length === 1 && vl[0].participante_id === null && vl[0].mensagem_id === null && vl[0].condicao === 'viva', 'localização de vítima fica no banco (sem o vínculo com participante e mensagem)');
+  chk(await contarOp('vitimas', opA.id) === 1, 'ficha de vítima fica no banco');
+  chk((await db.query('select count(*)::int n from public.arquivos_pendentes where operacao_id = $1', [opA.id])).rows[0].n === pendAntes, 'nenhum arquivo do Storage foi para a fila de exclusão');
+  chk((await db.query(`select count(*)::int n from storage.objects where bucket_id = 'fotos' and name = $1`, [caminhoFoto])).rows[0].n === 1, 'a foto continua no Storage');
+  const regArq = (await db.query('select * from public.operacao_arquivos where operacao_id = $1', [opA.id])).rows[0];
+  chk(regArq && regArq.resumo.participantes === 2 && regArq.resumo.posicoes === 8 && regArq.instantaneos.dashboard, 'registro do arquivo com resumo da lista e números do dashboard', regArq && regArq.resumo);
+  chk(antesB.participantes === await contarOp('participantes', opB.id) && antesB.posicoes === await contarOp('posicoes', opB.id), 'operação ativa não foi tocada');
+  // 5. depois do arquivamento
+  const dashDepois = await rpc(resp1, 'dashboard_operacao_dados', { p_operacao: opA.id });
+  const difs = (a, b, pre = '') => { const out = []; const ka = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    for (const k of ka) { const x = a ? a[k] : undefined, y = b ? b[k] : undefined;
+      if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x)) out.push(...difs(x, y, pre + k + '.'));
+      else if (J(x) !== J(y)) out.push(pre + k + ': ' + J(x).slice(0, 80) + ' → ' + J(y).slice(0, 80)); } return out; };
+  // mesmo conteúdo, sem depender da ordem das chaves (o banco guarda em jsonb) e sem o horário da consulta
+  const canon = (v) => Array.isArray(v) ? v.map(canon) : (v && typeof v === 'object') ? Object.keys(v).filter((k) => k !== 'gerado_em').sort().reduce((o, k) => (o[k] = canon(v[k]), o), {}) : v;
+  chk(J(canon(dashDepois)) === J(canon(dashAntes)), 'dashboard da operação: os mesmos números de antes do arquivamento', difs(canon(dashAntes), canon(dashDepois)));
+  const estudoDepois = await rpc(resp1, 'estudo_geral', {});
+  chk(J(canon(estudoDepois)) === J(canon(JSON.parse(estudoAntes))), 'dashboard geral (estudo_geral): igual ao de antes do arquivamento', difs(canon(JSON.parse(estudoAntes)), canon(estudoDepois)));
+  chk((await rpc(resp1, 'estudo_operacao', { p_operacao: opA.id })) !== null, 'estudos da operação: vêm do que foi guardado');
+  chk(/operacao_arquivada/.test(await erroDe(rpc(resp1, 'relatorio_operacao', { p_operacao: opA.id }))), 'relatório completo pelo servidor: recusado (o painel lê do arquivo)');
+  chk((await como(resp2, `select count(*)::int n from storage.objects where bucket_id = 'arquivos'`)).rows[0].n === 1, 'responsável da equipe lê o arquivo no Storage');
+  chk((await como(await usuario('r55@cbm', false), `select count(*)::int n from storage.objects where bucket_id = 'arquivos'`)).rows[0].n === 0, 'quem não é da operação não lê o arquivo');
+  chk((await como(resp2, 'select count(*)::int n from public.operacao_arquivos where operacao_id = $1', [opA.id])).rows[0].n === 1, 'responsável da equipe lê o registro do arquivo');
+  const relA = opA.id + '/' + u55(60) + '.pdf';
+  await como(resp1, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [relA]);
+  const doc = await rpc(resp1, 'registrar_documento', { p_operacao: opA.id, p_caminho: relA, p_paginas: 2, p_bytes: 900, p_sha256: null, p_tipo: 'imprensa', p_referencia: null });
+  chk(doc.tipo === 'imprensa' && await contarOp('diario', opA.id) === 0, 'relatório novo de operação arquivada: guardado, sem recriar o diário no banco');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_ponto', { p_operacao: opA.id, p_id: null, p_dados: J({ categoria: 'BASE', titulo: 'X', lat: -22.9, lng: -43.2 }) }))), 'operação arquivada continua só leitura');
+  chk(/operacao_ja_arquivada/.test(await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'b'.repeat(64), J(contagens)]))), 'arquivar de novo: recusado');
+  // 6. excluir operação arquivada: os arquivos do Storage saem pela pasta da operação
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opA.id });
+  const fila = (await db.query('select bucket, caminho from public.arquivos_pendentes where operacao_id = $1 order by bucket', [opA.id])).rows;
+  chk(fila.some((x) => x.bucket === 'arquivos' && x.caminho === caminhoArq) && fila.some((x) => x.bucket === 'fotos' && x.caminho === caminhoFoto), 'excluir operação arquivada: o arquivo e a foto entram na fila de exclusão', fila);
+  chk((await db.query('select count(*)::int n from public.operacao_arquivos where operacao_id = $1', [opA.id])).rows[0].n === 0, 'excluir operação arquivada: o registro do arquivo sai junto');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opB.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–055 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

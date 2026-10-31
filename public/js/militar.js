@@ -924,7 +924,9 @@
     ops.forEach(function (op) {
       var selo = op.status === 'ativa'
         ? UI.el('span', { classe: 'selo selo-ok', texto: 'Ativa' })
-        : UI.el('span', { classe: 'selo selo-neutro', texto: 'Encerrada' });
+        : op.arquivada_em
+          ? UI.el('span', { classe: 'selo selo-neutro', title: 'Encerrada e arquivada em ' + C.hora(op.arquivada_em) + ': consulta pelo arquivo da operação', texto: 'Arquivada' })
+          : UI.el('span', { classe: 'selo selo-neutro', texto: 'Encerrada' });
       // Encerrada também abre (só visualização), inclusive depois da retenção (cadastro, diário e relatórios)
       var semPainel = false;
       var funcoes = [];
@@ -936,6 +938,7 @@
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
       if (incompleta) funcoes.push({ texto: 'Completar cadastro', acao: function () { window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } }); } });
+      if (podeArquivar(op)) funcoes.push({ texto: 'Arquivar agora (liberar espaço)', acao: function () { arquivarOperacao(op); } });
       if (podeExcluir(op)) funcoes.push({ texto: 'Excluir operação', perigo: true, acao: function () { excluirOperacao(op); } });
       var acoes = UI.el('div', { classe: 'op-acoes' }, funcoes.length ? [menuLinha(funcoes)] : []);
       var deEquipe = est.usuario && op.responsavel_id !== est.usuario.id
@@ -1326,6 +1329,37 @@
   /* ------------------------------------------------------------------ */
   // Mostrado só a quem pode excluir: quem criou a operação ou um administrador.
   // A regra que vale é a do banco (função excluir_operacao); isto só esconde o botão.
+  // Arquivar (migração 055): operação encerrada, ainda não arquivada; quem criou ou administrador (o servidor confere)
+  function podeArquivar(op) {
+    if (!op || op.status === 'ativa' || op.arquivada_em || !('arquivada_em' in op)) return false;
+    return Boolean(est.usuario && (op.responsavel_id === est.usuario.id || (est.responsavel && est.responsavel.admin)));
+  }
+
+  async function arquivarOperacao(op) {
+    var ok = await UI.confirmar({
+      titulo: 'Arquivar a operação ' + op.codigo + '?',
+      texto: 'Os dados da operação (participantes, posições, trilhas, mensagens, setores, pontos, diário e registros) saem do banco '
+        + 'para um arquivo compactado no Storage, para liberar espaço. A operação continua na lista e abre só para consulta, '
+        + 'com mapa, relatórios e dashboard. Fotos e relatórios continuam onde estão. O arquivo é conferido antes de apagar '
+        + 'qualquer coisa; se algo não bater, nada é apagado. Não dá para desfazer pelo app.',
+      ok: 'Arquivar agora',
+    });
+    if (!ok) return;
+    UI.aviso('Arquivando ' + op.codigo + '… pode levar até um minuto.', 'ok', 5000);
+    try {
+      var s = await C.cliente.auth.getSession();
+      var token = s && s.data && s.data.session ? s.data.session.access_token : null;
+      if (!token) throw C.criarErro({ message: 'nao_autenticado' });
+      var r = await fetch('/api/arquivar', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ operacao_id: op.id }) });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok || !j.ok) throw C.criarErro({ message: (j.erro || 'falha') + (j.detalhe ? ' (' + j.detalhe + ')' : '') });
+      UI.aviso('Operação ' + op.codigo + ' arquivada: ' + (j.linhas || 0) + ' registro(s) num arquivo de ' + Math.max(1, Math.round((j.bytes || 0) / 1024)) + ' KB.', 'ok', 8000);
+    } catch (e) {
+      UI.aviso('Não foi possível arquivar: ' + (e.message || e), 'erro', 10000);
+    }
+    mostrarOperacoes();
+  }
+
   function podeExcluir(op) {
     return Boolean(op && est.usuario && est.responsavel && (op.responsavel_id === est.usuario.id || est.responsavel.admin));
   }
@@ -1436,6 +1470,17 @@
       UI.aviso('Operação não encontrada ou sem permissão de acesso.', 'erro');
       location.hash = '';
       return;
+    }
+    // Operação arquivada (migração 055): os dados estão no arquivo do Storage; baixa e confere antes de montar o painel
+    if (op.arquivada_em && window.ArquivoLocal) {
+      try {
+        await window.ArquivoLocal.carregar(op, { usuarioNome: est.responsavel && est.responsavel.nome });
+      } catch (e) {
+        carregandoPainel(false);
+        UI.aviso('Não foi possível abrir o arquivo desta operação: ' + (e.message || e), 'erro', 10000);
+        location.hash = '';
+        return;
+      }
     }
     est.op = op;
     avaliarGaveta();
@@ -1638,7 +1683,7 @@
     var op = est.op;
     $('op-codigo').textContent = op.codigo;
     var tipoOp = window.Cadastro.textoTipo(op);
-    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa' : 'Operação encerrada · só leitura');
+    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa' : op.arquivada_em ? 'Operação arquivada · só leitura' : 'Operação encerrada · só leitura');
     $('menu-dados-estado').textContent = 'tipo' in op && window.Cadastro.incompleto(op) ? 'cadastro incompleto' : '';
     $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
@@ -2572,7 +2617,7 @@
     if (!pil) return;
     var cls, txt;
     if (est.op && est.op.status !== 'ativa') {
-      cls = 'parado'; txt = 'Encerrada · só leitura';
+      cls = 'parado'; txt = est.op.arquivada_em ? 'Arquivada · só leitura' : 'Encerrada · só leitura';
     } else if (navigator.onLine === false || (est.syncFalhou && est.tempoReal !== 'ok')) {
       cls = 'sem_atualizacao'; txt = 'Sem conexão — reconectando';
     } else if (est.tempoReal === 'ok') {

@@ -139,6 +139,12 @@
     return /^[0-9a-f]{64}$/.test(t) ? t : null;
   }
 
+  // Código do convite por e-mail (#t=…&c=…): só preenche o nome; quem manda no acesso é o token do link
+  function lerCodigoConvite() {
+    var c = (new URLSearchParams(location.hash.replace(/^#/, '')).get('c') || '').trim().toLowerCase();
+    return /^[0-9a-f]{24}$/.test(c) ? c : null;
+  }
+
   async function iniciar() {
     $('btn-recarregar').addEventListener('click', function () { location.reload(); });
 
@@ -180,6 +186,14 @@
     $('ini-tipo-escolha').hidden = !permiteMilitar;
 
     var salvo = C.local.ler(CHAVE_PART, null);
+    estado.convite = lerCodigoConvite();
+    if (estado.convite && !(salvo && salvo.token === estado.token)) {
+      try {
+        var conv = await C.rpc('convite_ler', { p_codigo: estado.convite });
+        if (conv && conv.nome) $('ini-nome').value = conv.nome;
+        else estado.convite = null;
+      } catch (e) { /* sem o nome pré-preenchido: a pessoa digita */ }
+    }
     if (salvo && salvo.token === estado.token) {
       $('ini-nome').value = salvo.nome || '';
       $('ini-cpf').value = mascararCpf(salvo.cpf || '');
@@ -479,7 +493,23 @@
       $('ini-tel').focus();
       return;
     }
+    if (!(await confirmarInicio())) return;
     await entrarNaBusca({ nome: nome, tipo: tipo, cpf: cpf, tel: tel });
+  }
+
+  // O rastreamento só começa com o toque da pessoa e a confirmação (uma vez por abertura da página:
+  // se o navegador pedir a permissão de novo, não pergunta outra vez).
+  async function confirmarInicio() {
+    if (estado.inicioConfirmado) return true;
+    var ok = await UI.confirmar({
+      titulo: 'Começar a enviar sua localização?',
+      texto: 'Sua posição passa a aparecer para os bombeiros e o caminho que você fizer fica registrado. ' +
+        'O envio continua até os bombeiros liberarem a sua saída (toque em "Quero sair da busca" para pedir).',
+      ok: 'Começar',
+      cancelar: 'Agora não',
+    });
+    if (ok) estado.inicioConfirmado = true;
+    return Boolean(ok);
   }
 
   // Pede a localização pelo mecanismo oficial do navegador, entra na operação
@@ -514,6 +544,7 @@
         p_token: estado.token, p_nome: dados.nome, p_tipo: dados.tipo,
         p_cpf: dados.cpf || null, p_telefone: dados.tel || null,
       });
+      if (estado.convite) C.rpc('convite_aceitar', { p_codigo: estado.convite, p_participante: part.participante_id }).catch(function () { /* o convite não impede a participação */ });
       estado.cpf = dados.cpf;
       estado.telefone = dados.tel;
       estado.saidaSolicitadaEm = part.saida_solicitada_em || null;
@@ -1287,7 +1318,9 @@
       else { segs[0] = segs[0].slice(sobra); total = MAX_TRILHA_TELA; }
     }
     if (!estado.linhaMinha) {
-      estado.linhaMinha = L.polyline(segs, { color: corMinha(), weight: 4, opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
+      // mais fina em telas pequenas (até 60% num celular de 360 px), nunca mais grossa que antes
+      var ft = Math.max(0.6, Math.min(1, 0.6 + 0.4 * ((window.innerWidth || 1280) - 360) / (1280 - 360)));
+      estado.linhaMinha = L.polyline(segs, { color: corMinha(), weight: Math.max(2.5, 4 * ft), opacity: 0.9, interactive: false, lineJoin: 'round' }).addTo(estado.mapa);
       estado.linhaFalhaMinha = L.polyline(falhas, { color: corMinha(), weight: 2, opacity: 0.55, dashArray: '4 8', interactive: false }).addTo(estado.mapa);
     } else {
       estado.linhaMinha.setLatLngs(segs);
@@ -2636,6 +2669,8 @@
     $('ini-tel').value = mascararTelefone(s.telefone || '');
     $('btn-iniciar').textContent = 'CONTINUAR';
     mostrarTela('inicio');
+    estado.inicioConfirmado = false;
+    if (!(await confirmarInicio())) return;
     await entrarNaBusca({ nome: s.nome, tipo: s.tipo, cpf: s.cpf, tel: s.telefone });
   }
 

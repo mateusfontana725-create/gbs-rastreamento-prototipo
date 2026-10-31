@@ -276,6 +276,12 @@
     var out = [secao(2, 'Setores varridos', true)];
     if (!d.setores.length) {
       out.push(nota('Nenhum setor de busca foi definido nesta operação.'));
+      // o mapa geral sai mesmo assim: trilhas, pontos, relatos e o local da operação
+      if (recursos.mapaGeral) {
+        out.push(subtitulo('Mapa geral da operação'));
+        out.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
+        out.push(legendaMapa());
+      }
       return out;
     }
     var concl = d.setores.filter(function (s) { return s.status === 'concluido'; });
@@ -334,8 +340,9 @@
   function legendaMapa() {
     function linha(cor, tracejado) { return { text: tracejado ? '- - - ' : '—— ', color: cor, bold: true }; }
     return { text: [
-      'Trilhas: ', linha('#dc2626'), 'militar    ', linha('#16a34a', true), 'civil    ', linha('#0891b2', true), 'responsável',
-      '        Marcadores: ★ local da operação · ! relato de campo · + vítima · B base · U última localização',
+      'Trilhas: ', linha('#dc2626'), 'militar    ', linha('#16a34a', true), 'civil    ', linha('#0891b2', true), 'responsável    ',
+      linha('#7c3aed', true), 'desenhada no mapa',
+      '        Marcadores: ★ local da operação · ! relato de campo · + vítima · B base · U última localização · F foto',
     ], fontSize: 7.5, color: COR.suave, margin: [0, 3, 0, 8] };
   }
 
@@ -373,7 +380,7 @@
     out.push(subtitulo('Pontos de interesse marcados no mapa'));
     if (!d.pontos.length) out.push(nota('Nenhum ponto de interesse marcado.'));
     else out.push(tabela(['Data e hora', 'Tipo', 'Título e descrição', 'Coordenadas', 'Por'], d.pontos.map(function (p) {
-      return [dataHoraCurta(p.criado_em), PONTO[p.categoria] || p.categoria,
+      return [dataHoraCurta(p.criado_em), p.tipo_nome || PONTO[p.categoria] || p.categoria,
         { stack: [{ text: p.titulo, style: 'td', bold: true }, vazio(p.descricao) ? null : { text: p.descricao, style: 'tdSuave' }].filter(Boolean) },
         { text: coord(p.lat, p.lng), style: 'tdMono' }, p.criado_por_nome];
     }), [56, 72, '*', 92, 70]));
@@ -543,7 +550,7 @@
         ['Localidade / município / região', txt(op.local_endereco)],
         ['Início das operações (acionamento do CB)', op.acionado_em ? dataHora(op.acionado_em) : '—'],
         ['Coordenadas de referência (último avistamento)', coord(op.local_lat, op.local_lng)],
-        ['Data e hora do último momento visto', i.desaparecimento ? dataHora(i.desaparecimento) : '—'],
+        ['Data e hora do último momento visto', (window.Ipo ? window.Ipo.textoHoraVisto(i, dataHora) : (i.desaparecimento ? dataHora(i.desaparecimento) : '')) || '—'],
         ['Nº de pessoas perdidas', i.pessoas_perdidas != null ? String(i.pessoas_perdidas) : '—'],
       ]),
       subtitulo('Vítima(s)'),
@@ -590,20 +597,26 @@
       .concat(secaoDiario(d))
       .concat(secaoBusca(d, 5))
       .concat(secaoResultado(d, d.busca ? 6 : 5));
+    return documento(d, recursos, conteudo, { titulo: 'Relatório final — ' + op.codigo, assunto: 'Relatório final de operação de busca e salvamento', marca: 'RELATÓRIO FINAL' });
+  }
 
+  // Página com cabeçalho (logo e código), rodapé (gerado em, página X de Y) e estilos comuns aos relatórios.
+  // o: { titulo, assunto, marca (texto do cabeçalho), cabecalhoNaPrimeira }
+  function documento(d, recursos, conteudo, o) {
+    var op = d.operacao;
     return {
       pageSize: 'A4',
       pageMargins: [40, 58, 40, 52],
       info: {
-        title: 'Relatório final — ' + op.codigo,
+        title: o.titulo,
         author: d.gerado_por_nome || '',
-        subject: 'Relatório final de operação de busca e salvamento',
+        subject: o.assunto,
         creator: 'Rastreamento GBS',
       },
       // Cabeçalho das páginas seguintes à capa: logo do Corpo de Bombeiros à esquerda e
       // código da operação à direita (sem a logo, sai só o nome da corporação).
       header: function (pagina) {
-        if (pagina === 1) return null;
+        if (pagina === 1 && !o.cabecalhoNaPrimeira) return null;
         var marca = recursos.logo
           ? { image: recursos.logo, width: 112 }
           : { text: 'CORPO DE BOMBEIROS MILITAR', fontSize: 8, bold: true, color: COR.texto };
@@ -614,7 +627,7 @@
               marca,
               { width: '*', stack: [
                 { text: op.codigo, fontSize: 8, bold: true, color: COR.texto, alignment: 'right' },
-                { text: 'RELATÓRIO FINAL  ·  DOCUMENTO RESTRITO', fontSize: 7.5, color: COR.acento, bold: true, alignment: 'right', characterSpacing: 0.6, margin: [0, 2, 0, 0] },
+                { text: o.marca + '  ·  DOCUMENTO RESTRITO', fontSize: 7.5, color: COR.acento, bold: true, alignment: 'right', characterSpacing: 0.6, margin: [0, 2, 0, 0] },
               ] },
             ] },
             { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 0.5, lineColor: COR.linha }] },
@@ -660,6 +673,118 @@
     };
   }
 
+  /* ---------- relatório diário ------------------------------------------ */
+  // dia = 'AAAA-MM-DD' (dia local). Situação ao fim do dia (mapa geral, setores, vítimas) e o que aconteceu no dia
+  // (números, encontros e o diário daquele dia). Mesmo cabeçalho e estilos do relatório final, sem sumário.
+  function montarDiario(d, recursos, dia) {
+    recursos = recursos || {};
+    var op = d.operacao;
+    var ref = data(dia + 'T12:00:00');
+    ANO_REF = ref ? ref.getFullYear() : null;
+    function noDia(v) { return chaveDia(v) === dia; }
+    var doDia = registrosDiario(d).filter(function (e) { return noDia(e.ocorrido_em); });
+    var encontros = doDia.filter(function (e) { return e.categoria === 'encontro'; });
+    var concluidos = doDia.filter(function (e) { return e.tipo === 'setor_concluido'; });
+    var entraram = (d.participantes || []).filter(function (p) { return noDia(p.entrou_em); });
+    var fotos = (d.fotos || []).filter(function (f) { return noDia(f.capturada_em); });
+    var pontos = (d.pontos || []).filter(function (p) { return noDia(p.criado_em); });
+    var numeros = [
+      [String(doDia.length), 'registros no diário'], [String(encontros.length), 'encontros e relatos'],
+      [String(concluidos.length), 'setores concluídos'], [String(entraram.length), 'pessoas entraram'], [String(fotos.length), 'fotos'],
+    ];
+    var conteudo = [];
+    if (recursos.logo) conteudo.push({ image: recursos.logo, width: 150, margin: [0, 0, 0, 14] });
+    conteudo.push({ text: 'RELATÓRIO DIÁRIO DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
+    conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
+    conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20 });
+    conteudo.push({ text: diaExtenso(dia + 'T12:00:00'), style: 'subtituloCapa', margin: [0, 4, 0, 12] });
+    conteudo.push(ficha([
+      ['Acionamento', dataHora(op.acionado_em)],
+      ['Situação', op.status === 'encerrada' ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'Em andamento'],
+      ['Dia da operação', ref && data(op.acionado_em || op.criada_em) ? String(Math.floor((ref - new Date(chaveDia(op.acionado_em || op.criada_em) + 'T12:00:00')) / 86400000) + 1) + 'º dia' : '—'],
+      ['Gerado', 'automaticamente pelo painel, com os dados do fim do dia'],
+    ]));
+    conteudo.push({
+      table: { widths: ['*', '*', '*', '*', '*'], body: [numeros.map(function (n) {
+        return { stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }], fillColor: COR.fundo, margin: [8, 7, 4, 7] };
+      })] },
+      layout: { hLineWidth: function () { return 0; }, vLineWidth: function (i) { return i > 0 && i < 5 ? 3 : 0; }, vLineColor: function () { return '#ffffff'; },
+        paddingLeft: function () { return 0; }, paddingRight: function () { return 0; }, paddingTop: function () { return 0; }, paddingBottom: function () { return 0; } },
+      margin: [0, 0, 0, 14],
+    });
+    if (recursos.mapaGeral) {
+      conteudo.push(subtitulo('Mapa geral (situação até o fim do dia)'));
+      conteudo.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
+      conteudo.push(legendaMapa());
+    }
+    conteudo.push(subtitulo('Setores'));
+    if (!d.setores.length) conteudo.push(nota('Nenhum setor de busca definido.'));
+    else conteudo.push(tabela(['Setor', 'Situação', 'Equipe / grupo', 'Área'], d.setores.map(function (s) {
+      var grupos = (s.missoes || []).map(function (m) { return m.grupo; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ');
+      return [{ text: s.nome, style: 'td', bold: true }, STATUS_SETOR[s.status] || s.status, txt([s.equipe, grupos].filter(Boolean).join(' · ')), textoArea(areaSetor(s))];
+    }), ['*', 80, 150, 60]));
+    conteudo.push(subtitulo('Vítimas'));
+    if (!(d.vitimas || []).length) conteudo.push(nota('Nenhuma ficha de vítima.'));
+    else conteudo.push(tabela(['Vítima', 'Idade', 'Características'], d.vitimas.map(function (v) {
+      return [{ text: v.nome, style: 'td', bold: true }, v.idade == null ? '—' : String(v.idade), txt([v.caracteristicas, v.roupas].filter(function (x) { return !vazio(x); }).join(' · '))];
+    }), ['*', 40, 230]));
+    conteudo.push(subtitulo('Encontros e relatos do dia'));
+    if (!encontros.length) conteudo.push(nota('Nenhum encontro ou relato de campo neste dia.'));
+    else conteudo.push(tabela(['Hora', 'Registro', 'Local', 'Por'], encontros.map(function (e) {
+      return [hora(e.ocorrido_em), { stack: [{ text: e.titulo, style: 'td', bold: true }, vazio(e.detalhe) ? null : { text: e.detalhe, style: 'tdSuave' }].filter(Boolean) },
+        { text: coord(e.lat, e.lng), style: 'tdMono' }, e.autor_nome];
+    }), [36, '*', 92, 80]));
+    conteudo.push(subtitulo('Diário do dia'));
+    if (!doDia.length) conteudo.push(nota('Nenhum registro no diário neste dia.'));
+    else conteudo.push(tabela(['Hora', 'Tipo', 'Registro', 'Por'], doDia.map(function (e) {
+      return [{ text: hora(e.ocorrido_em), style: 'tdMono', bold: true }, { text: CATEGORIA[e.categoria] || e.categoria, style: 'tdSuave' },
+        { stack: [{ text: e.titulo, style: 'td' }, vazio(e.detalhe) ? null : { text: e.detalhe, style: 'tdSuave' }].filter(Boolean) }, { text: txt(e.autor_nome), style: 'tdSuave' }];
+    }), [36, 64, '*', 80]));
+    if (pontos.length) {
+      conteudo.push(subtitulo('Pontos marcados no dia'));
+      conteudo.push(tabela(['Hora', 'Tipo', 'Título', 'Coordenadas'], pontos.map(function (p) {
+        return [hora(p.criado_em), p.tipo_nome || PONTO[p.categoria] || p.categoria, { text: p.titulo, style: 'td', bold: true }, { text: coord(p.lat, p.lng), style: 'tdMono' }];
+      }), [36, 100, '*', 92]));
+    }
+    var data0 = dia.split('-');
+    return documento(d, recursos, conteudo, { titulo: 'Relatório diário ' + data0[2] + '/' + data0[1] + '/' + data0[0] + ' — ' + op.codigo,
+      assunto: 'Relatório diário de operação de busca e salvamento', marca: 'RELATÓRIO DIÁRIO ' + data0[2] + '/' + data0[1] });
+  }
+
+  /* ---------- relatório da passagem de comando --------------------------- */
+  // pas: a passagem (passagens_comando); linhas: o briefing do momento em linhas "RÓTULO: texto" (Briefing.textoPuro).
+  var ESTADO_PASSAGEM = { pendente: 'Aguardando aceite', aceita: 'Aceita', recusada: 'Recusada', cancelada: 'Cancelada', assumida: 'Comando assumido' };
+  function montarPassagem(op, pas, linhas, recursos, extra) {
+    recursos = recursos || {};
+    extra = extra || {};
+    var d = { operacao: op, gerado_em: extra.gerado_em || new Date().toISOString(), gerado_por_nome: extra.gerado_por_nome || '' };
+    ANO_REF = null;
+    var conteudo = [];
+    if (recursos.logo) conteudo.push({ image: recursos.logo, width: 150, margin: [0, 0, 0, 14] });
+    conteudo.push({ text: 'PASSAGEM DE COMANDO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
+    conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
+    conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20, margin: [0, 0, 0, 12] });
+    conteudo.push(ficha([
+      ['Quem passou', txt(pas.de_nome)],
+      ['Quem recebeu', txt(pas.para_nome)],
+      ['Pedido em', dataHora(pas.criada_em)],
+      ['Situação', (ESTADO_PASSAGEM[pas.estado] || pas.estado) + (pas.respondida_em ? ' em ' + dataHora(pas.respondida_em) : '')],
+      vazio(pas.nota) ? null : ['Recado de quem passou', pas.nota],
+      vazio(pas.resposta_nota) ? null : ['Resposta', pas.resposta_nota],
+      vazio(pas.motivo) ? null : ['Motivo', pas.motivo],
+      ['Acionamento da operação', dataHora(op.acionado_em)],
+    ]));
+    conteudo.push(subtitulo('Briefing entregue (foto de ' + dataHora((pas.resumo && pas.resumo.gerado_em) || pas.criada_em) + ')'));
+    var corpo = (linhas || []).slice(1).map(function (l) {
+      var i = l.indexOf(': ');
+      return i > 0 ? [l.slice(0, i).charAt(0) + l.slice(1, i).toLowerCase(), l.slice(i + 2)] : ['', l];
+    });
+    conteudo.push(corpo.length ? ficha(corpo) : nota('Briefing indisponível.'));
+    if (extra.observacoes) conteudo.push(ficha([['Observações', extra.observacoes]]));
+    conteudo.push(nota('O comando só muda quando quem recebe aceita; o horário do aceite fica registrado no diário da operação. Este documento reproduz o briefing que foi entregue no momento da passagem.'));
+    return documento(d, recursos, conteudo, { titulo: 'Passagem de comando — ' + op.codigo, assunto: 'Relatório de passagem de comando', marca: 'PASSAGEM DE COMANDO' });
+  }
+
   // Fotos de cada setor (dentro do círculo ou do polígono) e as que ficaram fora.
   function distribuirFotos(setores, fotos, limitePorSetor) {
     var porSetor = {}, omitidas = {}, fora = [];
@@ -690,7 +815,7 @@
     return dentro;
   }
 
-  var api = { montarDocumento: montarDocumento, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarDocumento: montarDocumento, montarDiario: montarDiario, montarPassagem: montarPassagem, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -7346,8 +7346,10 @@ begin
         from public.setores s where s.operacao_id = p_operacao), '[]'::json),
     'pontos', coalesce((
       select json_agg(json_build_object('categoria', pi.categoria, 'titulo', pi.titulo, 'descricao', pi.descricao, 'lat', pi.lat, 'lng', pi.lng,
-                                        'criado_em', pi.criado_em, 'criado_por_nome', pi.criado_por_nome) order by pi.criado_em)
-        from public.pontos_interesse pi where pi.operacao_id = p_operacao), '[]'::json),
+                                        'criado_em', pi.criado_em, 'criado_por_nome', pi.criado_por_nome,
+                                        'tipo_nome', tp.nome, 'icone', pi.icone, 'cor', pi.cor) order by pi.criado_em)
+        from public.pontos_interesse pi left join public.tipos_ponto tp on tp.id = pi.tipo_id
+       where pi.operacao_id = p_operacao), '[]'::json),
     'fotos', coalesce((
       select json_agg(json_build_object('id', f.id, 'caminho', f.caminho, 'lat', f.lat, 'lng', f.lng, 'autor_nome', f.autor_nome,
                                         'autor_tipo', f.autor_tipo, 'capturada_em', coalesce(f.capturada_em, f.registrada_em),
@@ -12784,5 +12786,3506 @@ begin
   return row_to_json(v_op);
 end;
 $$;
+
+-- =====================================================================
+-- 48. Proveniência e incerteza, binômio (cão e condutor), drone e água
+--     (migração 042 — idempotente; exige a 007, a 012, a 026 e a 028)
+--
+--  1. Revisão de relatos (relato_revisoes): cada relato do campo (objeto, vestígio, pista…) ganha um estado de
+--     revisão — pendente, em análise, confirmado, descartado, inconclusivo ou contestado — com justificativa,
+--     o momento do fato (e de onde ele vem: GPS do aparelho, informado, estimado ou desconhecido), quem revisou e
+--     quando. Cada revisão é uma VERSÃO nova (nada é sobrescrito). Fica numa tabela à parte: o participante que
+--     relatou continua lendo a própria mensagem, mas nunca vê a revisão interna.
+--     Três tempos de um relato: fato (fato_em ou a hora do GPS), recebimento (mensagens.criada_em) e
+--     registro/revisão (relato_revisoes.revisado_em).
+--  2. Incerteza: a idade da vítima pode ser marcada como estimada (vitimas.idade_qualidade). Idade vazia
+--     continua sendo "não informada", nunca zero.
+--  3. Binômio: sessão de busca com cão ligada a um setor (binomio_sessoes) com início, pausas, retomada e fim,
+--     artigo de odor (origem e manipulação) e condições; eventos da sessão (binomio_eventos): INDICAÇÃO do cão
+--     (sempre "em análise") e CONFIRMAÇÃO por método independente (ligada a uma indicação, começa "pendente").
+--     Indicação não é confirmação. GPS do condutor = o participante escolhido; GPS do cão é série separada
+--     (sem dispositivo, por enquanto).
+--  4. Drone e água (observacoes_campo): plano de voo, telemetria importada, área observada, foco térmico e
+--     indicação aquática (posição, possível área de origem, corrente, vento e condições), cada um com fonte,
+--     estado e nota. Plano não prova voo; foco térmico não é vítima; corrente desconhecida é um valor válido.
+--  Leitura só pelos responsáveis da operação; escrita só pelas funções; encerrada: somente leitura.
+-- =====================================================================
+
+/* ---------- 1. Revisão de relatos ---------- */
+create table if not exists public.relato_revisoes (
+  id                 uuid primary key default gen_random_uuid(),
+  operacao_id        uuid not null references public.operacoes(id) on delete cascade,
+  mensagem_id        uuid not null references public.mensagens(id) on delete cascade,
+  versao             integer not null check (versao >= 1),
+  estado             text not null check (estado in ('pendente', 'em_analise', 'confirmado', 'descartado', 'inconclusivo', 'contestado')),
+  nota               text not null default '' check (char_length(nota) <= 500),
+  fato_em            timestamptz,
+  fato_origem        text check (fato_origem is null or fato_origem in ('gps', 'informado', 'estimado', 'desconhecido')),
+  revisado_por       uuid references auth.users(id) on delete set null,
+  revisado_por_nome  text not null,
+  revisado_em        timestamptz not null default now(),
+  unique (mensagem_id, versao)
+);
+create index if not exists relato_revisoes_operacao_idx on public.relato_revisoes (operacao_id);
+
+alter table public.relato_revisoes enable row level security;
+drop policy if exists relato_revisoes_ler on public.relato_revisoes;
+create policy relato_revisoes_ler on public.relato_revisoes for select to authenticated using (public.dono_operacao(operacao_id));
+revoke all on public.relato_revisoes from anon;
+revoke insert, update, delete, truncate on public.relato_revisoes from authenticated;
+grant select on public.relato_revisoes to authenticated;
+drop trigger if exists relato_revisoes_encerrada on public.relato_revisoes;
+create trigger relato_revisoes_encerrada before insert or update or delete on public.relato_revisoes
+  for each row execute function public.bloquear_escrita_encerrada();
+
+create or replace function public.revisao_rotulo(p_estado text)
+returns text
+language sql immutable
+as $$
+  select case p_estado when 'pendente' then 'pendente' when 'em_analise' then 'em análise' when 'confirmado' then 'confirmado'
+                       when 'descartado' then 'descartado' when 'inconclusivo' then 'inconclusivo' when 'contestado' then 'contestado'
+                       else coalesce(p_estado, '') end;
+$$;
+
+-- Nova versão da revisão de um relato. Confirmar, descartar, contestar e "inconclusivo" exigem justificativa
+-- (como foi verificado / por que não vale). p_fato_em: quando o fato aconteceu (opcional), com a origem da hora.
+create or replace function public.revisar_relato(p_mensagem uuid, p_estado text, p_nota text, p_fato_em timestamptz default null, p_fato_origem text default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_m public.mensagens%rowtype;
+  v_op public.operacoes%rowtype;
+  v_nota text := left(btrim(coalesce(p_nota, '')), 500);
+  v_origem text := nullif(btrim(coalesce(p_fato_origem, '')), '');
+  r public.relato_revisoes%rowtype;
+begin
+  select * into v_m from public.mensagens where id = p_mensagem;
+  if not found or v_m.direcao <> 'entrada' or v_m.categoria is null then
+    raise exception 'relato_nao_encontrado';
+  end if;
+  if v_nome is null or not public.dono_operacao(v_m.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = v_m.operacao_id;
+  if v_op.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if p_estado is null or p_estado not in ('pendente', 'em_analise', 'confirmado', 'descartado', 'inconclusivo', 'contestado') then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_estado in ('confirmado', 'descartado', 'inconclusivo', 'contestado') and v_nota = '' then
+    raise exception 'justificativa_obrigatoria';
+  end if;
+  if v_origem is not null and v_origem not in ('gps', 'informado', 'estimado', 'desconhecido') then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_fato_em is not null and (p_fato_em > now() + interval '5 minutes' or p_fato_em < v_op.criada_em - interval '30 days') then
+    raise exception 'data_invalida';
+  end if;
+
+  perform 1 from public.mensagens where id = p_mensagem for update;   -- versões em ordem, mesmo com dois responsáveis
+  r.id := gen_random_uuid();
+  r.operacao_id := v_m.operacao_id;
+  r.mensagem_id := p_mensagem;
+  r.versao := coalesce((select max(versao) from public.relato_revisoes where mensagem_id = p_mensagem), 0) + 1;
+  r.estado := p_estado;
+  r.nota := v_nota;
+  r.fato_em := p_fato_em;
+  r.fato_origem := case when p_fato_em is null and v_origem is distinct from 'desconhecido' then null else coalesce(v_origem, 'informado') end;
+  r.revisado_por := auth.uid();
+  r.revisado_por_nome := v_nome;
+  r.revisado_em := now();
+  insert into public.relato_revisoes select r.*;
+
+  perform public.diario_auto(v_m.operacao_id, now(), 'encontro', 'relato_revisado',
+    'Relato de ' || v_m.remetente_nome || ' (' || lower(v_m.categoria) || '): ' || public.revisao_rotulo(p_estado),
+    concat_ws(' · ', nullif(v_nota, ''), case when p_fato_em is not null then 'fato às ' || to_char(p_fato_em at time zone 'America/Sao_Paulo', 'DD/MM HH24:MI') ||
+      case r.fato_origem when 'estimado' then ' (estimado)' when 'informado' then ' (informado)' else '' end end,
+      'versão ' || r.versao),
+    'relato_revisado:' || p_mensagem || ':' || r.versao, 'info', v_m.lat, v_m.lng, p_mensagem::text, v_nome);
+  return row_to_json(r);
+end;
+$$;
+
+revoke execute on function public.revisao_rotulo(text) from public, anon, authenticated;
+revoke execute on function public.revisar_relato(uuid, text, text, timestamptz, text) from public, anon;
+grant execute on function public.revisar_relato(uuid, text, text, timestamptz, text) to authenticated;
+
+/* ---------- 2. Idade da vítima: informada ou estimada ---------- */
+alter table public.vitimas add column if not exists idade_qualidade text;
+do $$
+begin
+  alter table public.vitimas add constraint vitimas_idade_qualidade_ok check (idade_qualidade is null or idade_qualidade in ('informada', 'estimada'));
+exception when duplicate_object then null;
+end;
+$$;
+
+create or replace function public.salvar_vitima(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v public.vitimas%rowtype;
+  v_op public.operacoes%rowtype;
+  v_idade numeric;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.dados_apagados_em is not null then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if p_id is null then
+    v.id := gen_random_uuid();
+    v.operacao_id := p_operacao;
+    v.criado_por := auth.uid();
+    v.criado_por_nome := v_nome_resp;
+    v.criado_em := now();
+    v.caracteristicas := '';
+    v.roupas := '';
+    v.observacoes := '';
+    v.perfil := '{}';
+  else
+    select * into v from public.vitimas where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'vitima_nao_encontrada';
+    end if;
+  end if;
+
+  if p_dados ? 'nome' then v.nome := btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'caracteristicas' then v.caracteristicas := btrim(coalesce(p_dados->>'caracteristicas', '')); end if;
+  if p_dados ? 'roupas' then v.roupas := btrim(coalesce(p_dados->>'roupas', '')); end if;
+  if p_dados ? 'observacoes' then v.observacoes := btrim(coalesce(p_dados->>'observacoes', '')); end if;
+  if p_dados ? 'nascimento' then v.nascimento := nullif(btrim(coalesce(p_dados->>'nascimento', '')), ''); end if;
+  if p_dados ? 'sexo' then v.sexo := nullif(btrim(coalesce(p_dados->>'sexo', '')), ''); end if;
+  if p_dados ? 'perfil' then
+    if jsonb_typeof(p_dados->'perfil') <> 'array' then
+      raise exception 'dados_invalidos';
+    end if;
+    v.perfil := array(select jsonb_array_elements_text(p_dados->'perfil'));
+  end if;
+  if p_dados ? 'origem' then v.origem := nullif(btrim(regexp_replace(coalesce(p_dados->>'origem', ''), '\s+', ' ', 'g')), ''); end if;
+  if p_dados ? 'idade' then
+    if coalesce(jsonb_typeof(p_dados->'idade'), 'null') = 'null' then
+      v.idade := null;
+    elsif jsonb_typeof(p_dados->'idade') = 'number' then
+      v_idade := (p_dados->>'idade')::numeric;
+      if v_idade <> trunc(v_idade) or v_idade not between 0 and 130 then
+        raise exception 'dados_invalidos';
+      end if;
+      v.idade := v_idade::smallint;
+    else
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+  if p_dados ? 'idade_qualidade' then v.idade_qualidade := nullif(btrim(coalesce(p_dados->>'idade_qualidade', '')), ''); end if;
+  if v.idade is null then v.idade_qualidade := null; end if;   -- sem idade não há qualidade: é "não informada"
+
+  if v.nome is null or char_length(v.nome) not between 1 and 80 then
+    raise exception 'nome_vitima_invalido';
+  end if;
+  if char_length(v.caracteristicas) > 1000 or char_length(v.roupas) > 1000 or char_length(v.observacoes) > 2000 then
+    raise exception 'dados_invalidos';
+  end if;
+  if (v.sexo is not null and v.sexo not in ('M', 'F')) or char_length(coalesce(v.nascimento, '')) > 20 or char_length(coalesce(v.origem, '')) > 120 then
+    raise exception 'dados_invalidos';
+  end if;
+  if v.idade_qualidade is not null and v.idade_qualidade not in ('informada', 'estimada') then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if not (v.perfil <@ array['idoso', 'crianca', 'adolescente', 'demencia', 'autismo', 'deficiencia_intelectual', 'transtorno_mental', 'outro']::text[]) then
+    raise exception 'dados_invalidos';
+  end if;
+  v.atualizado_em := now();
+  v.atualizado_por_nome := v_nome_resp;
+  if p_id is null then
+    insert into public.vitimas select v.*;
+  else
+    update public.vitimas set nome = v.nome, idade = v.idade, idade_qualidade = v.idade_qualidade, caracteristicas = v.caracteristicas, roupas = v.roupas,
+           observacoes = v.observacoes, perfil = v.perfil, nascimento = v.nascimento, sexo = v.sexo, origem = v.origem, atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+     where id = v.id;
+  end if;
+  return row_to_json(v);
+end;
+$$;
+
+/* ---------- 3. Binômio: sessão de busca com cão ---------- */
+create table if not exists public.binomio_sessoes (
+  id                        uuid primary key default gen_random_uuid(),
+  operacao_id               uuid not null references public.operacoes(id) on delete cascade,
+  setor_id                  uuid references public.setores(id) on delete set null,
+  condutor_participante_id  uuid references public.participantes(id) on delete set null,
+  condutor_nome             text not null default '' check (char_length(condutor_nome) <= 80),
+  cao_nome                  text not null check (char_length(btrim(cao_nome)) between 1 and 60),
+  cao_gps                   text not null default 'sem_dispositivo' check (cao_gps in ('sem_dispositivo', 'coleira_externa')),
+  artigo_odor               text not null default '' check (char_length(artigo_odor) <= 200),
+  artigo_origem             text not null default '' check (char_length(artigo_origem) <= 200),
+  artigo_manipulacao        text not null default '' check (char_length(artigo_manipulacao) <= 200),
+  condicoes                 text not null default '' check (char_length(condicoes) <= 500),
+  estado                    text not null default 'planejada' check (estado in ('planejada', 'em_andamento', 'pausada', 'finalizada')),
+  iniciada_em               timestamptz,
+  finalizada_em             timestamptz,
+  pausas                    jsonb not null default '[]'::jsonb,
+  criado_por_nome           text not null,
+  criado_em                 timestamptz not null default now(),
+  atualizado_em             timestamptz not null default now(),
+  atualizado_por_nome       text
+);
+create index if not exists binomio_sessoes_operacao_idx on public.binomio_sessoes (operacao_id);
+
+create table if not exists public.binomio_eventos (
+  id                  uuid primary key default gen_random_uuid(),
+  operacao_id         uuid not null references public.operacoes(id) on delete cascade,
+  sessao_id           uuid not null references public.binomio_sessoes(id) on delete cascade,
+  tipo                text not null check (tipo in ('indicacao', 'confirmacao')),
+  codigo              text not null,
+  ocorrido_em         timestamptz not null,
+  lat                 double precision check (lat between -90 and 90),
+  lng                 double precision check (lng between -180 and 180),
+  precisao            real,
+  descricao           text not null default '' check (char_length(descricao) <= 500),
+  metodo              text not null default '' check (char_length(metodo) <= 80),
+  estado              text not null check (estado in ('em_analise', 'pendente', 'confirmada', 'descartada', 'inconclusiva')),
+  relacionado_a       uuid references public.binomio_eventos(id) on delete set null,
+  registrado_por_nome text not null,
+  registrado_em       timestamptz not null default now(),
+  revisao_nota        text not null default '' check (char_length(revisao_nota) <= 500),
+  revisado_por_nome   text,
+  revisado_em         timestamptz,
+  check ((lat is null) = (lng is null))
+);
+create index if not exists binomio_eventos_sessao_idx on public.binomio_eventos (sessao_id);
+create index if not exists binomio_eventos_operacao_idx on public.binomio_eventos (operacao_id);
+
+/* ---------- 4. Drone e água: observações com origem ---------- */
+create table if not exists public.observacoes_campo (
+  id                  uuid primary key default gen_random_uuid(),
+  operacao_id         uuid not null references public.operacoes(id) on delete cascade,
+  modalidade          text not null check (modalidade in ('drone', 'aquatica')),
+  tipo                text not null check (tipo in ('plano_voo', 'telemetria', 'area_observada', 'foco_termico', 'indicacao_aquatica')),
+  titulo              text not null check (char_length(btrim(titulo)) between 1 and 80),
+  estado              text not null check (estado in ('planejado', 'registrado', 'a_verificar', 'verificado', 'descartado', 'inconclusivo')),
+  geometria           jsonb,
+  dados               jsonb not null default '{}'::jsonb check (jsonb_typeof(dados) = 'object' and length(dados::text) <= 20000),
+  fonte               text not null default '' check (char_length(fonte) <= 120),
+  observado_em        timestamptz,
+  nota                text not null default '' check (char_length(nota) <= 500),
+  registrado_por_nome text not null,
+  registrado_em       timestamptz not null default now(),
+  atualizado_em       timestamptz not null default now(),
+  atualizado_por_nome text
+);
+create index if not exists observacoes_campo_operacao_idx on public.observacoes_campo (operacao_id);
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['binomio_sessoes', 'binomio_eventos', 'observacoes_campo'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I on public.%I', t || '_ler', t);
+    execute format('create policy %I on public.%I for select to authenticated using (public.dono_operacao(operacao_id))', t || '_ler', t);
+    execute format('revoke all on public.%I from anon', t);
+    execute format('revoke insert, update, delete, truncate on public.%I from authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('drop trigger if exists %I on public.%I', t || '_encerrada', t);
+    execute format('create trigger %I before insert or update or delete on public.%I for each row execute function public.bloquear_escrita_encerrada()', t || '_encerrada', t);
+  end loop;
+end;
+$$;
+
+-- Validação de uma geometria: { tipo: 'ponto' | 'linha' | 'area', pts: [[lat, lng], …] } (até 5000 pontos)
+create or replace function public.geometria_valida(p jsonb)
+returns boolean
+language plpgsql immutable set search_path = public
+as $$
+declare
+  v_pt jsonb;
+  v_n integer;
+begin
+  if p is null then return true; end if;
+  if jsonb_typeof(p) <> 'object' or coalesce(p->>'tipo', '') not in ('ponto', 'linha', 'area') or jsonb_typeof(p->'pts') <> 'array' then
+    return false;
+  end if;
+  v_n := jsonb_array_length(p->'pts');
+  if v_n < 1 or v_n > 5000 or (p->>'tipo' = 'ponto' and v_n <> 1) or (p->>'tipo' = 'linha' and v_n < 2) or (p->>'tipo' = 'area' and v_n < 3) then
+    return false;
+  end if;
+  for v_pt in select * from jsonb_array_elements(p->'pts') loop
+    if jsonb_typeof(v_pt) <> 'array' or jsonb_array_length(v_pt) <> 2 or jsonb_typeof(v_pt->0) <> 'number' or jsonb_typeof(v_pt->1) <> 'number'
+       or (v_pt->>0)::double precision not between -90 and 90 or (v_pt->>1)::double precision not between -180 and 180 then
+      return false;
+    end if;
+  end loop;
+  return true;
+end;
+$$;
+
+-- Sessão do binômio: cria ou edita (cão, condutor, setor, artigo de odor e condições).
+create or replace function public.salvar_binomio_sessao(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v public.binomio_sessoes%rowtype;
+  v_op public.operacoes%rowtype;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_id is null then
+    v.id := gen_random_uuid();
+    v.operacao_id := p_operacao;
+    v.estado := 'planejada';
+    v.pausas := '[]'::jsonb;
+    v.cao_gps := 'sem_dispositivo';
+    v.condutor_nome := ''; v.artigo_odor := ''; v.artigo_origem := ''; v.artigo_manipulacao := ''; v.condicoes := '';
+    v.criado_por_nome := v_nome;
+    v.criado_em := now();
+  else
+    select * into v from public.binomio_sessoes where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'sessao_nao_encontrada';
+    end if;
+  end if;
+  if p_dados ? 'cao_nome' then v.cao_nome := btrim(regexp_replace(coalesce(p_dados->>'cao_nome', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'cao_gps' then v.cao_gps := coalesce(nullif(p_dados->>'cao_gps', ''), 'sem_dispositivo'); end if;
+  if p_dados ? 'condutor_nome' then v.condutor_nome := left(btrim(coalesce(p_dados->>'condutor_nome', '')), 80); end if;
+  if p_dados ? 'artigo_odor' then v.artigo_odor := left(btrim(coalesce(p_dados->>'artigo_odor', '')), 200); end if;
+  if p_dados ? 'artigo_origem' then v.artigo_origem := left(btrim(coalesce(p_dados->>'artigo_origem', '')), 200); end if;
+  if p_dados ? 'artigo_manipulacao' then v.artigo_manipulacao := left(btrim(coalesce(p_dados->>'artigo_manipulacao', '')), 200); end if;
+  if p_dados ? 'condicoes' then v.condicoes := left(btrim(coalesce(p_dados->>'condicoes', '')), 500); end if;
+  begin
+    if p_dados ? 'setor_id' then v.setor_id := nullif(p_dados->>'setor_id', '')::uuid; end if;
+    if p_dados ? 'condutor_participante_id' then v.condutor_participante_id := nullif(p_dados->>'condutor_participante_id', '')::uuid; end if;
+  exception when invalid_text_representation then
+    raise exception 'dados_invalidos';
+  end;
+  if v.setor_id is not null and not exists (select 1 from public.setores where id = v.setor_id and operacao_id = p_operacao) then
+    raise exception 'setor_nao_encontrado';
+  end if;
+  if v.condutor_participante_id is not null and not exists (select 1 from public.participantes where id = v.condutor_participante_id and operacao_id = p_operacao) then
+    raise exception 'participante_invalido';
+  end if;
+  if v.cao_nome is null or char_length(v.cao_nome) not between 1 and 60 or v.cao_gps not in ('sem_dispositivo', 'coleira_externa') then
+    raise exception 'dados_invalidos';
+  end if;
+  v.atualizado_em := now();
+  v.atualizado_por_nome := v_nome;
+  if p_id is null then
+    insert into public.binomio_sessoes select v.*;
+    perform public.diario_auto(p_operacao, now(), 'setor', 'binomio_sessao',
+      'Binômio: sessão do cão ' || v.cao_nome || ' criada' || coalesce(' no setor ' || (select nome from public.setores where id = v.setor_id), ''),
+      concat_ws(' · ', nullif('condutor: ' || coalesce(nullif(v.condutor_nome, ''), (select nome from public.participantes where id = v.condutor_participante_id), ''), 'condutor: '),
+        nullif('artigo de odor: ' || v.artigo_odor, 'artigo de odor: ')),
+      'binomio_sessao:' || v.id, 'info', null, null, v.id::text, v_nome);
+  else
+    update public.binomio_sessoes set setor_id = v.setor_id, condutor_participante_id = v.condutor_participante_id, condutor_nome = v.condutor_nome,
+           cao_nome = v.cao_nome, cao_gps = v.cao_gps, artigo_odor = v.artigo_odor, artigo_origem = v.artigo_origem,
+           artigo_manipulacao = v.artigo_manipulacao, condicoes = v.condicoes, atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+     where id = v.id;
+  end if;
+  return row_to_json(v);
+end;
+$$;
+
+-- Iniciar, pausar, retomar e finalizar a sessão (com a hora de cada passo e as pausas guardadas).
+create or replace function public.binomio_controle(p_sessao uuid, p_acao text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v public.binomio_sessoes%rowtype;
+  v_status text;
+  v_n integer;
+  v_titulo text;
+begin
+  select * into v from public.binomio_sessoes where id = p_sessao for update;
+  if not found then
+    raise exception 'sessao_nao_encontrada';
+  end if;
+  if v_nome is null or not public.dono_operacao(v.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = v.operacao_id;
+  if v_status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  v_n := jsonb_array_length(v.pausas);
+  if p_acao = 'iniciar' and v.estado = 'planejada' then
+    v.estado := 'em_andamento'; v.iniciada_em := now(); v_titulo := 'iniciada';
+  elsif p_acao = 'pausar' and v.estado = 'em_andamento' then
+    v.estado := 'pausada'; v.pausas := v.pausas || jsonb_build_array(jsonb_build_object('de', now())); v_titulo := 'pausada';
+  elsif p_acao = 'retomar' and v.estado = 'pausada' then
+    v.estado := 'em_andamento';
+    v.pausas := jsonb_set(v.pausas, array[(v_n - 1)::text, 'ate'], to_jsonb(now()));
+    v_titulo := 'retomada';
+  elsif p_acao = 'finalizar' and v.estado in ('em_andamento', 'pausada') then
+    if v.estado = 'pausada' and v_n > 0 then
+      v.pausas := jsonb_set(v.pausas, array[(v_n - 1)::text, 'ate'], to_jsonb(now()));
+    end if;
+    v.estado := 'finalizada'; v.finalizada_em := now(); v_titulo := 'finalizada';
+  else
+    raise exception 'transicao_invalida';
+  end if;
+  update public.binomio_sessoes set estado = v.estado, iniciada_em = v.iniciada_em, finalizada_em = v.finalizada_em, pausas = v.pausas,
+         atualizado_em = now(), atualizado_por_nome = v_nome
+   where id = v.id returning * into v;
+  perform public.diario_auto(v.operacao_id, now(), 'setor', 'binomio_' || p_acao,
+    'Binômio: sessão do cão ' || v.cao_nome || ' ' || v_titulo || coalesce(' (setor ' || (select nome from public.setores where id = v.setor_id) || ')', ''), '',
+    'binomio_' || p_acao || ':' || v.id || ':' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint, 'info', null, null, v.id::text, v_nome);
+  return row_to_json(v);
+end;
+$$;
+
+-- Evento da sessão. Indicação: começa "em análise". Confirmação: ligada a uma indicação da mesma sessão,
+-- com o método independente (equipe, busca visual, drone…), começa "pendente".
+create or replace function public.registrar_binomio_evento(p_sessao uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_s public.binomio_sessoes%rowtype;
+  v_status text;
+  e public.binomio_eventos%rowtype;
+  v_ind public.binomio_eventos%rowtype;
+begin
+  select * into v_s from public.binomio_sessoes where id = p_sessao;
+  if not found then
+    raise exception 'sessao_nao_encontrada';
+  end if;
+  if v_nome is null or not public.dono_operacao(v_s.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = v_s.operacao_id;
+  if v_status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' or coalesce(p_dados->>'tipo', '') not in ('indicacao', 'confirmacao') then
+    raise exception 'dados_invalidos';
+  end if;
+  perform 1 from public.binomio_sessoes where id = p_sessao for update;   -- códigos I1, I2… sem repetir
+  e.id := gen_random_uuid();
+  e.operacao_id := v_s.operacao_id;
+  e.sessao_id := p_sessao;
+  e.tipo := p_dados->>'tipo';
+  e.descricao := left(btrim(coalesce(p_dados->>'descricao', '')), 500);
+  e.metodo := left(btrim(coalesce(p_dados->>'metodo', '')), 80);
+  e.registrado_por_nome := v_nome;
+  e.registrado_em := now();
+  e.revisao_nota := '';
+  begin
+    e.ocorrido_em := coalesce(nullif(p_dados->>'ocorrido_em', '')::timestamptz, now());
+    e.lat := nullif(p_dados->>'lat', '')::double precision;
+    e.lng := nullif(p_dados->>'lng', '')::double precision;
+    e.precisao := nullif(p_dados->>'precisao', '')::real;
+    e.relacionado_a := nullif(p_dados->>'relacionado_a', '')::uuid;
+  exception when others then
+    raise exception 'dados_invalidos';
+  end;
+  if e.ocorrido_em > now() + interval '5 minutes' then
+    raise exception 'data_invalida';
+  end if;
+  if (e.lat is null) <> (e.lng is null) or (e.lat is not null and (e.lat not between -90 and 90 or e.lng not between -180 and 180)) then
+    raise exception 'posicao_invalida';
+  end if;
+  if e.tipo = 'indicacao' then
+    if v_s.estado not in ('em_andamento', 'pausada') then
+      raise exception 'sessao_nao_iniciada';
+    end if;
+    e.estado := 'em_analise';
+    e.relacionado_a := null;
+    e.codigo := 'I' || (select count(*) + 1 from public.binomio_eventos where sessao_id = p_sessao and tipo = 'indicacao');
+  else
+    select * into v_ind from public.binomio_eventos where id = e.relacionado_a and sessao_id = p_sessao and tipo = 'indicacao';
+    if not found then
+      raise exception 'indicacao_obrigatoria';
+    end if;
+    if e.metodo = '' then
+      raise exception 'metodo_obrigatorio';
+    end if;
+    e.estado := 'pendente';
+    e.codigo := 'C' || (select count(*) + 1 from public.binomio_eventos where sessao_id = p_sessao and tipo = 'confirmacao');
+    if e.lat is null and v_ind.lat is not null then e.lat := v_ind.lat; e.lng := v_ind.lng; end if;
+  end if;
+  insert into public.binomio_eventos select e.*;
+  perform public.diario_auto(v_s.operacao_id, e.ocorrido_em, 'encontro', 'binomio_' || e.tipo,
+    'Binômio (' || v_s.cao_nome || '): ' || case e.tipo when 'indicacao' then 'indicação ' || e.codigo || ' — verificar'
+      else 'confirmação ' || e.codigo || ' de ' || v_ind.codigo || ' por ' || e.metodo || ' — pendente' end,
+    concat_ws(' · ', nullif(e.descricao, ''), 'indicação não é confirmação'),
+    'binomio_evento:' || e.id, 'info', e.lat, e.lng, e.id::text, v_nome);
+  return row_to_json(e);
+end;
+$$;
+
+-- Resultado de um evento: confirmada, descartada ou inconclusiva (com justificativa); "em análise"/"pendente" voltam atrás.
+create or replace function public.revisar_binomio_evento(p_evento uuid, p_estado text, p_nota text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  e public.binomio_eventos%rowtype;
+  v_status text;
+  v_nota text := left(btrim(coalesce(p_nota, '')), 500);
+begin
+  select * into e from public.binomio_eventos where id = p_evento for update;
+  if not found then
+    raise exception 'evento_nao_encontrado';
+  end if;
+  if v_nome is null or not public.dono_operacao(e.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = e.operacao_id;
+  if v_status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if p_estado is null or p_estado not in ('em_analise', 'pendente', 'confirmada', 'descartada', 'inconclusiva')
+     or (e.tipo = 'indicacao' and p_estado = 'pendente') or (e.tipo = 'confirmacao' and p_estado = 'em_analise') then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_estado in ('confirmada', 'descartada', 'inconclusiva') and v_nota = '' then
+    raise exception 'justificativa_obrigatoria';
+  end if;
+  update public.binomio_eventos set estado = p_estado, revisao_nota = v_nota, revisado_por_nome = v_nome, revisado_em = now()
+   where id = p_evento returning * into e;
+  perform public.diario_auto(e.operacao_id, now(), 'encontro', 'binomio_revisao',
+    'Binômio: ' || case e.tipo when 'indicacao' then 'indicação ' else 'confirmação ' end || e.codigo || ' ' ||
+      case p_estado when 'em_analise' then 'em análise' when 'confirmada' then 'confirmada' when 'descartada' then 'descartada'
+                    when 'inconclusiva' then 'inconclusiva' else 'pendente' end,
+    v_nota, 'binomio_revisao:' || e.id || ':' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint, 'info', e.lat, e.lng, e.id::text, v_nome);
+  return row_to_json(e);
+end;
+$$;
+
+-- Observação de drone ou da água: cria ou edita. Estado inicial pelo tipo: plano → planejado;
+-- telemetria e área observada → registrado; foco térmico e indicação aquática → a verificar.
+create or replace function public.salvar_observacao_campo(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  o public.observacoes_campo%rowtype;
+  v_status text;
+  v_novo boolean := p_id is null;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = p_operacao;
+  if v_status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+  if v_novo then
+    o.id := gen_random_uuid();
+    o.operacao_id := p_operacao;
+    o.modalidade := p_dados->>'modalidade';
+    o.tipo := p_dados->>'tipo';
+    o.estado := case o.tipo when 'plano_voo' then 'planejado' when 'foco_termico' then 'a_verificar' when 'indicacao_aquatica' then 'a_verificar' else 'registrado' end;
+    o.dados := '{}'::jsonb; o.fonte := ''; o.nota := '';
+    o.registrado_por_nome := v_nome;
+    o.registrado_em := now();
+  else
+    select * into o from public.observacoes_campo where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'observacao_nao_encontrada';
+    end if;
+  end if;
+  if coalesce(o.modalidade, '') not in ('drone', 'aquatica')
+     or coalesce(o.tipo, '') not in ('plano_voo', 'telemetria', 'area_observada', 'foco_termico', 'indicacao_aquatica')
+     or (o.modalidade = 'aquatica') <> (o.tipo = 'indicacao_aquatica') then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_dados ? 'titulo' then o.titulo := btrim(regexp_replace(coalesce(p_dados->>'titulo', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'fonte' then o.fonte := left(btrim(coalesce(p_dados->>'fonte', '')), 120); end if;
+  if p_dados ? 'nota' then o.nota := left(btrim(coalesce(p_dados->>'nota', '')), 500); end if;
+  if p_dados ? 'dados' then
+    if jsonb_typeof(p_dados->'dados') <> 'object' or length((p_dados->'dados')::text) > 20000 then
+      raise exception 'dados_invalidos';
+    end if;
+    o.dados := p_dados->'dados';
+  end if;
+  if p_dados ? 'geometria' then
+    o.geometria := case when coalesce(jsonb_typeof(p_dados->'geometria'), 'null') = 'null' then null else p_dados->'geometria' end;
+    if not public.geometria_valida(o.geometria) then
+      raise exception 'area_invalida';
+    end if;
+  end if;
+  begin
+    if p_dados ? 'observado_em' then o.observado_em := nullif(p_dados->>'observado_em', '')::timestamptz; end if;
+  exception when others then
+    raise exception 'data_invalida';
+  end;
+  if o.observado_em is not null and o.observado_em > now() + interval '7 days' then
+    raise exception 'data_invalida';
+  end if;
+  if o.titulo is null or char_length(o.titulo) not between 1 and 80 then
+    raise exception 'dados_invalidos';
+  end if;
+  o.atualizado_em := now();
+  o.atualizado_por_nome := v_nome;
+  if v_novo then
+    insert into public.observacoes_campo select o.*;
+    perform public.diario_auto(p_operacao, coalesce(o.observado_em, now()), case when o.tipo in ('foco_termico', 'indicacao_aquatica') then 'encontro' else 'operacao' end,
+      'obs_' || o.tipo,
+      case o.tipo when 'plano_voo' then 'Drone: plano de voo — ' when 'telemetria' then 'Drone: telemetria importada — ' when 'area_observada' then 'Drone: área observada — '
+                  when 'foco_termico' then 'Drone: foco térmico a verificar — ' else 'Água: indicação a verificar — ' end || o.titulo,
+      concat_ws(' · ', nullif('fonte: ' || o.fonte, 'fonte: '), nullif(o.nota, '')),
+      'obs_campo:' || o.id, 'info',
+      case when o.geometria is not null then (o.geometria->'pts'->0->>0)::double precision end,
+      case when o.geometria is not null then (o.geometria->'pts'->0->>1)::double precision end, o.id::text, v_nome);
+  else
+    update public.observacoes_campo set titulo = o.titulo, fonte = o.fonte, nota = o.nota, dados = o.dados, geometria = o.geometria,
+           observado_em = o.observado_em, atualizado_em = o.atualizado_em, atualizado_por_nome = o.atualizado_por_nome
+     where id = o.id;
+  end if;
+  return row_to_json(o);
+end;
+$$;
+
+-- Estado de uma observação (verificado, descartado, inconclusivo exigem justificativa).
+create or replace function public.revisar_observacao_campo(p_id uuid, p_estado text, p_nota text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  o public.observacoes_campo%rowtype;
+  v_status text;
+  v_nota text := left(btrim(coalesce(p_nota, '')), 500);
+begin
+  select * into o from public.observacoes_campo where id = p_id for update;
+  if not found then
+    raise exception 'observacao_nao_encontrada';
+  end if;
+  if v_nome is null or not public.dono_operacao(o.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = o.operacao_id;
+  if v_status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if p_estado is null or p_estado not in ('planejado', 'registrado', 'a_verificar', 'verificado', 'descartado', 'inconclusivo') then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_estado in ('verificado', 'descartado', 'inconclusivo') and v_nota = '' then
+    raise exception 'justificativa_obrigatoria';
+  end if;
+  update public.observacoes_campo set estado = p_estado, nota = case when v_nota <> '' then v_nota else nota end,
+         atualizado_em = now(), atualizado_por_nome = v_nome
+   where id = p_id returning * into o;
+  perform public.diario_auto(o.operacao_id, now(), 'encontro', 'obs_revisao',
+    case o.modalidade when 'drone' then 'Drone: ' else 'Água: ' end || o.titulo || ' — ' ||
+      case p_estado when 'a_verificar' then 'a verificar' when 'verificado' then 'verificado' when 'descartado' then 'descartado'
+                    when 'inconclusivo' then 'inconclusivo' when 'planejado' then 'planejado' else 'registrado' end,
+    v_nota, 'obs_revisao:' || o.id || ':' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint, 'info', null, null, o.id::text, v_nome);
+  return row_to_json(o);
+end;
+$$;
+
+revoke execute on function public.geometria_valida(jsonb) from public, anon, authenticated;
+do $$
+declare
+  f text;
+begin
+  foreach f in array array['salvar_binomio_sessao(uuid, uuid, jsonb)', 'binomio_controle(uuid, text)', 'registrar_binomio_evento(uuid, jsonb)',
+                           'revisar_binomio_evento(uuid, text, text)', 'salvar_observacao_campo(uuid, uuid, jsonb)', 'revisar_observacao_campo(uuid, text, text)'] loop
+    execute 'revoke execute on function public.' || f || ' from public, anon';
+    execute 'grant execute on function public.' || f || ' to authenticated';
+  end loop;
+end;
+$$;
+
+do $$
+declare
+  t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['relato_revisoes', 'binomio_sessoes', 'binomio_eventos', 'observacoes_campo'] loop
+      begin
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      exception when duplicate_object then
+        null;
+      end;
+    end loop;
+  end if;
+end;
+$$;
+
+
+-- =====================================================================
+-- 49. Qualidade dos dados dos estudos (denominadores)
+--     (migração 043 — idempotente; exige a 023 e a 042)
+--
+--  Ao lado dos números do dashboard, diz SOBRE O QUE eles foram calculados:
+--   - unidade de análise: a operação (um caso = a primeira localização de vítima com posição);
+--   - casos elegíveis (operações encerradas + abertas com localização), válidos para distância
+--     (ULV e posição da localização) e para tempo (início e hora da localização, sem tempo negativo);
+--   - ausentes: falta ULV, falta posição da localização, falta hora de início — NUNCA viram zero;
+--   - não localizados: operações encerradas sem localização (censuradas: ficam fora das medianas);
+--   - abertas sem localização (ainda em andamento);
+--   - possíveis duplicatas: duas operações do mesmo tipo com ULV a menos de 1 km e início a menos de 48 h;
+--   - fichas: idade não informada, idade estimada, sem perfil.
+--  Só contagens de operações e de fichas; fichas com menos de 5 casos ficam ocultas (k = 5).
+-- =====================================================================
+create or replace function public.estudo_qualidade()
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_ops uuid[];
+begin
+  if public.nome_responsavel_atual() is null then
+    raise exception 'sem_permissao';
+  end if;
+  select coalesce(array_agg(o.id), '{}'::uuid[]) into v_ops from public.operacoes o where public.dono_operacao(o.id);
+  return (
+    with ops as (
+      select o.id, o.tipo, o.acionado_em, o.criada_em, o.encerrada_em, o.local_lat, o.local_lng
+        from public.operacoes o where o.id = any(v_ops)
+    ),
+    loc as (
+      select v.operacao_id,
+             bool_or(v.lat is not null) as com_posicao,
+             min(coalesce(v.posicao_em, v.registrado_em)) filter (where v.lat is not null) as em
+        from public.vitima_localizacoes v where v.operacao_id = any(v_ops) group by v.operacao_id
+    ),
+    base as (
+      select o.*, l.operacao_id is not null as tem_localizacao, coalesce(l.com_posicao, false) as com_posicao, l.em
+        from ops o left join loc l on l.operacao_id = o.id
+    ),
+    dup as (
+      select distinct x.id from ops x join ops y on y.id <> x.id
+       where x.local_lat is not null and y.local_lat is not null and coalesce(x.tipo, '') = coalesce(y.tipo, '')
+         and abs(extract(epoch from coalesce(x.acionado_em, x.criada_em) - coalesce(y.acionado_em, y.criada_em))) <= 48 * 3600
+         and public.distancia_km(x.local_lat, x.local_lng, y.local_lat, y.local_lng) < 1
+    ),
+    fichas as (
+      select t.idade, t.idade_qualidade, t.perfil from public.vitimas t where t.operacao_id = any(v_ops)
+    )
+    select json_build_object(
+      'gerado_em', now(),
+      'k_minimo', 5,
+      'unidade', 'operacao',
+      'operacoes', (select count(*) from ops),
+      'elegiveis', (select count(*) from base where encerrada_em is not null or tem_localizacao),
+      'com_localizacao', (select count(*) from base where com_posicao),
+      'validos_distancia', (select count(*) from base where com_posicao and local_lat is not null),
+      'validos_tempo', (select count(*) from base where com_posicao and acionado_em is not null and em >= acionado_em),
+      'ausentes', json_build_object(
+        'ulv', (select count(*) from base where com_posicao and local_lat is null),
+        'posicao_localizacao', (select count(*) from base where tem_localizacao and not com_posicao),
+        'inicio', (select count(*) from base where com_posicao and acionado_em is null)),
+      'tempo_negativo', (select count(*) from base where com_posicao and acionado_em is not null and em < acionado_em),
+      'nao_localizados', (select count(*) from base where encerrada_em is not null and not tem_localizacao),
+      'abertas_sem_localizacao', (select count(*) from base where encerrada_em is null and not tem_localizacao),
+      'possiveis_duplicatas', (select count(*) from dup),
+      'fichas', json_build_object(
+        'total', (select case when count(*) >= 5 then count(*) end from fichas),
+        'idade_nao_informada', (select case when count(*) >= 5 then count(*) end from fichas where idade is null),
+        'idade_estimada', (select case when count(*) >= 5 then count(*) end from fichas where idade is not null and idade_qualidade = 'estimada'),
+        'sem_perfil', (select case when count(*) >= 5 then count(*) end from fichas where cardinality(perfil) = 0))
+    )
+  );
+end;
+$$;
+
+revoke execute on function public.estudo_qualidade() from public, anon;
+grant execute on function public.estudo_qualidade() to authenticated;
+
+-- =====================================================================
+-- 50. Cadastro rápido de vítima e convite de participante por e-mail
+--     (migração 044 — idempotente; exige a 007, a 031 e a 042)
+--
+--  1) Cadastro rápido: vitimas.cadastro_rapido marca a ficha criada só com os dados essenciais
+--     (nome, idade aproximada, sexo, roupa/característica). O responsável completa depois no
+--     formulário da ficha (salvar com o formulário completo tira a marca). A ficha criada em
+--     "Vítima encontrada" só com o nome também nasce como cadastro rápido.
+--  2) Convite por e-mail: o responsável cadastra nome e e-mail; o servidor (api/convidar.js) envia
+--     o link do civil.html com um código do convite. O código só serve para preencher o nome e
+--     marcar o convite como aceito; quem manda no acesso continua sendo o token do link.
+--     O e-mail é dado pessoal: só os responsáveis da operação leem, e é apagado com a operação
+--     (exclusão ou fim da retenção). Limites: 200 convites por operação, 5 envios por convite.
+-- =====================================================================
+alter table public.vitimas add column if not exists cadastro_rapido boolean not null default false;
+
+create or replace function public.salvar_vitima(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v public.vitimas%rowtype;
+  v_op public.operacoes%rowtype;
+  v_idade numeric;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.dados_apagados_em is not null then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if p_id is null then
+    v.id := gen_random_uuid();
+    v.operacao_id := p_operacao;
+    v.criado_por := auth.uid();
+    v.criado_por_nome := v_nome_resp;
+    v.criado_em := now();
+    v.caracteristicas := '';
+    v.roupas := '';
+    v.observacoes := '';
+    v.perfil := '{}';
+    v.cadastro_rapido := false;
+  else
+    select * into v from public.vitimas where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'vitima_nao_encontrada';
+    end if;
+  end if;
+
+  if p_dados ? 'nome' then v.nome := btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'caracteristicas' then v.caracteristicas := btrim(coalesce(p_dados->>'caracteristicas', '')); end if;
+  if p_dados ? 'roupas' then v.roupas := btrim(coalesce(p_dados->>'roupas', '')); end if;
+  if p_dados ? 'observacoes' then v.observacoes := btrim(coalesce(p_dados->>'observacoes', '')); end if;
+  if p_dados ? 'nascimento' then v.nascimento := nullif(btrim(coalesce(p_dados->>'nascimento', '')), ''); end if;
+  if p_dados ? 'sexo' then v.sexo := nullif(btrim(coalesce(p_dados->>'sexo', '')), ''); end if;
+  if p_dados ? 'perfil' then
+    if jsonb_typeof(p_dados->'perfil') <> 'array' then
+      raise exception 'dados_invalidos';
+    end if;
+    v.perfil := array(select jsonb_array_elements_text(p_dados->'perfil'));
+  end if;
+  if p_dados ? 'origem' then v.origem := nullif(btrim(regexp_replace(coalesce(p_dados->>'origem', ''), '\s+', ' ', 'g')), ''); end if;
+  if p_dados ? 'idade' then
+    if coalesce(jsonb_typeof(p_dados->'idade'), 'null') = 'null' then
+      v.idade := null;
+    elsif jsonb_typeof(p_dados->'idade') = 'number' then
+      v_idade := (p_dados->>'idade')::numeric;
+      if v_idade <> trunc(v_idade) or v_idade not between 0 and 130 then
+        raise exception 'dados_invalidos';
+      end if;
+      v.idade := v_idade::smallint;
+    else
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+  if p_dados ? 'cadastro_rapido' then v.cadastro_rapido := coalesce((p_dados->>'cadastro_rapido')::boolean, false); end if;
+  if p_dados ? 'idade_qualidade' then v.idade_qualidade := nullif(btrim(coalesce(p_dados->>'idade_qualidade', '')), ''); end if;
+  if v.idade is null then v.idade_qualidade := null; end if;   -- sem idade não há qualidade: é "não informada"
+
+  if v.nome is null or char_length(v.nome) not between 1 and 80 then
+    raise exception 'nome_vitima_invalido';
+  end if;
+  if char_length(v.caracteristicas) > 1000 or char_length(v.roupas) > 1000 or char_length(v.observacoes) > 2000 then
+    raise exception 'dados_invalidos';
+  end if;
+  if (v.sexo is not null and v.sexo not in ('M', 'F')) or char_length(coalesce(v.nascimento, '')) > 20 or char_length(coalesce(v.origem, '')) > 120 then
+    raise exception 'dados_invalidos';
+  end if;
+  if v.idade_qualidade is not null and v.idade_qualidade not in ('informada', 'estimada') then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if not (v.perfil <@ array['idoso', 'crianca', 'adolescente', 'demencia', 'autismo', 'deficiencia_intelectual', 'transtorno_mental', 'outro']::text[]) then
+    raise exception 'dados_invalidos';
+  end if;
+  v.atualizado_em := now();
+  v.atualizado_por_nome := v_nome_resp;
+  if p_id is null then
+    insert into public.vitimas select v.*;
+  else
+    update public.vitimas set nome = v.nome, idade = v.idade, idade_qualidade = v.idade_qualidade, cadastro_rapido = v.cadastro_rapido, caracteristicas = v.caracteristicas, roupas = v.roupas,
+           observacoes = v.observacoes, perfil = v.perfil, nascimento = v.nascimento, sexo = v.sexo, origem = v.origem, atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+     where id = v.id;
+  end if;
+  return row_to_json(v);
+end;
+$$;
+
+create or replace function public.registrar_vitima_encontrada(p_operacao uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v_status text;
+  v_part public.participantes%rowtype;
+  v_enc public.participantes%rowtype;
+  v_vit public.vitimas%rowtype;
+  v_msg public.mensagens%rowtype;
+  v_reg public.vitima_localizacoes%rowtype;
+  v_nome_reg text;
+  v_condicao text;
+  v_lat double precision;
+  v_lng double precision;
+  v_prec real;
+  v_pos_em timestamptz;
+  v_enc_txt text;
+  v_local text;
+  v_obs text;
+  v_ref uuid;
+  v_vnome text;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = p_operacao;
+  if v_status is distinct from 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  v_condicao := p_dados->>'condicao';
+  if v_condicao is null or v_condicao not in ('viva', 'obito') then
+    raise exception 'dados_invalidos';
+  end if;
+  begin
+    v_lat := nullif(p_dados->>'lat', '')::double precision;
+    v_lng := nullif(p_dados->>'lng', '')::double precision;
+    v_prec := nullif(p_dados->>'precisao', '')::real;
+    v_pos_em := nullif(p_dados->>'posicao_em', '')::timestamptz;
+  exception when others then
+    raise exception 'posicao_invalida';
+  end;
+  if (v_lat is null) <> (v_lng is null)
+     or (v_lat is not null and (v_lat not between -90 and 90 or v_lng not between -180 and 180 or (v_lat = 0 and v_lng = 0))) then
+    raise exception 'posicao_invalida';
+  end if;
+  v_prec := case when v_prec between 0 and 100000 then v_prec end;
+  v_pos_em := case when v_lat is not null then least(coalesce(v_pos_em, now()), now()) end;
+  v_enc_txt := nullif(left(btrim(coalesce(p_dados->>'encontrada_por', '')), 120), '');
+  v_local := nullif(left(btrim(coalesce(p_dados->>'local_descricao', '')), 500), '');
+  v_obs := nullif(left(btrim(coalesce(p_dados->>'observacoes', '')), 1000), '');
+
+  if nullif(p_dados->>'encontrou', '') is not null then
+    begin
+      v_ref := (p_dados->>'encontrou')::uuid;
+    exception when others then
+      raise exception 'participante_invalido';
+    end;
+    select * into v_enc from public.participantes where id = v_ref and operacao_id = p_operacao;
+    if not found then
+      raise exception 'participante_invalido';
+    end if;
+  end if;
+
+  -- ficha da vítima: escolhida ou criada agora só com o nome
+  if nullif(p_dados->>'vitima_id', '') is not null then
+    begin
+      v_ref := (p_dados->>'vitima_id')::uuid;
+    exception when others then
+      raise exception 'vitima_nao_encontrada';
+    end;
+    select * into v_vit from public.vitimas where id = v_ref and operacao_id = p_operacao;
+    if not found then
+      raise exception 'vitima_nao_encontrada';
+    end if;
+  elsif btrim(coalesce(p_dados->>'vitima_nome', '')) <> '' then
+    v_vnome := btrim(regexp_replace(p_dados->>'vitima_nome', '\s+', ' ', 'g'));
+    if char_length(v_vnome) > 80 then
+      raise exception 'nome_vitima_invalido';
+    end if;
+    insert into public.vitimas (operacao_id, nome, criado_por, criado_por_nome, atualizado_por_nome, cadastro_rapido)
+    values (p_operacao, v_vnome, auth.uid(), v_nome_resp, v_nome_resp, true)
+    returning * into v_vit;
+  end if;
+
+  -- registro do responsável na operação (o mesmo da 025)
+  perform public.entrar_como_responsavel(p_operacao);
+  select * into v_part from public.participantes where operacao_id = p_operacao and user_id = auth.uid();
+
+  v_nome_reg := v_part.nome ||
+    case when v_enc.id is not null and v_enc.id <> v_part.id then ' (encontrada por ' || v_enc.nome || ')'
+         when v_enc_txt is not null then ' (encontrada por ' || v_enc_txt || ')' else '' end;
+
+  insert into public.mensagens (operacao_id, participante_id, remetente_id, remetente_nome, tipo, texto,
+                                direcao, categoria, lat, lng, precisao, posicao_em, entregue_em, lida_em, lida_por_nome)
+  values (p_operacao, v_part.id, auth.uid(), v_part.nome, 'PARTICIPANTE', 'Localizada, ver protocolo',
+          'entrada', 'VITIMA', v_lat, v_lng, v_prec, v_pos_em, now(), now(), v_part.nome)
+  returning * into v_msg;
+
+  insert into public.vitima_localizacoes (operacao_id, participante_id, mensagem_id, condicao, lat, lng, precisao,
+                                          posicao_em, registrado_em, registrado_por, registrado_por_nome, registrado_por_tipo,
+                                          vitima_id, encontrada_por_texto, local_descricao, observacoes)
+  values (p_operacao, v_part.id, v_msg.id, v_condicao, v_lat, v_lng, v_prec,
+          v_pos_em, v_msg.criada_em, auth.uid(), left(v_nome_reg, 120), 'responsavel',
+          v_vit.id, case when v_enc.id is null then v_enc_txt end, v_local, v_obs)
+  returning * into v_reg;
+
+  perform public.criar_alerta(p_operacao, 'vitima_localizada', 'critico',
+    'VÍTIMA LOCALIZADA',
+    'Registrado por ' || v_nome_reg || ' (responsável)' ||
+      case when v_lat is null then ' · sem localização' else '' end || '. Veja a condição no painel.',
+    'vitima:' || v_reg.id, null, null, coalesce(v_enc.id, v_part.id), v_lat, v_lng, v_pos_em);
+
+  return json_build_object('mensagem', row_to_json(v_msg), 'registro', row_to_json(v_reg),
+                           'vitima', case when v_vit.id is not null then row_to_json(v_vit) end);
+end;
+$$;
+
+create table if not exists public.convites_participante (
+  id                uuid primary key default gen_random_uuid(),
+  operacao_id       uuid not null references public.operacoes(id) on delete cascade,
+  nome              text not null check (char_length(btrim(nome)) between 2 and 40),
+  email             text not null check (char_length(email) <= 200 and email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]{2,}$'),
+  codigo            text not null unique default left(replace(gen_random_uuid()::text, '-', ''), 24),
+  criado_por_nome   text not null,
+  criado_em         timestamptz not null default now(),
+  envios            integer not null default 0,
+  enviado_em        timestamptz,
+  envio_erro        text check (envio_erro is null or char_length(envio_erro) <= 200),
+  aceito_em         timestamptz,
+  participante_id   uuid references public.participantes(id) on delete set null,
+  unique (operacao_id, email)
+);
+create index if not exists convites_participante_operacao_idx on public.convites_participante (operacao_id);
+
+alter table public.convites_participante enable row level security;
+drop policy if exists convites_participante_ler on public.convites_participante;
+create policy convites_participante_ler on public.convites_participante for select to authenticated using (public.dono_operacao(operacao_id));
+revoke all on public.convites_participante from anon;
+revoke insert, update, delete, truncate on public.convites_participante from authenticated;
+grant select on public.convites_participante to authenticated;
+drop trigger if exists convites_participante_encerrada on public.convites_participante;
+create trigger convites_participante_encerrada before insert or update or delete on public.convites_participante
+  for each row execute function public.bloquear_escrita_encerrada();
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'convites_participante') then
+    execute 'alter publication supabase_realtime add table public.convites_participante';
+  end if;
+end;
+$$;
+
+-- Fim da retenção: os e-mails dos convidados são apagados junto com os demais dados pessoais.
+create or replace function public.apagar_convites_da_operacao()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.dados_apagados_em is not null and old.dados_apagados_em is null then
+    delete from public.convites_participante where operacao_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists operacoes_apagar_convites on public.operacoes;
+create trigger operacoes_apagar_convites after update of dados_apagados_em on public.operacoes
+  for each row execute function public.apagar_convites_da_operacao();
+
+-- Cria o convite (ou devolve o que já existe para o mesmo e-mail na operação, atualizando o nome).
+create or replace function public.criar_convite_participante(p_operacao uuid, p_nome text, p_email text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_resp text := public.nome_responsavel_atual();
+  v_status text;
+  v_nome text := btrim(regexp_replace(coalesce(p_nome, ''), '\s+', ' ', 'g'));
+  v_email text := lower(btrim(coalesce(p_email, '')));
+  c public.convites_participante%rowtype;
+begin
+  if v_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = p_operacao;
+  if v_status is distinct from 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if char_length(v_nome) not between 2 and 40 then
+    raise exception 'nome_convite_invalido';
+  end if;
+  if char_length(v_email) > 200 or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]{2,}$' then
+    raise exception 'email_convite_invalido';
+  end if;
+  select * into c from public.convites_participante where operacao_id = p_operacao and email = v_email for update;
+  if found then
+    update public.convites_participante set nome = v_nome where id = c.id returning * into c;
+    return row_to_json(c);
+  end if;
+  if (select count(*) from public.convites_participante where operacao_id = p_operacao) >= 200 then
+    raise exception 'convites_limite';
+  end if;
+  insert into public.convites_participante (operacao_id, nome, email, criado_por_nome)
+  values (p_operacao, v_nome, v_email, v_resp) returning * into c;
+  perform public.diario_auto(p_operacao, now(), 'pessoa', 'convite_criado', 'Convite por e-mail: ' || v_nome, '',
+    'convite:' || c.id, 'info', null, null, c.id::text, v_resp);
+  return row_to_json(c);
+end;
+$$;
+
+-- Dados para o servidor enviar o e-mail (o servidor chama com o login do responsável). Confere o limite de envios.
+create or replace function public.convite_dados_envio(p_convite uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  c public.convites_participante%rowtype;
+  o public.operacoes%rowtype;
+begin
+  select * into c from public.convites_participante where id = p_convite;
+  if not found or not public.dono_operacao(c.operacao_id) or public.nome_responsavel_atual() is null then
+    raise exception 'sem_permissao';
+  end if;
+  select * into o from public.operacoes where id = c.operacao_id;
+  if o.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if c.envios >= 5 then
+    raise exception 'convite_envios_limite';
+  end if;
+  return json_build_object('id', c.id, 'nome', c.nome, 'email', c.email, 'codigo', c.codigo, 'operacao', o.codigo, 'token_civil', o.token_civil,
+                           'envios', c.envios, 'responsavel', public.nome_responsavel_atual());
+end;
+$$;
+
+-- Resultado do envio (p_erro nulo = enviado).
+create or replace function public.convite_registrar_envio(p_convite uuid, p_erro text default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  c public.convites_participante%rowtype;
+begin
+  select * into c from public.convites_participante where id = p_convite for update;
+  if not found or not public.dono_operacao(c.operacao_id) or public.nome_responsavel_atual() is null then
+    raise exception 'sem_permissao';
+  end if;
+  if p_erro is null then
+    update public.convites_participante set envios = envios + 1, enviado_em = now(), envio_erro = null where id = c.id returning * into c;
+    perform public.diario_auto(c.operacao_id, now(), 'pessoa', 'convite_enviado', 'Convite enviado por e-mail a ' || c.nome, 'envio ' || c.envios,
+      'convite_envio:' || c.id || ':' || c.envios, 'info', null, null, c.id::text, public.nome_responsavel_atual());
+  else
+    update public.convites_participante set envio_erro = left(btrim(p_erro), 200) where id = c.id returning * into c;
+  end if;
+  return row_to_json(c);
+end;
+$$;
+
+-- Revoga o convite (o link do e-mail deixa de pré-preencher o nome; o link da operação continua valendo).
+create or replace function public.cancelar_convite_participante(p_convite uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  c public.convites_participante%rowtype;
+begin
+  select * into c from public.convites_participante where id = p_convite for update;
+  if not found or not public.dono_operacao(c.operacao_id) or public.nome_responsavel_atual() is null then
+    raise exception 'sem_permissao';
+  end if;
+  delete from public.convites_participante where id = c.id;
+  return json_build_object('id', c.id, 'cancelado', true);
+end;
+$$;
+
+-- Página do participante: o nome convidado (só o nome, nada mais). Código inválido: nulo.
+create or replace function public.convite_ler(p_codigo text)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  c public.convites_participante%rowtype;
+begin
+  if p_codigo is null or p_codigo !~ '^[0-9a-f]{24}$' then
+    return null;
+  end if;
+  select * into c from public.convites_participante where codigo = p_codigo;
+  if not found then
+    return null;
+  end if;
+  return json_build_object('nome', c.nome, 'aceito', c.aceito_em is not null);
+end;
+$$;
+
+-- Depois de entrar na operação: liga o convite ao participante (só quem entrou, e uma vez).
+create or replace function public.convite_aceitar(p_codigo text, p_participante uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  c public.convites_participante%rowtype;
+  p public.participantes%rowtype;
+begin
+  if p_codigo is null or p_codigo !~ '^[0-9a-f]{24}$' then
+    return null;
+  end if;
+  select * into c from public.convites_participante where codigo = p_codigo for update;
+  if not found then
+    return null;
+  end if;
+  select * into p from public.participantes where id = p_participante and operacao_id = c.operacao_id and user_id = auth.uid();
+  if not found then
+    raise exception 'sem_permissao';
+  end if;
+  if c.aceito_em is null then
+    update public.convites_participante set aceito_em = now(), participante_id = p.id where id = c.id returning * into c;
+    perform public.diario_auto(c.operacao_id, now(), 'pessoa', 'convite_aceito', c.nome || ' entrou pelo convite por e-mail', '',
+      'convite_aceito:' || c.id, 'info', null, null, c.id::text, p.nome);
+  end if;
+  return json_build_object('aceito', true);
+end;
+$$;
+
+do $$
+declare
+  f text;
+begin
+  foreach f in array array['criar_convite_participante(uuid, text, text)', 'convite_dados_envio(uuid)', 'convite_registrar_envio(uuid, text)',
+                           'cancelar_convite_participante(uuid)', 'convite_aceitar(text, uuid)'] loop
+    execute format('revoke execute on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+end;
+$$;
+-- A página do participante lê o nome do convite antes de entrar (ainda sem sessão). O código é um segredo de 96 bits
+-- e só devolve o nome de quem foi convidado, nunca o e-mail.
+revoke execute on function public.convite_ler(text) from public;
+grant execute on function public.convite_ler(text) to anon, authenticated;
+
+-- =====================================================================
+-- 51. Painel de comando SCI (Sistema de Comando em Incidentes)
+--     (migração 045 — idempotente; exige a 012, a 026 e a 042)
+--
+--  Fonte única do Posto de Comando, atualizada em tempo real para quem acompanha de longe:
+--   - sci_estado (uma linha por operação): funções SCI e responsáveis (CI, Segurança, Ligação, Informação Pública,
+--     Operações, Planejamento, Logística, Adm./Finanças), marcos da linha do tempo (acionamento, despacho,
+--     chegada, PC, comunicações, SCI, relatório de danos, identificação, localização, resgate, consolidação,
+--     término), situação, objetivos, riscos, relatório de danos (com fonte e confirmação), acompanhamento
+--     remoto, total de vítimas informado (e se está confirmado) e logística (água, alimentação, combustível, energia);
+--   - sci_vitimas: quadro de vítimas numeradas (V-01…) — localizada → removida para a ACV → transportada,
+--     com triagem (verde, amarelo, vermelho, cinza = óbito), nome, idade, sexo, destino e o horário de cada passo;
+--   - sci_eventos: linha do tempo com hora, categoria, "NÃO CONFIRMADA", correções (o texto anterior fica guardado)
+--     e anulação com motivo. Cada evento também entra no diário da operação (e assim no relatório final);
+--   - sci_itens: instalações (PC, Área de Espera, ACV, ZPA, Abrigo, GGI…), equipes e missões, órgãos envolvidos,
+--     recursos e pedidos, canais de comunicação, leituras do nível do rio e imagens do local (bucket privado "sci").
+--  Leitura só pelos responsáveis da operação; escrita só pelas funções; operação encerrada: somente leitura.
+--  Modo teste: antes da ocorrência dá para testar o quadro com vítimas e registros de teste (não vão para o diário);
+--  ao sair do modo teste, as vítimas, a linha do tempo, os marcos e o total de teste são apagados ("zerar").
+-- =====================================================================
+
+/* ---------- Tabelas ---------- */
+create table if not exists public.sci_estado (
+  operacao_id         uuid primary key references public.operacoes(id) on delete cascade,
+  funcoes             jsonb not null default '{}'::jsonb check (jsonb_typeof(funcoes) = 'object'),
+  marcos              jsonb not null default '{}'::jsonb check (jsonb_typeof(marcos) = 'object'),
+  situacao            text not null default '' check (char_length(situacao) <= 4000),
+  situacao_em         timestamptz,
+  objetivos           text not null default '' check (char_length(objetivos) <= 4000),
+  riscos              text not null default '' check (char_length(riscos) <= 4000),
+  danos               text not null default '' check (char_length(danos) <= 8000),
+  danos_em            timestamptz,
+  danos_fonte         text not null default '' check (char_length(danos_fonte) <= 200),
+  danos_confirmado    boolean not null default false,
+  acompanhamento      text not null default '' check (char_length(acompanhamento) <= 300),
+  total_vitimas       integer check (total_vitimas between 0 and 100000),
+  total_confirmado    boolean not null default false,
+  logistica           jsonb not null default '{}'::jsonb check (jsonb_typeof(logistica) = 'object'),
+  teste               boolean not null default false,
+  atualizado_em       timestamptz not null default now(),
+  atualizado_por_nome text
+);
+
+create table if not exists public.sci_vitimas (
+  id                  uuid primary key default gen_random_uuid(),
+  operacao_id         uuid not null references public.operacoes(id) on delete cascade,
+  numero              integer not null check (numero between 1 and 9999),
+  nome                text not null default '' check (char_length(nome) <= 80),
+  idade               smallint check (idade between 0 and 130),
+  idade_estimada      boolean not null default false,
+  sexo                text check (sexo is null or sexo in ('M', 'F')),
+  triagem             text check (triagem is null or triagem in ('verde', 'amarelo', 'vermelho', 'cinza')),
+  fase                text not null default 'localizada' check (fase in ('localizada', 'removida', 'transportada')),
+  local               text not null default '' check (char_length(local) <= 200),
+  destino             text not null default '' check (char_length(destino) <= 200),
+  observacoes         text not null default '' check (char_length(observacoes) <= 1000),
+  vitima_id           uuid references public.vitimas(id) on delete set null,
+  localizada_em       timestamptz not null default now(),
+  removida_em         timestamptz,
+  triada_em           timestamptz,
+  transportada_em     timestamptz,
+  criado_por_nome     text not null,
+  criado_em           timestamptz not null default now(),
+  atualizado_em       timestamptz not null default now(),
+  atualizado_por_nome text,
+  unique (operacao_id, numero)
+);
+create index if not exists sci_vitimas_operacao_idx on public.sci_vitimas (operacao_id);
+
+create table if not exists public.sci_eventos (
+  id                  uuid primary key default gen_random_uuid(),
+  operacao_id         uuid not null references public.operacoes(id) on delete cascade,
+  ocorrido_em         timestamptz not null,
+  categoria           text not null check (categoria in ('decisao', 'seguranca', 'resgate', 'informacao', 'recurso', 'comunicacao')),
+  texto               text not null check (char_length(btrim(texto)) between 1 and 1000),
+  nao_confirmada      boolean not null default false,
+  confirmada_em       timestamptz,
+  confirmada_por_nome text,
+  origem              text not null default 'manual' check (origem in ('manual', 'automatico')),
+  ref                 text,
+  historico           jsonb not null default '[]'::jsonb check (jsonb_typeof(historico) = 'array'),
+  corrigido_em        timestamptz,
+  anulado_em          timestamptz,
+  anulado_por_nome    text,
+  anulado_motivo      text check (anulado_motivo is null or char_length(anulado_motivo) <= 300),
+  registrado_por_nome text not null,
+  registrado_em       timestamptz not null default now()
+);
+create index if not exists sci_eventos_operacao_idx on public.sci_eventos (operacao_id, ocorrido_em);
+
+create table if not exists public.sci_itens (
+  id                  uuid primary key default gen_random_uuid(),
+  operacao_id         uuid not null references public.operacoes(id) on delete cascade,
+  tipo                text not null check (tipo in ('instalacao', 'equipe', 'orgao', 'recurso', 'canal', 'leitura_rio', 'imagem')),
+  dados               jsonb not null default '{}'::jsonb check (jsonb_typeof(dados) = 'object' and length(dados::text) <= 20000),
+  ordem               integer not null default 0,
+  criado_por_nome     text not null,
+  criado_em           timestamptz not null default now(),
+  atualizado_em       timestamptz not null default now(),
+  atualizado_por_nome text
+);
+create index if not exists sci_itens_operacao_idx on public.sci_itens (operacao_id, tipo);
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['sci_estado', 'sci_vitimas', 'sci_eventos', 'sci_itens'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists %I on public.%I', t || '_ler', t);
+    execute format('create policy %I on public.%I for select to authenticated using (public.dono_operacao(operacao_id))', t || '_ler', t);
+    execute format('revoke all on public.%I from anon', t);
+    execute format('revoke insert, update, delete, truncate on public.%I from authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('drop trigger if exists %I on public.%I', t || '_encerrada', t);
+    execute format('create trigger %I before insert or update or delete on public.%I for each row execute function public.bloquear_escrita_encerrada()', t || '_encerrada', t);
+    if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+       and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end;
+$$;
+
+/* ---------- Rótulos ---------- */
+create or replace function public.sci_rotulo_marco(p text)
+returns text language sql immutable set search_path = public as $$
+  select case p
+    when 'acionamento' then 'Acionamento'
+    when 'despacho' then 'Despacho da equipe'
+    when 'chegada' then 'Chegada ao local e assunção do Comando'
+    when 'pc' then 'Posto de Comando instalado'
+    when 'comunicacoes' then 'Comunicações estabelecidas'
+    when 'sci' then 'SCI montado'
+    when 'danos' then 'Relatório primário de danos ao PC'
+    when 'identificacao' then 'Início da identificação de vítimas'
+    when 'localizacao' then 'Início da localização de vítimas'
+    when 'resgate' then 'Início da operação de resgate'
+    when 'consolidacao' then 'Consolidação dos dados ao GGI'
+    when 'termino' then 'Término e hot debriefing'
+    else null end;
+$$;
+
+create or replace function public.sci_rotulo_funcao(p text)
+returns text language sql immutable set search_path = public as $$
+  select case p
+    when 'ci' then 'Comandante do Incidente' when 'seguranca' then 'Oficial de Segurança' when 'ligacao' then 'Oficial de Ligação'
+    when 'informacao_publica' then 'Informação Pública' when 'operacoes' then 'Chefe de Operações' when 'planejamento' then 'Planejamento'
+    when 'logistica' then 'Logística' when 'adm_financas' then 'Adm./Finanças' else null end;
+$$;
+
+create or replace function public.sci_rotulo_triagem(p text)
+returns text language sql immutable set search_path = public as $$
+  select case p when 'verde' then 'VERDE' when 'amarelo' then 'AMARELO' when 'vermelho' then 'VERMELHO' when 'cinza' then 'CINZA (óbito)' else '' end;
+$$;
+
+create or replace function public.sci_vnum(p integer)
+returns text language sql immutable set search_path = public as $$
+  select 'V-' || lpad(p::text, 2, '0');
+$$;
+
+/* ---------- Linha do tempo: inclusão e espelho no diário ---------- */
+-- Evento na linha do tempo (também no diário da operação). Uso interno das funções do SCI.
+create or replace function public.sci_evento_interno(p_operacao uuid, p_em timestamptz, p_categoria text, p_texto text,
+                                                     p_nao_confirmada boolean default false, p_origem text default 'automatico',
+                                                     p_ref text default null)
+returns public.sci_eventos
+language plpgsql security definer set search_path = public
+as $$
+declare
+  e public.sci_eventos%rowtype;
+  v_teste boolean;
+begin
+  select teste into v_teste from public.sci_estado where operacao_id = p_operacao;
+  insert into public.sci_eventos (operacao_id, ocorrido_em, categoria, texto, nao_confirmada, origem, ref, registrado_por_nome)
+  values (p_operacao, coalesce(p_em, now()), p_categoria, left(btrim(p_texto), 1000), coalesce(p_nao_confirmada, false), p_origem, p_ref,
+          coalesce(public.nome_responsavel_atual(), 'Sistema'))
+  returning * into e;
+  if coalesce(v_teste, false) then
+    return e;
+  end if;
+  perform public.diario_auto(p_operacao, e.ocorrido_em,
+    case e.categoria when 'seguranca' then 'alerta' when 'resgate' then 'encontro' when 'recurso' then 'chegada'
+                     when 'informacao' then 'observacao' else 'operacao' end,
+    'sci_evento',
+    'SCI · ' || case e.categoria when 'decisao' then 'Decisão do Comando' when 'seguranca' then 'Segurança' when 'resgate' then 'Resgate'
+                                 when 'informacao' then 'Informação' when 'recurso' then 'Recurso' else 'Comunicação' end
+      || case when e.nao_confirmada then ' (NÃO CONFIRMADA)' else '' end,
+    e.texto, 'sci:' || e.id, case when e.categoria = 'seguranca' then 'critico' else 'info' end, null, null, e.id::text, e.registrado_por_nome);
+  return e;
+end;
+$$;
+
+-- Confere permissão e operação ativa. Devolve o nome do responsável.
+create or replace function public.sci_conferir(p_operacao uuid)
+returns text
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_status text;
+begin
+  if v_nome is null or p_operacao is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = p_operacao;
+  if v_status is distinct from 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  insert into public.sci_estado (operacao_id) values (p_operacao) on conflict (operacao_id) do nothing;
+  return v_nome;
+end;
+$$;
+
+/* ---------- Estado (funções, situação, danos, total, logística) ---------- */
+create or replace function public.sci_salvar_estado(p_operacao uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.sci_conferir(p_operacao);
+  s public.sci_estado%rowtype;
+  v_ant public.sci_estado%rowtype;
+  k text;
+  v jsonb;
+  v_txt text;
+begin
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+  select * into s from public.sci_estado where operacao_id = p_operacao for update;
+  v_ant := s;
+  -- funções: { chave: { nome, acumula_ci } } — só as chaves conhecidas; nome vazio = [PENDENTE]
+  if p_dados ? 'funcoes' then
+    if jsonb_typeof(p_dados->'funcoes') <> 'object' then
+      raise exception 'dados_invalidos';
+    end if;
+    for k, v in select * from jsonb_each(p_dados->'funcoes') loop
+      if public.sci_rotulo_funcao(k) is null or jsonb_typeof(v) <> 'object' then
+        raise exception 'dados_invalidos';
+      end if;
+      v_txt := left(btrim(regexp_replace(coalesce(v->>'nome', ''), '\s+', ' ', 'g')), 80);
+      s.funcoes := s.funcoes || jsonb_build_object(k, jsonb_build_object('nome', v_txt, 'acumula_ci', coalesce((v->>'acumula_ci')::boolean, false) and k <> 'ci'));
+      if coalesce(v_ant.funcoes->k->>'nome', '') is distinct from v_txt
+         or coalesce((v_ant.funcoes->k->>'acumula_ci')::boolean, false) is distinct from (coalesce((v->>'acumula_ci')::boolean, false) and k <> 'ci') then
+        perform public.sci_evento_interno(p_operacao, now(), 'decisao',
+          public.sci_rotulo_funcao(k) || ': ' || case when coalesce((v->>'acumula_ci')::boolean, false) and k <> 'ci' then 'acumulada pelo CI'
+                                                       when v_txt = '' then '[PENDENTE]' else v_txt end, false, 'automatico', 'funcao:' || k);
+      end if;
+    end loop;
+  end if;
+  if p_dados ? 'situacao' then
+    s.situacao := left(btrim(coalesce(p_dados->>'situacao', '')), 4000);
+    if s.situacao is distinct from v_ant.situacao then s.situacao_em := now(); end if;
+  end if;
+  if p_dados ? 'objetivos' then s.objetivos := left(btrim(coalesce(p_dados->>'objetivos', '')), 4000); end if;
+  if p_dados ? 'riscos' then s.riscos := left(btrim(coalesce(p_dados->>'riscos', '')), 4000); end if;
+  if p_dados ? 'acompanhamento' then s.acompanhamento := left(btrim(coalesce(p_dados->>'acompanhamento', '')), 300); end if;
+  if p_dados ? 'danos_fonte' then s.danos_fonte := left(btrim(coalesce(p_dados->>'danos_fonte', '')), 200); end if;
+  if p_dados ? 'danos_confirmado' then s.danos_confirmado := coalesce((p_dados->>'danos_confirmado')::boolean, false); end if;
+  if p_dados ? 'danos' then
+    s.danos := left(btrim(coalesce(p_dados->>'danos', '')), 8000);
+    if s.danos is distinct from v_ant.danos and s.danos <> '' then
+      begin
+        s.danos_em := coalesce(nullif(p_dados->>'danos_em', '')::timestamptz, now());
+      exception when others then
+        raise exception 'data_invalida';
+      end;
+      perform public.sci_evento_interno(p_operacao, s.danos_em, 'informacao',
+        'Relatório de danos' || case when s.danos_fonte <> '' then ' (' || s.danos_fonte || ')' else '' end || ': ' || left(s.danos, 600),
+        not s.danos_confirmado, 'automatico', 'danos');
+    end if;
+  end if;
+  if p_dados ? 'total_vitimas' then
+    if coalesce(jsonb_typeof(p_dados->'total_vitimas'), 'null') = 'null' then
+      s.total_vitimas := null;
+    elsif jsonb_typeof(p_dados->'total_vitimas') = 'number' and (p_dados->>'total_vitimas')::numeric between 0 and 100000
+          and (p_dados->>'total_vitimas')::numeric = trunc((p_dados->>'total_vitimas')::numeric) then
+      s.total_vitimas := (p_dados->>'total_vitimas')::integer;
+    else
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+  if p_dados ? 'total_confirmado' then s.total_confirmado := coalesce((p_dados->>'total_confirmado')::boolean, false); end if;
+  if s.total_vitimas is null then s.total_confirmado := false; end if;
+  if s.total_vitimas is distinct from v_ant.total_vitimas or s.total_confirmado is distinct from v_ant.total_confirmado then
+    perform public.sci_evento_interno(p_operacao, now(), 'informacao',
+      'Total de vítimas: ' || coalesce(s.total_vitimas::text, '[PENDENTE]') || case when s.total_vitimas is not null and not s.total_confirmado then ' (NÃO CONFIRMADO)' else '' end,
+      s.total_vitimas is not null and not s.total_confirmado, 'automatico', 'total');
+  end if;
+  if p_dados ? 'logistica' then
+    if jsonb_typeof(p_dados->'logistica') <> 'object' then
+      raise exception 'dados_invalidos';
+    end if;
+    for k, v in select * from jsonb_each(p_dados->'logistica') loop
+      if k not in ('agua', 'alimentacao', 'combustivel', 'energia') then
+        raise exception 'dados_invalidos';
+      end if;
+      s.logistica := s.logistica || jsonb_build_object(k, left(btrim(coalesce(v #>> '{}', '')), 300));
+    end loop;
+  end if;
+  update public.sci_estado set funcoes = s.funcoes, situacao = s.situacao, situacao_em = s.situacao_em, objetivos = s.objetivos, riscos = s.riscos,
+         acompanhamento = s.acompanhamento, danos = s.danos, danos_em = s.danos_em, danos_fonte = s.danos_fonte, danos_confirmado = s.danos_confirmado,
+         total_vitimas = s.total_vitimas, total_confirmado = s.total_confirmado, logistica = s.logistica,
+         atualizado_em = now(), atualizado_por_nome = v_nome
+   where operacao_id = p_operacao returning * into s;
+  return row_to_json(s);
+end;
+$$;
+
+/* ---------- Marcos da linha do tempo ---------- */
+-- p_em nulo = agora. p_apagar = desfaz o marco (fica registrado como correção).
+create or replace function public.sci_marcar(p_operacao uuid, p_marco text, p_em timestamptz default null, p_apagar boolean default false)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.sci_conferir(p_operacao);
+  s public.sci_estado%rowtype;
+  v_rot text := public.sci_rotulo_marco(p_marco);
+  v_ant timestamptz;
+  v_em timestamptz := coalesce(p_em, now());
+begin
+  if v_rot is null then
+    raise exception 'sci_marco_invalido';
+  end if;
+  if v_em > now() + interval '5 minutes' or v_em < now() - interval '30 days' then
+    raise exception 'data_invalida';
+  end if;
+  select * into s from public.sci_estado where operacao_id = p_operacao for update;
+  v_ant := nullif(s.marcos->>p_marco, '')::timestamptz;
+  if coalesce(p_apagar, false) then
+    if v_ant is null then
+      return row_to_json(s);
+    end if;
+    s.marcos := s.marcos - p_marco;
+    perform public.sci_evento_interno(p_operacao, now(), 'decisao', 'Corrigido: marco "' || v_rot || '" retirado (estava ' ||
+      to_char(v_ant at time zone 'America/Sao_Paulo', 'DD/MM HH24"h"MI') || ')', false, 'automatico', 'marco:' || p_marco);
+  else
+    s.marcos := s.marcos || jsonb_build_object(p_marco, v_em);
+    perform public.sci_evento_interno(p_operacao, v_em, 'decisao',
+      case when v_ant is null then v_rot
+           else v_rot || ' — corrigido de ' || to_char(v_ant at time zone 'America/Sao_Paulo', 'DD/MM HH24"h"MI') end,
+      false, 'automatico', 'marco:' || p_marco);
+  end if;
+  update public.sci_estado set marcos = s.marcos, atualizado_em = now(), atualizado_por_nome = v_nome
+   where operacao_id = p_operacao returning * into s;
+  return row_to_json(s);
+end;
+$$;
+
+/* ---------- Vítimas ---------- */
+-- p_dados: numero (opcional na criação: o próximo livre), nome, idade, idade_estimada, sexo, triagem, fase, local, destino,
+--          observacoes, vitima_id (ficha), em (hora do fato: localização na criação, ou da mudança de fase/triagem).
+create or replace function public.sci_salvar_vitima(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.sci_conferir(p_operacao);
+  v public.sci_vitimas%rowtype;
+  v_ant public.sci_vitimas%rowtype;
+  v_novo boolean := p_id is null;
+  v_em timestamptz;
+  v_idade numeric;
+  v_ordem text[] := array['localizada', 'removida', 'transportada'];
+begin
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+  begin
+    v_em := coalesce(nullif(p_dados->>'em', '')::timestamptz, now());
+  exception when others then
+    raise exception 'data_invalida';
+  end;
+  if v_em > now() + interval '5 minutes' then
+    raise exception 'data_invalida';
+  end if;
+  if v_novo then
+    v.id := gen_random_uuid();
+    v.operacao_id := p_operacao;
+    v.nome := ''; v.local := ''; v.destino := ''; v.observacoes := ''; v.idade_estimada := false;
+    v.fase := 'localizada';
+    v.localizada_em := v_em;
+    v.criado_por_nome := v_nome;
+    v.criado_em := now();
+    if p_dados ? 'numero' and nullif(p_dados->>'numero', '') is not null then
+      begin
+        v.numero := (p_dados->>'numero')::integer;
+      exception when others then
+        raise exception 'dados_invalidos';
+      end;
+    else
+      v.numero := coalesce((select max(numero) from public.sci_vitimas where operacao_id = p_operacao), 0) + 1;
+    end if;
+  else
+    select * into v from public.sci_vitimas where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'sci_vitima_inexistente';
+    end if;
+    if p_dados ? 'numero' and nullif(p_dados->>'numero', '') is not null then
+      begin
+        v.numero := (p_dados->>'numero')::integer;
+      exception when others then
+        raise exception 'dados_invalidos';
+      end;
+    end if;
+  end if;
+  v_ant := v;
+  if v.numero is null or v.numero not between 1 and 9999 then
+    raise exception 'dados_invalidos';
+  end if;
+  if exists (select 1 from public.sci_vitimas where operacao_id = p_operacao and numero = v.numero and id <> v.id) then
+    raise exception 'numero_em_uso';
+  end if;
+  if p_dados ? 'nome' then v.nome := left(btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g')), 80); end if;
+  if p_dados ? 'local' then v.local := left(btrim(coalesce(p_dados->>'local', '')), 200); end if;
+  if p_dados ? 'destino' then v.destino := left(btrim(coalesce(p_dados->>'destino', '')), 200); end if;
+  if p_dados ? 'observacoes' then v.observacoes := left(btrim(coalesce(p_dados->>'observacoes', '')), 1000); end if;
+  if p_dados ? 'idade_estimada' then v.idade_estimada := coalesce((p_dados->>'idade_estimada')::boolean, false); end if;
+  if p_dados ? 'idade' then
+    if coalesce(jsonb_typeof(p_dados->'idade'), 'null') = 'null' then
+      v.idade := null;
+    elsif jsonb_typeof(p_dados->'idade') = 'number' then
+      v_idade := (p_dados->>'idade')::numeric;
+      if v_idade <> trunc(v_idade) or v_idade not between 0 and 130 then
+        raise exception 'dados_invalidos';
+      end if;
+      v.idade := v_idade::smallint;
+    else
+      raise exception 'dados_invalidos';
+    end if;
+  end if;
+  if v.idade is null then v.idade_estimada := false; end if;
+  if p_dados ? 'sexo' then v.sexo := nullif(btrim(coalesce(p_dados->>'sexo', '')), ''); end if;
+  if p_dados ? 'triagem' then v.triagem := nullif(btrim(coalesce(p_dados->>'triagem', '')), ''); end if;
+  if p_dados ? 'fase' then v.fase := coalesce(nullif(p_dados->>'fase', ''), v.fase); end if;
+  if p_dados ? 'vitima_id' then
+    begin
+      v.vitima_id := nullif(p_dados->>'vitima_id', '')::uuid;
+    exception when others then
+      raise exception 'dados_invalidos';
+    end;
+    if v.vitima_id is not null and not exists (select 1 from public.vitimas where id = v.vitima_id and operacao_id = p_operacao) then
+      raise exception 'vitima_nao_encontrada';
+    end if;
+  end if;
+  if (v.sexo is not null and v.sexo not in ('M', 'F')) or (v.triagem is not null and v.triagem not in ('verde', 'amarelo', 'vermelho', 'cinza'))
+     or v.fase not in ('localizada', 'removida', 'transportada') then
+    raise exception 'dados_invalidos';
+  end if;
+  -- horários de cada passo (voltar uma fase é correção: o horário da fase desfeita é apagado)
+  if v.fase <> v_ant.fase or v_novo then
+    if array_position(v_ordem, v.fase) >= 2 and v.removida_em is null then v.removida_em := v_em; end if;
+    if array_position(v_ordem, v.fase) >= 3 and v.transportada_em is null then v.transportada_em := v_em; end if;
+    if array_position(v_ordem, v.fase) < 3 then v.transportada_em := null; end if;
+    if array_position(v_ordem, v.fase) < 2 then v.removida_em := null; end if;
+  end if;
+  if v.triagem is distinct from v_ant.triagem then
+    v.triada_em := case when v.triagem is null then null else v_em end;
+  end if;
+  v.atualizado_em := now();
+  v.atualizado_por_nome := v_nome;
+  if v_novo then
+    insert into public.sci_vitimas select v.*;
+    perform public.sci_evento_interno(p_operacao, v.localizada_em, 'resgate',
+      public.sci_vnum(v.numero) || ' localizada' || case when v.local <> '' then ' — ' || v.local else '' end ||
+      case when v.sexo is not null then ' (' || case v.sexo when 'M' then 'masculino' else 'feminino' end || ')' else '' end,
+      false, 'automatico', 'vitima:' || v.id);
+    if v.fase <> 'localizada' then
+      perform public.sci_evento_interno(p_operacao, v_em, 'resgate', public.sci_vnum(v.numero) ||
+        case v.fase when 'removida' then ' removida para a ACV' else ' transportada' || case when v.destino <> '' then ' — ' || v.destino else '' end end,
+        false, 'automatico', 'vitima:' || v.id);
+    end if;
+  else
+    update public.sci_vitimas set numero = v.numero, nome = v.nome, idade = v.idade, idade_estimada = v.idade_estimada, sexo = v.sexo,
+           triagem = v.triagem, fase = v.fase, local = v.local, destino = v.destino, observacoes = v.observacoes, vitima_id = v.vitima_id,
+           removida_em = v.removida_em, triada_em = v.triada_em, transportada_em = v.transportada_em,
+           atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+     where id = v.id;
+    if v.fase <> v_ant.fase then
+      perform public.sci_evento_interno(p_operacao, v_em, 'resgate', public.sci_vnum(v.numero) ||
+        case when array_position(v_ordem, v.fase) < array_position(v_ordem, v_ant.fase) then ' voltou para "' ||
+               case v.fase when 'localizada' then 'localizadas' else 'removidas para a ACV' end || '" (correção)'
+             when v.fase = 'removida' then ' removida para a ACV'
+             else ' transportada' || case when v.destino <> '' then ' — ' || v.destino else '' end end,
+        false, 'automatico', 'vitima:' || v.id);
+    end if;
+  end if;
+  if v.triagem is distinct from v_ant.triagem and v.triagem is not null then
+    perform public.sci_evento_interno(p_operacao, v_em, case when v.triagem = 'cinza' then 'seguranca' else 'resgate' end,
+      public.sci_vnum(v.numero) || case when v.triagem = 'cinza' then ' — óbito (triagem CINZA)' else ' triada ' || public.sci_rotulo_triagem(v.triagem) end,
+      false, 'automatico', 'vitima:' || v.id);
+  end if;
+  return row_to_json(v);
+end;
+$$;
+
+create or replace function public.sci_excluir_vitima(p_id uuid, p_motivo text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v public.sci_vitimas%rowtype;
+  v_nome text;
+begin
+  select * into v from public.sci_vitimas where id = p_id;
+  if not found then
+    raise exception 'sci_vitima_inexistente';
+  end if;
+  v_nome := public.sci_conferir(v.operacao_id);
+  if char_length(btrim(coalesce(p_motivo, ''))) < 3 then
+    raise exception 'justificativa_obrigatoria';
+  end if;
+  delete from public.sci_vitimas where id = v.id;
+  perform public.sci_evento_interno(v.operacao_id, now(), 'informacao', public.sci_vnum(v.numero) || ' retirada do quadro: ' || left(btrim(p_motivo), 300),
+    false, 'automatico', 'vitima:' || v.id);
+  return json_build_object('id', v.id, 'excluida', true);
+end;
+$$;
+
+-- Modo teste (antes da ocorrência). Ligar: só com o quadro ainda vazio (sem vítimas nem registros).
+-- Desligar = zerar: apaga as vítimas, a linha do tempo, os marcos e o total de teste. Funções, instalações, equipes,
+-- órgãos e recursos preparados ficam. Nada do modo teste foi para o diário.
+create or replace function public.sci_modo_teste(p_operacao uuid, p_ligar boolean)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.sci_conferir(p_operacao);
+  s public.sci_estado%rowtype;
+  v_v integer := 0;
+  v_e integer := 0;
+begin
+  select * into s from public.sci_estado where operacao_id = p_operacao for update;
+  if coalesce(p_ligar, false) then
+    if s.teste then
+      return json_build_object('teste', true);
+    end if;
+    if exists (select 1 from public.sci_vitimas where operacao_id = p_operacao) or exists (select 1 from public.sci_eventos where operacao_id = p_operacao)
+       or s.marcos <> '{}'::jsonb then
+      raise exception 'sci_ja_iniciado';
+    end if;
+    update public.sci_estado set teste = true, atualizado_em = now(), atualizado_por_nome = v_nome where operacao_id = p_operacao;
+    return json_build_object('teste', true);
+  end if;
+  if not s.teste then
+    return json_build_object('teste', false);
+  end if;
+  delete from public.sci_vitimas where operacao_id = p_operacao;
+  get diagnostics v_v = row_count;
+  delete from public.sci_eventos where operacao_id = p_operacao;
+  get diagnostics v_e = row_count;
+  update public.sci_estado set teste = false, marcos = '{}'::jsonb, total_vitimas = null, total_confirmado = false,
+         atualizado_em = now(), atualizado_por_nome = v_nome
+   where operacao_id = p_operacao;
+  perform public.diario_auto(p_operacao, now(), 'operacao', 'sci_zerado', 'SCI pronto: dados de teste zerados',
+    v_v || ' vítima(s) e ' || v_e || ' registro(s) de teste apagados', 'sci_zerado:' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint,
+    'info', null, null, null, v_nome);
+  return json_build_object('teste', false, 'vitimas', v_v, 'eventos', v_e);
+end;
+$$;
+
+/* ---------- Eventos (registro manual, correção, confirmação, anulação) ---------- */
+create or replace function public.sci_registrar_evento(p_operacao uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.sci_conferir(p_operacao);
+  v_em timestamptz;
+  e public.sci_eventos%rowtype;
+begin
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' or coalesce(p_dados->>'categoria', '') not in ('decisao', 'seguranca', 'resgate', 'informacao', 'recurso', 'comunicacao')
+     or char_length(btrim(coalesce(p_dados->>'texto', ''))) not between 1 and 1000 then
+    raise exception 'dados_invalidos';
+  end if;
+  begin
+    v_em := coalesce(nullif(p_dados->>'em', '')::timestamptz, now());
+  exception when others then
+    raise exception 'data_invalida';
+  end;
+  if v_em > now() + interval '5 minutes' or v_em < now() - interval '30 days' then
+    raise exception 'data_invalida';
+  end if;
+  e := public.sci_evento_interno(p_operacao, v_em, p_dados->>'categoria', p_dados->>'texto',
+                                 coalesce((p_dados->>'nao_confirmada')::boolean, false), 'manual', null);
+  return row_to_json(e);
+end;
+$$;
+
+-- Correção: o texto e a hora anteriores ficam no histórico do evento e a correção entra no diário.
+create or replace function public.sci_corrigir_evento(p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  e public.sci_eventos%rowtype;
+  v_nome text;
+  v_em timestamptz;
+  v_txt text;
+  v_cat text;
+begin
+  select * into e from public.sci_eventos where id = p_id for update;
+  if not found then
+    raise exception 'sci_registro_inexistente';
+  end if;
+  v_nome := public.sci_conferir(e.operacao_id);
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  begin
+    v_em := coalesce(nullif(p_dados->>'em', '')::timestamptz, e.ocorrido_em);
+  exception when others then
+    raise exception 'data_invalida';
+  end;
+  if v_em > now() + interval '5 minutes' then
+    raise exception 'data_invalida';
+  end if;
+  v_txt := coalesce(nullif(btrim(coalesce(p_dados->>'texto', '')), ''), e.texto);
+  v_cat := coalesce(nullif(p_dados->>'categoria', ''), e.categoria);
+  if char_length(v_txt) > 1000 or v_cat not in ('decisao', 'seguranca', 'resgate', 'informacao', 'recurso', 'comunicacao') then
+    raise exception 'dados_invalidos';
+  end if;
+  if v_txt = e.texto and v_em = e.ocorrido_em and v_cat = e.categoria then
+    return row_to_json(e);
+  end if;
+  update public.sci_eventos
+     set historico = historico || jsonb_build_array(jsonb_build_object('em', now(), 'por', v_nome, 'texto', e.texto, 'ocorrido_em', e.ocorrido_em, 'categoria', e.categoria,
+                                                                       'motivo', left(btrim(coalesce(p_dados->>'motivo', '')), 300))),
+         texto = v_txt, ocorrido_em = v_em, categoria = v_cat, corrigido_em = now()
+   where id = e.id returning * into e;
+  perform public.diario_auto(e.operacao_id, now(), 'observacao', 'sci_correcao', 'SCI · Correção de registro',
+    'Agora: ' || to_char(e.ocorrido_em at time zone 'America/Sao_Paulo', 'DD/MM HH24"h"MI') || ' ' || e.texto ||
+    ' · Antes: ' || to_char((e.historico->-1->>'ocorrido_em')::timestamptz at time zone 'America/Sao_Paulo', 'DD/MM HH24"h"MI') || ' ' || (e.historico->-1->>'texto') ||
+    case when coalesce(p_dados->>'motivo', '') <> '' then ' · Motivo: ' || left(btrim(p_dados->>'motivo'), 300) else '' end,
+    'sci_corr:' || e.id || ':' || jsonb_array_length(e.historico), 'info', null, null, e.id::text, v_nome);
+  return row_to_json(e);
+end;
+$$;
+
+create or replace function public.sci_confirmar_evento(p_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  e public.sci_eventos%rowtype;
+  v_nome text;
+begin
+  select * into e from public.sci_eventos where id = p_id for update;
+  if not found then
+    raise exception 'sci_registro_inexistente';
+  end if;
+  v_nome := public.sci_conferir(e.operacao_id);
+  if not e.nao_confirmada then
+    return row_to_json(e);
+  end if;
+  update public.sci_eventos set nao_confirmada = false, confirmada_em = now(), confirmada_por_nome = v_nome where id = e.id returning * into e;
+  perform public.diario_auto(e.operacao_id, now(), 'observacao', 'sci_confirmacao', 'SCI · Informação confirmada pela equipe', e.texto,
+    'sci_conf:' || e.id, 'info', null, null, e.id::text, v_nome);
+  return row_to_json(e);
+end;
+$$;
+
+create or replace function public.sci_anular_evento(p_id uuid, p_motivo text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  e public.sci_eventos%rowtype;
+  v_nome text;
+begin
+  select * into e from public.sci_eventos where id = p_id for update;
+  if not found then
+    raise exception 'sci_registro_inexistente';
+  end if;
+  v_nome := public.sci_conferir(e.operacao_id);
+  if char_length(btrim(coalesce(p_motivo, ''))) < 3 then
+    raise exception 'justificativa_obrigatoria';
+  end if;
+  if e.anulado_em is not null then
+    return row_to_json(e);
+  end if;
+  update public.sci_eventos set anulado_em = now(), anulado_por_nome = v_nome, anulado_motivo = left(btrim(p_motivo), 300) where id = e.id returning * into e;
+  perform public.diario_auto(e.operacao_id, now(), 'observacao', 'sci_anulacao', 'SCI · Registro anulado', e.texto || ' · Motivo: ' || e.anulado_motivo,
+    'sci_anul:' || e.id, 'info', null, null, e.id::text, v_nome);
+  return row_to_json(e);
+end;
+$$;
+
+/* ---------- Itens: instalações, equipes, órgãos, recursos, canais, nível do rio, imagens ---------- */
+-- Limpa e valida os dados de cada tipo: só as chaves conhecidas, textos aparados, números e horas conferidos.
+create or replace function public.sci_limpar_item(p_tipo text, p_dados jsonb)
+returns jsonb
+language plpgsql stable set search_path = public
+as $$
+declare
+  v_txt text[];
+  v_int text[] := '{}';
+  v_num text[] := '{}';
+  v_ts text[] := '{}';
+  v_enum jsonb := '{}'::jsonb;
+  v_obrig text;
+  r jsonb := '{}'::jsonb;
+  k text;
+  v jsonb;
+  t text;
+begin
+  if p_dados is null or jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_tipo = 'instalacao' then
+    v_txt := array['nome', 'responsavel', 'local', 'motivo', 'nota']; v_num := array['lat', 'lng']; v_ts := array['ativada_em', 'desativada_em'];
+    v_enum := '{"tipo": ["pc", "area_espera", "acv", "zpa", "abrigo", "ggi", "outra"], "estado": ["ativa", "planejada", "desativada"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'equipe' then
+    v_txt := array['nome', 'orgao', 'missao', 'funcao', 'setor', 'chefe', 'meios', 'notas', 'setor_id', 'grupo_id']; v_int := array['efetivo'];
+    v_enum := '{"status": ["designada", "em_deslocamento", "em_operacao", "disponivel", "desmobilizada"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'orgao' then
+    v_txt := array['nome', 'detalhe', 'missao', 'nota']; v_int := array['pessoas', 'viaturas']; v_ts := array['acionado_em', 'chegada_em'];
+    v_enum := '{"situacao": ["acionado", "a_caminho", "no_local", "desmobilizado"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'recurso' then
+    v_txt := array['nome', 'orgao', 'local', 'nota']; v_int := array['qtd']; v_ts := array['solicitado_em', 'chegada_em'];
+    v_enum := '{"tipo": ["viatura", "embarcacao", "aeronave", "equipamento", "outro"], "status": ["solicitado", "a_caminho", "no_local", "em_uso", "indisponivel", "desmobilizado"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'canal' then
+    v_txt := array['nome', 'funcao', 'usuarios'];
+    v_obrig := 'nome';
+  elsif p_tipo = 'leitura_rio' then
+    v_txt := array['ponto', 'nivel', 'vazao', 'fonte']; v_ts := array['em'];
+    v_enum := '{"tendencia": ["subindo", "estavel", "descendo", "a_confirmar"]}';
+    v_obrig := 'em';
+  elsif p_tipo = 'imagem' then
+    v_txt := array['caminho', 'legenda'];
+    v_obrig := 'caminho';
+  else
+    raise exception 'dados_invalidos';
+  end if;
+  for k, v in select * from jsonb_each(p_dados) loop
+    if coalesce(jsonb_typeof(v), 'null') = 'null' then
+      continue;
+    elsif k = any(v_txt) then
+      t := btrim(regexp_replace(v #>> '{}', '\s+', ' ', 'g'));
+      if k in ('notas', 'nota', 'detalhe', 'missao', 'motivo') then t := left(btrim(v #>> '{}'), 1000); else t := left(t, 200); end if;
+      if t <> '' then r := r || jsonb_build_object(k, t); end if;
+    elsif k = any(v_int) then
+      if jsonb_typeof(v) <> 'number' or (v #>> '{}')::numeric < 0 or (v #>> '{}')::numeric > 100000 or (v #>> '{}')::numeric <> trunc((v #>> '{}')::numeric) then
+        raise exception 'dados_invalidos';
+      end if;
+      r := r || jsonb_build_object(k, (v #>> '{}')::integer);
+    elsif k = any(v_num) then
+      if jsonb_typeof(v) <> 'number' or (k = 'lat' and abs((v #>> '{}')::numeric) > 90) or (k = 'lng' and abs((v #>> '{}')::numeric) > 180) then
+        raise exception 'posicao_invalida';
+      end if;
+      r := r || jsonb_build_object(k, v);
+    elsif k = any(v_ts) then
+      begin
+        r := r || jsonb_build_object(k, (v #>> '{}')::timestamptz);
+      exception when others then
+        raise exception 'data_invalida';
+      end;
+    elsif v_enum ? k then
+      if not ((v_enum->k) ? (v #>> '{}')) then
+        raise exception 'dados_invalidos';
+      end if;
+      r := r || jsonb_build_object(k, v #>> '{}');
+    end if;
+  end loop;
+  if (r ? 'lat') <> (r ? 'lng') then
+    raise exception 'posicao_invalida';
+  end if;
+  if not (r ? v_obrig) then
+    raise exception 'dados_invalidos';
+  end if;
+  return r;
+end;
+$$;
+
+create or replace function public.sci_salvar_item(p_operacao uuid, p_id uuid, p_tipo text, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.sci_conferir(p_operacao);
+  i public.sci_itens%rowtype;
+  v_ant jsonb;
+  d jsonb;
+  v_rot text;
+begin
+  if p_id is null then
+    i.id := gen_random_uuid();
+    i.operacao_id := p_operacao;
+    i.tipo := p_tipo;
+    i.ordem := coalesce((select max(ordem) from public.sci_itens where operacao_id = p_operacao and tipo = p_tipo), 0) + 1;
+    i.criado_por_nome := v_nome;
+    i.criado_em := now();
+    v_ant := '{}'::jsonb;
+  else
+    select * into i from public.sci_itens where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'sci_item_inexistente';
+    end if;
+    v_ant := i.dados;
+  end if;
+  d := public.sci_limpar_item(i.tipo, p_dados);
+  if i.tipo = 'imagem' then
+    if d->>'caminho' !~ ('^' || p_operacao::text || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$')
+       or (p_id is not null and d->>'caminho' is distinct from v_ant->>'caminho') then
+      raise exception 'dados_invalidos';
+    end if;
+    if not exists (select 1 from storage.objects where bucket_id = 'sci' and name = d->>'caminho') then
+      raise exception 'imagem_nao_enviada';
+    end if;
+  end if;
+  if i.tipo = 'leitura_rio' and (d->>'em')::timestamptz > now() + interval '5 minutes' then
+    raise exception 'data_invalida';
+  end if;
+  i.dados := d;
+  i.atualizado_em := now();
+  i.atualizado_por_nome := v_nome;
+  if p_id is null then
+    insert into public.sci_itens select i.*;
+  else
+    update public.sci_itens set dados = i.dados, atualizado_em = i.atualizado_em, atualizado_por_nome = i.atualizado_por_nome where id = i.id;
+  end if;
+  -- mudanças que contam a história da ocorrência entram sozinhas na linha do tempo
+  if i.tipo = 'orgao' and d->>'situacao' is distinct from v_ant->>'situacao' and d->>'situacao' in ('acionado', 'no_local', 'desmobilizado') then
+    perform public.sci_evento_interno(p_operacao, coalesce(case d->>'situacao' when 'no_local' then (d->>'chegada_em')::timestamptz
+                                                                                 when 'acionado' then (d->>'acionado_em')::timestamptz end, now()), 'recurso',
+      (d->>'nome') || case d->>'situacao' when 'no_local' then ' no local' || coalesce(' (' || (d->>'pessoas') || ' pessoas)', '')
+                                          when 'acionado' then ' acionado' else ' desmobilizado' end
+      || coalesce(' — ' || nullif(d->>'missao', ''), ''), false, 'automatico', 'item:' || i.id);
+  elsif i.tipo = 'recurso' and d->>'status' is distinct from v_ant->>'status' and d->>'status' in ('solicitado', 'no_local', 'indisponivel', 'desmobilizado') then
+    perform public.sci_evento_interno(p_operacao, coalesce(case when d->>'status' = 'no_local' then (d->>'chegada_em')::timestamptz
+                                                                when d->>'status' = 'solicitado' then (d->>'solicitado_em')::timestamptz end, now()), 'recurso',
+      (d->>'nome') || case d->>'status' when 'solicitado' then ' solicitado' when 'no_local' then ' chegou ao local'
+                                        when 'indisponivel' then ' indisponível' else ' desmobilizado' end
+      || coalesce(' — ' || nullif(d->>'nota', ''), ''), false, 'automatico', 'item:' || i.id);
+  elsif i.tipo = 'instalacao' and coalesce(d->>'estado', 'ativa') is distinct from coalesce(v_ant->>'estado', case when p_id is null then '' else 'ativa' end) then
+    v_rot := case d->>'tipo' when 'pc' then 'Posto de Comando' when 'area_espera' then 'Área de Espera' when 'acv' then 'Área de Concentração de Vítimas'
+                             when 'zpa' then 'ZPA' when 'abrigo' then 'Abrigo' when 'ggi' then 'GGI' else 'Instalação' end;
+    perform public.sci_evento_interno(p_operacao, now(), 'decisao',
+      v_rot || case when v_rot <> d->>'nome' then ' (' || (d->>'nome') || ')' else '' end ||
+      case coalesce(d->>'estado', 'ativa') when 'ativa' then ' estabelecida' when 'planejada' then ' planejada' else ' desativada' end ||
+      coalesce(' — responsável: ' || nullif(d->>'responsavel', ''), '') || coalesce(' — ' || nullif(d->>'motivo', ''), ''),
+      false, 'automatico', 'item:' || i.id);
+  elsif i.tipo = 'equipe' and d->>'status' is distinct from v_ant->>'status' and d->>'status' in ('em_operacao', 'desmobilizada') then
+    perform public.sci_evento_interno(p_operacao, now(), 'decisao',
+      'Equipe ' || (d->>'nome') || case d->>'status' when 'em_operacao' then ' em operação' else ' desmobilizada' end || coalesce(' — ' || nullif(d->>'missao', ''), ''),
+      false, 'automatico', 'item:' || i.id);
+  elsif i.tipo = 'leitura_rio' and p_id is null then
+    perform public.sci_evento_interno(p_operacao, (d->>'em')::timestamptz, 'seguranca',
+      'Nível do rio' || coalesce(' (' || nullif(d->>'ponto', '') || ')', '') || ': ' || coalesce(nullif(d->>'nivel', ''), '—') ||
+      coalesce(', ' || nullif(d->>'vazao', ''), '') || case d->>'tendencia' when 'subindo' then ' — SUBINDO' when 'estavel' then ' — estável'
+                                                         when 'descendo' then ' — descendo' else '' end || coalesce(' · fonte: ' || nullif(d->>'fonte', ''), ''),
+      false, 'automatico', 'item:' || i.id);
+  end if;
+  return row_to_json(i);
+end;
+$$;
+
+create or replace function public.sci_excluir_item(p_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  i public.sci_itens%rowtype;
+begin
+  select * into i from public.sci_itens where id = p_id;
+  if not found then
+    raise exception 'sci_item_inexistente';
+  end if;
+  perform public.sci_conferir(i.operacao_id);
+  delete from public.sci_itens where id = i.id;
+  return json_build_object('id', i.id, 'excluido', true);
+end;
+$$;
+
+/* ---------- Imagens do local (bucket privado "sci") ---------- */
+-- Caminho: <operação>/<uuid>.jpg. Apagar o registro (ou a operação) põe o arquivo na fila de remoção.
+create or replace function public.sci_fila_apagar_imagem()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if old.tipo = 'imagem' and old.dados->>'caminho' is not null then
+    insert into public.arquivos_pendentes (caminho, bucket, operacao_id, excluido_por)
+    values (old.dados->>'caminho', 'sci', old.operacao_id, auth.uid())
+    on conflict (caminho) do nothing;
+  end if;
+  return old;
+end;
+$$;
+drop trigger if exists sci_itens_apagar_imagem on public.sci_itens;
+create trigger sci_itens_apagar_imagem after delete on public.sci_itens
+  for each row execute function public.sci_fila_apagar_imagem();
+
+create or replace function public.sci_operacao_do_caminho(p_nome text)
+returns uuid
+language plpgsql immutable set search_path = public
+as $$
+begin
+  if coalesce(p_nome, '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$' then
+    return null;
+  end if;
+  return split_part(p_nome, '/', 1)::uuid;
+end;
+$$;
+
+create or replace function public.pode_enviar_imagem_sci(p_nome text)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select public.sci_operacao_do_caminho(p_nome) is not null and public.dono_operacao(public.sci_operacao_do_caminho(p_nome))
+     and exists (select 1 from public.operacoes o where o.id = public.sci_operacao_do_caminho(p_nome) and o.status = 'ativa' and o.dados_apagados_em is null);
+$$;
+
+create or replace function public.pode_ver_imagem_sci(p_nome text)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select (public.sci_operacao_do_caminho(p_nome) is not null and public.dono_operacao(public.sci_operacao_do_caminho(p_nome)))
+      or exists (select 1 from public.arquivos_pendentes a where a.caminho = p_nome and a.bucket = 'sci' and a.excluido_por = auth.uid());
+$$;
+
+create or replace function public.pode_apagar_imagem_sci(p_nome text)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from public.arquivos_pendentes a where a.caminho = p_nome and a.bucket = 'sci'
+                  and (a.excluido_por = auth.uid() or (a.operacao_id is not null and public.dono_operacao(a.operacao_id))));
+$$;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('sci', 'sci', false, 10485760, array['image/jpeg'])
+on conflict (id) do update
+  set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists gbs_sci_enviar on storage.objects;
+create policy gbs_sci_enviar on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'sci' and public.pode_enviar_imagem_sci(name));
+drop policy if exists gbs_sci_ver on storage.objects;
+create policy gbs_sci_ver on storage.objects
+  for select to authenticated
+  using (bucket_id = 'sci' and public.pode_ver_imagem_sci(name));
+drop policy if exists gbs_sci_apagar on storage.objects;
+create policy gbs_sci_apagar on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'sci' and public.pode_apagar_imagem_sci(name));
+
+/* ---------- Retenção: dados pessoais do quadro de vítimas saem com os demais ---------- */
+create or replace function public.apagar_sci_da_operacao()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.dados_apagados_em is not null and old.dados_apagados_em is null then
+    delete from public.sci_vitimas where operacao_id = new.id;
+    delete from public.sci_itens where operacao_id = new.id and tipo = 'imagem';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists operacoes_apagar_sci on public.operacoes;
+create trigger operacoes_apagar_sci after update of dados_apagados_em on public.operacoes
+  for each row execute function public.apagar_sci_da_operacao();
+
+/* ---------- Permissões ---------- */
+revoke execute on function public.sci_evento_interno(uuid, timestamptz, text, text, boolean, text, text) from public, anon, authenticated;
+revoke execute on function public.sci_conferir(uuid) from public, anon, authenticated;
+revoke execute on function public.sci_limpar_item(text, jsonb) from public, anon, authenticated;
+revoke execute on function public.sci_operacao_do_caminho(text) from public, anon;
+revoke execute on function public.sci_rotulo_marco(text) from public, anon, authenticated;
+revoke execute on function public.sci_rotulo_funcao(text) from public, anon, authenticated;
+revoke execute on function public.sci_rotulo_triagem(text) from public, anon, authenticated;
+revoke execute on function public.sci_vnum(integer) from public, anon, authenticated;
+do $$
+declare
+  f text;
+begin
+  foreach f in array array['sci_salvar_estado(uuid, jsonb)', 'sci_marcar(uuid, text, timestamptz, boolean)', 'sci_salvar_vitima(uuid, uuid, jsonb)',
+                           'sci_excluir_vitima(uuid, text)', 'sci_modo_teste(uuid, boolean)', 'sci_registrar_evento(uuid, jsonb)',
+                           'sci_corrigir_evento(uuid, jsonb)', 'sci_confirmar_evento(uuid)', 'sci_anular_evento(uuid, text)',
+                           'sci_salvar_item(uuid, uuid, text, jsonb)', 'sci_excluir_item(uuid)',
+                           'pode_enviar_imagem_sci(text)', 'pode_ver_imagem_sci(text)', 'pode_apagar_imagem_sci(text)'] loop
+    execute format('revoke execute on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+end;
+$$;
+
+-- =====================================================================
+-- 52. SCI integrado ao restante do app (migração 046 — idempotente; exige a 031, a 035, a 036, a 037, a 042 e a 045)
+--
+--  O painel de comando passa a usar o que o app já registra, em vez de pedir de novo:
+--   - "Vítima encontrada" (do campo ou do painel, vitima_localizacoes) entra sozinha no quadro de vítimas do SCI,
+--     ligada à ficha (nome, idade e sexo vêm da ficha), com a hora e o local do registro; óbito já entra como CINZA.
+--     O gatilho nunca impede o registro da vítima encontrada (se o SCI falhar, só avisa no log).
+--   - sci_contexto(op): o que o SCI mostra do app numa chamada só — comando atual (passagem de comando), briefing
+--     (objetivo, riscos, comunicações), fichas de vítima e localizações, equipes (grupos com membros, responsável,
+--     disponibilidade, deslocamento ativo e recursos), participantes rastreados, pontos de interesse (base, risco…),
+--     setores (com a geometria), alertas críticos sem ciente, pedidos de ajuda abertos, decisões pendentes,
+--     verificação (cão e drone) e o diário (linha do tempo única).
+--   - Instalações podem apontar para um ponto de interesse do mapa (ponto_id): as coordenadas vêm do ponto.
+-- =====================================================================
+alter table public.sci_vitimas add column if not exists localizacao_id uuid references public.vitima_localizacoes(id) on delete set null;
+create unique index if not exists sci_vitimas_localizacao_uk on public.sci_vitimas (localizacao_id) where localizacao_id is not null;
+
+-- Liga uma "vítima encontrada" ao quadro do SCI (cria a vítima no quadro ou completa a da mesma ficha).
+create or replace function public.sci_vincular_localizacao(p_loc uuid)
+returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare
+  l public.vitima_localizacoes%rowtype;
+  f public.vitimas%rowtype;
+  v public.sci_vitimas%rowtype;
+  v_em timestamptz;
+begin
+  select * into l from public.vitima_localizacoes where id = p_loc;
+  if not found then
+    return null;
+  end if;
+  select * into v from public.sci_vitimas where localizacao_id = l.id;
+  if found then
+    return v.id;
+  end if;
+  v_em := coalesce(l.posicao_em, l.registrado_em);
+  if l.vitima_id is not null then
+    select * into f from public.vitimas where id = l.vitima_id;
+    select * into v from public.sci_vitimas where operacao_id = l.operacao_id and vitima_id = l.vitima_id and localizacao_id is null order by numero limit 1 for update;
+  end if;
+  insert into public.sci_estado (operacao_id) values (l.operacao_id) on conflict (operacao_id) do nothing;
+  if v.id is not null then
+    update public.sci_vitimas
+       set localizacao_id = l.id, localizada_em = least(localizada_em, v_em),
+           triagem = case when l.condicao = 'obito' and triagem is null then 'cinza' else triagem end,
+           local = case when local = '' then coalesce(left(l.local_descricao, 200), '') else local end,
+           atualizado_em = now(), atualizado_por_nome = l.registrado_por_nome
+     where id = v.id returning * into v;
+  else
+    insert into public.sci_vitimas (operacao_id, numero, nome, idade, idade_estimada, sexo, triagem, fase, local, vitima_id, localizacao_id,
+                                    localizada_em, criado_por_nome, atualizado_por_nome)
+    values (l.operacao_id, coalesce((select max(numero) from public.sci_vitimas where operacao_id = l.operacao_id), 0) + 1,
+            coalesce(left(f.nome, 80), ''), f.idade, coalesce(f.idade_qualidade = 'estimada', false), f.sexo,
+            case when l.condicao = 'obito' then 'cinza' end, 'localizada', coalesce(left(l.local_descricao, 200), ''), f.id, l.id,
+            v_em, l.registrado_por_nome, l.registrado_por_nome)
+    returning * into v;
+  end if;
+  -- só na linha do tempo do SCI (o diário já tem a "vítima localizada")
+  insert into public.sci_eventos (operacao_id, ocorrido_em, categoria, texto, origem, ref, registrado_por_nome)
+  values (l.operacao_id, v_em, case when l.condicao = 'obito' then 'seguranca' else 'resgate' end,
+          public.sci_vnum(v.numero) || ' localizada' || case when v.nome <> '' then ' — ' || v.nome else '' end ||
+          case when l.condicao = 'obito' then ' (óbito)' else ' (com vida)' end || ' · registro "Vítima encontrada" de ' || l.registrado_por_nome,
+          'automatico', 'localizacao:' || l.id, l.registrado_por_nome);
+  return v.id;
+end;
+$$;
+
+create or replace function public.sci_gatilho_localizacao()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  begin
+    perform public.sci_vincular_localizacao(new.id);
+  exception when others then
+    raise warning 'SCI: não foi possível ligar a vítima encontrada % ao quadro: %', new.id, sqlerrm;   -- nunca impede o registro
+  end;
+  return new;
+end;
+$$;
+drop trigger if exists vitima_localizacoes_sci on public.vitima_localizacoes;
+create trigger vitima_localizacoes_sci after insert on public.vitima_localizacoes
+  for each row execute function public.sci_gatilho_localizacao();
+
+-- Vítimas já encontradas nas operações em andamento entram no quadro
+do $$
+declare
+  r record;
+begin
+  for r in select l.id from public.vitima_localizacoes l join public.operacoes o on o.id = l.operacao_id
+            where o.status = 'ativa' and o.dados_apagados_em is null
+              and not exists (select 1 from public.sci_vitimas s where s.localizacao_id = l.id)
+            order by l.registrado_em loop
+    perform public.sci_vincular_localizacao(r.id);
+  end loop;
+end;
+$$;
+
+-- O que o SCI mostra do restante do app, numa chamada só (só responsáveis da operação).
+create or replace function public.sci_contexto(p_operacao uuid)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  o public.operacoes%rowtype;
+begin
+  if public.nome_responsavel_atual() is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into o from public.operacoes where id = p_operacao;
+  return json_build_object(
+    'gerado_em', now(),
+    'comando', json_build_object('nome', o.comando_nome, 'desde', o.comando_desde,
+       'passagem_pendente', (select p.para_nome from public.passagens_comando p where p.operacao_id = p_operacao and p.estado = 'pendente' order by p.criada_em desc limit 1)),
+    'briefing', (select json_build_object('objetivo', b.objetivo, 'riscos', b.riscos, 'comunicacoes', b.comunicacoes, 'atualizado_em', b.atualizado_em)
+                   from public.briefing_operacao b where b.operacao_id = p_operacao),
+    'fichas', coalesce((select json_agg(json_build_object('id', v.id, 'nome', v.nome, 'idade', v.idade, 'idade_qualidade', v.idade_qualidade, 'sexo', v.sexo,
+                 'perfil', v.perfil, 'cadastro_rapido', v.cadastro_rapido, 'roupas', left(v.roupas, 120)) order by v.criado_em)
+                 from public.vitimas v where v.operacao_id = p_operacao), '[]'::json),
+    'localizacoes', coalesce((select json_agg(json_build_object('id', l.id, 'vitima_id', l.vitima_id, 'condicao', l.condicao, 'lat', l.lat, 'lng', l.lng, 'precisao', l.precisao,
+                 'em', coalesce(l.posicao_em, l.registrado_em), 'local_descricao', l.local_descricao, 'observacoes', l.observacoes,
+                 'registrado_por_nome', l.registrado_por_nome, 'encontrada_por_texto', l.encontrada_por_texto) order by l.registrado_em)
+                 from public.vitima_localizacoes l where l.operacao_id = p_operacao), '[]'::json),
+    'equipes', coalesce((select json_agg(json_build_object(
+                 'id', g.id, 'nome', g.nome, 'cor', g.cor, 'disponibilidade', g.disponibilidade, 'disponibilidade_obs', g.disponibilidade_obs, 'capacidades', g.capacidades,
+                 'membros', (select count(*) from public.grupo_membros m join public.participantes p on p.id = m.participante_id where m.grupo_id = g.id and not p.removido),
+                 'militares', (select count(*) from public.grupo_membros m join public.participantes p on p.id = m.participante_id where m.grupo_id = g.id and not p.removido and p.tipo = 'militar'),
+                 'em_campo', (select count(*) from public.grupo_membros m join public.participantes p on p.id = m.participante_id
+                               where m.grupo_id = g.id and not p.removido and p.ultimo_contato_em > now() - interval '10 minutes'),
+                 'responsavel', (select coalesce(p.nome_painel, p.nome) from public.grupo_membros m join public.participantes p on p.id = m.participante_id
+                                  where m.grupo_id = g.id and m.papel = 'responsavel' and not p.removido order by m.criado_em limit 1),
+                 'missao', (select json_build_object('nome', x.nome, 'status', x.status, 'setor_nome', x.setor_nome, 'enviada_em', x.enviada_em,
+                                                     'chegou_setor_em', x.chegou_setor_em, 'busca_finalizada_em', x.busca_finalizada_em)
+                              from public.missoes x where x.grupo_id = g.id and x.status not in ('na_base', 'encerrada') order by x.enviada_em desc limit 1),
+                 'recursos', coalesce((select json_agg(json_build_object('tipo', r.tipo, 'identificacao', r.identificacao, 'quantidade', r.quantidade, 'situacao', r.situacao) order by r.criado_em)
+                              from public.grupo_recursos r where r.grupo_id = g.id), '[]'::json)) order by g.nome)
+                 from public.grupos g where g.operacao_id = p_operacao), '[]'::json),
+    'participantes', (select json_build_object('total', count(*) filter (where p.tipo <> 'responsavel'),
+                 'militares', count(*) filter (where p.tipo = 'militar'), 'civis', count(*) filter (where p.tipo = 'civil'),
+                 'responsaveis', count(*) filter (where p.tipo = 'responsavel'),
+                 'em_campo', count(*) filter (where p.tipo <> 'responsavel' and p.ultimo_contato_em > now() - interval '10 minutes'),
+                 'primeiro_militar_em', min(p.criado_em) filter (where p.tipo in ('militar', 'responsavel')))
+                 from public.participantes p where p.operacao_id = p_operacao and not p.removido),
+    'pontos', coalesce((select json_agg(json_build_object('id', p.id, 'categoria', p.categoria, 'titulo', p.titulo, 'lat', p.lat, 'lng', p.lng) order by p.criado_em)
+                 from public.pontos_interesse p where p.operacao_id = p_operacao), '[]'::json),
+    'setores', coalesce((select json_agg(json_build_object('id', s.id, 'nome', s.nome, 'status', s.status, 'cor', s.cor, 'equipe', s.equipe, 'forma', s.forma,
+                 'centro_lat', s.centro_lat, 'centro_lng', s.centro_lng, 'raio_m', s.raio_m, 'pontos', s.pontos) order by s.nome)
+                 from public.setores s where s.operacao_id = p_operacao), '[]'::json),
+    'alertas', coalesce((select json_agg(json_build_object('tipo', a.tipo, 'titulo', a.titulo, 'texto', a.texto, 'criado_em', a.criado_em) order by a.criado_em desc)
+                 from (select * from public.alertas a where a.operacao_id = p_operacao and a.nivel = 'critico' and a.reconhecido_em is null order by a.criado_em desc limit 30) a), '[]'::json),
+    'pedidos_ajuda', coalesce((select json_agg(json_build_object('participante_nome', a.participante_nome, 'estado', a.estado, 'prioridade', a.prioridade,
+                 'recebido_em', a.recebido_em, 'equipe_nome', a.equipe_nome) order by a.recebido_em)
+                 from public.pedidos_ajuda a where a.operacao_id = p_operacao and a.estado <> 'resolvido'), '[]'::json),
+    'decisoes', coalesce((select json_agg(json_build_object('texto', d.texto, 'responsavel_nome', d.responsavel_nome, 'prazo', d.prazo) order by d.criado_em)
+                 from public.decisoes_pendentes d where d.operacao_id = p_operacao and d.estado = 'pendente'), '[]'::json),
+    'verificacao', json_build_object(
+       'indicacoes_em_analise', (select count(*) from public.binomio_eventos e where e.operacao_id = p_operacao and e.tipo = 'indicacao' and e.estado = 'em_analise'),
+       'focos_a_verificar', (select count(*) from public.observacoes_campo x where x.operacao_id = p_operacao and x.tipo = 'foco_termico' and x.estado = 'a_verificar')),
+    'diario', coalesce((select json_agg(json_build_object('id', d.id, 'ocorrido_em', d.ocorrido_em, 'categoria', d.categoria, 'tipo', d.tipo, 'nivel', d.nivel,
+                 'titulo', d.titulo, 'detalhe', left(d.detalhe, 500), 'autor_nome', d.autor_nome, 'origem', d.origem) order by d.ocorrido_em desc)
+                 from (select * from public.diario d where d.operacao_id = p_operacao and d.tipo not like 'sci\_%' order by d.ocorrido_em desc limit 400) d), '[]'::json)
+  );
+end;
+$$;
+
+-- Instalação ligada a um ponto do mapa (ponto_id)
+create or replace function public.sci_limpar_item(p_tipo text, p_dados jsonb)
+returns jsonb
+language plpgsql stable set search_path = public
+as $$
+declare
+  v_txt text[];
+  v_int text[] := '{}';
+  v_num text[] := '{}';
+  v_ts text[] := '{}';
+  v_enum jsonb := '{}'::jsonb;
+  v_obrig text;
+  r jsonb := '{}'::jsonb;
+  k text;
+  v jsonb;
+  t text;
+begin
+  if p_dados is null or jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_tipo = 'instalacao' then
+    v_txt := array['nome', 'responsavel', 'local', 'motivo', 'nota', 'ponto_id']; v_num := array['lat', 'lng']; v_ts := array['ativada_em', 'desativada_em'];
+    v_enum := '{"tipo": ["pc", "area_espera", "acv", "zpa", "abrigo", "ggi", "outra"], "estado": ["ativa", "planejada", "desativada"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'equipe' then
+    v_txt := array['nome', 'orgao', 'missao', 'funcao', 'setor', 'chefe', 'meios', 'notas', 'setor_id', 'grupo_id']; v_int := array['efetivo'];
+    v_enum := '{"status": ["designada", "em_deslocamento", "em_operacao", "disponivel", "desmobilizada"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'orgao' then
+    v_txt := array['nome', 'detalhe', 'missao', 'nota']; v_int := array['pessoas', 'viaturas']; v_ts := array['acionado_em', 'chegada_em'];
+    v_enum := '{"situacao": ["acionado", "a_caminho", "no_local", "desmobilizado"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'recurso' then
+    v_txt := array['nome', 'orgao', 'local', 'nota']; v_int := array['qtd']; v_ts := array['solicitado_em', 'chegada_em'];
+    v_enum := '{"tipo": ["viatura", "embarcacao", "aeronave", "equipamento", "outro"], "status": ["solicitado", "a_caminho", "no_local", "em_uso", "indisponivel", "desmobilizado"]}';
+    v_obrig := 'nome';
+  elsif p_tipo = 'canal' then
+    v_txt := array['nome', 'funcao', 'usuarios'];
+    v_obrig := 'nome';
+  elsif p_tipo = 'leitura_rio' then
+    v_txt := array['ponto', 'nivel', 'vazao', 'fonte']; v_ts := array['em'];
+    v_enum := '{"tendencia": ["subindo", "estavel", "descendo", "a_confirmar"]}';
+    v_obrig := 'em';
+  elsif p_tipo = 'imagem' then
+    v_txt := array['caminho', 'legenda'];
+    v_obrig := 'caminho';
+  else
+    raise exception 'dados_invalidos';
+  end if;
+  for k, v in select * from jsonb_each(p_dados) loop
+    if coalesce(jsonb_typeof(v), 'null') = 'null' then
+      continue;
+    elsif k = any(v_txt) then
+      t := btrim(regexp_replace(v #>> '{}', '\s+', ' ', 'g'));
+      if k in ('notas', 'nota', 'detalhe', 'missao', 'motivo') then t := left(btrim(v #>> '{}'), 1000); else t := left(t, 200); end if;
+      if t <> '' then r := r || jsonb_build_object(k, t); end if;
+    elsif k = any(v_int) then
+      if jsonb_typeof(v) <> 'number' or (v #>> '{}')::numeric < 0 or (v #>> '{}')::numeric > 100000 or (v #>> '{}')::numeric <> trunc((v #>> '{}')::numeric) then
+        raise exception 'dados_invalidos';
+      end if;
+      r := r || jsonb_build_object(k, (v #>> '{}')::integer);
+    elsif k = any(v_num) then
+      if jsonb_typeof(v) <> 'number' or (k = 'lat' and abs((v #>> '{}')::numeric) > 90) or (k = 'lng' and abs((v #>> '{}')::numeric) > 180) then
+        raise exception 'posicao_invalida';
+      end if;
+      r := r || jsonb_build_object(k, v);
+    elsif k = any(v_ts) then
+      begin
+        r := r || jsonb_build_object(k, (v #>> '{}')::timestamptz);
+      exception when others then
+        raise exception 'data_invalida';
+      end;
+    elsif v_enum ? k then
+      if not ((v_enum->k) ? (v #>> '{}')) then
+        raise exception 'dados_invalidos';
+      end if;
+      r := r || jsonb_build_object(k, v #>> '{}');
+    end if;
+  end loop;
+  if (r ? 'lat') <> (r ? 'lng') then
+    raise exception 'posicao_invalida';
+  end if;
+  if not (r ? v_obrig) then
+    raise exception 'dados_invalidos';
+  end if;
+  return r;
+end;
+$$;
+
+revoke execute on function public.sci_vincular_localizacao(uuid) from public, anon, authenticated;
+revoke execute on function public.sci_contexto(uuid) from public, anon;
+grant execute on function public.sci_contexto(uuid) to authenticated;
+
+-- =====================================================================
+-- 53. Convites por categoria (civil, bombeiro, responsável) por e-mail ou WhatsApp, e tipos de ponto
+--     criados pelos usuários (migração 047 — idempotente; exige a 003 e a 044)
+--
+--  1) Convite: escolhe a categoria (civil → link dos civis; militar → link dos bombeiros; responsável → painel
+--     da operação, que pede login) e o canal (e-mail, enviado pelo servidor; WhatsApp, aberto no aparelho do
+--     responsável com a mensagem pronta, sem salvar o contato). O WhatsApp usa o telefone (com DDD).
+--  2) Tipos de ponto: além das categorias fixas (que têm regras: risco com raio de alerta, base, vítima…),
+--     os responsáveis criam tipos com nome, ícone (emoji ou letras) e cor, usados em todas as operações.
+--     O ponto de um tipo criado fica na categoria "OUTRO" (sem regra) e guarda o ícone e a cor do tipo.
+-- =====================================================================
+
+/* ---------- 1. Convites por categoria e canal ---------- */
+alter table public.convites_participante add column if not exists tipo text not null default 'civil';
+alter table public.convites_participante add column if not exists canal text not null default 'email';
+alter table public.convites_participante add column if not exists telefone text;
+alter table public.convites_participante alter column email drop not null;
+do $$
+begin
+  alter table public.convites_participante add constraint convites_participante_categoria_ok check (
+    tipo in ('civil', 'militar', 'responsavel') and canal in ('email', 'whatsapp')
+    and (telefone is null or telefone ~ '^[0-9]{10,13}$')
+    and ((canal = 'email' and email is not null) or (canal = 'whatsapp' and telefone is not null)));
+exception when duplicate_object then null;
+end;
+$$;
+create unique index if not exists convites_participante_telefone_uk on public.convites_participante (operacao_id, telefone, tipo) where telefone is not null;
+
+-- p_dados: nome, tipo (civil | militar | responsavel), canal (email | whatsapp), email ou telefone (com DDD).
+-- O mesmo e-mail (ou telefone) e a mesma categoria na operação reaproveitam o convite.
+create or replace function public.criar_convite(p_operacao uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_resp text := public.nome_responsavel_atual();
+  v_status text;
+  v_nome text := btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g'));
+  v_tipo text := coalesce(nullif(p_dados->>'tipo', ''), 'civil');
+  v_canal text := coalesce(nullif(p_dados->>'canal', ''), 'email');
+  v_email text := lower(btrim(coalesce(p_dados->>'email', '')));
+  v_tel text := regexp_replace(coalesce(p_dados->>'telefone', ''), '[^0-9]', '', 'g');
+  c public.convites_participante%rowtype;
+begin
+  if v_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select status into v_status from public.operacoes where id = p_operacao;
+  if v_status is distinct from 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if v_tipo not in ('civil', 'militar', 'responsavel') or v_canal not in ('email', 'whatsapp') then
+    raise exception 'dados_invalidos';
+  end if;
+  if char_length(v_nome) not between 2 and 40 then
+    raise exception 'nome_convite_invalido';
+  end if;
+  if v_canal = 'email' then
+    if char_length(v_email) > 200 or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]{2,}$' then
+      raise exception 'email_convite_invalido';
+    end if;
+    v_tel := null;
+    select * into c from public.convites_participante where operacao_id = p_operacao and email = v_email for update;
+  else
+    if char_length(v_tel) in (10, 11) then v_tel := '55' || v_tel; end if;   -- DDD + número: Brasil
+    if v_tel !~ '^[0-9]{12,13}$' then
+      raise exception 'telefone_convite_invalido';
+    end if;
+    v_email := null;
+    select * into c from public.convites_participante where operacao_id = p_operacao and telefone = v_tel and tipo = v_tipo for update;
+  end if;
+  if found then
+    update public.convites_participante set nome = v_nome, tipo = v_tipo, canal = v_canal where id = c.id returning * into c;
+    return row_to_json(c);
+  end if;
+  if (select count(*) from public.convites_participante where operacao_id = p_operacao) >= 200 then
+    raise exception 'convites_limite';
+  end if;
+  insert into public.convites_participante (operacao_id, nome, email, telefone, tipo, canal, criado_por_nome)
+  values (p_operacao, v_nome, v_email, v_tel, v_tipo, v_canal, v_resp) returning * into c;
+  perform public.diario_auto(p_operacao, now(), 'pessoa', 'convite_criado',
+    'Convite ' || case v_canal when 'email' then 'por e-mail' else 'por WhatsApp' end || ' (' ||
+      case v_tipo when 'civil' then 'civil' when 'militar' then 'bombeiro' else 'responsável' end || '): ' || v_nome, '',
+    'convite:' || c.id, 'info', null, null, c.id::text, v_resp);
+  return row_to_json(c);
+end;
+$$;
+
+-- Dados do envio pelo servidor (e-mail): agora com a categoria e o que o link de cada uma precisa.
+create or replace function public.convite_dados_envio(p_convite uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  c public.convites_participante%rowtype;
+  o public.operacoes%rowtype;
+begin
+  select * into c from public.convites_participante where id = p_convite;
+  if not found or not public.dono_operacao(c.operacao_id) or public.nome_responsavel_atual() is null then
+    raise exception 'sem_permissao';
+  end if;
+  select * into o from public.operacoes where id = c.operacao_id;
+  if o.status <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if c.envios >= 5 then
+    raise exception 'convite_envios_limite';
+  end if;
+  if c.canal <> 'email' or c.email is null then
+    raise exception 'dados_invalidos';
+  end if;
+  return json_build_object('id', c.id, 'nome', c.nome, 'email', c.email, 'codigo', c.codigo, 'operacao', o.codigo, 'operacao_id', o.id,
+                           'tipo', c.tipo, 'token_civil', o.token_civil, 'token_militar', o.token_militar,
+                           'envios', c.envios, 'responsavel', public.nome_responsavel_atual());
+end;
+$$;
+
+/* ---------- 2. Tipos de ponto ---------- */
+create table if not exists public.tipos_ponto (
+  id               uuid primary key default gen_random_uuid(),
+  nome             text not null check (char_length(btrim(nome)) between 2 and 40),
+  icone            text not null check (char_length(icone) between 1 and 8),
+  cor              text not null check (cor ~ '^#[0-9a-fA-F]{6}$'),
+  ativo            boolean not null default true,
+  criado_por       uuid references auth.users(id) on delete set null,
+  criado_por_nome  text not null,
+  criado_em        timestamptz not null default now(),
+  atualizado_em    timestamptz not null default now()
+);
+create unique index if not exists tipos_ponto_nome_uk on public.tipos_ponto (lower(btrim(nome))) where ativo;
+alter table public.tipos_ponto enable row level security;
+drop policy if exists tipos_ponto_ler on public.tipos_ponto;
+create policy tipos_ponto_ler on public.tipos_ponto for select to authenticated using (public.nome_responsavel_atual() is not null);
+revoke all on public.tipos_ponto from anon;
+revoke insert, update, delete, truncate on public.tipos_ponto from authenticated;
+grant select on public.tipos_ponto to authenticated;
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'tipos_ponto') then
+    execute 'alter publication supabase_realtime add table public.tipos_ponto';
+  end if;
+end;
+$$;
+
+alter table public.pontos_interesse add column if not exists tipo_id uuid references public.tipos_ponto(id) on delete set null;
+alter table public.pontos_interesse add column if not exists icone text;
+alter table public.pontos_interesse add column if not exists cor text;
+do $$
+begin
+  alter table public.pontos_interesse add constraint pontos_interesse_tipo_ok check (
+    (icone is null or char_length(icone) between 1 and 8) and (cor is null or cor ~ '^#[0-9a-fA-F]{6}$'));
+exception when duplicate_object then null;
+end;
+$$;
+
+-- Cria ou edita um tipo (qualquer responsável cria; editar e desativar: quem criou ou administrador).
+-- p_dados: nome, icone (emoji ou até 3 letras), cor (#rrggbb), ativo
+create or replace function public.salvar_tipo_ponto(p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  t public.tipos_ponto%rowtype;
+begin
+  if v_nome is null then
+    raise exception 'sem_permissao';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if p_id is null then
+    t.id := gen_random_uuid(); t.ativo := true; t.criado_por := auth.uid(); t.criado_por_nome := v_nome; t.criado_em := now();
+  else
+    select * into t from public.tipos_ponto where id = p_id for update;
+    if not found then
+      raise exception 'tipo_ponto_inexistente';
+    end if;
+    if t.criado_por is distinct from auth.uid() and not public.eh_admin() then
+      raise exception 'sem_permissao';
+    end if;
+  end if;
+  if p_dados ? 'nome' then t.nome := btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'icone' then t.icone := btrim(coalesce(p_dados->>'icone', '')); end if;
+  if p_dados ? 'cor' then t.cor := lower(btrim(coalesce(p_dados->>'cor', ''))); end if;
+  if p_dados ? 'ativo' then t.ativo := coalesce((p_dados->>'ativo')::boolean, true); end if;
+  if t.nome is null or char_length(t.nome) not between 2 and 40 then
+    raise exception 'nome_invalido';
+  end if;
+  if t.icone is null or char_length(t.icone) not between 1 and 8 or t.cor is null or t.cor !~ '^#[0-9a-f]{6}$' then
+    raise exception 'dados_invalidos';
+  end if;
+  if t.ativo and exists (select 1 from public.tipos_ponto x where x.ativo and x.id <> t.id and lower(btrim(x.nome)) = lower(t.nome)) then
+    raise exception 'tipo_ponto_existente';
+  end if;
+  t.atualizado_em := now();
+  if p_id is null then
+    insert into public.tipos_ponto select t.*;
+  else
+    update public.tipos_ponto set nome = t.nome, icone = t.icone, cor = t.cor, ativo = t.ativo, atualizado_em = t.atualizado_em where id = t.id;
+    -- pontos já marcados com este tipo passam a mostrar o novo ícone e a nova cor
+    update public.pontos_interesse p set icone = t.icone, cor = t.cor
+      from public.operacoes o where p.tipo_id = t.id and o.id = p.operacao_id and o.status = 'ativa';
+  end if;
+  return row_to_json(t);
+end;
+$$;
+
+-- Ponto com tipo criado pelos usuários (tipo_id → ícone e cor)
+create or replace function public.salvar_ponto(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v_p public.pontos_interesse%rowtype;
+  v_op public.operacoes%rowtype;
+  v_ref uuid;
+  v_msg public.mensagens%rowtype;
+  v_tipo public.tipos_ponto%rowtype;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.dados_apagados_em is not null then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+
+  if p_id is null then
+    v_p.id := gen_random_uuid();
+    v_p.operacao_id := p_operacao;
+    v_p.criado_por := auth.uid();
+    v_p.criado_por_nome := v_nome_resp;
+    v_p.criado_em := now();
+    v_p.descricao := '';
+    -- ponto criado a partir de um relato: guarda quem relatou
+    if p_dados ? 'mensagem_id' and nullif(p_dados->>'mensagem_id', '') is not null then
+      select * into v_msg from public.mensagens
+       where id = (p_dados->>'mensagem_id')::uuid and operacao_id = p_operacao and direcao = 'entrada';
+      if not found then
+        raise exception 'dados_invalidos';
+      end if;
+      v_p.mensagem_id := v_msg.id;
+      v_p.relatado_por_nome := v_msg.remetente_nome;
+    end if;
+  else
+    select * into v_p from public.pontos_interesse where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'ponto_nao_encontrado';
+    end if;
+  end if;
+
+  if p_dados ? 'categoria' then v_p.categoria := p_dados->>'categoria'; end if;
+  -- tipo criado pelos usuários: a categoria fica "OUTRO" (sem regra especial) e o ícone e a cor vêm do tipo
+  if p_dados ? 'tipo_id' then
+    if nullif(p_dados->>'tipo_id', '') is null then
+      v_p.tipo_id := null; v_p.icone := null; v_p.cor := null;
+    else
+      begin
+        select * into v_tipo from public.tipos_ponto where id = (p_dados->>'tipo_id')::uuid and ativo;
+      exception when others then
+        raise exception 'dados_invalidos';
+      end;
+      if v_tipo.id is null then
+        raise exception 'tipo_ponto_inexistente';
+      end if;
+      v_p.tipo_id := v_tipo.id; v_p.icone := v_tipo.icone; v_p.cor := v_tipo.cor; v_p.categoria := 'OUTRO';
+    end if;
+  elsif p_dados ? 'categoria' and v_p.categoria <> 'OUTRO' then
+    v_p.tipo_id := null; v_p.icone := null; v_p.cor := null;
+  end if;
+  if p_dados ? 'titulo' then v_p.titulo := btrim(coalesce(p_dados->>'titulo', '')); end if;
+  if p_dados ? 'descricao' then v_p.descricao := left(btrim(coalesce(p_dados->>'descricao', '')), 1000); end if;
+  if p_dados ? 'lat' then v_p.lat := (p_dados->>'lat')::double precision; end if;
+  if p_dados ? 'lng' then v_p.lng := (p_dados->>'lng')::double precision; end if;
+  if p_dados ? 'raio_m' then v_p.raio_m := nullif(p_dados->>'raio_m', '')::double precision; end if;
+  if p_dados ? 'foto_id' then
+    v_ref := nullif(p_dados->>'foto_id', '')::uuid;
+    if v_ref is not null and not exists (select 1 from public.fotos where id = v_ref and operacao_id = p_operacao) then
+      raise exception 'dados_invalidos';
+    end if;
+    v_p.foto_id := v_ref;
+  end if;
+
+  if v_p.categoria is null or v_p.categoria not in ('ULTIMA_LOCALIZACAO', 'POSSIVEL_LOCALIZACAO', 'VESTIGIO',
+                                                      'RISCO', 'ENCONTRO', 'VITIMA_ENCONTRADA', 'OUTRO', 'BASE') then
+    raise exception 'dados_invalidos';
+  end if;
+  if v_p.titulo is null or char_length(v_p.titulo) not between 1 and 80 then
+    raise exception 'nome_invalido';
+  end if;
+  if v_p.lat is null or v_p.lng is null or v_p.lat not between -90 and 90 or v_p.lng not between -180 and 180
+     or (v_p.lat = 0 and v_p.lng = 0) then
+    raise exception 'posicao_invalida';
+  end if;
+
+  if v_p.raio_m is not null and v_p.raio_m not between 10 and 5000 then
+    raise exception 'dados_invalidos';
+  end if;
+  v_p.atualizado_em := now();
+  v_p.atualizado_por_nome := v_nome_resp;
+  if p_id is null then
+    insert into public.pontos_interesse select v_p.*;
+  else
+    update public.pontos_interesse set categoria = v_p.categoria, titulo = v_p.titulo, descricao = v_p.descricao,
+           lat = v_p.lat, lng = v_p.lng, foto_id = v_p.foto_id, raio_m = v_p.raio_m, tipo_id = v_p.tipo_id, icone = v_p.icone, cor = v_p.cor,
+           atualizado_em = v_p.atualizado_em,
+           atualizado_por_nome = v_p.atualizado_por_nome
+     where id = v_p.id;
+  end if;
+  return row_to_json(v_p);
+end;
+$$;
+
+revoke execute on function public.criar_convite(uuid, jsonb) from public, anon;
+grant execute on function public.criar_convite(uuid, jsonb) to authenticated;
+revoke execute on function public.salvar_tipo_ponto(uuid, jsonb) from public, anon;
+grant execute on function public.salvar_tipo_ponto(uuid, jsonb) to authenticated;
+
+-- =====================================================================
+-- 048 — Dashboard em outra janela e por link público (só visualização); várias vítimas por ocorrência.
+--
+--  1. dashboard_operacao_dados(operação): tudo o que o dashboard da operação precisa (participantes com a
+--     trilha resumida, grupos, setores, ocorrências e o estudo das vítimas), lido do banco. A janela própria
+--     do dashboard (dashboard.html?op=) passa a usar isto e mostra os mesmos números do painel.
+--  2. Link público: operacoes.dashboard_token (48 caracteres). dashboard_publico_gerar / _desligar (responsável
+--     da operação); dashboard_publico(token) para quem abre o link SEM login: só leitura, sem nomes de pessoas
+--     ("Bombeiro 1", "Civil 2"…), sem textos de mensagens, sem fotos. Não existe nenhuma função de escrita
+--     acessível pelo link.
+--  3. Várias vítimas: estudo_operacao devolve "vitimas" (uma linha por ficha e por localização sem ficha), cada
+--     uma com a própria localização, condição, tempo e distância do ULV e a situação no SCI. estudo_geral passa a
+--     contar cada vítima localizada como um caso (antes, só a primeira localização de cada operação).
+-- =====================================================================
+
+alter table public.operacoes add column if not exists dashboard_token text;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'operacoes_dashboard_token_ok') then
+    alter table public.operacoes add constraint operacoes_dashboard_token_ok
+      check (dashboard_token is null or dashboard_token ~ '^[0-9a-f]{48}$');
+  end if;
+end $$;
+create unique index if not exists operacoes_dashboard_token_uk on public.operacoes (dashboard_token) where dashboard_token is not null;
+
+-- ---------------------------------------------------------------------
+-- Vítimas da operação, uma por linha: cada ficha (com a 1ª localização ligada a ela) e cada localização
+-- sem ficha ("vítima sem ficha"). p_nomes = false: sem nome (estudos e dashboards não levam nomes).
+-- ---------------------------------------------------------------------
+create or replace function public.estudo_vitimas(p_operacao uuid, p_nomes boolean)
+returns json
+language sql stable security definer set search_path = public
+as $$
+  with op as (select * from public.operacoes where id = p_operacao),
+  fichas as (
+    select t.id, t.nome, t.idade, t.sexo, t.perfil, t.criado_em, row_number() over (order by t.criado_em, t.id) as n
+      from public.vitimas t where t.operacao_id = p_operacao
+  ),
+  locs as (
+    select distinct on (coalesce(v.vitima_id::text, v.id::text))
+           v.id, v.vitima_id, v.condicao, v.lat, v.lng, coalesce(v.posicao_em, v.registrado_em) as em
+      from public.vitima_localizacoes v
+     where v.operacao_id = p_operacao
+     order by coalesce(v.vitima_id::text, v.id::text), (v.lat is null), coalesce(v.posicao_em, v.registrado_em)
+  ),
+  linhas as (
+    select f.n as ordem, f.id as vitima_id, l.id as localizacao_id, f.nome, f.idade, f.sexo, f.perfil, l.condicao, l.lat, l.lng, l.em
+      from fichas f left join locs l on l.vitima_id = f.id
+    union all
+    select (select count(*) from fichas) + row_number() over (order by l.em, l.id), null, l.id, null, null, null, '{}'::text[], l.condicao, l.lat, l.lng, l.em
+      from locs l where l.vitima_id is null or not exists (select 1 from fichas f where f.id = l.vitima_id)
+  )
+  select coalesce(json_agg(json_build_object(
+      'rotulo', 'V-' || lpad(x.ordem::text, 2, '0'),
+      'vitima_id', x.vitima_id,
+      'localizacao_id', x.localizacao_id,
+      'nome', case when p_nomes then x.nome end,
+      'sem_ficha', x.vitima_id is null,
+      'idade', x.idade, 'sexo', x.sexo, 'perfil', to_json(x.perfil),
+      'localizada', x.localizacao_id is not null,
+      'condicao', x.condicao,
+      'em', x.em,
+      'minutos_ate', case when x.em is null or o.acionado_em is null then null else round(extract(epoch from x.em - o.acionado_em) / 60) end,
+      'distancia_km', case when x.lat is null or o.local_lat is null then null
+                           else round(public.distancia_km(o.local_lat, o.local_lng, x.lat, x.lng)::numeric, 2) end,
+      'sci', (select json_build_object('numero', s.numero, 'fase', s.fase, 'triagem', s.triagem)
+                from public.sci_vitimas s where s.operacao_id = p_operacao and x.vitima_id is not null and s.vitima_id = x.vitima_id
+               order by s.numero limit 1)
+    ) order by x.ordem), '[]'::json)
+    from linhas x cross join op o;
+$$;
+
+-- Estudo de uma operação (dados), sem conferir permissão: usado por estudo_operacao e pelos dashboards.
+create or replace function public.estudo_operacao_dados(p_operacao uuid, p_nomes boolean)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_op public.operacoes%rowtype;
+  v_loc record;
+  v_vit json;
+begin
+  select * into v_op from public.operacoes where id = p_operacao;
+  select v.condicao, v.lat, v.lng, coalesce(v.posicao_em, v.registrado_em) as em into v_loc
+    from public.vitima_localizacoes v
+   where v.operacao_id = p_operacao and v.lat is not null
+   order by coalesce(v.posicao_em, v.registrado_em) limit 1;
+  v_vit := public.estudo_vitimas(p_operacao, p_nomes);
+  return json_build_object(
+    'codigo', v_op.codigo, 'tipo', v_op.tipo, 'acionado_em', v_op.acionado_em, 'encerrada_em', v_op.encerrada_em,
+    'ulv', case when v_op.local_lat is null then null else json_build_object('lat', v_op.local_lat, 'lng', v_op.local_lng) end,
+    'localizacoes', (select count(*) from public.vitima_localizacoes v where v.operacao_id = p_operacao),
+    -- primeira localização da operação (compatibilidade com telas antigas)
+    'localizacao', case when v_loc.em is null then null else json_build_object(
+        'condicao', v_loc.condicao,
+        'em', v_loc.em,
+        'minutos_ate', case when v_op.acionado_em is null then null else round(extract(epoch from v_loc.em - v_op.acionado_em) / 60) end,
+        'distancia_km', case when v_op.local_lat is null then null
+                             else round(public.distancia_km(v_op.local_lat, v_op.local_lng, v_loc.lat, v_loc.lng)::numeric, 2) end) end,
+    'vitimas', v_vit,
+    'vitimas_total', json_array_length(v_vit),
+    'vitimas_localizadas', (select count(*) from json_array_elements(v_vit) e where (e->>'localizada')::boolean),
+    'fichas', (select count(*) from public.vitimas t where t.operacao_id = p_operacao),
+    'perfis', coalesce((select json_object_agg(x.perfil, x.n) from (
+        select unnest(t.perfil) as perfil, count(*) as n from public.vitimas t where t.operacao_id = p_operacao group by 1) x), '{}'::json),
+    'setores', (select count(*) from public.setores s where s.operacao_id = p_operacao),
+    'registros_diario', (select count(*) from public.diario d where d.operacao_id = p_operacao)
+  );
+end;
+$$;
+
+-- Estudo de uma operação: ULV, vítimas (cada uma com a própria localização), perfis das fichas.
+create or replace function public.estudo_operacao(p_operacao uuid)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if public.nome_responsavel_atual() is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  return public.estudo_operacao_dados(p_operacao, false);   -- sem nomes (como sempre)
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Dados do dashboard da operação (sem conferir permissão). p_publico: sem nomes, sem textos.
+-- Trilhas: um ponto a cada 30 s por pessoa (precisão até 150 m, como no painel), o bastante para km, horas e cobertura.
+-- ---------------------------------------------------------------------
+create or replace function public.dashboard_dados(p_operacao uuid, p_publico boolean)
+returns json
+language sql stable security definer set search_path = public
+as $$
+  with op as (select * from public.operacoes where id = p_operacao),
+  pessoas as (
+    select pa.*, row_number() over (partition by pa.tipo order by pa.criado_em, pa.id) as n_tipo
+      from public.participantes pa where pa.operacao_id = p_operacao
+  ),
+  pts as (
+    select distinct on (po.participante_id, floor(extract(epoch from po.registrado_em) / 30))
+           po.participante_id, po.lat, po.lng, po.precisao, po.registrado_em
+      from public.posicoes po
+     where po.operacao_id = p_operacao and (po.precisao is null or po.precisao <= 150)
+     order by po.participante_id, floor(extract(epoch from po.registrado_em) / 30), po.registrado_em
+  )
+  select json_build_object(
+    'publico', p_publico,
+    'gerado_em', now(),
+    'operacao', (select json_build_object('id', o.id, 'codigo', o.codigo, 'tipo', o.tipo, 'status', o.status, 'acionado_em', o.acionado_em,
+                   'criada_em', o.criada_em, 'encerrada_em', o.encerrada_em, 'local_lat', o.local_lat, 'local_lng', o.local_lng,
+                   'gps_lacuna_s', o.gps_lacuna_s) from op o),
+    'participantes', coalesce((select json_agg(json_build_object(
+        'id', p.id,
+        'nome', case when p_publico then case p.tipo when 'militar' then 'Bombeiro ' when 'civil' then 'Civil ' else 'Responsável ' end || p.n_tipo
+                     else p.nome end,
+        'tipo', p.tipo,
+        'removido', p.removido,
+        'grupo', case when p.tipo = 'responsavel' then null else (
+                   select json_build_object('id', g.id, 'nome', g.nome, 'cor', g.cor)
+                     from public.grupo_membros gm join public.grupos g on g.id = gm.grupo_id
+                    where gm.participante_id = p.id order by lower(g.nome) limit 1) end,
+        'pontos', coalesce((select json_agg(json_build_array(round(t.lat::numeric, 6), round(t.lng::numeric, 6), t.precisao,
+                                                             floor(extract(epoch from t.registrado_em) * 1000)) order by t.registrado_em)
+                              from pts t where t.participante_id = p.id), '[]'::json)
+      ) order by p.tipo, p.n_tipo) from pessoas p), '[]'::json),
+    'setores', coalesce((select json_agg(json_build_object('id', s.id, 'nome', s.nome, 'forma', s.forma, 'centro_lat', s.centro_lat,
+                   'centro_lng', s.centro_lng, 'raio_m', s.raio_m, 'pontos', s.pontos, 'status', s.status) order by s.criado_em)
+                   from public.setores s where s.operacao_id = p_operacao), '[]'::json),
+    'ocorrencias', json_build_object(
+      'ajuda', (select count(*) from public.mensagens m where m.operacao_id = p_operacao and (m.categoria = 'AJUDA' or m.resposta = 'PRECISO_AJUDA')),
+      'PISTA', (select count(*) from public.mensagens m where m.operacao_id = p_operacao and m.direcao = 'entrada' and m.categoria = 'PISTA'),
+      'VESTIGIO', (select count(*) from public.mensagens m where m.operacao_id = p_operacao and m.direcao = 'entrada' and m.categoria = 'VESTIGIO'),
+      'OBJETO', (select count(*) from public.mensagens m where m.operacao_id = p_operacao and m.direcao = 'entrada' and m.categoria = 'OBJETO'),
+      'OBSTACULO', (select count(*) from public.mensagens m where m.operacao_id = p_operacao and m.direcao = 'entrada' and m.categoria = 'OBSTACULO'),
+      'ordens', (select count(*) from public.mensagens m where m.operacao_id = p_operacao and m.direcao <> 'entrada'),
+      'fotos', (select count(*) from public.fotos f where f.operacao_id = p_operacao),
+      'pontos', (select count(*) from public.pontos_interesse pi where pi.operacao_id = p_operacao),
+      'retornosAtrasados', (select count(*) from public.alertas a where a.operacao_id = p_operacao and a.tipo = 'retorno_atrasado')),
+    -- relatos de campo (para a lista ao tocar numa ocorrência); no link público, sem texto nem autor
+    'relatos', coalesce((select json_agg(json_build_object('id', m.id, 'categoria', case when m.resposta = 'PRECISO_AJUDA' then 'AJUDA' else m.categoria end,
+                   'criada_em', m.criada_em, 'direcao', m.direcao,
+                   'texto', case when p_publico then null else m.texto end,
+                   'autor', case when p_publico then null else m.remetente_nome end) order by m.criada_em desc)
+                   from public.mensagens m where m.operacao_id = p_operacao
+                    and (m.categoria in ('AJUDA', 'PISTA', 'VESTIGIO', 'OBJETO', 'OBSTACULO') or m.resposta = 'PRECISO_AJUDA' or m.direcao <> 'entrada')), '[]'::json),
+    'estudo', public.estudo_operacao_dados(p_operacao, false)
+  );
+$$;
+
+-- Janela própria do dashboard (responsável da operação, com login)
+create or replace function public.dashboard_operacao_dados(p_operacao uuid)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if public.nome_responsavel_atual() is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  return public.dashboard_dados(p_operacao, false);
+end;
+$$;
+
+-- Link público (sem login): só leitura
+create or replace function public.dashboard_publico(p_token text)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_op uuid;
+begin
+  if p_token is null or p_token !~ '^[0-9a-f]{48}$' then
+    raise exception 'link_publico_invalido';
+  end if;
+  select id into v_op from public.operacoes where dashboard_token = p_token;
+  if v_op is null then
+    raise exception 'link_publico_invalido';
+  end if;
+  return public.dashboard_dados(v_op, true);
+end;
+$$;
+
+-- Gera (ou troca) o link público. Trocar invalida o anterior.
+create or replace function public.dashboard_publico_gerar(p_operacao uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_token text := left(replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''), 48);
+  v_tinha boolean;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select dashboard_token is not null into v_tinha from public.operacoes where id = p_operacao;
+  update public.operacoes set dashboard_token = v_token where id = p_operacao;
+  perform public.diario_auto(p_operacao, now(), 'operacao', 'dashboard_publico',
+    case when v_tinha then 'Link público do dashboard trocado (o anterior deixou de funcionar)' else 'Link público do dashboard criado' end,
+    'Somente visualização, sem nomes.', 'dashboard_publico:' || v_token, 'info', null, null, null, v_nome);
+  return json_build_object('token', v_token);
+end;
+$$;
+
+create or replace function public.dashboard_publico_desligar(p_operacao uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  if exists (select 1 from public.operacoes where id = p_operacao and dashboard_token is not null) then
+    update public.operacoes set dashboard_token = null where id = p_operacao;
+    perform public.diario_auto(p_operacao, now(), 'operacao', 'dashboard_publico',
+      'Link público do dashboard desligado', '', 'dashboard_publico:off:' || extract(epoch from now())::bigint, 'info', null, null, null, v_nome);
+  end if;
+  return json_build_object('token', null);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Estudo geral: cada vítima localizada é um caso (antes: só a 1ª localização de cada operação)
+-- ---------------------------------------------------------------------
+create or replace function public.estudo_geral()
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_ops uuid[];
+begin
+  if public.nome_responsavel_atual() is null then
+    raise exception 'sem_permissao';
+  end if;
+  select coalesce(array_agg(o.id), '{}'::uuid[]) into v_ops from public.operacoes o where public.dono_operacao(o.id);
+  return (
+    with ops as (
+      select o.id, o.tipo, o.acionado_em, o.criada_em, o.encerrada_em, o.local_lat, o.local_lng
+        from public.operacoes o where o.id = any(v_ops)
+    ),
+    -- uma linha por vítima: a 1ª localização (com posição) de cada ficha, e cada localização sem ficha
+    primeira as (
+      select distinct on (v.operacao_id, coalesce(v.vitima_id::text, v.id::text))
+             v.operacao_id, v.vitima_id, v.condicao, v.lat, v.lng, coalesce(v.posicao_em, v.registrado_em) as em
+        from public.vitima_localizacoes v
+       where v.operacao_id = any(v_ops) and v.lat is not null
+       order by v.operacao_id, coalesce(v.vitima_id::text, v.id::text), coalesce(v.posicao_em, v.registrado_em)
+    ),
+    casos as (
+      select o.id as operacao_id, p.vitima_id, o.tipo, p.condicao,
+             case when o.local_lat is null then null else public.distancia_km(o.local_lat, o.local_lng, p.lat, p.lng) end as km,
+             case when o.acionado_em is null then null else extract(epoch from p.em - o.acionado_em) / 60 end as minutos
+        from ops o join primeira p on p.operacao_id = o.id
+    ),
+    fichas as (
+      select t.id, t.operacao_id, unnest(t.perfil) as perfil from public.vitimas t where t.operacao_id = any(v_ops)
+    ),
+    faixas as (
+      select b.ordem, b.rotulo, count(c.operacao_id) as n
+        from (values (1, 'até 1 km', 0::double precision, 1::double precision), (2, '1 a 2 km', 1, 2), (3, '2 a 5 km', 2, 5),
+                     (4, '5 a 10 km', 5, 10), (5, 'mais de 10 km', 10, 1e9)) b(ordem, rotulo, de, ate)
+        left join casos c on c.km >= b.de and c.km < b.ate
+       group by b.ordem, b.rotulo
+    )
+    select json_build_object(
+      'gerado_em', now(),
+      'k_minimo', 5,
+      'operacoes', json_build_object(
+        'total', (select count(*) from ops),
+        'abertas', (select count(*) from ops where encerrada_em is null),
+        'encerradas', (select count(*) from ops where encerrada_em is not null),
+        'por_tipo', coalesce((select json_object_agg(x.t, x.n) from (select coalesce(tipo, 'sem_tipo') as t, count(*) as n from ops group by 1) x), '{}'::json),
+        'por_mes', coalesce((select json_agg(json_build_object('mes', x.mes, 'n', x.n) order by x.mes) from (
+          select to_char(coalesce(acionado_em, criada_em), 'YYYY-MM') as mes, count(*) as n from ops
+           where coalesce(acionado_em, criada_em) >= now() - interval '12 months' group by 1) x), '[]'::json)),
+      'localizacoes', json_build_object(
+        'operacoes_com_localizacao', (select count(distinct operacao_id) from casos),
+        'vitimas_localizadas', (select count(*) from casos),
+        'por_condicao', coalesce((select json_object_agg(x.condicao, case when x.n >= 5 then x.n end) from (
+          select condicao, count(*) as n from casos group by 1) x), '{}'::json),
+        'minutos_ate_mediana', (select case when count(minutos) >= 5 then round((percentile_cont(0.5) within group (order by minutos))::numeric) end from casos)),
+      'distancia_km', json_build_object(
+        'casos', (select case when count(km) >= 5 then count(km) end from casos),
+        'p25', (select case when count(km) >= 5 then round((percentile_cont(0.25) within group (order by km))::numeric, 2) end from casos),
+        'mediana', (select case when count(km) >= 5 then round((percentile_cont(0.5) within group (order by km))::numeric, 2) end from casos),
+        'p75', (select case when count(km) >= 5 then round((percentile_cont(0.75) within group (order by km))::numeric, 2) end from casos),
+        'media', (select case when count(km) >= 5 then round(avg(km)::numeric, 2) end from casos),
+        'faixas', coalesce((select json_agg(json_build_object('faixa', f.rotulo, 'n', case when f.n >= 5 then f.n end) order by f.ordem) from faixas f), '[]'::json)),
+      'perfis', coalesce((select json_agg(json_build_object(
+          'perfil', p.perfil,
+          'fichas', case when p.fichas >= 5 then p.fichas end,
+          'operacoes_com_localizacao', case when p.casos >= 5 then p.casos end,
+          'mediana_km', p.mediana_km) order by p.perfil) from (
+        -- cada ficha com o perfil conta a própria localização (a da vítima, não a da operação)
+        select pf.perfil,
+               (select count(*) from fichas f where f.perfil = pf.perfil) as fichas,
+               (select count(*) from fichas f join casos c on c.vitima_id = f.id where f.perfil = pf.perfil) as casos,
+               (select case when count(c.km) >= 5 then round((percentile_cont(0.5) within group (order by c.km))::numeric, 2) end
+                  from fichas f join casos c on c.vitima_id = f.id where f.perfil = pf.perfil and c.km is not null) as mediana_km
+          from (values ('idoso'), ('crianca'), ('adolescente'), ('demencia'), ('autismo'), ('deficiencia_intelectual'), ('transtorno_mental'), ('outro')) pf(perfil)
+        ) p), '[]'::json)
+    )
+  );
+end;
+$$;
+
+revoke execute on function public.estudo_vitimas(uuid, boolean) from public, anon, authenticated;
+revoke execute on function public.estudo_operacao_dados(uuid, boolean) from public, anon, authenticated;
+revoke execute on function public.dashboard_dados(uuid, boolean) from public, anon, authenticated;
+revoke execute on function public.dashboard_operacao_dados(uuid) from public, anon;
+grant execute on function public.dashboard_operacao_dados(uuid) to authenticated;
+revoke execute on function public.dashboard_publico(text) from public;
+grant execute on function public.dashboard_publico(text) to anon, authenticated;
+revoke execute on function public.dashboard_publico_gerar(uuid) from public, anon;
+grant execute on function public.dashboard_publico_gerar(uuid) to authenticated;
+revoke execute on function public.dashboard_publico_desligar(uuid) from public, anon;
+grant execute on function public.dashboard_publico_desligar(uuid) to authenticated;
+
+-- =====================================================================
+-- 049 — Relatório diário da operação (gerado e guardado sozinho) e relatório da passagem de comando.
+--
+--  relatorios.tipo: 'final' (como antes), 'diario' (um por dia da operação; referencia = 'AAAA-MM-DD') ou
+--  'passagem' (referencia = id da passagem de comando). Os PDFs continuam no bucket privado "relatorios".
+--  relatorio_diario_reservar(operação, dia): o painel aberto pede a vez antes de gerar o diário de um dia; com dois
+--  responsáveis de painel aberto, só um gera (a reserva vale 15 min). Dia já com relatório: não reserva.
+--  registrar_documento(...): grava o PDF de qualquer tipo (registrar_relatorio continua para o final).
+-- =====================================================================
+
+alter table public.relatorios add column if not exists tipo text not null default 'final';
+alter table public.relatorios add column if not exists referencia text;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'relatorios_tipo_ok') then
+    alter table public.relatorios add constraint relatorios_tipo_ok check (
+      tipo in ('final', 'diario', 'passagem')
+      and (tipo <> 'diario' or referencia ~ '^\d{4}-\d{2}-\d{2}$')
+      and (tipo <> 'passagem' or referencia ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+      and (tipo <> 'final' or referencia is null));
+  end if;
+end $$;
+create unique index if not exists relatorios_diario_uk on public.relatorios (operacao_id, referencia) where tipo = 'diario';
+
+create table if not exists public.relatorio_diario_reservas (
+  operacao_id     uuid not null references public.operacoes(id) on delete cascade,
+  dia             date not null,
+  reservado_por   uuid,
+  reservado_em    timestamptz not null default now(),
+  primary key (operacao_id, dia)
+);
+alter table public.relatorio_diario_reservas enable row level security;
+revoke all on public.relatorio_diario_reservas from anon, authenticated;
+
+-- Pede a vez para gerar o relatório diário de um dia já terminado (ou de hoje, perto da meia-noite).
+-- Devolve { ok: true } quando este painel deve gerar; { ok: false, motivo } quando não.
+create or replace function public.relatorio_diario_reservar(p_operacao uuid, p_dia date)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_op public.operacoes%rowtype;
+  v_res public.relatorio_diario_reservas%rowtype;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if p_dia is null or p_dia > current_date + 1 or p_dia < (coalesce(v_op.acionado_em, v_op.criada_em))::date - 1 then
+    raise exception 'dados_invalidos';
+  end if;
+  if exists (select 1 from public.relatorios where operacao_id = p_operacao and tipo = 'diario' and referencia = to_char(p_dia, 'YYYY-MM-DD')) then
+    return json_build_object('ok', false, 'motivo', 'ja_existe');
+  end if;
+  select * into v_res from public.relatorio_diario_reservas where operacao_id = p_operacao and dia = p_dia for update;
+  if found and v_res.reservado_em > now() - interval '15 minutes' and v_res.reservado_por is distinct from auth.uid() then
+    return json_build_object('ok', false, 'motivo', 'outro_gerando');
+  end if;
+  insert into public.relatorio_diario_reservas (operacao_id, dia, reservado_por, reservado_em)
+  values (p_operacao, p_dia, auth.uid(), now())
+  on conflict (operacao_id, dia) do update set reservado_por = excluded.reservado_por, reservado_em = excluded.reservado_em;
+  return json_build_object('ok', true);
+end;
+$$;
+
+-- Registra um PDF já enviado ao bucket (qualquer tipo). Diário repetido no mesmo dia: devolve o que já existe.
+create or replace function public.registrar_documento(p_operacao uuid, p_caminho text, p_paginas integer, p_bytes bigint, p_sha256 text,
+                                                     p_tipo text, p_referencia text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v public.relatorios%rowtype;
+  v_titulo text;
+begin
+  if v_nome is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  if p_tipo is null or p_tipo not in ('final', 'diario', 'passagem')
+     or (p_tipo = 'diario' and (p_referencia is null or p_referencia !~ '^\d{4}-\d{2}-\d{2}$'))
+     or (p_tipo = 'passagem' and not exists (select 1 from public.passagens_comando pc where pc.operacao_id = p_operacao and pc.id::text = p_referencia))
+     or (p_tipo = 'final' and p_referencia is not null) then
+    raise exception 'dados_invalidos';
+  end if;
+  if p_caminho is null or p_caminho !~ ('^' || p_operacao::text || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$') then
+    raise exception 'dados_invalidos';
+  end if;
+  if not exists (select 1 from storage.objects where bucket_id = 'relatorios' and name = p_caminho) then
+    raise exception 'arquivo_nao_enviado';
+  end if;
+  if p_tipo = 'diario' then
+    select * into v from public.relatorios where operacao_id = p_operacao and tipo = 'diario' and referencia = p_referencia;
+    if found then
+      return row_to_json(v);
+    end if;
+  end if;
+  insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por, gerado_por_nome, tipo, referencia)
+  values (p_operacao, p_caminho, p_paginas, p_bytes, lower(p_sha256), auth.uid(), v_nome, p_tipo, p_referencia)
+  on conflict (caminho) do nothing
+  returning * into v;
+  if not found then
+    select * into v from public.relatorios where caminho = p_caminho;
+    return row_to_json(v);
+  end if;
+  if p_tipo = 'diario' then
+    delete from public.relatorio_diario_reservas where operacao_id = p_operacao and dia = p_referencia::date;
+  end if;
+  v_titulo := case p_tipo
+    when 'diario' then 'Relatório diário de ' || to_char(p_referencia::date, 'DD/MM/YYYY') || ' gerado'
+    when 'passagem' then 'Relatório da passagem de comando gerado'
+    else 'Relatório final gerado' end;
+  perform public.diario_auto(p_operacao, v.gerado_em, 'documento', case p_tipo when 'final' then 'relatorio_gerado' else 'relatorio_' || p_tipo end, v_titulo,
+    coalesce(p_paginas || ' página(s)', ''), 'relatorio:' || v.id, 'info', null, null, v.id::text, v_nome);
+  return row_to_json(v);
+end;
+$$;
+
+revoke execute on function public.relatorio_diario_reservar(uuid, date) from public, anon;
+grant execute on function public.relatorio_diario_reservar(uuid, date) to authenticated;
+revoke execute on function public.registrar_documento(uuid, text, integer, bigint, text, text, text) from public, anon;
+grant execute on function public.registrar_documento(uuid, text, integer, bigint, text, text, text) to authenticated;
+
+-- =====================================================================
+-- 050 — Ícones livres: grupos com ícone e categorias fixas de ponto com ícone e cor escolhidos.
+--
+--  grupos.icone: opcional (1 a 8 caracteres: emoji, letra ou sigla); salvar_grupo aceita "icone" (vazio tira).
+--  categorias_ponto_estilo: ícone e cor de cada categoria fixa (Última localização, Risco, Base…), para todas as
+--  operações. As regras de cada categoria (alarme de risco, raio da base, vítima) não mudam, só a aparência.
+--  salvar_estilo_categoria(categoria, icone, cor): qualquer responsável; icone e cor nulos = volta ao padrão.
+-- =====================================================================
+
+alter table public.grupos add column if not exists icone text;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'grupos_icone_ok') then
+    alter table public.grupos add constraint grupos_icone_ok check (icone is null or char_length(icone) between 1 and 8);
+  end if;
+end $$;
+
+-- salvar_grupo: igual à 036, com o ícone
+create or replace function public.salvar_grupo(p_operacao uuid, p_id uuid, p_dados jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome_resp text := public.nome_responsavel_atual();
+  v public.grupos%rowtype;
+  v_op public.operacoes%rowtype;
+begin
+  if v_nome_resp is null or not public.dono_operacao(p_operacao) then
+    raise exception 'sem_permissao';
+  end if;
+  select * into v_op from public.operacoes where id = p_operacao;
+  if v_op.dados_apagados_em is not null then
+    raise exception 'operacao_encerrada';
+  end if;
+  p_dados := coalesce(p_dados, '{}'::jsonb);
+  if jsonb_typeof(p_dados) <> 'object' then
+    raise exception 'dados_invalidos';
+  end if;
+
+  if p_id is null then
+    v.id := gen_random_uuid();
+    v.operacao_id := p_operacao;
+    v.cor := '#f59e0b';
+    v.permite_militar := false;
+    v.disponibilidade := 'disponivel';
+    v.disponibilidade_obs := '';
+    v.capacidades := '';
+    v.criado_por := auth.uid();
+    v.criado_por_nome := v_nome_resp;
+    v.criado_em := now();
+  else
+    select * into v from public.grupos where id = p_id and operacao_id = p_operacao for update;
+    if not found then
+      raise exception 'grupo_nao_encontrado';
+    end if;
+  end if;
+
+  if p_dados ? 'nome' then v.nome := btrim(regexp_replace(coalesce(p_dados->>'nome', ''), '\s+', ' ', 'g')); end if;
+  if p_dados ? 'cor' then v.cor := p_dados->>'cor'; end if;
+  if p_dados ? 'icone' then v.icone := nullif(btrim(coalesce(p_dados->>'icone', '')), ''); end if;
+  if p_dados ? 'permite_militar' then
+    if jsonb_typeof(p_dados->'permite_militar') <> 'boolean' then
+      raise exception 'dados_invalidos';
+    end if;
+    v.permite_militar := (p_dados->>'permite_militar')::boolean;
+  end if;
+  if v.nome is null or char_length(v.nome) not between 1 and 60 then
+    raise exception 'nome_grupo_invalido';
+  end if;
+  if v.cor is null or v.cor !~ '^#[0-9a-fA-F]{6}$' then
+    raise exception 'dados_invalidos';
+  end if;
+  if v.icone is not null and char_length(v.icone) > 8 then
+    raise exception 'icone_invalido';
+  end if;
+
+  v.atualizado_em := now();
+  v.atualizado_por_nome := v_nome_resp;
+  begin
+    if p_id is null then
+      insert into public.grupos select v.*;
+      insert into public.grupo_convites (grupo_id, operacao_id, token, criado_por_nome)
+      values (v.id, v.operacao_id, public.gerar_token(), v_nome_resp);
+    else
+      update public.grupos set nome = v.nome, cor = v.cor, icone = v.icone, permite_militar = v.permite_militar,
+             atualizado_em = v.atualizado_em, atualizado_por_nome = v.atualizado_por_nome
+       where id = v.id;
+    end if;
+  exception when unique_violation then
+    raise exception 'grupo_existente';
+  end;
+  return row_to_json(v);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Aparência das categorias fixas de ponto
+-- ---------------------------------------------------------------------
+create table if not exists public.categorias_ponto_estilo (
+  categoria        text primary key check (categoria in ('ULTIMA_LOCALIZACAO', 'POSSIVEL_LOCALIZACAO', 'VESTIGIO', 'RISCO', 'ENCONTRO',
+                                                         'VITIMA_ENCONTRADA', 'BASE', 'OUTRO')),
+  icone            text check (icone is null or char_length(icone) between 1 and 8),
+  cor              text check (cor is null or cor ~ '^#[0-9a-f]{6}$'),
+  atualizado_por_nome text not null,
+  atualizado_em    timestamptz not null default now()
+);
+alter table public.categorias_ponto_estilo enable row level security;
+drop policy if exists categorias_ponto_estilo_ler on public.categorias_ponto_estilo;
+create policy categorias_ponto_estilo_ler on public.categorias_ponto_estilo for select to authenticated using (public.nome_responsavel_atual() is not null);
+revoke all on public.categorias_ponto_estilo from anon;
+revoke insert, update, delete, truncate on public.categorias_ponto_estilo from authenticated;
+grant select on public.categorias_ponto_estilo to authenticated;
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'categorias_ponto_estilo') then
+    execute 'alter publication supabase_realtime add table public.categorias_ponto_estilo';
+  end if;
+end $$;
+
+create or replace function public.salvar_estilo_categoria(p_categoria text, p_icone text, p_cor text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_nome text := public.nome_responsavel_atual();
+  v_icone text := nullif(btrim(coalesce(p_icone, '')), '');
+  v_cor text := nullif(lower(btrim(coalesce(p_cor, ''))), '');
+  v public.categorias_ponto_estilo%rowtype;
+begin
+  if v_nome is null then
+    raise exception 'sem_permissao';
+  end if;
+  if p_categoria is null or p_categoria not in ('ULTIMA_LOCALIZACAO', 'POSSIVEL_LOCALIZACAO', 'VESTIGIO', 'RISCO', 'ENCONTRO', 'VITIMA_ENCONTRADA', 'BASE', 'OUTRO') then
+    raise exception 'dados_invalidos';
+  end if;
+  if (v_icone is not null and char_length(v_icone) > 8) or (v_cor is not null and v_cor !~ '^#[0-9a-f]{6}$') then
+    raise exception 'icone_invalido';
+  end if;
+  if v_icone is null and v_cor is null then
+    delete from public.categorias_ponto_estilo where categoria = p_categoria;   -- volta ao padrão do aplicativo
+    return json_build_object('categoria', p_categoria, 'icone', null, 'cor', null);
+  end if;
+  insert into public.categorias_ponto_estilo (categoria, icone, cor, atualizado_por_nome, atualizado_em)
+  values (p_categoria, v_icone, v_cor, v_nome, now())
+  on conflict (categoria) do update set icone = excluded.icone, cor = excluded.cor,
+    atualizado_por_nome = excluded.atualizado_por_nome, atualizado_em = excluded.atualizado_em
+  returning * into v;
+  return row_to_json(v);
+end;
+$$;
+
+revoke execute on function public.salvar_estilo_categoria(text, text, text) from public, anon;
+grant execute on function public.salvar_estilo_categoria(text, text, text) to authenticated;
 
 notify pgrst, 'reload schema';

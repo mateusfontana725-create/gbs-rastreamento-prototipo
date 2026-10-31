@@ -6,7 +6,9 @@
     { "source": "/", "destination": "/militar.html", "permanent": false }
   ],
   "functions": {
-    "api/poa-ia.js": { "maxDuration": 60 }
+    "api/poa-ia.js": { "maxDuration": 60 },
+    "api/sci-ia.js": { "maxDuration": 30 },
+    "api/meteo.js": { "maxDuration": 30 }
   },
   "crons": [
     { "path": "/api/limpeza", "schedule": "0 7 * * *" }
@@ -18,11 +20,11 @@
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "geolocation=(self), camera=(), microphone=()" },
+        { "key": "Permissions-Policy", "value": "geolocation=(self), camera=(), microphone=(self)" },
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https://*.rainviewer.com https://tile.openstreetmap.org https://*.tile.opentopomap.org https://server.arcgisonline.com https://unpkg.com https://*.supabase.co https://elevation-tiles-prod.s3.amazonaws.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://unpkg.com https://cdn.jsdelivr.net https://tile.openstreetmap.org https://*.tile.opentopomap.org https://server.arcgisonline.com https://elevation-tiles-prod.s3.amazonaws.com; worker-src 'self' blob:; child-src blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https://*.rainviewer.com https://gibs.earthdata.nasa.gov https://tile.openstreetmap.org https://*.tile.opentopomap.org https://server.arcgisonline.com https://unpkg.com https://*.supabase.co https://elevation-tiles-prod.s3.amazonaws.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://unpkg.com https://cdn.jsdelivr.net https://tile.openstreetmap.org https://*.tile.opentopomap.org https://server.arcgisonline.com https://elevation-tiles-prod.s3.amazonaws.com; worker-src 'self' blob:; child-src blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         }
       ]
     },

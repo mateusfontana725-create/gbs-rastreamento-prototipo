@@ -284,7 +284,10 @@
     atualizarMeio();
 
     var grupoAcion = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('acionamento'), texto: 'Data e hora do início das operações *' }), acion]);
-    var grupoDesap = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('desap'), texto: 'Data e hora do último momento visto' }), desap]);
+    var desapQual = UI.el('select', { classe: 'campo campo-sob', id: id('desap-qual'), 'aria-label': 'Origem da hora do último momento visto' }, [UI.el('option', { value: '', texto: 'Origem da hora…' })].concat(
+      window.Ipo.QUALIDADE_HORA.map(function (x) { return UI.el('option', { value: x[0], selected: ipo.desaparecimento_qualidade === x[0] ? true : null, texto: x[1] }); })));
+    var grupoDesap = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('desap'), texto: 'Data e hora do último momento visto' }), desap, desapQual,
+      UI.el('p', { classe: 'ajuda', texto: 'Em branco: não informado. Ninguém sabe? Escolha "Desconhecido".' })]);
     var grupoDestino = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('destino'), texto: 'IPO para (destinatários)' }), destino]);
     var grupoSolicDoc = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-doc'), texto: 'Documento do solicitante (RG/CPF)' }), solicDoc]);
     var grupoResp = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('resp'), texto: 'Responsável pelas informações' }), responsavel]);
@@ -336,7 +339,7 @@
       dados.acionado_em = new Date(ms).toISOString();
       dados.ipo = window.Ipo.normalizarIpo({
         natureza: naturezaValor(), solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,
-        destinatarios: destino.value, desaparecimento: isoLocal(desap.value), meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
+        destinatarios: destino.value, desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value, meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
         pessoas_perdidas: pessoas.value, buscas_preliminares: marcadoEm(nomeBuscas), possibilidade_vida: marcadoEm(nomeVida),
         bms_envolvidos: bms.value, imagens_anexas: marcadoEm(nomeImagens) === 'sim' ? true : marcadoEm(nomeImagens) === 'nao' ? false : null,
         responsavel_informacoes: responsavel.value,
@@ -361,6 +364,7 @@
       solicDoc.value = '';
       destino.value = window.Ipo.DESTINO_PADRAO;
       desap.value = '';
+      desapQual.value = '';
       pessoas.value = '';
       bms.value = '';
       responsavel.value = '';
@@ -422,7 +426,7 @@
       UI.el('div', { classe: 'form-colunas' }, [
         UI.secao('Ocorrência', [blocos([
           ['Início das operações', op.acionado_em ? dataHora(op.acionado_em) : ''],
-          ['Último momento visto', ipo.desaparecimento ? dataHora(ipo.desaparecimento) : ''],
+          ['Último momento visto', window.Ipo.textoHoraVisto(ipo, dataHora)],
           ipo.natureza && ipo.natureza !== tipo ? ['Natureza', ipo.natureza, true] : null,
           ['Descrição', op.descricao, true],
         ])]),
@@ -553,7 +557,10 @@
     return (await C.consultar(C.cliente.from('vitimas').select('*').eq('operacao_id', op.id).order('criado_em', { ascending: true }))) || [];
   }
 
-  function textoIdade(v) { return v.idade == null ? 'idade não informada' : v.idade + (v.idade === 1 ? ' ano' : ' anos'); }
+  function textoIdade(v) {
+    if (v.idade == null) return 'idade não informada';
+    return (v.idade_qualidade === 'estimada' ? 'cerca de ' : '') + v.idade + (v.idade === 1 ? ' ano' : ' anos') + (v.idade_qualidade === 'estimada' ? ' (estimada)' : '');
+  }
 
   // opcoes: { editavel, limparArquivos() } — limparArquivos apaga do Storage as fotos substituídas
   // Fichas de vítima dentro do formulário de dados da operação (Dados da operação → Editar).
@@ -584,8 +591,8 @@
         lista.appendChild(UI.el('li', null, [UI.el('button', { classe: 'item-vitima', type: 'button', 'data-vitima': v.id, onclick: function () { abrirFicha(op, v, filhas); } }, [
           mini,
           UI.el('span', { classe: 'item-area-txt' }, [
-            UI.el('strong', { texto: v.nome }),
-            UI.el('small', { classe: 'muted', texto: textoIdade(v) + (v.roupas ? ' · ' + resumir(v.roupas, 60) : '') }),
+            UI.el('strong', null, [v.nome, v.cadastro_rapido ? UI.el('span', { classe: 'selo selo-alerta selo-rapido', title: 'Cadastro rápido: falta completar a ficha', texto: 'completar' }) : null]),
+            UI.el('small', { classe: 'muted', texto: textoIdade(v) + (v.roupas || v.caracteristicas ? ' · ' + resumir(v.roupas || v.caracteristicas, 60) : '') }),
           ]),
         ])]));
       });
@@ -596,7 +603,10 @@
       UI.el('h3', { classe: 'titulo-com-dica' }, ['Vítimas', UI.dica('Só os responsáveis desta operação veem estas fichas. Civis e militares de campo não têm acesso.')]),
       lista,
       vazio,
-      editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vitima-nova', texto: '＋ Nova ficha', onclick: function () { editarFicha(op, null, filhas); } }) : null,
+      editavel ? UI.el('div', { classe: 'acoes-linha' }, [
+        UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', id: 'vitima-rapida', texto: '⚡ Cadastro rápido', title: 'Só o essencial: dá para completar a ficha depois', onclick: function () { abrirRapido(op, filhas); } }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'vitima-nova', texto: '＋ Ficha completa', onclick: function () { editarFicha(op, null, filhas); } }),
+      ]) : null,
     ]);
   }
 
@@ -631,10 +641,11 @@
     });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-vitima' }, [
       UI.el('h2', { id: 'modal-titulo', texto: v.nome }),
+      v.cadastro_rapido ? UI.el('p', { classe: 'nota nota-rapido', texto: 'Cadastro rápido: só os dados essenciais. Complete a ficha (características, roupas, foto, perfil…) assim que puder.' }) : null,
       caixaFoto,
       dl,
       UI.rodape([
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitima-editar', texto: 'Editar', onclick: function () { fechar(); editarFicha(op, v, opcoes); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { fechar(); editarFicha(op, v, opcoes); } }) : null,
         editavel ? rotFoto : null,
         editavel ? inFoto : null,
         editavel && v.foto_caminho ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Tirar foto', onclick: function () { fechar(); removerFoto(op, v, opcoes); } }) : null,
@@ -662,6 +673,9 @@
     v = v || { nome: '', idade: null, caracteristicas: '', roupas: '', observacoes: '' };
     var nome = UI.el('input', { classe: 'campo', id: prefixo + '-nome', maxlength: '80', value: v.nome, placeholder: 'Nome (ou "Não identificada")' });
     var idade = UI.el('input', { classe: 'campo', id: prefixo + '-idade', type: 'number', min: '0', max: '130', step: '1', inputmode: 'numeric', value: v.idade == null ? '' : String(v.idade) });
+    // Idade informada (documento, família) ou estimada (aparência): em branco é "não informada", nunca zero
+    var estimada = UI.el('input', { type: 'checkbox', id: prefixo + '-idade-estimada', checked: v.idade_qualidade === 'estimada' ? true : null });
+    var blocoIdade = UI.el('div', { classe: 'idade-linha' }, [idade, UI.el('label', { classe: 'check-curto', for: prefixo + '-idade-estimada' }, [estimada, ' estimada'])]);
     function area(id, max, valor, ph) { var a = UI.el('textarea', { classe: 'campo', id: prefixo + '-' + id, maxlength: String(max), rows: '3', placeholder: ph || '' }); a.value = valor || ''; return a; }
     var carac = area('caracteristicas', 1000, v.caracteristicas, 'Altura, porte, cabelo, cor da pele, sinais, tatuagens, cicatrizes…');
     var roupas = area('roupas', 1000, v.roupas, 'Cores e tipo de roupa, calçado, acessórios, mochila…');
@@ -686,7 +700,7 @@
     var elementos = [
       UI.grade([
         UI.campo('Nome *', nome, { para: prefixo + '-nome', largo: true }),
-        UI.campo('Idade', idade, { para: prefixo + '-idade' }),
+        UI.campo('Idade', blocoIdade, { para: prefixo + '-idade', dica: 'Em branco: não informada. Marque "estimada" quando a idade vem da aparência ou de um palpite.' }),
         UI.campo('Nascimento', nasc, { para: prefixo + '-nascimento', dica: 'Formato dd/mm/aaaa. Vai para o IPO.' }),
         UI.campo('Sexo', sexo, { para: prefixo + '-sexo' }),
         UI.campo('Origem', origem, { para: prefixo + '-origem', dica: 'Cidade ou bairro de onde a pessoa é.' }),
@@ -701,6 +715,7 @@
       return {
         nome: nome.value.replace(/\s+/g, ' ').trim(),
         idade: idade.value.trim() === '' ? null : Number(idade.value),
+        idade_qualidade: idade.value.trim() === '' ? null : (estimada.checked ? 'estimada' : 'informada'),
         caracteristicas: carac.value.trim(),
         roupas: roupas.value.trim(),
         observacoes: obs.value.trim(),
@@ -719,7 +734,7 @@
       return null;
     }
     function bloquear(sim) {
-      [nome, idade, nasc, sexo, origem, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); });
+      [nome, idade, estimada, nasc, sexo, origem, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); });
       perfil.querySelectorAll('select').forEach(function (c) { c.disabled = Boolean(sim); });
       foto.disabled = Boolean(sim);
     }
@@ -732,11 +747,15 @@
     var nova = !v;
     v = v || { nome: '', idade: null, caracteristicas: '', roupas: '', observacoes: '' };
     var campos = camposVitima(v, 'vitima');
+    // ficha de cadastro rápido: salvar tira a marca "completar", a menos que ainda falte algo
+    var faltaCompletar = UI.el('input', { type: 'checkbox', id: 'vitima-ainda-rapida' });
+    var blocoFalta = v.cadastro_rapido ? UI.el('label', { classe: 'linha-opcao' }, [faltaCompletar, ' Ainda falta completar (manter a marca de cadastro rápido)']) : null;
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'vitima-salvar', texto: nova ? 'Criar ficha' : 'Salvar' });
     var form = UI.el('form', { classe: 'form-vitima form-padrao', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova vítima' : 'Editar vítima' }),
+      UI.el('h2', { id: 'modal-titulo', texto: nova ? 'Nova vítima' : v.cadastro_rapido ? 'Completar a ficha' : 'Editar vítima' }),
     ].concat(campos.elementos, [
+      blocoFalta,
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
     ]));
@@ -746,6 +765,7 @@
       var dados = campos.ler();
       var invalido = campos.validar(dados);
       if (invalido) { erro.textContent = invalido.texto; erro.hidden = false; invalido.campo.focus(); return; }
+      if (v.cadastro_rapido) dados.cadastro_rapido = Boolean(faltaCompletar.checked);
       btn.disabled = true;
       try {
         var res = await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: v.id || null, p_dados: dados });
@@ -769,6 +789,88 @@
       }
     });
     var fechar = UI.abrirModal(form, { fecharNoFundo: false, empilhar: true, aoFechar: function () { if (opcoes.aoMudar) opcoes.aoMudar(); } });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Cadastro rápido: só o essencial, a ficha completa fica para depois  */
+  /* ------------------------------------------------------------------ */
+  var FAIXAS = [['crianca', 'Criança'], ['adolescente', 'Adolescente'], ['adulto', 'Adulto'], ['idoso', 'Idoso'], ['', 'Não sei']];
+  // opcoes.aoSalvar(ficha): chamado depois de salvar (também em "salvar e adicionar outra")
+  function abrirRapido(op, opcoes) {
+    opcoes = opcoes || {};
+    var nome = UI.el('input', { classe: 'campo', id: 'rapida-nome', maxlength: '80', autocomplete: 'off', placeholder: 'Nome, apelido ou deixe em branco', autofocus: true });
+    var idade = UI.el('input', { classe: 'campo', id: 'rapida-idade', type: 'number', min: '0', max: '130', step: '1', inputmode: 'numeric', placeholder: 'anos (aproximado)' });
+    var desc = UI.el('input', { classe: 'campo', id: 'rapida-desc', maxlength: '200', autocomplete: 'off', placeholder: 'Ex.: camisa azul, bermuda jeans, boné' });
+    function chips(nomeRadio, lista, padrao) {
+      return UI.el('div', { classe: 'chips-rapido', role: 'radiogroup' }, lista.map(function (x) {
+        var r = UI.el('input', { type: 'radio', name: nomeRadio, value: x[0], checked: x[0] === padrao ? true : null });
+        return UI.el('label', { classe: 'chip-rapido' }, [r, UI.el('span', { texto: x[1] })]);
+      }));
+    }
+    var faixa = chips('rapida-faixa', FAIXAS, '');
+    var sexo = chips('rapida-sexo', [['M', 'Masculino'], ['F', 'Feminino'], ['', 'Não sei']], '');
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'rapida-salvar', texto: 'Salvar' });
+    var btnOutra = UI.el('button', { classe: 'btn', type: 'button', id: 'rapida-salvar-outra', texto: 'Salvar e novo', title: 'Salva e deixa o formulário limpo para a próxima vítima' });
+    var form = UI.el('form', { classe: 'form-rapido form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Cadastro rápido' },
+        [UI.dica('Só o essencial, na hora. A ficha fica marcada "completar" e o responsável termina depois (características, foto, perfil, observações).')]),
+      UI.campo('Nome', nome, { para: 'rapida-nome', opcional: true, ajuda: 'Em branco: "Não identificada".' }),
+      UI.campo('Faixa etária', faixa),
+      UI.grade([
+        UI.campo('Idade', idade, { para: 'rapida-idade', opcional: true, ajuda: 'Fica como estimada.' }),
+        UI.campo('Sexo', sexo),
+      ]),
+      UI.campo('Roupa e aparência', desc, { para: 'rapida-desc', opcional: true }),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnOutra, btn]),
+    ]);
+    function marcado(n) { var r = form.querySelector('input[name="' + n + '"]:checked'); return r ? r.value : ''; }
+    async function salvar(outra) {
+      erro.hidden = true;
+      var nm = nome.value.replace(/\s+/g, ' ').trim() || 'Não identificada';
+      var anos = idade.value.trim() === '' ? null : Number(idade.value);
+      if (anos != null && !(Number.isInteger(anos) && anos >= 0 && anos <= 130)) { erro.textContent = 'Idade: um número inteiro de 0 a 130.'; erro.hidden = false; idade.focus(); return; }
+      var fx = marcado('rapida-faixa');
+      var dados = { nome: nm, idade: anos, idade_qualidade: anos == null ? null : 'estimada', cadastro_rapido: true,
+        caracteristicas: desc.value.trim(), perfil: ['crianca', 'adolescente', 'idoso'].indexOf(fx) !== -1 ? [fx] : [] };
+      var sx = marcado('rapida-sexo');
+      if (sx) dados.sexo = sx;
+      btn.disabled = btnOutra.disabled = true;
+      try {
+        var res = await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: dados });
+        UI.aviso('Cadastro rápido salvo: ' + res.nome + '. Complete a ficha quando puder.', 'ok');
+        if (opcoes.aoSalvar) opcoes.aoSalvar(res);
+        if (outra) {
+          nome.value = ''; idade.value = ''; desc.value = '';
+          form.querySelectorAll('input[type="radio"][value=""]').forEach(function (r) { r.checked = true; });
+          btn.disabled = btnOutra.disabled = false;
+          nome.focus();
+        } else {
+          fechar(true);
+        }
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = btnOutra.disabled = false;
+      }
+    }
+    form.addEventListener('submit', function (ev) { ev.preventDefault(); salvar(false); });
+    btnOutra.addEventListener('click', function () { salvar(true); });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, empilhar: Boolean(opcoes.empilhar), tamanho: 'estreito', aoFechar: function () { if (opcoes.aoMudar) opcoes.aoMudar(); } });
+  }
+
+  // Abre a ficha pelo identificador (ex.: a partir do marcador da vítima localizada no mapa).
+  async function abrirFichaPorId(op, id, opcoes) {
+    opcoes = opcoes || {};
+    try {
+      var lista = await carregarVitimas(op);
+      var v = lista.filter(function (x) { return x.id === id; })[0];
+      if (!v) { UI.aviso('Esta ficha não existe mais.', 'erro'); return; }
+      abrirFicha(op, v, opcoes);
+    } catch (e) {
+      UI.aviso('Não foi possível abrir a ficha: ' + e.message, 'erro');
+    }
   }
 
   // Envia a foto (já reduzida) para a ficha e devolve a ficha com o caminho da foto.
@@ -849,6 +951,8 @@
     escolherPontoNoMapa: escolherPontoNoMapa,
     abrirDados: abrirDados,
     secaoFichas: secaoFichas,
+    abrirRapido: abrirRapido,
+    abrirFichaPorId: abrirFichaPorId,
     subirFoto: subirFoto,
     aoMudarVitimas: aoMudarVitimas,
   };

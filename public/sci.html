@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR" data-pagina="militar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#06080a">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Comando SCI · GBS</title>
+  <link rel="icon" type="image/png" sizes="256x256" href="img/brasao-cbmpr.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="css/estilos.css">
+  <link rel="stylesheet" href="css/militar.css">
+  <script src="js/tema.js"></script>
+</head>
+<body class="janela-sci">
+
+  <!-- Painel de comando SCI numa janela própria: para o comando remoto (celular) e para outro monitor no PC.
+       Mesma sessão do painel; sem sessão, pede o login de responsável. -->
+  <main class="janela-sci-corpo">
+    <p class="nota" id="sci-aviso" role="alert" hidden></p>
+    <form class="sci-login" id="sci-login" hidden novalidate>
+      <h1>Comando SCI</h1>
+      <p class="muted">Entre com a sua conta de responsável.</p>
+      <label class="rotulo" for="sci-email">E-mail</label>
+      <input class="campo" id="sci-email" type="email" autocomplete="username" required>
+      <label class="rotulo" for="sci-senha">Senha</label>
+      <input class="campo" id="sci-senha" type="password" autocomplete="current-password" required>
+      <p class="erro-form" id="sci-login-erro" hidden></p>
+      <button class="btn btn-escuro" type="submit" id="sci-entrar">Entrar</button>
+    </form>
+    <div id="sci-corpo"></div>
+  </main>
+  <div id="avisos" aria-live="polite"></div>
+
+  <script src="/api/config"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="js/comunicacao.js"></script>
+  <script src="js/interface.js"></script>
+  <script src="js/fotos.js"></script>
+  <script src="js/sci-core.js"></script>
+  <script src="js/sci.js"></script>
+  <script src="js/sci-janela.js"></script>
+</body>
+</html>

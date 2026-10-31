@@ -62,7 +62,7 @@
     return { nome: s.nome, poa: poa, forma: s.forma, centroLat: s.centro_lat, centroLng: s.centro_lng, raioM: s.raio_m, pontos: s.pontos };
   }
   function rotuloPonto(p) {
-    var c = P.categorias && P.categorias[p.categoria];
+    var c = P.categoriaDoPonto ? P.categoriaDoPonto(p) : P.categorias && P.categorias[p.categoria];
     return (c ? c.rotulo : p.categoria) + ' — ' + p.titulo;
   }
   function dataLocal(ms) {

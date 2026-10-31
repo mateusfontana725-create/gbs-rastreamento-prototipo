@@ -229,6 +229,25 @@
     return (a * (1 - ti) + c * ti) * (1 - tj) + (b * (1 - ti) + d * ti) * tj;
   }
 
+  // Escala de chuva no estilo dos radares (mm/h): fraca em azul-claro, moderada em verde e amarelo, intensa em
+  // laranja e vermelho, muito intensa em magenta. Abaixo de 0,1 mm/h não pinta (sem chuva).
+  var PARADAS_CHUVA = [[0.1, [147, 197, 253]], [1, [59, 130, 246]], [2.5, [34, 197, 94]], [5, [250, 204, 21]], [10, [249, 115, 22]], [25, [220, 38, 38]], [50, [192, 38, 211]]];
+  function corChuva(mmh) {
+    if (mmh == null || !isFinite(mmh) || mmh < PARADAS_CHUVA[0][0]) return null;
+    for (var i = 1; i < PARADAS_CHUVA.length; i++) {
+      if (mmh <= PARADAS_CHUVA[i][0]) {
+        var a = PARADAS_CHUVA[i - 1], b = PARADAS_CHUVA[i], k = (mmh - a[0]) / (b[0] - a[0]);
+        return [0, 1, 2].map(function (c) { return Math.round(a[1][c] + (b[1][c] - a[1][c]) * k); });
+      }
+    }
+    return PARADAS_CHUVA[PARADAS_CHUVA.length - 1][1];
+  }
+  // Transparência pela intensidade: garoa quase transparente, chuva forte bem visível.
+  function opacidadeChuva(mmh) {
+    if (mmh == null || !isFinite(mmh) || mmh < PARADAS_CHUVA[0][0]) return 0;
+    return Math.min(0.75, 0.3 + 0.45 * Math.min(1, Math.log(1 + mmh) / Math.log(26)));
+  }
+
   // Escala de temperatura no estilo dos mapas de vento: frio em azul, quente em vermelho.
   var PARADAS_TEMP = [[-5, [59, 130, 246]], [5, [56, 189, 248]], [15, [74, 222, 128]], [22, [250, 204, 21]], [30, [249, 115, 22]], [38, [220, 38, 38]]];
   function corTemperatura(t) {
@@ -334,6 +353,7 @@
     beaufort: beaufort, alertaBeaufort: alertaBeaufort, BEAUFORT: BEAUFORT,
     direcaoCardeal: direcaoCardeal, chuvaMaisProxima: chuvaMaisProxima, alertaChuvaProxima: alertaChuvaProxima, tendenciaChuva: tendenciaChuva,
     componentesVento: componentesVento, interpolar: interpolar, corTemperatura: corTemperatura, corVento: corVento,
+    corChuva: corChuva, opacidadeChuva: opacidadeChuva, PARADAS_CHUVA: PARADAS_CHUVA,
     PARADAS_TEMP: PARADAS_TEMP, PARADAS_VENTO: PARADAS_VENTO,
     LIMIARES: LIMIARES, intensidadeChuva: intensidadeChuva, distanciaM: distanciaM, rumoGraus: rumoGraus,
     nivelDeSeveridade: nivelDeSeveridade, maior: maior, previsaoChegada: previsaoChegada, analisar: analisar,

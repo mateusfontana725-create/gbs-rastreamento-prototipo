@@ -277,7 +277,8 @@
    * O modo "Personalizar tela" (js/personalizar.js) muda isto arrastando os botões.
    */
   var CHAVE_APARENCIA = 'gbs-aparencia';
-  var FONTES = { menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
+  var FONTES = { minimo: 'Mínimo', menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
+  var LETRAS = { industrial: 'Industrial', tecnica: 'Técnica', sistema: 'Do aparelho' };
   var POSICOES_GRUPOS = { topright: 'Canto superior direito', topleft: 'Canto superior esquerdo', bottomright: 'Canto inferior direito', bottomleft: 'Canto inferior esquerdo' };
   function listaTexto(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : []; }
   function lerAparencia() {
@@ -286,6 +287,7 @@
     if (typeof v !== 'object') v = {};
     return {
       fonte: FONTES[v.fonte] ? v.fonte : 'normal',
+      letra: LETRAS[v.letra] ? v.letra : 'industrial',
       topo: Array.isArray(v.topo) ? listaTexto(v.topo) : null,   // null = o padrão da página
       gruposPos: POSICOES_GRUPOS[v.gruposPos] ? v.gruposPos : 'topright',
       // versão anterior (escolhas por botão): convertida em "topo" na primeira leitura
@@ -295,7 +297,7 @@
   var ouvintes = [];
   function gravarAparencia(v) {
     try {
-      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, topo: v.topo, gruposPos: v.gruposPos }));
+      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, letra: v.letra, topo: v.topo, gruposPos: v.gruposPos }));
     } catch (e) { /* sem armazenamento: vale só até recarregar */ memoria = v; }
     aplicarAparencia(v);
   }
@@ -304,12 +306,15 @@
   function aplicarAparencia(v) {
     v = v || atual();
     document.documentElement.setAttribute('data-fonte', v.fonte);
+    document.documentElement.setAttribute('data-letra', v.letra || 'industrial');
     ouvintes.forEach(function (f) { try { f(v); } catch (e) { /* um ouvinte com erro não para os outros */ } });
   }
   function mudar(fn) { var v = atual(); fn(v); gravarAparencia(v); }
   var aparencia = {
     ler: atual,
     fontes: FONTES,
+    letras: LETRAS,
+    definirLetra: function (l) { mudar(function (v) { v.letra = LETRAS[l] ? l : 'industrial'; }); },
     posicoesGrupos: POSICOES_GRUPOS,
     definirFonte: function (f) { mudar(function (v) { v.fonte = FONTES[f] ? f : 'normal'; }); },
     // Botões do topo (ids na ordem). padrao: os ids que a página põe no topo quando não há escolha.
@@ -323,7 +328,7 @@
     definirTopo: function (ids) { mudar(function (v) { v.topo = listaTexto(ids); }); },
     definirPosicaoGrupos: function (pos) { mudar(function (v) { v.gruposPos = POSICOES_GRUPOS[pos] ? pos : 'topright'; }); },
     posicaoGrupos: function () { return atual().gruposPos; },
-    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', topo: null, gruposPos: 'topright' }); },
+    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', letra: 'industrial', topo: null, gruposPos: 'topright' }); },
     aoMudar: function (f) { ouvintes.push(f); },
     aplicar: function () { aplicarAparencia(); },
   };

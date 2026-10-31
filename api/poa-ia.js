@@ -295,4 +295,4 @@ module.exports = async (req, res) => {
   }
 };
 
-module.exports._interno = { limparPoa, limparPod, normalizarPoa, normalizarPod, extrairJson };
+module.exports._interno = { limparPoa, limparPod, normalizarPoa, normalizarPod, extrairJson, perguntar, configurarIa, rpcUsuario };

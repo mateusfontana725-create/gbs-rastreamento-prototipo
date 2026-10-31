@@ -15,6 +15,11 @@
   var C = window.Comunicacao, UI = window.UI, P = window.Painel, Co = window.Coords, G = window.GPS;
   if (!P || !Co || !G) return;
   function $(id) { return document.getElementById(id); }
+  // Nome da categoria do ponto (fixa ou tipo criado pelos responsáveis)
+  function rotuloCategoria(P, d) {
+    var c = P.categoriaDoPonto ? P.categoriaDoPonto(d) : P.categorias[d.categoria];
+    return (c && c.rotulo) || d.categoria;
+  }
   function dist(a, b) { return G.distancia(a[0], a[1], b[0], b[1]); }
   function fmtDist(m) {
     if (m < 1000) return Math.round(m) + ' m';
@@ -74,7 +79,7 @@
   /* ------------------------------------------------------------------ */
   /* Estado por operação (camadas importadas, anéis, sol)                 */
   /* ------------------------------------------------------------------ */
-  var atual = { opId: null, mapa: null, camadaImport: null, camadaAneis: null, importados: [], aneis: {}, estadoAlertas: {}, marcaTemp: null };
+  var atual = { marcadoresImport: [], opId: null, mapa: null, camadaImport: null, camadaAneis: null, importados: [], aneis: {}, estadoAlertas: {}, marcaTemp: null };
 
   function chaveImport() { return 'gbs-importados:' + atual.opId; }
   function chaveAneis() { return 'gbs-aneis:' + atual.opId; }
@@ -88,6 +93,8 @@
     atual.estadoAlertas = {};
     atual.importados = [];
     atual.aneis = {};
+    if (P.desagruparMarcadores) P.desagruparMarcadores(atual.marcadoresImport);
+    atual.marcadoresImport = [];
     atual.camadaImport = atual.camadaAneis = atual.marcaTemp = null;
     if (!opId || !mapa) return;
     atual.camadaImport = L.layerGroup().addTo(mapa);
@@ -247,7 +254,7 @@
     });
     P.pontosInteresse().forEach(function (d) {
       if (!escolhido(o.pontos, d.id)) return;
-      dados.pontos.push({ nome: d.titulo, lat: d.lat, lng: d.lng, descricao: d.descricao, categoria: (P.categorias[d.categoria] || {}).rotulo || d.categoria });
+      dados.pontos.push({ nome: d.titulo, lat: d.lat, lng: d.lng, descricao: d.descricao, categoria: rotuloCategoria(P, d) });
     });
     dados.setores = P.setores().filter(function (s) { return escolhido(o.setores, s.id); });
     return dados;
@@ -290,7 +297,7 @@
       return { id: p.id, rotulo: P.nome(p) + ' (' + P.tipo(p) + ')', marcado: participanteId ? p.id === participanteId : true };
     }));
     var gPontos = grupoEscolha('Pontos de interesse', P.pontosInteresse().map(function (d) {
-      return { id: d.id, rotulo: d.titulo + ' · ' + ((P.categorias[d.categoria] || {}).rotulo || d.categoria), marcado: !participanteId };
+      return { id: d.id, rotulo: d.titulo + ' · ' + rotuloCategoria(P, d), marcado: !participanteId };
     }));
     var gSetores = grupoEscolha('Setores de busca', P.setores().map(function (s) {
       return { id: s.id, rotulo: s.nome, marcado: !participanteId };
@@ -336,6 +343,8 @@
   function desenharImportados() {
     if (!atual.camadaImport) return;
     atual.camadaImport.clearLayers();
+    if (P.desagruparMarcadores) P.desagruparMarcadores(atual.marcadoresImport);
+    atual.marcadoresImport = [];
     atual.importados.forEach(function (imp) {
       if (!imp.visivel) return;
       var d = imp.dados;
@@ -352,10 +361,13 @@
       });
       d.pontos.forEach(function (p) {
         if (p.oculto) return;
-        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'mk-import-wrap', html: '<div class="mk-import" style="background:' + C.esc(corDe(imp, p)) + '"></div><div class="mk-import-rotulo">' + C.esc(p.nome) + '</div>', iconSize: [0, 0] }), title: p.nome })
-          .bindPopup(function () { return infoImportado(p, imp); }).addTo(atual.camadaImport);
+        var mkImp = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'mk-import-wrap', html: '<div class="mk-import" style="background:' + C.esc(corDe(imp, p)) + '"></div><div class="mk-import-rotulo">' + C.esc(p.nome) + '</div>', iconSize: [0, 0] }), title: p.nome })
+          .bindPopup(function () { return infoImportado(p, imp); });
+        atual.marcadoresImport.push(mkImp);
       });
     });
+    // pontos importados entram no agrupamento do mapa; sem o agrupamento, ficam na camada de sempre
+    if (P.agruparMarcadores) P.agruparMarcadores(atual.marcadoresImport, 'import'); else atual.marcadoresImport.forEach(function (mk) { mk.addTo(atual.camadaImport); });
     var el = $('menu-importados-qtd');
     if (el) el.textContent = atual.importados.length ? atual.importados.length + ' camada(s)' : '';
   }

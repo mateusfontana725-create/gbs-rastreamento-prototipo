@@ -192,8 +192,18 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   **Seguir sem elas**) — a operação não é criada de novo, ficha salva não é reenviada e, antes de repetir,
   o painel confere no servidor se a tentativa anterior já tinha gravado (sem duplicar). A foto é
   adicionada depois, na ficha.
+- **Cadastro rápido** (migração 044): **Ferramentas → Cadastro rápido de vítima** (ou **⚡ Cadastro rápido** na lista de
+  vítimas) pede só o essencial, com botões grandes: **nome** (em branco = "Não identificada"), **faixa etária** (criança,
+  adolescente, adulto, idoso — criança, adolescente e idoso já preenchem o perfil), **idade** aproximada (fica "estimada"),
+  **sexo** e **roupa e aparência**. **Salvar e novo** deixa o formulário limpo para a próxima pessoa; Enter salva. A ficha
+  fica marcada **completar** na lista e na ficha (aviso e botão **Completar a ficha**); salvar o formulário completo tira a
+  marca, a menos que se marque "Ainda falta completar". A vítima criada só com o nome em **Vítima encontrada** também nasce
+  como cadastro rápido.
 - **Vítimas (fichas)** ficam em **Dados da operação → Editar** (e na criação da operação): uma ou mais fichas por operação, com **foto**, **nome** (ou "Não
   identificada"), **idade**, **características físicas**, **roupas** e **observações**.
+- **Idade informada ou estimada** (migração 042): ao lado da idade, a caixa **estimada** marca que ela veio da
+  aparência ou de um palpite ("cerca de 70 anos (estimada)"). Em branco é **não informada** — nunca vira zero, e os
+  estudos contam à parte as fichas sem idade e com idade estimada.
 - A foto é reduzida no aparelho (máx. 1600 px, JPEG) e guardada no bucket **privado `vitimas`** do
   Supabase Storage; só aparece por link temporário assinado. Trocar ou tirar a foto apaga o arquivo antigo.
 - **Somente os responsáveis da operação** veem as fichas (RLS no banco e no Storage). Civis e militares de
@@ -225,6 +235,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   **círculo** = civil, **losango vermelho com R** = responsável da operação (diferenciado do militar pela forma e pela letra). O **responsável do grupo** recebe um
   **distintivo branco com ★** no canto do marcador, que não depende da cor. O **responsável da operação**
   nunca recebe a cor de um grupo.
+- **Cor livre** (grupos e setores): além das amostras prontas, o botão **＋** abre o painel de cor com **tom,
+  intensidade e claridade** (deslizantes), o **código #rrggbb** e o seletor do sistema. **Guardar em "Minhas cores"**
+  mantém até 12 cores neste aparelho para reaproveitar em outros grupos e setores (`js/cores.js`; o servidor aceita
+  qualquer #rrggbb). Dá para criar quantos grupos quiser, cada um na sua cor.
 - **Paleta dos grupos** (novos grupos): rosa, laranja, índigo, lima, branco e ocre, escolhidas para não
   se confundir com o vermelho dos militares e responsáveis, o verde dos civis, o amarelo de
   pedido de ajuda, o âmbar da seleção e as trilhas roxas e azuis. Grupos que já existiam mantêm a cor salva.
@@ -239,7 +253,9 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   botão **Detalhes ›**. A **ficha** ou os **detalhes** abrem com **dois cliques**, **clicar e segurar** (mouse ou dedo)
   ou o botão do balão; arrastar o mapa a partir de um símbolo não abre nada. **Na lista lateral um clique abre direto.**
   Os símbolos ficam **translúcidos** (quem pede ajuda, quer sair ou está selecionado fica opaco) e **diminuem ao
-  afastar o zoom** (até ~metade do tamanho, agrupamentos inclusive); trilhas finas (2,5 px de perto, ~1 px de longe;
+  afastar o zoom** (até ~metade do tamanho, agrupamentos inclusive) **e também de muito perto**: do zoom 17 (escala de 100 m)
+  em diante cada nível diminui um pouco (90% no zoom 16, 80% no 17, 68% no 18, 58% no 19 e 50% do 20 em diante); vítima localizada e pedido
+  de ajuda nunca ficam abaixo de 80%; trilhas finas (2,5 px de perto, ~1 px de longe;
   com alguém selecionado, as outras ficam apagadas), setores e círculos de base/risco com traço e preenchimento
   discretos. **Camadas → Nomes no mapa** volta a mostrar os nomes como abaixo.
 - **Fileiras de botões** viram **"⋮ Mais"**: na ficha ficam **Ver no mapa** e **⋮ Mais** (enviar destino, rota até a
@@ -370,6 +386,120 @@ Só objetivo, riscos, comunicações, observações e decisões são digitados a
 **Migrações 035, 036 e 037**: rode no Supabase em ordem (035 → 036 → 037). Cada módulo do painel avisa se a sua migração
 ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cada função estão nos próprios arquivos `.sql`.
 
+### Painel de comando SCI (migrações 045 e 046)
+
+**SCI** no topo do painel abre o **painel de comando** do Sistema de Comando em Incidentes, atualizado em tempo real.
+**⋯ Mais → ↗ Outra janela** abre só o painel (`sci.html?op=…`): é o link do **comando remoto** (ex.: Comandante do Batalhão)
+acompanhar pelo celular — pede o login de responsável e se atualiza sozinho. Com a operação encerrada, fica só para consulta.
+
+**Integrado ao que o app já tem (não pede de novo):**
+
+- **Vítimas**: as **fichas** do cadastro aparecem em **Procuradas**. O **"Vítima encontrada"** do app — no celular de campo, no
+  mapa ou pelo próprio SCI — põe a vítima em **Localizadas** sozinha (migração 046, gatilho no banco), ligada à ficha (nome, idade,
+  sexo), com a hora e o local; óbito já entra como cinza. Arrastar uma ficha de Procuradas para Localizadas abre o mesmo formulário
+  do app (ponto no mapa, quem encontrou, condição, estado) e, ao registrar, volta ao SCI. No mapa, o marcador da vítima mostra o número
+  e o quadro do SCI e tem **Abrir no SCI**. **+ Sem identificação** é para vítimas ainda sem ficha (ex.: várias ilhadas); depois dá para
+  ligar à ficha. **⚡ Nova ficha** abre o cadastro rápido.
+- **Comandante do Incidente** = quem está **no comando da operação** (Briefing → Passar o comando); só muda pela passagem de comando
+  (ou se o SCI disser outro nome). **Objetivo**, **riscos** e **comunicações** são os do **briefing** (uma fonte só).
+- **Equipes** = os **grupos** do app: membros e quantos com sinal, ★ responsável do grupo, disponibilidade, **deslocamento ativo**
+  (status e setor) e **recursos** (embarcação, viatura, drone, cão…). O SCI acrescenta a **missão** e o **órgão** de cada grupo e as
+  **equipes fora do app** (sem celular rastreado). Atalhos para abrir o grupo e os recursos.
+- **Instalações** apontam para **pontos do mapa** (a base cadastrada vira o PC com um toque); as coordenadas vêm do ponto.
+- **Alertas do comando** incluem os do app: **pedido de ajuda** (sem atendimento é crítico), **retorno atrasado**, **sem comunicação**,
+  **passagem de comando** aguardando aceite, **decisões pendentes** (prazo vencido), indicações do **cão** em análise e **focos térmicos**
+  a verificar — além dos do SCI (segurança primeiro, vítima vermelha, rio subindo, contagem, o que falta).
+- **Linha do tempo única**: os registros do SCI e todo o **diário** do app (deslocamentos, chegadas, setores, pessoas, alertas, vítimas
+  encontradas), com filtro por assunto. Os **marcos** que o app já sabe aparecem para **confirmar** (acionamento do cadastro, primeiro
+  militar no app, primeira vítima encontrada, encerramento). Tudo o que o SCI registra entra no diário e no relatório final.
+- **Mapa do comando** (Visão geral): local, instalações, vítimas encontradas na cor da triagem, setores e pontos de risco.
+- **Órgãos**: mostra também quantos estão **rastreados pelo app** (militares, civis, com sinal), ao lado do efetivo informado ao PC.
+- **Setores** de operação são os do mapa.
+
+**Abas**: **Visão geral** (números — vítimas, procuradas, localizadas, óbitos, equipes em missão, rastreados, órgãos —, alertas,
+comando e situação, mapa, últimos registros) · **Vítimas** (Procuradas → Localizadas → Removidas para a ACV → Transportadas, triagem
+verde/amarelo/vermelho/cinza só depois da ACV, total informado e NÃO CONFIRMADO) · **Comando** (funções SCI, instalações, setores,
+comunicações, organograma, acompanhamento remoto) · **Equipes e órgãos** · **Linha do tempo** · **Recursos** (recursos das equipes do
+app, outros recursos e pedidos, logística, nível do rio) · **Local e danos** (imagens de satélite, coordenadas, links de mapa e rota,
+aeronave, relatório de danos). As abas mostram quantos alertas cada uma tem.
+
+**Registrar por frase ou voz** (🎤 no Chrome do celular): "despacho 7h15", "PC estabelecido", "V-03 na ACV, amarela", "V-01 e V-02
+transportadas ao hospital", "SAMU no local com 5 pessoas", "segurança: Sgt Dinardi", "total de vítimas 14", "rio estável segundo o drone".
+O painel mostra o que entendeu e as **divergências** antes de gravar; informação de terceiros entra como **NÃO CONFIRMADA**.
+**Entender com IA** (opcional, `api/sci-ia.js`, mesma chave do POA/POD) lê frases longas; as ações passam pela mesma validação e nomes de
+vítimas não vão para a IA. **O que falta?** lista as pendências em ordem de prioridade.
+
+**Copiar resumo** (WhatsApp, com fichas procuradas e quem está em campo), **Texto para a imprensa** (sem nomes de vítimas),
+**Imprimir / PDF** e **Modo teste** (testar o quadro antes da ocorrência; ao sair, zera vítimas, linha do tempo, marcos e total de teste,
+sem nada no diário).
+
+Banco: migração **045** (`sci_estado`, `sci_vitimas`, `sci_eventos`, `sci_itens`, funções `sci_*`, bucket privado `sci`) e **046**
+(vínculo com a vítima encontrada — o gatilho nunca impede o registro —, `sci_contexto` com o que o SCI lê do app, instalação ligada a
+ponto do mapa). Leitura só pelos responsáveis da operação; escrita só pelas funções; encerrada somente leitura.
+
+### Verificação: relatos, binômio, drone e água (migrações 042 e 043)
+
+Regra de leitura em todos: **indicação não é confirmação**. Cada registro guarda **quem, quando e de onde veio** o dado,
+e os estados finais (confirmado, descartado, inconclusivo, contestado) **exigem justificativa**.
+
+- **Revisão de relatos** (pista, vestígio, objeto, obstáculo…): no relato (Mensagens → relato → **Detalhes e revisão**),
+  **Revisar** escolhe o estado — pendente, em análise, confirmado, descartado, inconclusivo ou contestado. Cada revisão
+  é uma **versão nova** (as anteriores ficam em "Versões da revisão"). O relato mostra **três horários separados**:
+  **Fato** (quando aconteceu: informado, estimado, pelo GPS ou desconhecido — em branco é "não informado", não a hora do
+  envio), **Recebido** (quando chegou) e **Revisado** (quem e quando). A hora da posição GPS aparece à parte. O selo do
+  estado aparece no feed de mensagens. Só os responsáveis veem as revisões; o participante continua vendo só a mensagem.
+- **Binômio (cão e condutor)** — Ferramentas → **Binômio**: sessão ligada a um **setor**, com o **condutor**
+  (participante do app ou só o nome), o **cão**, se o cão tem GPS (normalmente **sem dispositivo**: o mapa mostra a
+  **trilha do GPS do condutor** durante a sessão, sem as pausas, e diz isso), o **artigo de odor** (o quê, origem,
+  manipulação) e as **condições**. **Iniciar, Pausar, Retomar, Finalizar** guardam a hora de cada passo; o cartão mostra
+  o tempo efetivo de busca. **⚑ Indicação** registra I1, I2… "em análise" na posição do condutor (ou minha posição, ou
+  tocando no mapa). **Confirmar por outro meio** cria C1… ligada à indicação, com **método independente obrigatório**
+  (equipe no local, busca visual, drone…), "pendente" até alguém registrar o **Resultado** com justificativa. I e C
+  aparecem no mapa; tudo vai para o diário.
+- **Drone e água** — Ferramentas → **Drone e água**, abas Drone e Água:
+  - **Plano de voo** (linha ou área desenhada; sensor e altura): fica "planejado" — **plano não prova voo**;
+  - **Telemetria**: o arquivo do voo (GPX, KML/KMZ, GeoJSON ou CSV) vira o trajeto voado, com início e fim lidos do arquivo;
+  - **Área observada** (área desenhada; sensor, altura e qualidade: boa, parcial, ruim): é o que conta como visto;
+  - **Foco térmico** (ponto; temperatura e imagem): fica "a verificar" — **térmico não é vítima** — até alguém verificar ou descartar;
+  - **Indicação na água**: posição, **possível área de origem** (área desenhada), **corrente** (desconhecida, estimada ou
+    medida — **desconhecida é um valor válido**, os campos de direção e velocidade só aparecem quando há valor), **vento com a
+    fonte do dado** (medido, previsão, estimado, desconhecido) e condições.
+  Cada registro tem título, fonte, hora observada e estado; tocar no mapa abre o registro.
+- **Dashboard da operação → Verificação**: relatos sem revisão, em análise, confirmados, descartados, inconclusivos;
+  indicações do cão em análise e confirmadas; focos térmicos a verificar; indicações na água; área observada por drone.
+
+**Migrações 042 e 043**: rode no Supabase em ordem. Sem elas, cada janela avisa qual migração falta e o resto do painel segue normal.
+
+### Convidar por WhatsApp ou e-mail, por categoria (migrações 044 e 047)
+
+**Convidar** tem as abas **● Link para CIVIS**, **■ Link para BOMBEIROS**, **☎ WhatsApp** e **✉ E-mail**. Nas duas últimas, o
+responsável escolhe a **categoria** do convidado — **Civil**, **Bombeiro** ou **Responsável** — e o link enviado corresponde a ela:
+civil recebe o link dos civis, bombeiro o link dos bombeiros (pode escolher militar) e responsável o endereço do **painel da operação**
+(entra com a própria conta; precisa estar na Equipe de responsáveis).
+
+- **WhatsApp**: nome + celular com DDD → **Enviar pelo WhatsApp** abre a conversa direto com o número (`wa.me`), **sem salvar o
+  contato**, com a mensagem e o link prontos; é só tocar em enviar. Celular com 10 ou 11 dígitos ganha o 55 do Brasil.
+- **E-mail**: como abaixo, agora com a categoria. O mesmo celular + categoria (ou o mesmo e-mail) na mesma operação reaproveita o convite.
+- Banco: `criar_convite` (categoria, canal, e-mail ou telefone), erros `telefone_convite_invalido` e `nome_convite_invalido`.
+
+
+**Convidar → ✉ Convidar por e-mail**: o responsável digita o **nome** e o **e-mail** do participante e toca **Enviar convite**. O
+participante recebe um e-mail com o botão **Abrir e começar** (o link do `civil.html` da operação). Ao abrir no celular, o
+**nome já vem preenchido** e basta tocar em COMEÇAR e permitir a localização.
+
+- A lista **Convidados** mostra a situação de cada convite: **Não enviado**, **Enviado** (hora e número de envios), **Falha no envio**
+  (com o motivo) e **Entrou** (hora em que a pessoa começou o rastreamento). Cada linha tem **Reenviar** (até 5 envios por convite),
+  **Copiar link** e **Cancelar**. O mesmo e-mail na mesma operação reaproveita o convite (não duplica). Limite de 200 convites por operação.
+- **Quem envia é o servidor** (`api/convidar.js`): o navegador manda só o identificador do convite. O servidor confere o login do
+  responsável, lê do banco o e-mail e o token da operação, monta o link e envia pelo provedor **Resend** (<https://resend.com>).
+  Variáveis na Vercel: `RESEND_API_KEY` (chave do provedor), `EMAIL_REMETENTE` (ex.: `Rastreamento GBS <convite@seudominio.com.br>`,
+  com o domínio verificado no provedor) e, opcionalmente, `SITE_URL` (endereço público do site; sem ela usa o da requisição).
+  **Sem essas variáveis**, o painel avisa que o envio não está configurado e oferece **Abrir no meu e-mail** (mensagem pronta no
+  seu programa de e-mail) e **Copiar link** — o convite fica cadastrado do mesmo jeito.
+- O **código do convite** (`#t=…&c=…`) só preenche o nome e marca o convite como aceito; o acesso à operação continua sendo o token
+  do link. O e-mail do convidado é dado pessoal: só os responsáveis da operação o leem, a página do participante nunca o recebe, e ele é
+  apagado junto com a operação (exclusão ou fim da retenção). Convite, envio e aceite entram no diário.
+
 ### Rota até um participante (ir até a pessoa ou mandar apoio)
 
 - Na ficha de um participante, **📍 Rota até ela**: escolha **de onde sai** — a **sua localização** (GPS do
@@ -486,8 +616,13 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   traço começado longe das pontas é recusado com aviso. Tocar sem arrastar não marca nada. Enquanto desenha,
   o mapa fica parado; **dois dedos** dão zoom, a roda do mouse também, e **✋ Mover mapa** libera o arrasto do
   mapa (toque em **✎ Desenhar** para voltar). A barra mostra o comprimento e tem **Desfazer traço** (desfaz o
-  último traço inteiro), **Limpar** (pede confirmação), **Concluir…** e **Cancelar** (pede confirmação).
-- **Concluir…** pergunta o que é o desenho: **✔ Trilha já percorrida**, **📋 Trilha planejada** ou **➝ Enviar para
+  último traço inteiro), **Limpar** (pede confirmação), **✔ Concluir**, **Mais opções…** e **Cancelar** (pede confirmação).
+- **Ponto a ponto**: o botão **• Ponto a ponto** da barra troca o modo: cada **toque** no mapa marca um ponto, ligado ao
+  anterior por uma reta (os pontos aparecem como bolinhas); arrastar move o mapa normalmente e **Desfazer ponto** tira o último.
+  **✎ Mão livre** volta ao traço contínuo. O modo escolhido fica lembrado no aparelho e vale também para o trajeto a enviar.
+- **✔ Concluir** salva na hora, **sem formulário**, como **trilha planejada** com nome automático ("Trilha 3 · 14:05"); nome,
+  situação, grupo e cor podem ser ajustados depois na lista. **Mais opções…** abre a escolha completa abaixo.
+- **Mais opções…** pergunta o que é o desenho: **✔ Trilha já percorrida**, **📋 Trilha planejada** ou **➝ Enviar para
   alguém percorrer** (abre o envio de destino com o trajeto; **Guardar também no mapa como trilha planejada** vem
   marcado e registra a trilha com o nome do destino e quem recebeu). **Voltar ao desenho** não perde nada.
 - As duas primeiras abrem o formulário: **nome** (único na operação), **situação** (já marcada pela escolha),
@@ -541,9 +676,21 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 ### Pontos de interesse
 
 - **Ferramentas → Marcar ponto de interesse**: toque no local (ou **Usar minha posição**), escolha a
-  categoria e dê um nome. Categorias e ícones (placa com letra):
+  categoria e dê um nome. Categorias fixas (têm regras próprias: alarme de risco, raio da base, vítima) e ícones:
   **U** Última localização conhecida · **?** Possível localização da vítima · **V** Vestígio ou objeto
   encontrado · **!** Área de risco/perigo · **E** Ponto de encontro · **+** Vítima encontrada · **•** Outro.
+- **Ícones livres (migração 050)**: nada de lista fixa — **Escolher ícone** abre o **catálogo inteiro** (mais de 300 ícones por
+  assunto: resgate e emergência, pessoas, animais, veículos, terreno, água, construções, objetos e vestígios, equipamento,
+  sinais, letras e números), com **busca por palavra** ("cão", "barco", "base") e o campo **Ou digite** para qualquer letra,
+  sigla ou emoji (até 8 caracteres). Vale para os tipos criados, para as **categorias fixas** (no formulário, **✎ Ícones e
+  tipos → Trocar ícone**: ícone e cor de Última localização, Risco, Base etc. para todas as operações; as regras de cada
+  categoria continuam; **Voltar ao padrão** desfaz) e para os **grupos** (ícone opcional no formulário do grupo, mostrado
+  dentro do quadradinho da cor nas listas, na legenda, na ficha e no painel de grupos do mapa).
+- **Tipos de ponto criados pelos usuários (migração 047)**: no formulário, **＋ Novo tipo** cria um tipo com **nome**, **ícone**
+  (letra, número ou emoji, com sugestões prontas) e **cor** (amostras ou cor personalizada). O tipo fica disponível para todos os
+  responsáveis, em qualquer operação, e aparece junto das categorias fixas. **Editar tipos** muda o ícone/cor (os pontos já marcados
+  acompanham) ou **deixa de usar** o tipo (some da lista; os pontos continuam). Só quem criou ou um administrador altera. Mapa, listas,
+  3D, relatório (mapa e tabela) e exportações usam o ícone, a cor e o nome do tipo.
 - Cada ponto guarda título, categoria, coordenadas (editáveis no formulário), descrição, data e hora, quem
   registrou e, se veio de um relato, **quem relatou** (botão **Registrar como ponto de interesse** na janela
   do relato). Os detalhes mostram a **altitude aproximada** (modelo digital de terreno).
@@ -604,6 +751,23 @@ e o mapa e o rastreamento continuam funcionando.
 > **não foi verificado contra as APIs reais** (o ambiente de desenvolvimento não tinha acesso a elas). Confirme a
 > resposta real de cada fonte depois de publicar, em Preview, antes de usar em operação.
 
+- **Satélite (nuvens de chuva em todo o Brasil)**: botão **Satélite** no painel da Meteorologia, ligado por padrão. Imagem
+  do **GOES-East** (NOAA), canal infravermelho realçado, pelo **NASA GIBS** (domínio público, sem chave), **nova a cada 10 min**
+  (atraso de ~30 min) e cobrindo **o Brasil inteiro**. O painel filtra a imagem: as nuvens de topo muito frio (onde chove
+  forte e há tempestade) aparecem coloridas — azul, verde, amarelo e vermelho, do mais fraco ao mais forte —, as nuvens altas
+  ficam brancas translúcidas e o resto fica transparente, então o mapa continua visível. **▶** anima as **últimas 2 horas**
+  (12 imagens) e a barra escolhe o horário ("Satélite GOES · 11:50 (há 26 min)"). Mostra as nuvens que costumam dar chuva,
+  não a chuva medida no chão (isso é radar).
+- **Área do vento, da temperatura e da chuva no mapa**: **Operação** (240 km ao redor, mais detalhe), **Paraná** (o estado
+  inteiro, padrão) ou **Brasil** (o país inteiro, menos detalhe). Paraná e Brasil são iguais para todas as operações e ficam
+  30 min em cache no servidor (`/api/meteo?tipo=grade&area=parana|brasil`). Os alertas de chuva perto da operação continuam
+  usando a grade da operação, que é mais detalhada.
+- **Mapa de chuva (estilo radar)**: botão **Chuva** no painel da Meteorologia, **ligado por padrão**. Pinta sobre o mapa a
+  intensidade da chuva de agora em cada lugar da região (240 km), com as cores dos radares — azul-claro (garoa), azul, verde,
+  amarelo, laranja, vermelho e magenta (acima de 50 mm/h) — e transparência pela intensidade (garoa quase transparente). Vem
+  da mesma grade de previsão do vento e da temperatura (MET Norway, licença livre com atribuição), com legenda em mm/h. É
+  **previsão de modelo** com pontos a ~40 km (manchas suaves, não ecos de radar); a legenda diz isso. Com o radar RainViewer
+  ligado no servidor, ele aparece no lugar (as duas camadas de chuva não se sobrepõem).
 - **Radar de precipitação** (RainViewer): **desligado por padrão**, porque a licença do RainViewer é só pessoal e
   educacional. Liga-se com `METEO_RADAR=rainviewer` (só para testes). Não há radar gratuito com licença comercial que cubra
   o Brasil; a alternativa profissional é um provedor pago (ver a seção de licenças).
@@ -703,20 +867,18 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
   **"Reincluído · aguardando o celular voltar"**.
 - Sem reinclusão, quem foi removido não consegue voltar sozinho pelo link.
 
-### Localização do responsável (sempre ligada)
+### Localização e trilha do responsável (opcional, liga e desliga à mão)
 
-- Ao abrir ou criar uma operação ativa, **Minha posição liga automaticamente** — usando a permissão de
-  localização do navegador (se ela ainda não foi dada, o navegador pergunta).
-- O **estado** da localização não tem item no menu. Só aparece um aviso quando há problema real: *bloqueada no navegador* (o aviso traz **Como liberar**) ou *sem GPS neste aparelho*. O estado real continua o mesmo: *ligando…*, **ligada** (só depois de a
-  permissão ser concedida **e** chegar coordenada), *ligada · procurando sinal*, *bloqueada no navegador*
-  (tocar mostra como liberar) ou *sem envio · toque para tentar* (falha de conexão).
-- **Não existe desligar**: o item não é uma chave. Tocar nele com a posição ligada só confirma o estado;
-  com o envio parado (bloqueio ou falha), o aviso do menu oferece **Tentar de novo**. Escolhas
-  "desligada" guardadas por versões antigas do painel são ignoradas. Nunca há dois observadores de GPS nem
-  envios duplicados.
+- Ao abrir ou criar uma operação, **nada é registrado**: o responsável não entra no mapa e a posição dele não é enviada.
+- **Ferramentas → Registrar minha trilha** (o estado aparece ao lado: *desligado*, *ligando…*, *gravando*, *gravando · sem sinal*)
+  liga o registro **depois de uma confirmação** ("Iniciar o registro da sua trilha?"). Só então o responsável entra no mapa e a
+  trilha começa a ser gravada. Tocar de novo pede outra confirmação ("Interromper o registro da sua trilha?") e para o envio; o que
+  já foi gravado continua no mapa. O item pode ir para o topo pelo **Personalizar tela**.
+- Se a página recarregar (ou for reaberta) enquanto gravava neste aparelho, o painel **pergunta** se retoma — nunca liga sozinho.
+- Se o navegador bloqueia a localização, o aviso do menu traz **Como liberar**; ao liberar, o registro já confirmado continua.
 - Se o mesmo responsável está com o painel aberto em **dois aparelhos** e um deles já compartilha, o
-  outro mostra *enviada por outro aparelho seu* e não liga sozinho (a trilha não "pula" entre os dois);
-  o aviso do menu **Ferramentas** oferece **Usar este aparelho**, que passa o envio para este aparelho.
+  outro mostra *enviada por outro aparelho seu*; o aviso do menu **Ferramentas** oferece **Usar este aparelho**.
+- Fotos e mensagens do responsável continuam funcionando sem o registro da trilha (o cadastro no mapa é feito na hora, se preciso).
 - Limite: funciona com o painel **aberto e a tela ligada**. Em segundo plano ou com a tela bloqueada o
   navegador pode pausar o GPS (seção 8).
 
@@ -817,9 +979,11 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 ### Organização do painel
 
 - **Identidade visual** do painel do responsável (`public/css/militar.css`, só na página militar):
-  tipografia **IBM Plex** (Sans, Sans Condensed e Mono, arquivos locais em `public/vendor/fontes`, licença
-  OFL — sem CDN de fontes), cantos retos, sombras discretas, vermelho só para o crítico e âmbar para o que
-  está selecionado/ligado. A página do participante não muda.
+  tipografia **Barlow** (estilo DIN, de sinalização; Barlow no texto, Barlow Condensed nos títulos) e **IBM Plex Mono** nos
+  números — arquivos locais em `public/vendor/fontes`, licença OFL, sem CDN de fontes —, cantos retos, sombras discretas,
+  vermelho só para o crítico e âmbar para o que está selecionado/ligado. Em **Personalizar tela → Letra** dá para trocar
+  por **Técnica** (IBM Plex, a anterior) ou **Do aparelho** (a letra do sistema). Vale também no SCI e no dashboard em
+  janela própria. A página do participante não muda.
 - A barra superior tem só **Mensagens** e **Ferramentas** (☰).
 - **Brasão** do Corpo de Bombeiros Militar do Paraná no cabeçalho do painel (login, operações e responsáveis), no lugar da antiga marca "GBS" (`public/img/brasao-cbmpr.png`). A página do participante não muda.
 - **Filtros nas listas** (muito dado, então dá para reduzir a tela): em **operações**, busca por nome, local ou descrição (sem acento), situação (ativas ou encerradas), criador (**criadas por mim** ou **por outros**; só aparece para administrador, que enxerga todas) e período do acionamento, com **Limpar**; em **responsáveis**, busca por nome ou e-mail, situação (com acesso ou desativados), papel (administradores ou responsáveis comuns) e **Limpar**. O contador mostra quantos itens aparecem.
@@ -838,16 +1002,20 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     críticos como vítima, risco, base e última localização, pessoas, demais pontos, setores). Se o lado direito estiver
     ocupado, o nome tenta a esquerda, em cima ou embaixo; sem espaço, some até aproximar. Passar o mouse (ou focar) no
     marcador mostra o nome escondido. O nome do setor fica abaixo das pessoas e dos pontos, sem cobri-los.
-  - **Pessoas próximas agrupadas** de longe (até o zoom 15): um círculo com o número de pessoas e um anel com as cores dos
+  - **Pessoas próximas agrupadas** (até o zoom 18, ou seja, já na escala de **200 m** e de **100 m**; só de muito perto, 25 m ou
+    menos, ficam soltas): um círculo com o número de pessoas e um anel com as cores dos
     grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
     nunca entra no agrupamento. Fica **sempre ligado** (não há opção para desligar).
 - **Topo do painel**: as ações mais usadas ficam à vista — **Marcar ponto**, **Foto**, **Setor** (pergunta: desenhar a
   área ou por raio), **Trilha** (desenhar trilha/trajeto) e **Dashboard**. No notebook aparecem só os ícones (o nome
   vem ao passar o mouse); no celular e no tablet em pé, numa faixa logo abaixo do título, dividindo a largura.
-- O menu **Ferramentas** é **uma lista só, sem subgrupos**: Vítima encontrada, Enviar destino, Setores, trilhas e
-  pontos, Grupos, Deslocamentos de grupos, Dados da operação, Diário, Relatório final (PDF), Equipe de responsáveis,
-  Ir para coordenada, Medir distância e área, Importar arquivo, Exportar, Diagnóstico do GPS, Formato das
-  coordenadas e **Tema**;
+- O menu **Ferramentas** tem uma **busca** no topo ("Buscar função…": filtra pelo nome; Enter abre a primeira) e as funções
+  em **seções recolhíveis** (tocar no título recolhe/abre; fica lembrado neste aparelho):
+  **Em campo** (Registrar minha trilha, Vítima encontrada, Cadastro rápido, Enviar destino, Pedidos de ajuda) ·
+  **Equipes** (Grupos, Deslocamentos, Binômio, Drone e água, Equipe de responsáveis) ·
+  **Mapa e arquivos** (Setores, trilhas e pontos, Ir para coordenada, Medir, Régua, Importar, Exportar) ·
+  **Comando e registros** (Briefing e passagem, Dados da operação, Diário, Relatório) ·
+  **Ajustes** (Personalizar tela, Diagnóstico do GPS, Formato das coordenadas, Tema);
   - **Ações definitivas** — sempre **no fim**, separado por uma linha vermelha:
     **Encerrar operação** (pede confirmação) e, com espaço entre os dois, **Excluir operação** (só para
     quem pode; confirmação reforçada: lista o que será apagado e exige **digitar o nome da operação**).
@@ -897,14 +1065,23 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     no mesmo agrupamento quando está perto. O grupo é um **quadrado arredondado** (as pessoas agrupadas são
     círculos) com o número e um anel com a cor de cada tipo (azul-claro pontos de interesse, laranja relatos, roxo
     fotos); um **!** vermelho avisa que há área de risco ou pedido de ajuda dentro. Passar o mouse diz quantos de
-    cada; tocar aproxima; vários no mesmo lugar abrem em leque. De perto (zoom 17+) o raio do agrupamento diminui.
-    **Vítima encontrada** (ponto ou relato) nunca entra no grupo, e os círculos das áreas de risco e da base
-    continuam sempre visíveis. **Ver no mapa** de um ponto agrupado aproxima até ele aparecer e pisca. As camadas
+    cada; tocar aproxima; vários no mesmo lugar abrem em leque. O agrupamento já funciona na escala de 200 m e de 100 m (raio de
+    40 a 50 px) e só diminui de muito perto (zoom 19+).
+    **Vítima encontrada** (ponto ou relato) agrupa como os demais, mas o grupo fica inconfundível: **borda verde
+    pulsante**, um **+ verde** no canto com a quantidade (**+2**) e a etiqueta **VÍTIMA** / **2 VÍTIMAS** ao lado, visível
+    em qualquer zoom (relato e ponto da mesma vítima, a menos de 30 m, contam como uma); de perto ela diminui junto com os outros
+    ícones (só o pedido de ajuda mantém um tamanho mínimo). **Indicações a verificar** (binômio, drone e água, em amarelo
+    no anel) e **pontos importados** (verde-limão) também entram no agrupamento e diminuem com o zoom, assim como o
+    marcador de destino. Os círculos das áreas de risco e da base continuam sempre visíveis. **Ver no mapa** de um ponto agrupado aproxima até ele aparecer e pisca. As camadas
     e os modos (Pontos, Relatos, Fotos) continuam ligando e desligando cada tipo. A legenda mostra os dois
     agrupamentos.
   - **Trilhas finas de longe**: a espessura (e o tracejado dos civis, o contorno claro e as marcas de falha)
     acompanha o zoom — de perto como antes (4 px; 6 px a da pessoa selecionada) e, afastando, afina até 1,5 px,
     para não cobrir o mapa.
+  - **Trilhas proporcionais à tela**: além do zoom, a espessura acompanha a largura da tela — igual à de sempre em
+    telas a partir de 1280 px e mais fina em telas menores (até 60% num celular de 360 px), nunca mais grossa que antes.
+    Vale para trilhas GPS, trilhas desenhadas, trajetos dos grupos e a trilha do próprio participante no celular; girar o
+    celular ou redimensionar a janela reajusta na hora.
   - **Camadas → Mostrar no mapa**: **um botão por camada** (aceso = aparece; apagado = riscado), agrupados em
     **Equipes** (Pessoas, Trilhas de GPS, Nomes), **Planejamento da busca** (Setores, Trilhas
     planejadas, Trilhas percorridas, Pontos de interesse, Local da operação) e **Registros do campo** (Relatos,
@@ -917,9 +1094,13 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **qualquer função das Ferramentas** (Grupos, Diário, Enviar destino, Vítima encontrada, Exportar…) pode ir para o
     topo: arraste da bandeja **Em Ferramentas** até o lugar desejado, ou toque nela para pôr no fim;
   - o painel **Grupos** do mapa pode ser arrastado para qualquer canto (ou escolhido no quadradinho);
-  - **tamanho do texto** (Menor, Normal, Maior, Grande) muda o painel todo na hora;
+  - **tamanho do texto** (Mínimo, Menor, Normal, Maior, Grande) muda o painel todo na hora (escala sobre a base de cada
+    página; antes "Menor" ficava igual ao normal no painel);
   - **Padrão** volta tudo como era; **Concluir** (ou Esc) sai do modo. No teclado: ← → mudam a ordem do botão em foco e
     Delete tira do topo. No modo de edição os botões não executam a ação, só se movem.
+- **Barra de desenho** (marcar ponto, setor, trilha, medir, vítima…), sempre no mesmo formato e numa linha: a instrução,
+  **↶** (desfazer), **⋯** (as ações secundárias: limpar, mover mapa, mais opções…), a ação principal (**Concluir**) e **×**
+  (cancelar). Uma ação extra só (ex.: "Usar minha posição") fica à vista.
 - **Modais e formulários** (padrão único, `UI.abrirModal` em `js/interface.js`): cabeçalho fixo com o título, o **i**
   (explicação, em vez de parágrafos de texto) e o **×**; corpo que rola; rodapé com as ações sempre à vista. Campos
   agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
@@ -1016,6 +1197,12 @@ chave própria).
   da chamada, nunca na URL, e não aparece em notificações.
 - No painel: faixa de alerta própria (magenta; roxo escuro para óbito) com alarme, selo com a condição no
   relato, na ficha, na central e nos alertas, e marcador no mapa.
+- **Tocar no marcador da vítima** mostra o balão com o **nome da vítima** (e a idade, "~" se estimada), a condição, **quem
+  encontrou**, o local e o aviso "falta completar a ficha". **O que aconteceu ›** (ou dois toques, ou a mensagem "Detalhes" na
+  central) abre a janela completa: vítima, hora (e há quanto tempo), quem encontrou e quem registrou, local, coordenadas, **setor**,
+  distância do último local visto, tempo depois do início, estado e encaminhamento, e os **participantes**: quem encontrou e quem estava
+  **a até 300 m** (pela última posição, com grupo, distância e idade da posição, e atalho para a ficha). Daí abre a ficha da
+  vítima (ou **Completar a ficha**) e **Ver no mapa**.
 - **O responsável também registra** (quando a notícia chega por rádio, telefone ou pessoalmente), por três
   caminhos: **Ferramentas → Vítima encontrada**, **toque longo / botão direito no mapa → ✚ Vítima encontrada
   aqui** e, na ficha de um participante, **✚ Encontrou a vítima**. O formulário pede a **condição** (com vida ou
@@ -1075,12 +1262,28 @@ chave própria).
 - **Gerar PDF** monta, no navegador: capa com natureza, números e datas, sumário, a ocorrência (o IPO, com cada dado
   uma só vez: tipo não aparece, a natureza diz o tipo), pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
   setor, início, fim, duração, área, deslocamentos e fotos tiradas dentro do setor), pontos e encontros,
+  **mapa geral da operação** com todos os elementos registrados (trilhas GPS, trilhas desenhadas, pontos com o ícone do tipo,
+  relatos, vítimas, fotos e o local) — **também quando não há setores cadastrados**,
   diário consolidado por dia (sem repetir os registros do IPO) e resultado (sem campos de assinatura). Cabeçalho e rodapé em todas as páginas
   ("DOCUMENTO RESTRITO", página X de Y).
 - O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios` (sem exclusão pelo app); a lista
   **Relatórios já gerados** permite baixar de novo.
 - Ao **encerrar** a operação ou **apagar os dados**, se ainda não houver relatório, o painel oferece gerar antes
   (depois da retenção o relatório sai só com cadastro, diário e resultado).
+- **Relatório diário (migração 049)**: o painel aberto numa operação ativa **gera e guarda sozinho** o relatório de cada
+  dia que já terminou (e o de hoje a partir das 23h50), sem ninguém pedir: capa com o dia por extenso e o "Nº dia" da
+  operação, números do dia (registros no diário, encontros e relatos, setores concluídos, pessoas que entraram, fotos), mapa
+  geral com a situação até o fim do dia, setores, vítimas, encontros do dia, o diário do dia e os pontos marcados no dia.
+  Um por dia: com dois painéis abertos, o banco dá a vez a um só (`relatorio_diario_reservar`, reserva de 15 min); dia que
+  já tem relatório não é refeito. Na tela do relatório, **Relatório de hoje (PDF)** baixa o do dia até agora (sem ocupar o
+  lugar do dia completo). Na lista **Relatórios já gerados**, cada um mostra o tipo (Final, Diário de dd/mm/aaaa, Passagem
+  de comando). Cada relatório gerado entra no diário.
+- **Relatório da passagem de comando (migração 049)**: quando quem recebe **aceita** o comando, o relatório da passagem é
+  gerado e guardado sozinho; no **Histórico de passagens** (Briefing e passagem de comando), **Relatório (PDF)** baixa e
+  guarda de novo. Traz quem passou, quem recebeu, a hora do pedido e do aceite (ou recusa), o recado, a resposta e o
+  **briefing entregue** (objetivo, vítimas, último local visto, hipóteses, riscos, equipes, tarefas, comunicações e
+  decisões pendentes), como estava no momento da passagem.
+- Os avisos de "ainda não há relatório" antes de encerrar ou apagar contam só o **relatório final**.
 - Biblioteca: **pdfmake 0.2.23** (`public/vendor/pdfmake/`, licença MIT), carregada só ao gerar. Os mapas são
   desenhados em canvas com o OpenStreetMap de fundo; sem acesso ao fundo, o mapa sai sem ele (com escala).
 
@@ -1118,13 +1321,18 @@ dado de participante sai do banco nesses painéis.
   - Dashboard da operação: os números abrem as pessoas (efetivo, km e horas por pessoa), os setores e a duração;
     uma coluna do gráfico mostra quem estava em campo naquele intervalo; um grupo, os integrantes; um setor, a
     cobertura, quem passou e **Ver setor no mapa**. Tocar numa pessoa mostra a pessoa no mapa e abre a ficha.
-    Pedidos de ajuda, relatos e ordens abrem as mensagens; retornos atrasados, os alertas; o diário, o diário.
+    **Pedidos de ajuda, pistas, vestígios, objetos, obstáculos e ordens mostram a lista deles ali mesmo** (não abrem a área
+    de mensagens); no painel, tocar num relato abre o detalhe dele. Retornos atrasados abrem os alertas; o diário, o diário.
+    Uma vítima abre os dados dela (situação, hora, tempo, distância do ULV e situação no SCI).
 - **Operação → Dashboard da operação** (janela larga; no celular, uma coluna):
   - seis números: duração, efetivo (e quantos em campo agora), km percorridos, esforço em pessoa·hora,
-    setores (com a % da área coberta) e se a vítima foi localizada;
-  - **pessoas em campo** ao longo do tempo (uma coluna por intervalo de 15 min a 1 dia), com a hora da
-    localização da vítima marcada;
-  - **vítima**: condição, hora, tempo após o início, distância do ULV e perfis das fichas;
+    setores (com a % da área coberta) e vítimas localizadas (**"2 de 3"** quando há mais de uma);
+  - **pessoas em campo** ao longo do tempo (uma coluna por intervalo de 15 min a 1 dia), com a hora em que **cada
+    vítima** foi localizada marcada;
+  - **vítimas** (migração 048): **várias por ocorrência**, cada uma com os próprios dados — V-01, V-02… (o nome aparece só
+    no painel, com login), situação (procurando / com vida / em óbito, com a hora), distância do ULV, tempo após o início,
+    idade, perfil e a fase e a triagem no SCI. Cada ficha conta a localização ligada a ela; uma localização registrada sem
+    ficha vira uma vítima própria ("Vítima sem ficha"). Com uma só vítima, o cartão continua como antes;
   - **esforço por grupo** (pessoas, km e horas com GPS) e **cobertura dos setores** (% da área por onde passou
     alguma trilha, em quadrados de ~30 m, e a última passagem; os menos cobertos primeiro);
   - **ocorrências**: pedidos de ajuda, pistas, vestígios, objetos, obstáculos, fotos, pontos marcados, ordens
@@ -1132,14 +1340,34 @@ dado de participante sai do banco nesses painéis.
   Esforço, setores e ocorrências são calculados no navegador com o que o painel já carregou (trilhas filtradas
   pelo mesmo critério do mapa). Só a parte da vítima vem do banco (`estudo_operacao`, migração 023); sem ela, o
   restante aparece mesmo assim.
+  - **Atualiza sozinho** (sem botão Atualizar): o dashboard da operação a cada 30 s e o geral a cada 2 min, com a tela
+    visível, sem piscar nem perder a rolagem ("● atualiza sozinho" no topo).
+  - **↗ Abrir em outra janela** (`dashboard.html?op=…`): agora lê do banco os mesmos dados do painel
+    (`dashboard_operacao_dados`, migração 048: participantes com a trilha resumida a um ponto a cada 30 s, grupos,
+    setores, ocorrências e vítimas) — antes a janela abria sem as trilhas e mostrava números errados (efetivo e km zerados).
+  - **🔗 Link público** (no topo do dashboard da operação, para quem pode alterar a operação): cria um endereço
+    `dashboard.html?p=<token>` para acompanhar **sem login e só visualizando** (familiares, imprensa, outros órgãos, sala de
+    situação). Mostra os mesmos números e gráficos, **sem nomes** (pessoas viram "Bombeiro 1", "Civil 2"; vítimas, "V-01"),
+    sem textos de relatos, sem fotos e sem telefones; não há nenhum botão de alteração e o banco não aceita escrita pelo
+    link (`dashboard_publico`, a única função liberada sem login). **Copiar**, **Enviar pelo WhatsApp**, **Trocar link** (o
+    anterior para de funcionar na hora) e **Desligar**; criar, trocar e desligar entram no diário. Link trocado ou
+    desligado mostra "Este link não funciona mais".
 - **ULV** = o ponto do cadastro da operação (coordenadas do último avistamento). **Localização da vítima** = o primeiro
-  registro de vítima localizada da operação (`vitima_localizacoes`). **Distância** = Haversine entre os dois.
+  registro de localização **daquela vítima** (o ligado à ficha; sem ficha, cada registro é uma vítima). **Distância** =
+  Haversine entre os dois. No Dashboard geral (`estudo_geral`, migração 048) **cada vítima localizada é um caso** (antes,
+  só a primeira de cada operação); o perfil conta a distância da própria vítima.
 - **Perfil da vítima** = uma lista de seleção na ficha ("Perfil da vítima (para estudos)"), sem digitação. Os valores vêm de uma só lista (`PERFIS_VITIMA`, em `ipo.js`), usada pelo formulário e pelos gráficos, e o banco aceita só esses valores. Não é calculado pela idade.
   Alzheimer/demência, autismo, deficiência intelectual, transtorno mental, outro). Não é calculado pela idade.
+- **Qualidade dos dados** (cartão no fim do Dashboard, migração 043, função `estudo_qualidade`): diz **sobre o que** os
+  números foram calculados. Unidade de análise: a **operação** (primeira localização com posição). Casos elegíveis,
+  com localização, **válidos para distância** (ULV e posição) e **para tempo** (início e hora, sem tempo negativo);
+  **ausentes** contados à parte (sem ULV, localização sem posição, sem hora de início) — **ausente nunca vira zero**;
+  **não localizados** (encerradas sem localização: ficam fora das medianas, censurados); abertas sem localização;
+  **possíveis duplicatas** (mesmo tipo, ULV a menos de 1 km e início a menos de 48 h); fichas sem idade, com idade
+  estimada e sem perfil (com o mesmo sigilo de 5 casos). A proporção "com vida / em óbito" usa todas as localizadas
+  como denominador (a oculta não conta como zero).
 - **Sigilo dos números:** grupos com **menos de 5 casos** chegam ocultos ("oculto (menos de 5 casos)"), no banco
   (`estudo_geral`, `estudo_operacao`), não só na tela.
-- **Limitação conhecida:** a localização não está ligada a uma ficha específica. Com duas vítimas na mesma operação,
-  a distância conta para as duas. Ligar a localização à ficha é o próximo passo, se o estudo precisar disso.
 - Exportar os dados para pesquisa **não está implementado**: depende de decisão sobre dados de saúde (LGPD) e de
   aprovação ética, antes de qualquer conjunto de dados sair do sistema.
 
@@ -1162,6 +1390,9 @@ Não existe formulário separado: o IPO **é** o cadastro. Os campos ficam num s
   local (ponto no mapa ou só endereço), solicitante (nome e documento), natureza, destinatários, data e hora do último momento
   visto, nº de pessoas perdidas, buscas preliminares, possibilidade de vida ("Não apurado" quando não se sabe), BMs
   diretamente envolvidos, imagens anexas, responsável pelas informações, a observação e as vítimas.
+  Abaixo da hora do último momento visto, a **origem da hora**: informado (testemunha, câmera, registro), estimado
+  ou **desconhecido** (apurado e ninguém sabe). Em branco fica "não informado"; com hora e sem origem, vale "informado".
+  Os Dados da operação e o PDF mostram "(estimado)" ao lado da hora.
   Em celular, o formulário tem uma coluna só; em tablet e PC (a partir de 760 px) as seções ficam lado a lado
   (Ocorrência | Solicitante, Busca | Observação) e a janela é mais larga. Na criação, Local | Ocorrência e
   nome da operação e retenção na mesma linha.
@@ -1223,6 +1454,7 @@ rastreamento-sar/
 ├── public/                     ← site publicado pelo Vercel
 │   ├── militar.html            painel do responsável
 │   ├── civil.html              página do participante
+│   ├── sci.html                painel de comando SCI em janela própria (comando remoto, segundo monitor, impressão)
 │   ├── sw.js                   service worker: notificações no Android, página e mapa guardados para abrir sem internet
 │   ├── versao.json             versão publicada (páginas abertas há muito tempo avisam que há versão nova)
 │   ├── css/estilos.css         estilos (alto contraste, botões grandes, responsivo)
@@ -1242,6 +1474,14 @@ rastreamento-sar/
 │       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
 │       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
 │       ├── briefing.js         briefing da operação e passagem de comando com aceite
+│       ├── sci-core.js         regras do SCI sem tela: totais, alertas, resumo, imprensa, leitura das frases (também no servidor)
+│       ├── sci.js              painel de comando SCI (blocos, quadro de vítimas, linha do tempo, formulários, tempo real)
+│       ├── sci-janela.js       abre o SCI em sci.html (com login quando não há sessão)
+│       ├── convites.js         convite por e-mail: cadastro, envio, situação e link
+│       ├── cores.js            cor livre (tom, intensidade, claridade, minhas cores) e conversões
+│       ├── relatos-revisao.js  revisão dos relatos (estado, justificativa, versões, hora do fato)
+│       ├── binomio.js          sessão do binômio cão e condutor: indicações e confirmações independentes
+│       ├── observacoes-campo.js drone (plano, telemetria, área observada, foco térmico) e indicação na água
 │       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
 │       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM, limite da política)
 │       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
@@ -1252,6 +1492,8 @@ rastreamento-sar/
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
 │   ├── responsaveis.js         cria login e redefine senha de responsáveis (só administradores; chave SECRETA)
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
+│   ├── sci-ia.js               assistente opcional do Posto de Comando: frase → ações para conferir (mesma chave do POA/POD)
+│   ├── convidar.js             envio do convite de participante por e-mail (chave RESEND_API_KEY só no servidor)
 │   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
 ├── supabase/
@@ -1472,8 +1714,11 @@ rastreamento-sar/
    | `SUPABASE_SECRET_KEY` | chave secret (ou service_role) — usada na limpeza diária e no cadastro de responsáveis |
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
+   | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
+   | `EMAIL_REMETENTE` | (com a chave acima) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
+   | `SITE_URL` | (opcional) endereço público do site, ex.: `https://busca.seudominio.com.br`. Sem ela, o link do e-mail usa o endereço da requisição |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
-   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada só por `/api/poa-ia` para o botão "Sugerir com IA" do POA/POD. Sem ela, o botão avisa e o preenchimento manual segue normal |
+   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada por `/api/poa-ia` (botão "Sugerir com IA" do POA/POD) e por `/api/sci-ia` (botão "Entender com IA" do SCI). Sem ela, os botões avisam e o preenchimento manual (e a leitura de frases do próprio SCI) segue normal |
    | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-3.8-flash` |
    | `POA_IA_PROVEDOR` | (opcional) `anthropic` ou `gemini`. Sem ela, usa o provedor que tiver chave (Anthropic primeiro) |
    | `POA_IA_MODELO` | (opcional) troca o modelo do provedor escolhido. Padrões: `claude-haiku-5-5` (Anthropic, o mais barato) e `gemini-3.8-flash` |
@@ -1506,7 +1751,7 @@ Depois do deploy, o Vercel mostra o domínio do projeto, por exemplo `https://ra
 2. **Link do participante**: é gerado **por operação**, no botão **Convidar** do cabeçalho da operação. Há duas abas:
    - **Link para CIVIS** — `https://rastreamento-sar.vercel.app/civil.html#t=<token de 64 caracteres>`
      Quem entra por ele sempre aparece como **civil**.
-   - **Link para MILITARES** — outro token; permite escolher **militar** (ou civil). Compartilhe só com militares.
+   - **Link para BOMBEIROS** — outro token; permite escolher **militar** (ou civil). Compartilhe só com bombeiros.
 
    Cada aba tem **Copiar**, **Compartilhar** (WhatsApp etc., no celular) e **QR Code** para leitura na base.
 
@@ -1547,9 +1792,9 @@ RETORNE, ATENÇÃO, MUDE A ROTA e PARE pedem confirmação antes do envio, e o t
 camadas (Mapa, Topográfico, Satélite), fotos e relatos ficam em **Ferramentas** (seção 1); a lista
 de participantes tem os próprios botões de ocultar/mostrar.
 
-**Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **INICIAR RASTREAMENTO** → permite
+**Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **COMEÇAR** → confirma ("Começar a enviar sua localização?") → permite
 a localização. O **CPF é opcional** para todos (migração 029); se informado, é conferido pelos dígitos
-verificadores. O celular é obrigatório para civis e opcional para militares (link de militares). Deve manter a página aberta e a tela
+verificadores. O celular é obrigatório para civis e opcional para militares (link dos bombeiros). Deve manter a página aberta e a tela
 ligada (a opção "Manter a tela ligada" já vem marcada). Para sair, toca em **Solicitar encerramento**.
 
 **Na ficha do participante**, o CPF aparece mascarado (`***.456.789-**`, com o botão "mostrar") e
@@ -1736,9 +1981,83 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40c | **Ferramentas → Personalizar tela**: arrastar **Foto** para fora do topo, arrastar **Grupos** da bandeja para o 2º lugar, arrastar o painel de grupos para o canto inferior esquerdo, texto **Maior**, **Concluir** e recarregar | Foto passa a ficar em Ferramentas e funciona de lá; Grupos aparece no topo e abre a lista de grupos; o painel de grupos fica no canto escolhido; tudo continua igual depois de recarregar; **Padrão** desfaz |
 | 40d | Abrir os modais (Encerrar, Vítima encontrada, Marcar ponto, Enviar destino, Relatório final) no computador e no celular | título com **i** e **×** no topo; ações sempre visíveis embaixo; no celular, folha de baixo sem rolagem lateral |
 | 40e | Civil entra na busca com internet e espera aparecer "Mapa guardado no aparelho"; liga o modo avião, **recarrega a página** e anda 2 min; desliga o modo avião | a página reabre direto no rastreamento, o mapa da área aparece, os pontos ficam na fila e chegam ao painel quando o sinal volta |
+| 40f | Num relato de vestígio: **Detalhes e revisão → Revisar**, escolher **Confirmado** sem justificativa; depois com justificativa e hora do fato estimada | sem justificativa não salva; salvo, o relato mostra Fato (estimado), Recebido e Revisado, "Versões da revisão (1)" e o selo **Confirmado** no feed |
+| 40g | **Ferramentas → Binômio → + Nova sessão** (cão, condutor participante, setor, artigo de odor), **Iniciar**, andar 2 min com o condutor, **⚑ Indicação**, **Confirmar por outro meio** sem método e depois com "Equipe no local" | a trilha roxa do condutor aparece no mapa só durante a sessão; I1 "em análise" no mapa; sem método não confirma; C1 "pendente" até o **Resultado** |
+| 40h | **Ferramentas → Drone e água**: importar o GPX do voo em **+ Telemetria**, marcar um **+ Foco térmico** no mapa e descartá-lo com justificativa; na aba Água, **+ Indicação na água** sem mexer na corrente | a linha do voo aparece; o foco começa "a verificar" e fica riscado ao descartar; a indicação mostra "Corrente: desconhecida" e a fonte do vento |
+| 40i | Ficha da vítima com idade 70 e **estimada**; IPO com o último momento visto **estimado**; abrir o Dashboard geral | a ficha mostra "cerca de 70 anos (estimada)", os Dados da operação "(estimado)"; o cartão **Qualidade dos dados** mostra unidade, válidos, ausentes, não localizados e duplicatas |
+| 40j | Tocar no marcador da vítima localizada; depois **O que aconteceu ›** | o balão mostra o nome da vítima, a condição, quem encontrou e o local; a janela mostra setor, distância do ULV, quem encontrou e quem estava a até 300 m |
+| 40k | **Ferramentas → Cadastro rápido de vítima**: só **Idoso**, **Feminino** e a roupa → **Salvar e novo**; depois só o nome → Enter | duas fichas "completar" na lista de vítimas; abrir uma e tocar em **Completar a ficha** tira a marca ao salvar |
+| 40l | **Novo grupo**: tocar em **＋**, escolher uma cor pelo tom/claridade, **Guardar em "Minhas cores"**, criar outro grupo e reutilizá-la; repetir no **Setor** | a cor escolhida aparece no marcador, na trilha e na lista; "Minhas cores" aparece nos dois formulários |
+| 40m | Aproximar o mapa de uma equipe de 3 pessoas a ~15 m uma da outra, do zoom 16 até o 20 | até o zoom 18 ficam num círculo com o número; a partir do 19 se separam; os ícones diminuem do 17 em diante e a vítima localizada continua grande |
+| 40n | **Convidar → ✉ Convidar por e-mail** com nome e e-mail reais; abrir o e-mail no celular e o link | o e-mail chega com o botão; a página abre com o nome preenchido; ao começar, o convite passa a **Entrou**; sem `RESEND_API_KEY`, aparecem **Abrir no meu e-mail** e **Copiar link** |
+| 40n2 | Com uma ficha de vítima cadastrada, abrir **SCI → Vítimas**; no celular de campo, **Encontrei a vítima** | a ficha aparece em Procuradas e passa sozinha para Localizadas (com o nome) em poucos segundos; o marcador no mapa tem **Abrir no SCI** |
+| 40n3 | Com um grupo em deslocamento e um pedido de ajuda aberto, abrir o SCI | Visão geral: equipe em missão, alerta crítico do pedido de ajuda; aba Equipes: grupo com ★, deslocamento e recursos; linha do tempo com o diário |
+| 40o | **SCI → Modo teste**, registrar 2 vítimas e "despacho 7h15", **Sair do modo teste (zerar)** | quadro vazio, total [PENDENTE], linha do tempo vazia; o diário não tem os registros de teste |
+| 40p | No SCI: "duas vítimas localizadas na água", arrastar V-01 para a ACV, tocar e triar amarela; "V-02 na ACV, vermelha"; "segurança: Sgt Dinardi" | quadrados nos quadros certos, cor só depois da ACV, alerta crítico da V-02 vermelha e o de segurança some ao designar |
+| 40q | Abrir **↗ Outra janela** no celular de outro responsável, sem estar logado | pede o login; depois mostra o painel e se atualiza sozinho quando o PC registra algo |
+| 40r | Falar no 🎤 "SAMU no local com 5 pessoas" e conferir | órgão SAMU no local com 5 pessoas e hora de chegada; faixa de órgãos atualizada; entra na linha do tempo e no diário |
+| 40r2 | Abrir uma operação no celular do responsável; depois **Ferramentas → Registrar minha trilha** → **Iniciar registro**; andar 2 min; tocar de novo → **Interromper** | ao abrir, o responsável não aparece no mapa; só depois de confirmar ele aparece e a trilha é gravada; ao interromper, o envio para e o item volta a "desligado" |
+| 40r3 | No celular do civil, tocar **COMEÇAR** | aparece "Começar a enviar sua localização?"; **Agora não** não envia nada; **Começar** entra no rastreamento |
+| 40r4 | **Trilha → • Ponto a ponto**, tocar 4 pontos, arrastar o mapa, **Desfazer ponto**, **✔ Concluir** | os pontos aparecem ligados por retas; arrastar só move o mapa; a trilha é salva como planejada ("Trilha N · hora") sem abrir janelas |
+| 40r5 | Abrir o painel com trilhas no computador e no celular (e girar o celular) | no celular as trilhas ficam mais finas; no computador, iguais às de antes |
+| 40r6 | Ligar **☂ Meteorologia** num dia com chuva na região e afastar o mapa | o botão **Chuva** vem aceso; manchas coloridas (azul a vermelho) mostram onde chove, com a legenda em mm/h; tocar em **Chuva** tira a camada |
+| 40r7 | Operação com 2 fichas de vítima e 2 registros de "vítima encontrada" (um ligado à ficha, outro sem ficha) → **Dashboard** | "Localizadas 2 de 3"; o cartão Vítimas lista V-01, V-02, V-03 com a situação de cada uma; o gráfico marca as duas horas; tocar numa vítima mostra os dados dela |
+| 40r8 | No dashboard da operação, tocar em **Vestígios**; deixar o dashboard aberto 1 min enquanto chega um relato | abre a lista dos vestígios (a área de mensagens não abre); o número muda sozinho, sem tocar em nada |
+| 40r9 | **↗ Abrir em outra janela** com trilhas na operação | efetivo, km, esforço e setores iguais aos do painel |
+| 40r10 | **🔗 Link público → Criar**, abrir o link num celular sem login; depois **Trocar link** | o celular mostra o dashboard sem nomes e sem botões; depois da troca, o link antigo diz "Este link não funciona mais" |
+| 40r11 | Deixar o painel aberto numa operação ativa acionada há 2 dias; abrir **Relatório final** depois de ~1 min | a lista mostra "Diário de dd/mm/aaaa" para cada dia já terminado (um por dia); abrir o painel em outro computador não duplica |
+| 40r12 | **Passar o comando** e, no outro aparelho, **Aceitar**; depois **Histórico de passagens → Relatório (PDF)** | a lista de relatórios ganha "Passagem de comando"; o PDF tem quem passou, quem recebeu, as horas e o briefing entregue |
+| 40v | **Marcar ponto → ✎ Ícones e tipos → Base → Trocar ícone**, buscar "barraca", escolher, cor azul, **Salvar** | o ponto Base do mapa muda para ⛺ azul em todas as operações; **Voltar ao padrão** traz o B de volta |
+| 40w | **Grupos → Novo grupo**, **Escolher ícone** → "serviço" → 🐕‍🦺 | o grupo aparece com 🐕‍🦺 dentro da cor na lista, na legenda e no painel de grupos do mapa |
+| 40x | **Ferramentas → Ajustes → Personalizar tela**: Texto **Menor** e depois **Mínimo**; Letra **Técnica** e **Do aparelho** | o texto do painel diminui a cada passo; a letra muda na hora e fica lembrada ao recarregar |
+| 40y | **Ferramentas**: digitar "rela" na busca e Enter; recolher a seção **Equipes** e reabrir o menu | só "Relatório" aparece e Enter abre; Equipes continua recolhida |
+| 40z | **Trilha**: desenhar, abrir **⋯** e escolher **Limpar**; depois **×** | a barra fica numa linha (↶, ⋯, Concluir, ×); o menu ⋯ mostra Limpar, Mover mapa e Mais opções |
+| 40za | Marcar uma **Vítima encontrada** perto de outros pontos; afastar o mapa (zoom 14) e depois aproximar até o zoom 20 | de longe, o grupo mostra o **+ verde**; de perto a vítima aparece solta e diminui a cada nível, como os demais ícones; binômio, drone/água e pontos importados também agrupam e diminuem |
+| 40zb | Agrupar no mapa (zoom 14) duas vítimas registradas a ~200 m uma da outra, com outros pontos perto | o grupo tem borda verde pulsante, **+2** e a etiqueta **2 VÍTIMAS** ao lado |
+| 40zc | **☂ Meteorologia**: deixar **Satélite** ligado, afastar até ver o Brasil; tocar em **▶**; trocar a **Área** para Paraná e Brasil | nuvens de chuva coloridas em todo o país, com o horário da imagem; a animação passa pelas últimas 2 h; a chuva/vento/temperatura cobrem o estado ou o país |
+| 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
+| 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
+| 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Relatório diário e da passagem de comando (migração 049)**: banco — 926 verificações (reserva do dia, um diário por dia, reserva de outro responsável e expiração, passagem só da própria operação, diário da operação, relatórios antigos como "final"); unitários da montagem dos dois PDFs; navegador — diários dos dias terminados gerados e guardados sem baixar, sem repetir, relatório de hoje só baixado, relatório da passagem.
+- **Dashboard em outra janela e por link público; várias vítimas (migração 048)**: banco — 912 verificações (estudo com cada vítima e a própria localização, dados da janela iguais aos do painel, link público sem nomes nem textos, troca e desligamento do link, nada gravável sem login, estudo geral por vítima); navegador — painel, janela própria, link público e link inválido, atualização automática e lista de vestígios.
+- **Convites por categoria/WhatsApp e tipos de ponto (migração 047)**: banco — 889 verificações (convite por WhatsApp com telefone normalizado, link por categoria, tipos de ponto com permissão de edição, pontos acompanhando o tipo, relatório com nome/ícone/cor do tipo); navegador — convites por WhatsApp/e-mail com categoria e tipos de ponto (criar, marcar, voltar à categoria fixa) a 1280 e 390 px.
+- **SCI integrado (migração 046)**: banco — 868 verificações (vítima encontrada entra sozinha no quadro, com os dados da ficha, completando
+  a que já estava lançada, óbito como cinza, sem duplicar no diário; `sci_contexto` com comando, briefing, fichas, localizações, equipes,
+  participantes, pontos, setores, alertas, decisões, verificação e diário, só para os responsáveis; instalação ligada a ponto); unitários —
+  procuradas pelas fichas e alertas do app no SCI. Navegador (1280 px e 390 px): CI do comando, números do app, mapa, diário nos últimos
+  registros, ficha arrastada para "Localizadas" abrindo o "Vítima encontrada" do app e voltando ao SCI, PC ligado à base do mapa, equipes
+  dos grupos com missão no SCI, linha do tempo única com filtro e marcos sugeridos, objetivo salvo no briefing, pedido de ajuda como
+  alerta crítico; janela própria registrando a vítima encontrada pelo mesmo fluxo.
+- **Painel de comando SCI (migração 045)**: banco — 852 verificações (migrações 007–045: funções e total com eventos automáticos, marcos com
+  correção e retirada, vítimas numeradas com horários de cada passo e correção de fase, óbito como segurança, registro manual, confirmação,
+  correção com histórico, anulação com motivo, espelho no diário, itens validados por tipo, imagens no bucket privado, acesso só dos
+  responsáveis, modo teste sem diário e zerar, encerrada, retenção e exclusão); unitários — regras do SCI com os dados e as frases do
+  simulado Três Bocas (totais, alertas, resumo, imprensa, 14 frases, divergências, normalização) e o endpoint `/api/sci-ia` com a rede
+  simulada. Navegador (Playwright, 1280 px e 390 px): abrir o SCI, marco por frase com hora, vítimas (nova, arrastar para a ACV, ficha,
+  triagem com cor), frase de vítima com alerta crítico, funções e acompanhamento remoto, órgão por frase, total não confirmado, rio
+  subindo, registro não confirmado e confirmação, "O que falta"; janela própria com sessão, encerrada (só consulta) e com login.
+
+- **Cadastro rápido, vítima no mapa, cor livre, agrupamento e convite por e-mail (migração 044)**: banco — 800 verificações
+  (migrações 007–044: ficha rápida, completar tira a marca, vítima só com o nome nasce rápida; convite com e-mail normalizado,
+  reaproveitado, limite de envios, só o nome pelo código, aceite só do próprio participante, e-mails apagados na retenção);
+  unitários — conversão de cor, cor livre e escala dos ícones por zoom, e o endpoint `/api/convidar` com a rede simulada
+  (login, link montado no servidor, HTML escapado, provedor ausente ou recusando). Navegador (Playwright, 1280 px e 390 px): balão
+  e janela da vítima localizada, cadastro rápido (Salvar e novo, Enter), seletor de cor em grupo e setor (código, tom, minhas cores),
+  aba de convite por e-mail (e-mail inválido, sem provedor, envio) e agrupamento/tamanho por zoom 12–20; página do participante
+  com convite válido, desconhecido, malformado e sem convite.
+
+- **Verificação e qualidade dos dados (migrações 042–043)**: banco — 770 verificações (migrações 007–043: revisão de
+  relatos com versões, justificativa e hora do fato; idade estimada sem zero; binômio com transições, I/C numerados,
+  método obrigatório e pausas; drone e água com estado inicial pelo tipo e geometria validada; somente leitura na
+  operação encerrada; denominadores do estudo com ausentes, censurados e duplicatas). Navegador (Playwright, painel com
+  Supabase falso, 1280 px e 390 px): revisar relato (justificativa obrigatória, três horários, versão e selo no feed),
+  sessão do binômio completa (criar, iniciar, indicação na posição do condutor, confirmação com método, pausar, marcadores
+  no mapa), drone e água (foco marcado no mapa voltando ao formulário, telemetria lida de GPX, descarte com justificativa,
+  corrente desconhecida), idade estimada, hora do último momento visto estimada e cartão de qualidade do Dashboard.
 
 - **Pedidos de ajuda, recursos e briefing (migrações 035–037)**: banco — 638 verificações (migrações 007–037: pedido
   criado pela mensagem de ajuda, máquina de estados no servidor, ciente não resolve, baixar prioridade e encerrar exigem

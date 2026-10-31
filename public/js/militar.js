@@ -155,6 +155,8 @@
     // setores, pontos de interesse e destinos
     setores: new Map(),         // id → { d: dados, camada }
     pontosInt: new Map(),       // id → { d: dados, marcador }
+    tiposPonto: new Map(),      // id → tipo de ponto criado pelos responsáveis (nome, ícone, cor)
+    estilosCategoria: new Map(),  // categoria fixa → { icone, cor } escolhidos (migração 050)
     destinos: new Map(),        // participante_id → destino ativo
     rotasFicha: new Map(),      // destino:modo → { rota, origem, em, calculando, erro }
     camadaRotaFicha: null,
@@ -205,6 +207,7 @@
     alertaFaixa: null,
     // "Encontrei a vítima": registros com a condição (só responsáveis leem)
     vitimasLoc: new Map(),      // mensagem_id → registro
+    fichas: new Map(),          // id da ficha → {nome, idade, cadastro_rapido…} (para o nome no marcador da vítima localizada)
     semVitimaLoc: false,        // banco sem a migração 011
     // tempo de permanência em setor (calculado no servidor pela trilha GPS)
     permanencias: new Map(),    // id → permanência aberta (pessoa ainda no setor)
@@ -361,6 +364,9 @@
     $('btn-regua').addEventListener('click', alternarRegua);
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
+    $('menu-sci').addEventListener('click', function () { fecharMenu(false); abrirSci(); });
+    $('menu-binomio').addEventListener('click', function () { fecharMenu(false); if (window.Binomio) window.Binomio.abrir(); });
+    $('menu-drone-agua').addEventListener('click', function () { fecharMenu(false); if (window.ObservacoesCampo) window.ObservacoesCampo.abrir(); });
     $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
     $('comando-chip').addEventListener('click', function () { if (window.Briefing) window.Briefing.abrir(); });
     if (window.AjudaPedidos) window.AjudaPedidos.aoMudar(function () { if (est.op) { atualizarEstados(); if (est.selecionado) atualizarFicha(); } });
@@ -373,6 +379,7 @@
     $('ficha-renomear').addEventListener('click', function () { var p = est.participantes.get(est.selecionado); if (p) renomearParticipante(p); });
     $('ficha-vitima').addEventListener('click', function () { if (est.selecionado) abrirRegistroVitima({ encontrou: est.selecionado, onde: 'quem' }); });
     $('menu-vitima').addEventListener('click', function () { fecharMenu(false); abrirRegistroVitima({}); });
+    $('menu-vitima-rapida').addEventListener('click', function () { fecharMenu(false); abrirCadastroRapido(); });
     $('btn-excluir-op').addEventListener('click', function () { excluirOperacao(est.op); });
     document.querySelectorAll('[data-camada]').forEach(function (b) {
       b.addEventListener('click', function () { trocarCamada(b.getAttribute('data-camada')); });
@@ -410,6 +417,8 @@
     $('ficha-exportar').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirExportar(est.selecionado); });
     $('opt-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
     $('menu-diag-gps').addEventListener('click', function () { fecharMenu(false); abrirDiagnosticoGps(); });
+    $('menu-minha-trilha').addEventListener('click', function () { fecharMenu(false); alternarMinhaTrilha(); });
+    iniciarSecoesMenu();
     // Tema escuro ou claro (Ferramentas → Configurações). Os botões marcam o tema atual e o menu continua aberto.
     document.querySelectorAll('.menu-tema [data-tema]').forEach(function (b) {
       b.addEventListener('click', function () { definirTema(b.getAttribute('data-tema')); });
@@ -1132,10 +1141,13 @@
     var novaJanela = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-nova-janela', texto: '↗ Abrir em outra janela',
       title: 'Abre só o dashboard desta operação numa janela própria, para deixar o mapa em outra',
       onclick: function () { window.Dashboard.abrirJanela(est.op.id); } });
+    var linkPublico = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-op-link-publico', texto: '🔗 Link público',
+      title: 'Link para acompanhar a operação sem login, só visualização (sem nomes)', onclick: abrirLinkPublicoDashboard });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao modal-dashboard' }, [
       UI.el('div', { classe: 'modal-dashboard-topo' }, [
         UI.el('h2', { id: 'modal-titulo', texto: 'Dashboard da operação · ' + est.op.codigo }),
         UI.el('div', { classe: 'dash-acoes' }, [
+          podeAlterar() ? linkPublico : null,
           novaJanela,
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'aria-label': 'Fechar', texto: 'Fechar', onclick: function () { fechar(); } }),
         ]),
@@ -1147,8 +1159,62 @@
       verPessoa: function (id) { UI.fecharTodos(); selecionar(id); },
       verSetor: function (id) { var s = est.setores.get(id); UI.fecharTodos(); if (s) verSetorNoMapa(s.d); },
       abrirCentral: function (aba) { UI.fecharTodos(); abrirCentral(aba); },
+      abrirRelato: function (id) { UI.fecharTodos(); abrirRelato(id); },
       abrirDiario: function () { UI.fecharTodos(); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); },
     } });
+  }
+
+  // Link público do dashboard (migração 048): quem abre não precisa de login e só vê os números (sem nomes,
+  // sem textos de mensagens, sem fotos). Pode ser trocado (o anterior para de funcionar) ou desligado.
+  function urlDashboardPublico(token) { return location.origin + '/dashboard.html?p=' + token; }
+  function abrirLinkPublicoDashboard() {
+    var op = est.op;
+    if (!op) return;
+    var corpo = UI.el('div');
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Link público do dashboard' }),
+      UI.dica('Quem abre o link vê o dashboard desta operação sem entrar no sistema, só para acompanhar: números, gráficos, setores e vítimas (sem nomes). Não dá para alterar nada. Trocar o link faz o anterior parar de funcionar.'),
+      corpo,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]), { empilhar: true });
+    async function executar(fn, aviso) {
+      try {
+        var r = await C.rpc(fn, { p_operacao: op.id });
+        op.dashboard_token = r.token || null;
+        desenhar();
+        if (aviso) UI.aviso(aviso, 'ok');
+      } catch (e) { UI.aviso('Não foi possível: ' + e.message, 'erro', 7000); }
+    }
+    function desenhar() {
+      corpo.innerHTML = '';
+      if (!op.dashboard_token) {
+        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Esta operação ainda não tem link público.' }));
+        corpo.appendChild(UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dash-pub-criar', texto: 'Criar link público', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Criar o link público?', texto: 'Qualquer pessoa com o link poderá acompanhar o dashboard desta operação, sem login e sem poder alterar nada. Os nomes das pessoas não aparecem.', ok: 'Criar link', empilhar: true }))) return;
+          executar('dashboard_publico_gerar', 'Link público criado.');
+        } }));
+        return;
+      }
+      var url = urlDashboardPublico(op.dashboard_token);
+      var campo = UI.el('input', { classe: 'campo mono', id: 'dash-pub-url', readonly: true, value: url });
+      corpo.appendChild(UI.campo('Endereço', campo, { para: 'dash-pub-url' }));
+      corpo.appendChild(UI.el('div', { classe: 'linha-botoes' }, [
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dash-pub-copiar', texto: 'Copiar link', onclick: function () {
+          (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function () { UI.aviso('Link copiado.', 'ok'); }, function () { campo.select(); UI.aviso('Selecione e copie o endereço.', 'erro'); });
+        } }),
+        UI.el('a', { classe: 'btn', id: 'dash-pub-whatsapp', target: '_blank', rel: 'noopener', href: 'https://wa.me/?text=' + encodeURIComponent('Acompanhe a operação ' + op.codigo + ' (somente visualização): ' + url), texto: 'Enviar pelo WhatsApp' }),
+        UI.el('a', { classe: 'btn', target: '_blank', rel: 'noopener', href: url, texto: 'Abrir' }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'dash-pub-trocar', texto: 'Trocar link', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Trocar o link público?', texto: 'O link atual para de funcionar na hora. Quem estiver acompanhando precisará do novo.', ok: 'Trocar', empilhar: true }))) return;
+          executar('dashboard_publico_gerar', 'Link trocado. O anterior não funciona mais.');
+        } }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'dash-pub-desligar', texto: 'Desligar', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Desligar o link público?', texto: 'Quem tiver o link deixa de ver o dashboard.', ok: 'Desligar', perigo: true, empilhar: true }))) return;
+          executar('dashboard_publico_desligar', 'Link público desligado.');
+        } }),
+      ]));
+    }
+    desenhar();
   }
 
   // Retrato do que o painel já tem carregado, para o dashboard da operação (sem nova consulta ao banco):
@@ -1172,7 +1238,15 @@
       if (m.direcao !== 'entrada') o.ordens++;
     });
     est.alertas.forEach(function (a) { if (a.tipo === 'retorno_atrasado') o.retornosAtrasados++; });
-    return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: o };
+    // relatos e ordens, para a lista ao tocar numa ocorrência do dashboard
+    var relatos = [];
+    est.mensagens.forEach(function (m) {
+      var ajuda = m.categoria === 'AJUDA' || m.resposta === 'PRECISO_AJUDA';
+      if (m.direcao === 'entrada' && !ajuda && !(m.categoria && o[m.categoria] != null)) return;
+      relatos.push({ id: m.id, categoria: ajuda ? 'AJUDA' : m.categoria, direcao: m.direcao, criada_em: m.criada_em, texto: m.texto, autor: m.remetente_nome });
+    });
+    relatos.sort(function (a, b) { return String(b.criada_em).localeCompare(String(a.criada_em)); });
+    return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: o, relatos: relatos };
   }
 
   function abrirDadosOperacao() {
@@ -1320,7 +1394,7 @@
     assinarTempoRealExtras();
     assinarTrilhasManuais();
     var cargasModulos = [];
-    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing'].forEach(function (nome) {
+    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing', 'RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) {
       if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
     });
     // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
@@ -1330,19 +1404,22 @@
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
     iniciarPolling();
     if (op.status === 'ativa') {
-      await entrarComoResponsavel();
+      // O responsável só entra no mapa (e só registra posição) quando liga "Registrar minha trilha".
+      // Se já tem registro nesta operação (ligou antes), ele é reaproveitado para mensagens e fotos.
+      acharMeuRegistro();
       est.timerMeuSinal = setInterval(function () {
         if (!est.op || est.op.status !== 'ativa') return;
-        if (!est.meuPart) entrarComoResponsavel();
-        else enviarMeuSinal();
+        if (est.compartilhando && !est.meuPart) entrarComoResponsavel();
+        else if (est.meuPart) enviarMeuSinal();
         lerPosicaoSeParado();
         vigiarMeuGps();
         enviarMinhaFila();
         enviarFilaFotos();
       }, CFG_GPS.sinalVidaMs);
-      // A localização do responsável liga sozinha ao abrir (ou criar) a operação,
-      // respeitando a permissão do navegador e a escolha de desligar nesta operação.
-      iniciarMinhaPosicaoAuto();
+      // Estava registrando neste aparelho (a página recarregou)? Pergunta antes de retomar.
+      oferecerRetomarMinhaTrilha();
+      // relatório diário: gerado e guardado sozinho para os dias que já terminaram (migração 049)
+      if (window.Relatorio && window.Relatorio.iniciarDiarios) window.Relatorio.iniciarDiarios();
     }
     atualizarEstadoGps();
     if (est.abrirConvite) {
@@ -1353,6 +1430,7 @@
 
   function fecharPainel() {
     carregandoPainel(false);
+    if (window.Relatorio && window.Relatorio.pararDiarios) window.Relatorio.pararDiarios();
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
     est.timerMeuSinal = null;
@@ -1408,6 +1486,7 @@
     est.alertasCarregados = false;
     est.alertaFaixa = null;
     est.vitimasLoc = new Map();
+    est.fichas = new Map();
     est.semVitimaLoc = false;
     est.permanencias = new Map();
     est.semPermanencia = false;
@@ -1427,6 +1506,7 @@
     if (window.AjudaPedidos) window.AjudaPedidos.parar();
     if (window.RecursosEquipe) window.RecursosEquipe.parar();
     if (window.Briefing) window.Briefing.parar();
+    ['RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) { if (window[nome]) window[nome].parar(); });
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -1479,6 +1559,7 @@
     est.missaoMembros = new Map();
     est.alertas = new Map();
     est.vitimasLoc = new Map();
+    est.fichas = new Map();
     est.permanencias = new Map();
     est.filtroGrupos = new Set();   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
@@ -1514,6 +1595,8 @@
     $('btn-convite').hidden = op.status !== 'ativa';
     $('btn-registrar-foto').hidden = op.status !== 'ativa';
     $('menu-vitima').hidden = op.status !== 'ativa';
+    $('menu-vitima-rapida').hidden = op.status !== 'ativa';
+    $('menu-minha-trilha').hidden = op.status !== 'ativa';
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
     $('menu-destino').hidden = op.status !== 'ativa';
@@ -1676,34 +1759,42 @@
   // O círculo mostra quantos são e um anel com a proporção de cada tipo; "!" vermelho quando
   // há área de risco ou pedido de ajuda dentro. De perto o raio diminui; vários no mesmo
   // lugar se abrem em leque ao tocar.
-  var COR_TIPO_PONTO = { poi: '#38bdf8', relato: '#f97316', foto: '#a855f7' };
-  var ROTULO_TIPO_PONTO = { poi: ['ponto de interesse', 'pontos de interesse'], relato: ['relato', 'relatos'], foto: ['foto', 'fotos'] };
+  var COR_TIPO_PONTO = { poi: '#38bdf8', relato: '#f97316', foto: '#a855f7', verif: '#fbbf24', import: '#84cc16' };
+  var ROTULO_TIPO_PONTO = { poi: ['ponto de interesse', 'pontos de interesse'], relato: ['relato', 'relatos'], foto: ['foto', 'fotos'],
+    verif: ['indicação a verificar', 'indicações a verificar'], import: ['ponto importado', 'pontos importados'] };
+  var TIPOS_PONTO_ORDEM = ['poi', 'relato', 'foto', 'verif', 'import'];
   function criarGrupo() {
     if (!L.markerClusterGroup) return L.featureGroup();   // biblioteca indisponível: sem agrupamento
     return L.markerClusterGroup({
       clusterPane: 'pontos',
       showCoverageOnHover: false,
-      maxClusterRadius: function (z) { return z >= 17 ? 28 : 45; },
+      // agrupa já na escala de 200 m e de 100 m (zoom 16 e 17); só bem de perto o raio diminui
+      maxClusterRadius: function (z) { return z >= 19 ? 26 : z >= 17 ? 40 : 50; },
       spiderfyOnMaxZoom: true,
       zoomToBoundsOnClick: true,
       iconCreateFunction: function (grupo) {
         var filhos = grupo.getAllChildMarkers();
-        var cont = { poi: 0, relato: 0, foto: 0 }, critico = false;
+        var cont = { poi: 0, relato: 0, foto: 0, verif: 0, import: 0 }, critico = false, vitimas = [];
         filhos.forEach(function (m) {
           var t = cont[m.options.tipoPonto] != null ? m.options.tipoPonto : 'poi';
           cont[t]++;
           if (m.options.critico) critico = true;
+          if (m.options.vitima) vitimas.push(m.getLatLng());
         });
+        // relato e ponto da mesma vítima (a menos de 30 m) contam como uma só
+        var vitima = vitimas.filter(function (ll, i) { return !vitimas.slice(0, i).some(function (o) { return o.distanceTo(ll) < 30; }); }).length;
         var cores = [];
-        ['poi', 'relato', 'foto'].forEach(function (t) { for (var i = 0; i < cont[t]; i++) cores.push(COR_TIPO_PONTO[t]); });
+        TIPOS_PONTO_ORDEM.forEach(function (t) { for (var i = 0; i < cont[t]; i++) cores.push(COR_TIPO_PONTO[t]); });
         var anel = window.MapaRotulos ? window.MapaRotulos.fatiasDeCor(cores) : cores[0] + ' 0deg 360deg';
-        var dica = ['poi', 'relato', 'foto'].filter(function (t) { return cont[t]; })
+        var dica = TIPOS_PONTO_ORDEM.filter(function (t) { return cont[t]; })
           .map(function (t) { return cont[t] + ' ' + ROTULO_TIPO_PONTO[t][cont[t] === 1 ? 0 : 1]; }).join(', ') +
-          (critico ? ' · inclui área de risco ou pedido de ajuda' : '') + '. Toque para aproximar.';
+          (vitima ? ' · inclui vítima localizada' : '') + (critico ? ' · inclui área de risco ou pedido de ajuda' : '') + '. Toque para aproximar.';
         return L.divIcon({
           className: 'cluster-wrap',
-          html: '<div class="cluster cluster-pontos' + (critico ? ' cluster-critico' : '') + '" style="background:conic-gradient(' + anel + ')" title="' + C.esc(dica) + '">' +
-            '<b>' + filhos.length + '</b>' + (critico ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') + '</div>',
+          html: '<div class="cluster cluster-pontos' + (critico ? ' cluster-critico' : '') + (vitima ? ' cluster-vitima' : '') + '" style="background:conic-gradient(' + anel + ')" title="' + C.esc(dica) + '">' +
+            '<b>' + filhos.length + '</b>' + (critico ? '<i class="cl-alerta" aria-hidden="true">!</i>' : '') +
+            // vítima dentro do grupo: marca "+" verde (com a quantidade) e etiqueta fixa ao lado, em qualquer zoom
+            (vitima ? '<i class="cl-vitima" aria-hidden="true">+' + (vitima > 1 ? vitima : '') + '</i><span class="cl-vitima-rotulo">' + (vitima > 1 ? vitima + ' VÍTIMAS' : 'VÍTIMA') + '</span>' : '') + '</div>',
           iconSize: [38, 38],
           iconAnchor: [19, 19],
         });
@@ -1714,6 +1805,19 @@
   // Cada marcador de ponto vai para o agrupamento, exceto os "fixos" (vítima encontrada),
   // que ficam sempre soltos e por cima.
   function camadaDoPonto(mk) { return mk.options.fixo ? est.camadaPontosFixos : est.camadaPontos; }
+
+  // Marcadores de outros módulos (binômio, drone e água, camadas importadas) entram no mesmo agrupamento e
+  // diminuem com o zoom como os demais. Cada módulo guarda a própria lista e a tira antes de redesenhar.
+  // tipo: 'verif' (indicações a verificar) ou 'import' (pontos importados).
+  function agruparMarcadores(lista, tipo) {
+    if (!est.camadaPontos || !lista || !lista.length) return;
+    lista.forEach(function (mk) { mk.options.tipoPonto = tipo; mk.options.pane = 'pontos'; });
+    if (est.camadaPontos.addLayers) est.camadaPontos.addLayers(lista); else lista.forEach(function (mk) { est.camadaPontos.addLayer(mk); });
+  }
+  function desagruparMarcadores(lista) {
+    if (!est.camadaPontos || !lista || !lista.length) return;
+    if (est.camadaPontos.removeLayers) est.camadaPontos.removeLayers(lista); else lista.forEach(function (mk) { est.camadaPontos.removeLayer(mk); });
+  }
   function mostrarPonto(mk, visivel) {
     var c = mk && camadaDoPonto(mk);
     if (!c) return;
@@ -1771,7 +1875,7 @@
     var listaGrupos = grupos.length
       ? '<ul class="legenda-grupos">' + grupos.map(function (g) {
         var n = est.membros.has(g.id) ? est.membros.get(g.id).size : 0;
-        return '<li><span class="legenda-cor" style="background:' + C.esc(g.cor) + '"></span><span class="legenda-grupo-nome">' + C.esc(g.nome) + '</span><small class="muted">' + n + ' integrante' + (n === 1 ? '' : 's') + '</small></li>';
+        return '<li>' + htmlChipGrupo(g, 'legenda-cor') + '<span class="legenda-grupo-nome">' + C.esc(g.nome) + '</span><small class="muted">' + n + ' integrante' + (n === 1 ? '' : 's') + '</small></li>';
       }).join('') + '</ul>'
       : '<p class="muted legenda-vazio">Nenhum grupo cadastrado nesta operação.</p>';
     var noMapa = linhas('mapa');
@@ -1905,6 +2009,8 @@
     menu.hidden = true;
     $('btn-ferramentas').setAttribute('aria-expanded', 'false');
     document.body.classList.remove('menu-aberto');
+    var filtro = $('menu-filtro');
+    if (filtro && filtro.value) { filtro.value = ''; filtro.dispatchEvent(new Event('input')); }
     if (devolverFoco) $('btn-ferramentas').focus();
   }
 
@@ -2319,6 +2425,8 @@
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'setores', filter: filtro }, agendarAreas)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pontos_interesse', filter: filtro }, agendarAreas)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tipos_ponto' }, agendarAreas)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'categorias_ponto_estilo' }, agendarAreas)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'destinos', filter: filtro }, agendarAreas)
       .subscribe(function (status) {
         if (geracao !== est.geracaoCanal) return;
@@ -2356,6 +2464,7 @@
       est.canalExtras = C.cliente.channel('op-extras-' + opId + '-' + Date.now())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'vitimas', filter: filtro }, function () {
           if (window.Cadastro) window.Cadastro.aoMudarVitimas(opId);
+          carregarFichas();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grupos', filter: filtro }, agendarGrupos)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grupo_membros', filter: filtro }, agendarGrupos)
@@ -2958,7 +3067,13 @@
   // em relação ao mapa e cobre tudo. De perto fica como antes; afastando, afina.
   function fatorZoomTrilha() {
     var z = est.mapa ? est.mapa.getZoom() : 17;
-    return z >= 18 ? 1 : z >= 17 ? 0.85 : z >= 16 ? 0.7 : z >= 15 ? 0.55 : z >= 14 ? 0.45 : 0.38;
+    return (z >= 18 ? 1 : z >= 17 ? 0.85 : z >= 16 ? 0.7 : z >= 15 ? 0.55 : z >= 14 ? 0.45 : 0.38) * fatorTelaTrilha();
+  }
+  // Espessura pela largura da tela: em telas grandes (≥ 1280 px) fica como sempre foi; em telas menores
+  // afina na proporção (até 60% num celular de 360 px), para não cobrir o mapa. Nunca passa do tamanho atual.
+  function fatorTelaTrilha() {
+    var w = window.innerWidth || 1280;
+    return Math.max(0.6, Math.min(1, 0.6 + 0.4 * (w - 360) / (1280 - 360)));
   }
   // linha fina (2,5 px de perto; ~1 px de longe); a selecionada um pouco mais grossa
   function pesoTrilha(p) {
@@ -3060,6 +3175,16 @@
     });
   }
 
+  // A tela mudou de tamanho (girou o celular, redimensionou a janela): espessuras acompanham.
+  var ultimoFatorTela = null;
+  function ajustarTrilhasATela() {
+    var f = fatorTelaTrilha();
+    if (f === ultimoFatorTela) return;
+    ultimoFatorTela = f;
+    estilizarTrilhas();
+    est.trilhasManuais.forEach(function (t) { if (t.camada && t.fatorTela !== f) desenharTrilhaManual(t); });
+  }
+
   // Ocultar a trilha afeta só o mapa: os pontos continuam chegando e sendo guardados.
   function alternarTrilha(id, valor) {
     var p = est.participantes.get(id);
@@ -3155,7 +3280,7 @@
       else if (gaveta.mq.addListener) gaveta.mq.addListener(avaliarGaveta);
     }
     var tAjuste = null;
-    window.addEventListener('resize', function () { clearTimeout(tAjuste); tAjuste = setTimeout(function () { if (gaveta.ativa) aplicarGaveta(); }, 120); });
+    window.addEventListener('resize', function () { clearTimeout(tAjuste); tAjuste = setTimeout(function () { if (gaveta.ativa) aplicarGaveta(); ajustarTrilhasATela(); }, 120); });
     alca.addEventListener('click', function () {
       if (gaveta.arrastou) { gaveta.arrastou = false; return; }
       definirGaveta({ mini: 'meia', meia: 'cheia', cheia: 'mini' }[gaveta.estado]);
@@ -3479,7 +3604,7 @@
     // Topo da ficha, em texto simples: tipo · grupo(s) · situação. CPF, coordenadas e
     // histórico ficam na aba "Dados".
     $('ficha-resumo').innerHTML = '<span>' + C.esc(TIPOS[tipoDe(d)].rotulo) + '</span>' + gruposDe(p.id).map(function (g) {
-      return '<span class="ficha-grupo"><i class="ficha-grupo-cor" style="background:' + C.esc(g.cor) + '"></i>' + (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
+      return '<span class="ficha-grupo">' + htmlChipGrupo(est.grupos.get(g.id) || g, 'ficha-grupo-cor', 'i') + (g.papel === 'responsavel' ? '★ ' : '') + C.esc(g.nome) + '</span>';
     }).join('') + '<span class="ficha-estado"><span class="ponto ponto-' + e.cod + '"></span>' + C.esc(e.rot) + '</span>';
     var posTxt;
     if (!pos) posTxt = 'Ainda sem posição';
@@ -4013,22 +4138,33 @@
     var qr = UI.el('div', { classe: 'qr', 'aria-label': 'QR Code do link' });
     var nota = UI.el('p', { classe: 'nota' });
     var abaCivil = UI.el('button', { classe: 'btn btn-ativo', type: 'button', texto: '● Link para CIVIS' });
-    var abaMil = UI.el('button', { classe: 'btn', type: 'button', texto: '■ Link para MILITARES' });
+    var abaMil = UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-bombeiros', texto: '■ Link para BOMBEIROS' });
+    var abaWhats = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-whatsapp', texto: '☎ WhatsApp' }) : null;
+    var abaEmail = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-email', texto: '✉ E-mail' }) : null;
+    var caixaLink = UI.el('div', { classe: 'link-caixa' });
+    var paineis = { whatsapp: abaWhats ? window.Convites.painel('whatsapp') : null, email: abaEmail ? window.Convites.painel('email') : null };
+    Object.keys(paineis).forEach(function (k) { if (paineis[k]) paineis[k].hidden = true; });
 
     function mostrar(tipo) {
-      atual = tipo;
-      entrada.value = links[tipo];
+      var convite = tipo === 'email' || tipo === 'whatsapp';
+      if (!convite) atual = tipo;
+      if (!convite) entrada.value = links[tipo];
       abaCivil.className = 'btn' + (tipo === 'civil' ? ' btn-ativo' : '');
       abaMil.className = 'btn' + (tipo === 'militar' ? ' btn-ativo' : '');
+      if (abaWhats) abaWhats.className = 'btn' + (tipo === 'whatsapp' ? ' btn-ativo' : '');
+      if (abaEmail) abaEmail.className = 'btn' + (tipo === 'email' ? ' btn-ativo' : '');
+      caixaLink.hidden = qr.hidden = nota.hidden = convite;
+      Object.keys(paineis).forEach(function (k) { if (paineis[k]) paineis[k].hidden = k !== tipo; });
+      if (convite) return;
       nota.textContent = tipo === 'civil'
         ? 'Quem entrar por este link aparece como civil.'
-        : 'Só para militares: quem entrar por este link se identifica como militar.';
+        : 'Só para bombeiros: quem entrar por este link se identifica como militar.';
       if (window.qrcode) {
         try {
           var q = window.qrcode(0, 'M');
           q.addData(links[tipo]);
           q.make();
-          qr.innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true, title: 'QR Code — link para ' + (tipo === 'civil' ? 'civis' : 'militares') });
+          qr.innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true, title: 'QR Code — link para ' + (tipo === 'civil' ? 'civis' : 'bombeiros') });
         } catch (e) { qr.textContent = 'Não foi possível gerar o QR Code.'; }
       } else {
         qr.textContent = 'QR Code indisponível (biblioteca não carregada).';
@@ -4057,16 +4193,21 @@
 
     abaCivil.addEventListener('click', function () { mostrar('civil'); });
     abaMil.addEventListener('click', function () { mostrar('militar'); });
+    if (abaEmail) abaEmail.addEventListener('click', function () { mostrar('email'); });
+    if (abaWhats) abaWhats.addEventListener('click', function () { mostrar('whatsapp'); });
 
     var botoes = [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Copiar', onclick: copiar })];
     if (navigator.share) botoes.push(UI.el('button', { classe: 'btn', type: 'button', texto: 'Compartilhar', onclick: compartilhar }));
+    [entrada].concat(botoes).forEach(function (n) { caixaLink.appendChild(n); });
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links não dão acesso ao painel. Só servem para entrar na operação como participante.')]),
-      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil]),
-      UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links de civis e de bombeiros não dão acesso ao painel: só servem para entrar na operação como participante. Responsável convidado entra pelo painel, com a própria conta.')]),
+      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil, abaWhats, abaEmail]),
+      caixaLink,
       qr,
       nota,
+      paineis.whatsapp,
+      paineis.email,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
     mostrar(atual);
@@ -4247,12 +4388,13 @@
       pane: 'pontos',        // participantes ficam por cima
       tipoPonto: 'relato',
       critico: m.categoria === 'AJUDA',
-      fixo: m.categoria === 'VITIMA',   // vítima localizada: nunca some dentro de um grupo
+      vitima: m.categoria === 'VITIMA',   // vítima localizada: agrupa como os demais, mas o grupo mostra a marca de vítima
     });
     ligarCliquesMapa(mk, {
       info: function () {
+        if (m.categoria === 'VITIMA') return infoVitimaLocalizada(m, mk);
         return { latlng: mk.getLatLng(), titulo: cat.rotulo, sub: nomeDoParticipante(m.participante_id, m.remetente_nome) + ' · ' + C.hora(m.criada_em, false),
-          texto: m.categoria === 'VITIMA' ? null : resumoTexto(m.texto, 90), deslocY: -10 };
+          texto: resumoTexto(m.texto, 90), deslocY: -10 };
       },
       detalhes: function () { abrirRelato(m.id); },
     });
@@ -4285,29 +4427,140 @@
     destacarNoMapa(mkR && camadaDoPonto(mkR), mkR, m.lat, m.lng);
   }
 
+  // Balão do marcador da vítima localizada: o nome da vítima, a condição e o que se sabe do achado
+  function infoVitimaLocalizada(m, mk) {
+    var reg = registroDaMensagem(m);
+    if (!reg) return { latlng: mk.getLatLng(), titulo: 'Vítima localizada', sub: C.hora(m.criada_em, false), texto: 'Carregando os detalhes…', deslocY: -10 };
+    var f = reg.vitima_id ? est.fichas.get(reg.vitima_id) : null;
+    var enc = quemEncontrou(reg);
+    var linhas = [
+      'Condição: ' + CONDICAO_VITIMA[reg.condicao],
+      enc ? 'Encontrada por ' + nomeExibido(enc) : reg.encontrada_por_texto ? 'Encontrada por ' + reg.encontrada_por_texto : 'Registrada por ' + reg.registrado_por_nome,
+      reg.local_descricao ? 'Local: ' + resumoTexto(reg.local_descricao, 70) : null,
+      f && f.cadastro_rapido ? 'Cadastro rápido: falta completar a ficha' : null,
+    ].filter(Boolean);
+    return { latlng: mk.getLatLng(), titulo: f ? textoFicha(f) : 'Vítima localizada', sub: 'Localizada às ' + C.hora(reg.posicao_em || reg.registrado_em, false), texto: linhas.join('\n'), deslocY: -10, botao: 'O que aconteceu ›' };
+  }
+
+  // Tudo sobre a vítima localizada: quem é, a condição, quem encontrou, onde, e quem estava perto
+  function abrirVitimaLocalizada(m) {
+    var reg = registroDaMensagem(m);
+    var f = reg && reg.vitima_id ? est.fichas.get(reg.vitima_id) : null;
+    var enc = reg ? quemEncontrou(reg) : null;
+    var op = est.op;
+    var dl = UI.el('dl', { classe: 'kv-grade vit-loc-dados' });
+    function kv(rot, valor, largo) {
+      dl.appendChild(UI.el('div', { classe: 'kv' + (largo ? ' kv-largo' : '') }, [UI.el('dt', { texto: rot }), UI.el('dd', { classe: valor ? null : 'kv-vazio' }, [valor || 'não informado'])]));
+    }
+    var corpo = [UI.el('h2', { id: 'modal-titulo', texto: f ? f.nome : 'Vítima localizada' })];
+    if (!reg) {
+      corpo.push(UI.el('p', { classe: 'muted', texto: est.semVitimaLoc ? 'Detalhes indisponíveis: falta a migração 011 no Supabase.' : 'Carregando os detalhes…' }));
+    } else {
+      corpo.push(UI.el('div', { classe: 'acoes-linha vit-loc-selos' }, [
+        seloCondicaoReg(reg),
+        f && f.cadastro_rapido ? UI.el('span', { classe: 'selo selo-alerta', texto: 'Cadastro rápido: completar' }) : null,
+        !f ? UI.el('span', { classe: 'selo selo-neutro', texto: 'Sem ficha' }) : null,
+      ]));
+      var pos = reg.lat != null ? { lat: reg.lat, lng: reg.lng } : null;
+      var quando = reg.posicao_em || reg.registrado_em;
+      var setor = pos ? setorDoPonto(pos.lat, pos.lng) : null;
+      var ulv = pos && op.local_lat != null ? C.distancia(op.local_lat, op.local_lng, pos.lat, pos.lng) : null;
+      var inicio = op.acionado_em ? C.paraMs(op.acionado_em) : null;
+      kv('Vítima', f ? textoFicha(f) : '');
+      kv('Localizada', C.hora(quando) + ' (' + C.idade(quando) + ')');
+      kv('Encontrada por', enc ? nomeExibido(enc) + ' (' + TIPOS[tipoDe(enc.dados)].rotulo.toLowerCase() + ')' : reg.encontrada_por_texto || '');
+      kv('Registrada por', reg.registrado_por_nome.replace(/\s*\(encontrada por [^)]*\)\s*$/, '') + ' às ' + C.hora(reg.registrado_em, false));
+      kv('Local', reg.local_descricao || '', true);
+      kv('Coordenadas', pos ? C.coord(pos.lat) + ', ' + C.coord(pos.lng) + ' (' + C.precisao(reg.precisao) + ')' : '', true);
+      kv('Setor', pos ? (setor ? setor.nome : 'fora dos setores desenhados') : '');
+      kv('Do último local visto', ulv != null ? formatarComprimento(ulv) : '');
+      kv('Depois do início', inicio && C.paraMs(quando) >= inicio ? textoMin(Math.round((C.paraMs(quando) - inicio) / 60000)) : '');
+      kv('Estado e encaminhamento', reg.observacoes || '', true);
+      // Participantes: quem estava perto na última posição conhecida
+      if (pos) {
+        var perto = [];
+        est.participantes.forEach(function (p) {
+          if (p.dados.removido || (enc && p.id === enc.id) || tipoDe(p.dados) === 'responsavel') return;
+          var pp = posicaoAtual(p);
+          if (!pp) return;
+          var d = C.distancia(pos.lat, pos.lng, pp.lat, pp.lng);
+          if (d <= 300) perto.push({ p: p, d: d, pp: pp });
+        });
+        perto.sort(function (a, b) { return a.d - b.d; });
+        var lista = perto.length ? UI.el('ul', { classe: 'lista-perto' }, perto.map(function (x) {
+          var gr = gruposDe(x.p.id).map(function (g) { return g.nome; }).join(', ');
+          return UI.el('li', null, [
+            UI.el('strong', { texto: nomeExibido(x.p) }),
+            UI.el('small', { classe: 'muted', texto: TIPOS[tipoDe(x.p.dados)].rotulo + (gr ? ' · ' + gr : '') + ' · a ' + formatarComprimento(x.d) + ' · posição ' + C.idade(x.pp.t) }),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ficha', onclick: function () { fechar(); selecionar(x.p.id); } }),
+          ]);
+        })) : UI.el('p', { classe: 'muted', texto: 'Ninguém com posição conhecida a menos de 300 m.' });
+        corpo.push(dl, UI.secao('Participantes', [
+          enc ? UI.el('p', null, [UI.el('strong', { texto: nomeExibido(enc) }), ' encontrou a vítima ', UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'ver ficha', onclick: function () { fechar(); selecionar(enc.id); } })]) : null,
+          UI.el('p', { classe: 'muted', texto: 'Perto do local (até 300 m, pela última posição):' }),
+          lista,
+        ]));
+      } else {
+        corpo.push(dl);
+      }
+    }
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'visor-vitima-loc' }, corpo.concat([
+      compactarAcoes(UI.rodape([
+        f && window.Cadastro ? UI.el('button', { classe: 'btn' + (f.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitloc-ficha', texto: f.cadastro_rapido ? 'Completar a ficha' : 'Abrir a ficha', onclick: function () {
+          fechar();
+          window.Cadastro.abrirFichaPorId(op, f.id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas });
+        } }) : null,
+        m.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }) : null,
+        reg && window.SCI ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitloc-sci', texto: 'Abrir no SCI', onclick: function () {
+          fechar(); try { localStorage.setItem('gbs-sci-aba', 'vitimas'); } catch (e) { /* abre na última aba */ } abrirSci();
+        } }) : null,
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ])),
+    ])));
+    // no quadro do SCI: número, quadro (ACV, transportada) e triagem
+    if (reg && !est.semSci) {
+      C.consultar(C.cliente.from('sci_vitimas').select('numero,fase,triagem,destino').eq('localizacao_id', reg.id).maybeSingle()).then(function (sv) {
+        var alvo = document.querySelector('.visor-vitima-loc .vit-loc-selos');
+        if (!sv || !alvo) return;
+        var fases = { localizada: 'localizada, aguardando remoção', removida: 'na ACV', transportada: 'transportada' + (sv.destino ? ' — ' + sv.destino : '') };
+        var tri = { verde: 'verde', amarelo: 'amarela', vermelho: 'vermelha', cinza: 'cinza (óbito)' };
+        alvo.appendChild(UI.el('span', { classe: 'selo selo-neutro', texto: 'SCI: V-' + (sv.numero < 10 ? '0' : '') + sv.numero + ' · ' + fases[sv.fase] + (sv.triagem ? ' · triagem ' + tri[sv.triagem] : '') }));
+      }).catch(function (e) { if (ehTabelaAusente(e)) est.semSci = true; });
+    }
+  }
+
   function abrirRelato(id) {
     var m = est.mensagens.get(id);
     if (!m) return;
+    if (m.categoria === 'VITIMA') { marcarLidas([m.id]); abrirVitimaLocalizada(m); return; }
     var p = est.participantes.get(m.participante_id);
     var cat = CATEGORIAS[m.categoria] || CATEGORIAS.MENSAGEM;
     marcarLidas([m.id]);
+    var RR = window.RelatosRevisao;
+    var revisavel = Boolean(RR && RR.disponivel() && RR.ehRelato(m));
     var dl = UI.el('dl', { classe: 'dados' });
     function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', null, [valor])); }
     linha('Enviado por', nomeDoParticipante(m.participante_id, m.remetente_nome) + (p ? ' (' + TIPOS[tipoDe(p.dados)].rotulo.toLowerCase() + ')' : ''));
-    linha('Horário', C.hora(m.criada_em) + ' (' + C.idade(m.criada_em) + ')');
+    if (!revisavel) linha('Horário', C.hora(m.criada_em) + ' (' + C.idade(m.criada_em) + ')');
     linha('Latitude', C.coord(m.lat));
     linha('Longitude', C.coord(m.lng));
     linha('Precisão', C.precisao(m.precisao));
-    if (m.posicao_em) linha('Posição obtida às', C.hora(m.posicao_em));
+    if (m.posicao_em) linha('Posição GPS obtida às', C.hora(m.posicao_em));
     linha('Leitura', m.lida_em ? 'Lida por ' + (m.lida_por_nome || 'responsável') + ' às ' + C.hora(m.lida_em, false) : 'Lida agora por você');
+    var ultRev = revisavel ? RR.ultima(m.id) : null;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'visor-relato' }, [
       UI.el('h2', { id: 'modal-titulo', texto: m.categoria && m.categoria !== 'MENSAGEM' ? 'Relato: ' + cat.rotulo : 'Mensagem com localização' }),
       m.categoria === 'VITIMA' ? seloCondicao(m) : null,
+      revisavel ? UI.el('div', { classe: 'acoes-linha' }, [RR.selo(m)]) : null,
       UI.el('p', { classe: 'relato-texto', texto: m.texto }),
+      ultRev && ultRev.nota ? UI.el('p', { classe: 'revisao-nota', texto: ultRev.revisado_por_nome + ': ' + ultRev.nota }) : null,
+      revisavel ? RR.horarios(m) : null,
       dl,
+      revisavel ? RR.historico(m) : null,
       compactarAcoes(UI.rodape([
+        revisavel && podeAlterar() ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'relato-revisar', texto: 'Revisar', onclick: function () { fechar(); RR.abrir(m, { aoSalvar: function () { abrirRelato(m.id); } }); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
-        p ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
+        p ? UI.el('button', { classe: 'btn' + (revisavel && podeAlterar() ? '' : ' btn-escuro'), type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
@@ -4489,11 +4742,14 @@
         simb,
         UI.el('strong', { texto: nomeDoParticipante(m.participante_id, m.remetente_nome) }),
         relato ? UI.el('span', { classe: 'selo selo-relato', texto: cat.rotulo }) : null,
+        relato && window.RelatosRevisao ? window.RelatosRevisao.selo(m) : null,
         UI.el('span', { classe: 'muted num feed-hora', texto: C.hora(m.criada_em, false) }),
       ]);
       var acoes = UI.el('div', { classe: 'feed-acoes' }, [
         m.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verRelatoNoMapa(m); } }) : null,
         p ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Responder', onclick: function () { abrirConversa(m.participante_id); } }) : null,
+        m.categoria === 'VITIMA' || (relato && window.RelatosRevisao && window.RelatosRevisao.ehRelato(m) && window.RelatosRevisao.disponivel())
+          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: m.categoria === 'VITIMA' ? 'Detalhes' : 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
       ]);
       ul.appendChild(UI.el('li', { classe: 'feed-item' + (relato ? ' relato' : '') + (est.destaqueNovas.has(m.id) || !jaLida(m) ? ' nova' : ''), 'data-id': m.id }, [
         topo,
@@ -4935,6 +5191,7 @@
         C.consultar(C.cliente.from('setores').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true })),
         C.consultar(C.cliente.from('pontos_interesse').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true })),
         C.consultar(C.cliente.from('destinos').select('*').eq('operacao_id', opId).is('encerrado_em', null)),
+        carregarTiposPonto(),
       ]);
       if (!est.op || est.op.id !== opId) return;
       aplicarSetores(r[0] || [], true);
@@ -4947,6 +5204,23 @@
       est.erroAreas = true;
     }
     await carregarTrilhasManuais();   // trata os próprios erros (banco sem a migração 028 não derruba setores)
+  }
+
+  // Tipos de ponto criados pelos responsáveis (valem para todas as operações). Banco sem a migração 047: só as categorias fixas.
+  async function carregarTiposPonto() {
+    try {
+      var lista = await C.consultar(C.cliente.from('tipos_ponto').select('*').order('nome', { ascending: true }));
+      est.tiposPonto = new Map((lista || []).map(function (t) { return [t.id, t]; }));
+    } catch (e) {
+      est.tiposPonto = new Map();
+    }
+    // ícone e cor escolhidos para as categorias fixas (sem a migração 050: as de sempre)
+    try {
+      var estilos = await C.consultar(C.cliente.from('categorias_ponto_estilo').select('*'));
+      est.estilosCategoria = new Map((estilos || []).map(function (x) { return [x.categoria, x]; }));
+    } catch (e) {
+      est.estilosCategoria = new Map();
+    }
   }
 
   function agendarAreas() {
@@ -5138,11 +5412,41 @@
   }
 
   /* ---------- Pontos de interesse ----------------------------------- */
+  // Categoria para mostrar: uma das fixas (com regras próprias: risco, base, vítima…) ou um tipo criado
+  // pelos responsáveis, com ícone e cor próprios (o ponto guarda uma cópia, para aparecer mesmo sem o tipo).
+  function catDoPonto(d) {
+    var t = d && d.tipo_id ? est.tiposPonto.get(d.tipo_id) : null;
+    if (d && (d.tipo_id || d.icone)) {
+      return { rotulo: t ? t.nome : 'Outro ponto', letra: (t && t.icone) || d.icone || '•', cor: (t && t.cor) || d.cor || null, tipo: true };
+    }
+    var k = CAT_PONTO[d && d.categoria] ? d.categoria : 'OUTRO';
+    var e = est.estilosCategoria.get(k);
+    if (e && (e.icone || e.cor)) return { rotulo: CAT_PONTO[k].rotulo, letra: e.icone || CAT_PONTO[k].letra, cor: e.cor || COR_CATEGORIA[k], tipo: true };
+    return CAT_PONTO[k];
+  }
+  // Cores de sempre das categorias fixas (as mesmas do CSS .poi-*): ponto de partida ao escolher outra
+  var COR_CATEGORIA = { ULTIMA_LOCALIZACAO: '#f8fafc', POSSIVEL_LOCALIZACAO: '#fbbf24', VESTIGIO: '#ec4899', RISCO: '#dc2626',
+    ENCONTRO: '#2563eb', VITIMA_ENCONTRADA: '#10b981', BASE: '#0ea5e9', OUTRO: '#64748b' };
+  function estiloCorPonto(cor) {
+    return cor ? 'background:' + cor + ';color:' + window.Cores.textoSobre(cor) : '';
+  }
+  function htmlMarcaPonto(d) {
+    var cat = catDoPonto(d);
+    var est_ = estiloCorPonto(cat.cor);
+    return '<div class="mk-poi poi-' + C.esc(d.categoria) + (cat.tipo ? ' poi-tipo' : '') + '"' + (est_ ? ' style="' + est_ + '"' : '') +
+      '><span>' + C.esc(cat.letra) + '</span></div>';
+  }
+  // Marca do ponto como elemento (listas, detalhes, formulário)
+  function elMarcaPonto(d, extra) {
+    var cat = catDoPonto(d);
+    return UI.el('span', Object.assign({ classe: 'mk-poi poi-' + d.categoria + (cat.tipo ? ' poi-tipo' : ''), style: estiloCorPonto(cat.cor) || null }, extra || {}),
+      [UI.el('span', { texto: cat.letra })]);
+  }
+
   function iconePontoInt(d) {
-    var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
     return L.divIcon({
       className: 'mk-poi-wrap',
-      html: '<div class="mk-poi poi-' + C.esc(d.categoria) + '"><span>' + C.esc(cat.letra) + '</span></div>' +
+      html: htmlMarcaPonto(d) +
         '<div class="mk-poi-rotulo">' + C.esc(d.titulo) + '</div>',
       iconSize: [0, 0],
     });
@@ -5158,11 +5462,11 @@
     if (!est.mapa || !est.camadaPontosInt) return;
     var d = p.d;
     // A sincronização redesenha a lista inteira: só refaz quando o ponto mudou (evita refazer o agrupamento)
-    var assinatura = [d.lat, d.lng, d.categoria, d.titulo, d.raio_m].join('|');
+    var cat = catDoPonto(d);
+    var assinatura = [d.lat, d.lng, d.categoria, d.titulo, d.raio_m, d.tipo_id, cat.letra, cat.cor, cat.rotulo].join('|');
     if (p.marcador && p._assinatura === assinatura) return;
     tirarPontoInt(p);
     p._assinatura = assinatura;
-    var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
     // Área de risco: círculo do alarme de proximidade (quem entra é avisado).
     if (d.categoria === 'RISCO') {
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 1.5, opacity: 0.7, dashArray: '6 6',
@@ -5175,7 +5479,7 @@
     // O marcador entra no agrupamento junto com relatos e fotos (o círculo de risco/base continua sempre à vista).
     var mk = L.marker([d.lat, d.lng], {
       icon: iconePontoInt(d), keyboard: true, riseOnHover: true, title: cat.rotulo + ': ' + d.titulo, alt: d.titulo,
-      pane: 'pontos', tipoPonto: 'poi', critico: d.categoria === 'RISCO', fixo: d.categoria === 'VITIMA_ENCONTRADA',
+      pane: 'pontos', tipoPonto: 'poi', critico: d.categoria === 'RISCO', vitima: d.categoria === 'VITIMA_ENCONTRADA',
     });
     ligarCliquesMapa(mk, {
       noDesenho: function () { aoClicarNoMapa({ latlng: mk.getLatLng() }); },
@@ -5188,14 +5492,60 @@
 
 
   /* ---------- Modo de desenho (tocar no mapa) ------------------------ */
+  // Barra do desenho, sempre no mesmo formato (enxuta): instrução · [extra] · ↶ desfazer · ⋯ outras ações ·
+  // ação principal · ×. Quem chama só passa os botões; o papel de cada um sai da classe/texto:
+  //   btn-ok (ou Concluir/Salvar/Enviar) = principal; "Desfazer…" = ↶; "Cancelar"/"Sair" = ×;
+  //   data-fixo = fica à vista; o resto vai para o menu ⋯ (com uma só ação extra, ela fica à vista).
+  function papelBotao(b) {
+    var t = (b.textContent || '').trim(), id = b.id || '';
+    if (/^(cancelar|sair)$/i.test(t) || /-(cancelar|sair)$/.test(id)) return 'cancelar';
+    if (/^desfazer/i.test(t)) return 'desfazer';
+    if (b.classList.contains('btn-ok') || /^(✔ )?(concluir|salvar|enviar)/i.test(t)) return 'principal';
+    if (b.hasAttribute('data-fixo')) return 'fixo';
+    return 'outro';
+  }
   function mostrarBarraDesenho(texto, extra, botoes) {
     $('barra-desenho-texto').textContent = texto;
+    $('barra-desenho-texto').title = texto;
     var ex = $('barra-desenho-extra');
     ex.innerHTML = '';
     if (extra) ex.appendChild(extra);
     var bt = $('barra-desenho-botoes');
     bt.innerHTML = '';
-    (botoes || []).forEach(function (b) { if (b) bt.appendChild(b); });
+    var grupos = { cancelar: [], desfazer: [], principal: [], fixo: [], outro: [] };
+    (botoes || []).forEach(function (b) { if (b) grupos[papelBotao(b)].push(b); });
+    grupos.desfazer.forEach(function (b) {
+      var rot = b.textContent.trim();
+      b.textContent = '↶';
+      b.setAttribute('aria-label', rot); b.title = rot;
+      b.classList.add('barra-ico');
+      bt.appendChild(b);
+    });
+    grupos.fixo.forEach(function (b) { bt.appendChild(b); });
+    if (grupos.outro.length === 1) bt.appendChild(grupos.outro[0]);
+    else if (grupos.outro.length > 1) {
+      var menu = UI.el('div', { classe: 'barra-mais-menu', id: 'barra-mais-menu', role: 'menu', hidden: true });
+      grupos.outro.forEach(function (b) {
+        b.classList.add('barra-mais-item');
+        b.setAttribute('role', 'menuitem');
+        b.addEventListener('click', function () { menu.hidden = true; mais.setAttribute('aria-expanded', 'false'); });
+        menu.appendChild(b);
+      });
+      var mais = UI.el('button', { classe: 'btn btn-pequeno barra-ico', type: 'button', id: 'barra-mais', texto: '⋯', title: 'Mais ações', 'aria-label': 'Mais ações',
+        'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: function () {
+          menu.hidden = !menu.hidden;
+          mais.setAttribute('aria-expanded', String(!menu.hidden));
+        } });
+      bt.appendChild(UI.el('span', { classe: 'barra-mais' }, [mais, menu]));
+    }
+    grupos.principal.forEach(function (b) { b.classList.add('btn-ok'); bt.appendChild(b); });
+    grupos.cancelar.forEach(function (b) {
+      var rot = b.textContent.trim();
+      b.textContent = '×';
+      b.setAttribute('aria-label', rot); b.title = rot;
+      b.classList.add('barra-ico', 'barra-x');
+      bt.appendChild(b);
+    });
     $('barra-desenho').hidden = false;
   }
 
@@ -5249,6 +5599,10 @@
         L.polyline(dz.pontos, { color: '#0b1220', weight: 7, opacity: 0.6, interactive: false, className: 'trilha-rascunho-contorno' }).addTo(dz.camadaTemp);
         L.polyline(dz.pontos, { color: dz.tipo === 'trajeto' ? '#3b82f6' : '#facc15', weight: 3, interactive: false, className: 'trilha-rascunho' + (dz.tipo === 'trajeto' ? ' trajeto-rascunho' : '') }).addTo(dz.camadaTemp);
       }
+      // ponto a ponto: cada ponto marcado aparece (até 400, para não pesar)
+      if (dz.modo === 'pontos' && dz.pontos.length > 2 && dz.pontos.length <= 400) {
+        dz.pontos.slice(1, -1).forEach(function (p) { L.circleMarker(p, { radius: 3.5, color: '#0b1220', weight: 1, fillColor: dz.tipo === 'trajeto' ? '#93c5fd' : '#fde68a', fillOpacity: 1, interactive: false, className: 'trilha-rascunho-vertice' }).addTo(dz.camadaTemp); });
+      }
       if (dz.pontos.length) {
         L.circleMarker(dz.pontos[0], { radius: 5, color: '#0b1220', weight: 1.5, fillColor: '#22c55e', fillOpacity: 1, interactive: false, className: 'trilha-rascunho-inicio' }).addTo(dz.camadaTemp);
         L.circleMarker(dz.pontos[dz.pontos.length - 1], { radius: 8, color: '#0b1220', weight: 2, fillColor: '#ffffff', fillOpacity: 1, interactive: false, className: 'trilha-rascunho-fim' }).addTo(dz.camadaTemp);
@@ -5294,6 +5648,7 @@
     cancelarDesenho();
     fecharMenu(false);
     if (telaPequena()) { fecharAreas(); fecharCentral(); if (!$('ficha').hidden) fecharFicha(); }
+    if (gaveta.ativa) definirGaveta('mini', false);   // o mapa livre para tocar
     est.desenho = { tipo: 'externo', camadaTemp: L.layerGroup().addTo(est.mapa), aoClicar: o.aoClicar, aoCancelar: o.aoCancelar };
     $('mapa').classList.add('modo-desenho');
     var dz = est.desenho;
@@ -5369,12 +5724,7 @@
       if (raio && r >= 5 && r <= 50000) desenharPrevia(r);
     }
     if (raio) raio.addEventListener('input', atualizarArea);
-    var cores = UI.el('div', { classe: 'cores-setor', role: 'radiogroup', 'aria-label': 'Cor do setor' }, CORES_SETOR.map(function (c) {
-      return UI.el('label', { classe: 'cor-opcao', title: c }, [
-        UI.el('input', { type: 'radio', name: 'setor-cor', value: c, checked: c.toLowerCase() === d.cor.toLowerCase() ? true : null }),
-        UI.el('span', { style: 'background:' + c }),
-      ]);
-    }));
+    var cores = UI.seletorCor({ rotulo: 'Cor do setor', valor: d.cor, padroes: CORES_SETOR });
     var part = opcoesParticipantes(d.participante_id, true);
     var equipe = UI.el('input', { classe: 'campo', id: 'setor-equipe', maxlength: '60', value: d.equipe || '', placeholder: 'Ex.: Equipe Alfa' });
     var status = UI.el('select', { classe: 'campo', id: 'setor-status' }, Object.keys(STATUS_SETOR).map(function (k) {
@@ -5408,7 +5758,7 @@
       erro.hidden = true;
       var dados = {
         nome: nome.value.replace(/\s+/g, ' ').trim(),
-        cor: (form.querySelector('input[name="setor-cor"]:checked') || {}).value || d.cor,
+        cor: cores.valor() || d.cor,
         participante_id: part.value || null,
         equipe: equipe.value.trim(),
         status: status.value,
@@ -5679,13 +6029,52 @@
   function abrirFormPontoInt(base) {
     var novo = !base.id;
     var d = Object.assign({ categoria: 'OUTRO', titulo: '', descricao: '' }, base);
-    var grade = UI.el('div', { classe: 'cat-pontos', role: 'radiogroup', 'aria-label': 'Categoria' }, Object.keys(CAT_PONTO).map(function (k) {
-      return UI.el('label', { classe: 'cat-ponto' }, [
-        UI.el('input', { type: 'radio', name: 'ponto-cat', value: k, checked: k === d.categoria ? true : null }),
-        UI.el('span', { classe: 'mk-poi poi-' + k }, [UI.el('span', { texto: CAT_PONTO[k].letra })]),
-        UI.el('span', { classe: 'cat-ponto-txt', texto: CAT_PONTO[k].rotulo }),
+    // Categorias fixas (com regras: risco, base, vítima…) e, depois, os tipos criados pelos responsáveis.
+    // Valor do rádio: a categoria ('RISCO'…) ou 'tipo:<id>'.
+    var marcadoInicial = d.tipo_id ? 'tipo:' + d.tipo_id : d.categoria;
+    var grade = UI.el('div', { classe: 'cat-pontos', role: 'radiogroup', 'aria-label': 'Categoria' });
+    function rotuloDaOpcao(v) {
+      if (!v) return '';
+      if (v.indexOf('tipo:') === 0) { var t = est.tiposPonto.get(v.slice(5)); return t ? t.nome : ''; }
+      return CAT_PONTO[v] ? CAT_PONTO[v].rotulo : '';
+    }
+    function rotulosConhecidos() {
+      var r = Object.keys(CAT_PONTO).map(function (c) { return CAT_PONTO[c].rotulo; });
+      est.tiposPonto.forEach(function (t) { r.push(t.nome); });
+      return r;
+    }
+    function opcaoCat(valor, marca, rotulo, extra) {
+      return UI.el('label', { classe: 'cat-ponto' + (extra ? ' ' + extra : '') }, [
+        UI.el('input', { type: 'radio', name: 'ponto-cat', value: valor, checked: valor === marcadoInicial ? true : null }),
+        marca,
+        UI.el('span', { classe: 'cat-ponto-txt', texto: rotulo }),
       ]);
-    }));
+    }
+    function desenharGrade(marcar) {
+      var atual = marcar || (grade.querySelector('input:checked') || {}).value || marcadoInicial;
+      marcadoInicial = atual;
+      grade.innerHTML = '';
+      Object.keys(CAT_PONTO).forEach(function (k) {
+        grade.appendChild(opcaoCat(k, elMarcaPonto({ categoria: k }), CAT_PONTO[k].rotulo));
+      });
+      var tipos = Array.from(est.tiposPonto.values()).filter(function (t) { return t.ativo || 'tipo:' + t.id === atual; })
+        .sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+      tipos.forEach(function (t) {
+        grade.appendChild(opcaoCat('tipo:' + t.id, elMarcaPonto({ categoria: 'OUTRO', tipo_id: t.id, icone: t.icone, cor: t.cor }), t.nome, 'cat-ponto-tipo'));
+      });
+      // tipo que o ponto usa mas não está carregado (ex.: banco sem permissão de leitura): mantém a escolha
+      if (atual.indexOf('tipo:') === 0 && !est.tiposPonto.has(atual.slice(5))) {
+        grade.appendChild(opcaoCat(atual, elMarcaPonto(d), d.titulo || 'Tipo do ponto', 'cat-ponto-tipo'));
+      }
+      grade.appendChild(UI.el('button', { classe: 'cat-ponto cat-ponto-novo', type: 'button', id: 'ponto-novo-tipo',
+        title: 'Criar um tipo de ponto com nome, ícone e cor próprios (fica disponível para todos os responsáveis)', onclick: function () {
+          abrirTipoPonto(null, function (t) { desenharGrade('tipo:' + t.id); aoMudarCat(); });
+        } }, [UI.el('span', { classe: 'mk-poi', 'aria-hidden': 'true' }, [UI.el('span', { texto: '＋' })]), UI.el('span', { classe: 'cat-ponto-txt', texto: 'Novo tipo' })]));
+      grade.appendChild(UI.el('button', { classe: 'cat-ponto cat-ponto-novo', type: 'button', id: 'ponto-gerir-tipos', title: 'Trocar o ícone e a cor de qualquer categoria, editar ou deixar de usar tipos', onclick: function () {
+        abrirGerirTiposPonto(function () { desenharGrade(); aoMudarCat(); });
+      } }, [UI.el('span', { classe: 'mk-poi', 'aria-hidden': 'true' }, [UI.el('span', { texto: '✎' })]), UI.el('span', { classe: 'cat-ponto-txt', texto: 'Ícones e tipos' })]));
+    }
+    desenharGrade();
     var titulo = UI.el('input', { classe: 'campo', id: 'ponto-titulo', maxlength: '80', value: d.titulo, placeholder: 'Ex.: Última vez vista na trilha da cachoeira' });
     var desc = UI.el('textarea', { classe: 'campo', id: 'ponto-desc', maxlength: '1000', rows: '3', placeholder: 'Opcional' });
     desc.value = d.descricao || '';
@@ -5715,16 +6104,19 @@
         : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.'));
     }
     ajustarRaio(d.categoria);
-    grade.addEventListener('change', function () {
+    var rotuloAnterior = '';
+    function aoMudarCat() {
       var k = (grade.querySelector('input:checked') || {}).value;
       if (k === 'BASE' && !d.raio_m && Number(raio.value) === RAIO_ALERTA_PADRAO) raio.value = String(RAIO_BASE_PADRAO);
       ajustarRaio(k);
-    });
-    grade.addEventListener('change', function () {
-      var k = (grade.querySelector('input:checked') || {}).value;
-      if (k && (!titulo.value.trim() || Object.keys(CAT_PONTO).some(function (c) { return CAT_PONTO[c].rotulo === titulo.value.trim(); }))) titulo.value = CAT_PONTO[k].rotulo;
-    });
-    if (!d.titulo) titulo.value = CAT_PONTO[d.categoria].rotulo;
+      // nome ainda é o rótulo de uma categoria (ou vazio): acompanha a escolha
+      var atual = titulo.value.trim();
+      if (k && (!atual || atual === rotuloAnterior || rotulosConhecidos().indexOf(atual) !== -1)) titulo.value = rotuloDaOpcao(k);
+      rotuloAnterior = rotuloDaOpcao(k);
+    }
+    grade.addEventListener('change', aoMudarCat);
+    if (!d.titulo) titulo.value = rotuloDaOpcao(marcadoInicial) || CAT_PONTO.OUTRO.rotulo;
+    rotuloAnterior = rotuloDaOpcao(marcadoInicial);
     var salvo = false;
     var form = UI.el('form', { classe: 'form-ponto form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Marcar ponto' : 'Editar ponto' }),
@@ -5751,8 +6143,9 @@
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       erro.hidden = true;
+      var escolha = (grade.querySelector('input:checked') || {}).value;
       var dados = {
-        categoria: (grade.querySelector('input:checked') || {}).value,
+        categoria: escolha && escolha.indexOf('tipo:') === 0 ? 'OUTRO' : escolha,
         titulo: titulo.value.replace(/\s+/g, ' ').trim(),
         descricao: desc.value.trim(),
         lat: Number(lat.value),
@@ -5764,6 +6157,8 @@
         erro.textContent = 'Coordenadas inválidas.'; erro.hidden = false; return;
       }
       if (novo && d.mensagem_id) dados.mensagem_id = d.mensagem_id;
+      if (escolha.indexOf('tipo:') === 0) dados.tipo_id = escolha.slice(5);
+      else if (d.tipo_id) dados.tipo_id = null;   // voltou para uma categoria fixa
       if (dados.categoria === 'RISCO' || dados.categoria === 'BASE') {
         var r = Number(raio.value);
         if (!isFinite(r) || r < 10 || r > 5000) { erro.textContent = 'Raio: de 10 m a 5.000 m.'; erro.hidden = false; return; }
@@ -5816,18 +6211,147 @@
     destacarNoMapa(mk && camadaDoPonto(mk), mk, d.lat, d.lng);
   }
 
+  /* ---------- Tipos de ponto criados pelos responsáveis ------------- */
+  var CORES_TIPO = ['#64748b', '#2563eb', '#16a34a', '#f59e0b', '#7c3aed', '#0891b2', '#db2777', '#92400e'];
+
+  // Criar ou editar um tipo (nome, ícone, cor). Abre por cima do formulário do ponto. aoSalvar(tipo)
+  function abrirTipoPonto(t, aoSalvar) {
+    var nome = UI.el('input', { classe: 'campo', id: 'tipo-ponto-nome', maxlength: '40', value: t ? t.nome : '', placeholder: 'Ex.: Pouso de helicóptero' });
+    var cor = t ? t.cor : CORES_TIPO[est.tiposPonto.size % CORES_TIPO.length];
+    // ícone: o catálogo inteiro (Escolher ícone), ou qualquer letra/sigla/emoji digitado lá
+    var icone = UI.seletorIcone({ id: 'tipo-ponto-icone', rotulo: 'Ícone do tipo', valor: t ? t.icone : null, cor: cor });
+    var cores = UI.seletorCor({ rotulo: 'Cor do tipo', valor: cor, padroes: CORES_TIPO, aoMudar: function (c) { cor = c; icone.definirCor(c); } });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'tipo-ponto-salvar', texto: t ? 'Salvar tipo' : 'Criar tipo' });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: t ? 'Editar tipo de ponto' : 'Novo tipo de ponto' }),
+      UI.dica('O tipo fica disponível para todos os responsáveis, em qualquer operação. Pontos já marcados com ele acompanham as mudanças de ícone e cor.'),
+      UI.secao('Tipo', [
+        UI.campo('Nome', nome, { para: 'tipo-ponto-nome' }),
+        UI.campo('Ícone', icone, { dica: '"Escolher ícone" abre todos os ícones, com busca. Também vale letra, sigla ou emoji digitado.' }),
+        cores,
+      ]),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var dados = { nome: nome.value.replace(/\s+/g, ' ').trim(), icone: icone.valor(), cor: cores.valor() || cor };
+      if (dados.nome.length < 2) { erro.textContent = 'Informe o nome do tipo (2 a 40 letras).'; erro.hidden = false; return; }
+      if (!dados.icone) { erro.textContent = 'Escolha um ícone.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var res = await C.rpc('salvar_tipo_ponto', { p_id: t ? t.id : null, p_dados: dados });
+        est.tiposPonto.set(res.id, res);
+        fechar();
+        UI.aviso(t ? 'Tipo "' + res.nome + '" salvo.' : 'Tipo "' + res.nome + '" criado.', 'ok');
+        est.pontosInt.forEach(function (p) { if (p.d.tipo_id === res.id) { p.d.icone = res.icone; p.d.cor = res.cor; desenharPontoInt(p); } });
+        renderizarAreas();
+        if (aoSalvar) aoSalvar(res);
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { empilhar: true, fecharNoFundo: false });
+    setTimeout(function () { nome.focus(); }, 30);
+  }
+
+  // Ícone e cor de uma categoria fixa (para todos os responsáveis; as regras da categoria não mudam). aoSalvar()
+  function abrirEstiloCategoria(k, aoSalvar) {
+    var e = est.estilosCategoria.get(k) || {};
+    var cor = e.cor || COR_CATEGORIA[k];
+    var icone = UI.seletorIcone({ id: 'estilo-cat-icone', rotulo: 'Ícone', valor: e.icone || CAT_PONTO[k].letra, cor: cor });
+    var cores = UI.seletorCor({ rotulo: 'Cor', valor: cor, padroes: [COR_CATEGORIA[k]].concat(CORES_TIPO), aoMudar: function (c) { cor = c; icone.definirCor(c); } });
+    async function salvar(ic, c) {
+      try {
+        var res = await C.rpc('salvar_estilo_categoria', { p_categoria: k, p_icone: ic, p_cor: c });
+        if (res && (res.icone || res.cor)) est.estilosCategoria.set(k, res); else est.estilosCategoria.delete(k);
+        fechar();
+        est.pontosInt.forEach(function (p) { if (p.d.categoria === k && !p.d.tipo_id) desenharPontoInt(p); });
+        renderizarAreas();
+        UI.aviso('Aparência de "' + CAT_PONTO[k].rotulo + '" salva.', 'ok');
+        if (aoSalvar) aoSalvar();
+      } catch (er) { UI.aviso('Não foi possível salvar: ' + er.message, 'erro', 7000); }
+    }
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: CAT_PONTO[k].rotulo }),
+      UI.dica('Muda só a aparência desta categoria, em todas as operações. As regras dela (alarme de risco, raio da base, vítima) continuam.'),
+      UI.secao('Aparência', [UI.campo('Ícone', icone), cores]),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'estilo-cat-padrao', texto: 'Voltar ao padrão', onclick: function () { salvar(null, null); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'estilo-cat-salvar', texto: 'Salvar', onclick: function () { salvar(icone.valor(), cores.valor() || cor); } }),
+      ]),
+    ]), { empilhar: true });
+  }
+
+  // Ícones das categorias fixas e tipos criados: trocar ícone/cor; editar ou deixar de usar tipos (quem criou ou administrador). aoMudar()
+  function abrirGerirTiposPonto(aoMudar) {
+    var fixas = UI.el('ul', { classe: 'lista-areas' });
+    var lista = UI.el('ul', { classe: 'lista-areas' });
+    function desenhar() {
+      fixas.innerHTML = '';
+      Object.keys(CAT_PONTO).forEach(function (k) {
+        var e = est.estilosCategoria.get(k);
+        fixas.appendChild(UI.el('li', { classe: 'item-area tipo-ponto-item' }, [
+          elMarcaPonto({ categoria: k }),
+          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: CAT_PONTO[k].rotulo }),
+            UI.el('small', { classe: 'muted', texto: e ? 'Escolhido por ' + e.atualizado_por_nome : 'Padrão' })]),
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'data-categoria': k, texto: 'Trocar ícone', onclick: function () {
+            abrirEstiloCategoria(k, function () { desenhar(); if (aoMudar) aoMudar(); });
+          } }),
+        ]));
+      });
+      lista.innerHTML = '';
+      var tipos = Array.from(est.tiposPonto.values()).filter(function (t) { return t.ativo; }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+      if (!tipos.length) lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhum tipo criado.' }));
+      tipos.forEach(function (t) {
+        var meu = (est.usuario && t.criado_por === est.usuario.id) || (est.responsavel && est.responsavel.admin);
+        lista.appendChild(UI.el('li', { classe: 'item-area tipo-ponto-item' }, [
+          elMarcaPonto({ categoria: 'OUTRO', tipo_id: t.id, icone: t.icone, cor: t.cor }),
+          UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: t.nome }), UI.el('small', { classe: 'muted', texto: 'Criado por ' + t.criado_por_nome })]),
+          meu ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () {
+            abrirTipoPonto(t, function () { desenhar(); if (aoMudar) aoMudar(); });
+          } }) : null,
+          meu ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Deixar de usar', title: 'Some da lista de categorias; pontos já marcados continuam no mapa', onclick: async function () {
+            if (!(await UI.confirmar({ titulo: 'Deixar de usar "' + t.nome + '"?', texto: 'O tipo some da lista de categorias. Os pontos já marcados com ele continuam no mapa, com o mesmo ícone.', ok: 'Deixar de usar', empilhar: true }))) return;
+            try {
+              var res = await C.rpc('salvar_tipo_ponto', { p_id: t.id, p_dados: { ativo: false } });
+              est.tiposPonto.set(res.id, res);
+              desenhar();
+              if (aoMudar) aoMudar();
+            } catch (e) { UI.aviso('Não foi possível alterar: ' + e.message, 'erro', 7000); }
+          } }) : null,
+        ]));
+      });
+    }
+    desenhar();
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Ícones e tipos de ponto' }),
+      UI.dica('Qualquer categoria pode ter o ícone e a cor trocados (vale para todas as operações). Os tipos criados só são alterados por quem criou ou por um administrador.'),
+      UI.secao('Categorias', [fixas]),
+      UI.secao('Tipos criados', [lista, UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '＋ Novo tipo', onclick: function () {
+        abrirTipoPonto(null, function () { desenhar(); if (aoMudar) aoMudar(); });
+      } })]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]), { empilhar: true, tamanho: 'largo' });
+  }
+
   function abrirPontoInt(id) {
     var p = est.pontosInt.get(id);
     if (!p) return;
     var d = p.d;
-    var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+    var cat = catDoPonto(d);
     var alt = UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' });
     var foto = d.foto_id && est.fotos.get(d.foto_id);
     var ativa = est.op.status === 'ativa';
     var editavel = podeAlterar();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-ponto' }, [
       cabecaDetalhe({
-        marca: UI.el('span', { classe: 'mk-poi poi-' + d.categoria, 'aria-hidden': 'true' }, [UI.el('span', { texto: cat.letra })]),
+        marca: elMarcaPonto(d, { 'aria-hidden': 'true' }),
         tipo: 'Ponto de interesse · ' + cat.rotulo, titulo: d.titulo,
         extra: [editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-renomear', type: 'button', id: 'ponto-renomear', title: 'Renomear o ponto', 'aria-label': 'Renomear o ponto', texto: '✎',
           onclick: function () { fechar(); renomearPonto(d); } }) : null],
@@ -6172,10 +6696,10 @@
             UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: (STATUS_SETOR[d.status] || STATUS_SETOR.pendente).rotulo })])])]);
         })) : UI.el('p', { classe: 'muted', texto: 'Nenhum setor.' })], { dica: 'O centro do setor é o destino.' }),
         UI.secao('Pontos de interesse', [pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
-          var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+          var cat = catDoPonto(d);
           return UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', onclick: function () {
             fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id, participantes: participantes, grupo_id: grupoId });
-          } }, [UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
+          } }, [elMarcaPonto(d),
             UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: d.titulo }), UI.el('small', { classe: 'muted', texto: cat.rotulo })])])]);
         })) : UI.el('p', { classe: 'muted', texto: 'Nenhum ponto marcado.' })]),
       ]),
@@ -6473,9 +6997,9 @@
     $('pontos-int-vazio').hidden = est.pontosInt.size > 0;
     est.pontosInt.forEach(function (p) {
       var d = p.d;
-      var cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+      var cat = catDoPonto(d);
       ulP.appendChild(UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', 'data-ponto': d.id, onclick: function () { abrirPontoInt(d.id); } }, [
-        UI.el('span', { classe: 'mk-poi poi-' + d.categoria }, [UI.el('span', { texto: cat.letra })]),
+        elMarcaPonto(d),
         UI.el('span', { classe: 'item-area-txt' }, [
           UI.el('strong', { texto: d.titulo }),
           UI.el('small', { classe: 'muted', texto: cat.rotulo + ' · ' + C.hora(d.criado_em, false) + ' · ' + d.criado_por_nome }),
@@ -6539,12 +7063,14 @@
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
     var g = L.featureGroup();
     var opc = { pane: 'trilhasDesenhadas', lineJoin: 'round', lineCap: 'round' };
-    L.polyline(d.pontos, Object.assign({ color: '#0b1220', weight: 5, opacity: 0.4, className: 'trilha-desenhada-contorno' }, opc)).addTo(g);
+    var ft = fatorTelaTrilha();   // mais discreta em telas pequenas
+    t.fatorTela = ft;
+    L.polyline(d.pontos, Object.assign({ color: '#0b1220', weight: 5 * ft, opacity: 0.4, className: 'trilha-desenhada-contorno' }, opc)).addTo(g);
     var cor = d.cor || e.cor;   // cor própria da trilha (ex.: a do arquivo importado) ou a da situação
-    L.polyline(d.pontos, Object.assign({ color: cor, weight: 2.5, opacity: 0.85, dashArray: e.traco, className: 'trilha-desenhada trilha-desenhada-' + d.estado }, opc)).addTo(g);
+    L.polyline(d.pontos, Object.assign({ color: cor, weight: Math.max(1.5, 2.5 * ft), opacity: 0.85, dashArray: e.traco, className: 'trilha-desenhada trilha-desenhada-' + d.estado }, opc)).addTo(g);
     var ini = d.pontos[0], fim = d.pontos[d.pontos.length - 1];
-    L.circleMarker(ini, Object.assign({ radius: 3.5, color: '#0b1220', weight: 1.5, fillColor: cor, fillOpacity: 0.9 }, opc)).addTo(g);
-    L.circleMarker(fim, Object.assign({ radius: 4, color: cor, weight: 2, fillColor: '#0b1220', fillOpacity: 0.9 }, opc)).addTo(g);
+    L.circleMarker(ini, Object.assign({ radius: Math.max(2.5, 3.5 * ft), color: '#0b1220', weight: 1.5, fillColor: cor, fillOpacity: 0.9 }, opc)).addTo(g);
+    L.circleMarker(fim, Object.assign({ radius: Math.max(3, 4 * ft), color: cor, weight: 2, fillColor: '#0b1220', fillOpacity: 0.9 }, opc)).addTo(g);
     ligarCliquesMapa(g, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante um desenho o toque é do mapa
       info: function () { return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') }; },
@@ -6657,6 +7183,7 @@
         else apagarRascunhoTrilha();
       }
     }
+    opc.modo = modoDesenhoTrilha();
     iniciarDesenho('trilha', opc);
     if (!est.desenho || est.desenho.tipo !== 'trilha') return;
     if (trilhaId) desenharTrilhaManual(est.trilhasManuais.get(trilhaId));   // esconde o traçado antigo enquanto edita
@@ -6674,15 +7201,23 @@
   function simplificarIdx(pts, tol) { return window.Rotas.simplificarIndices(pts, tol); }
   function arredLL(ll) { return [Math.round(ll.lat * 1e7) / 1e7, Math.round(ll.lng * 1e7) / 1e7]; }
 
+  // Modo do desenho de trilha/trajeto: 'livre' (segurar e arrastar, como caneta) ou 'pontos' (cada toque
+  // no mapa marca um ponto, ligado ao anterior por uma reta; o mapa continua arrastável). Lembrado no aparelho.
+  var CHAVE_MODO_DESENHO = 'gbs-desenho-modo';
+  function modoDesenhoTrilha() { return C.local.ler(CHAVE_MODO_DESENHO, 'livre') === 'pontos' ? 'pontos' : 'livre'; }
+
   // Liga o desenho por arrasto no mapa. "Mover mapa" (dz.mover) devolve o arrasto ao mapa sem sair do desenho.
   // Dois dedos: o traço em andamento é descartado e o gesto fica para o zoom do mapa.
+  // No modo ponto a ponto o arrasto é sempre do mapa e o toque (sem arrastar) acrescenta um ponto.
   function ligarDesenhoLivre(dz) {
     var mapa = est.mapa, cont = mapa.getContainer();
-    var ativos = new Set(), traco = null;
+    var ativos = new Set(), traco = null, toque = null;
     function ehControle(t) { return t && t.closest && t.closest('.leaflet-control-container, .leaflet-control, .leaflet-popup'); }
-    function desenhando() { return est.desenho === dz && !dz.mover && !dz.pausado; }
+    function porPontos() { return dz.modo === 'pontos'; }
+    function desenhando() { return est.desenho === dz && !dz.mover && !dz.pausado && !porPontos(); }
     function aplicarModo() {
-      var livre = est.desenho === dz && !dz.mover;
+      var livre = est.desenho === dz && !dz.mover && !porPontos();
+      cont.classList.toggle('desenho-pontos', est.desenho === dz && porPontos() && !dz.mover);
       cont.classList.toggle('desenho-livre', livre);
       cont.classList.toggle('desenho-mover', est.desenho === dz && Boolean(dz.mover));
       if (livre) { mapa.dragging.disable(); mapa.doubleClickZoom.disable(); mapa.boxZoom.disable(); }
@@ -6693,6 +7228,7 @@
       traco = null;
     }
     function aoDescer(ev) {
+      if (est.desenho === dz && porPontos() && !dz.mover && !ehControle(ev.target)) toque = { x: ev.clientX, y: ev.clientY, n: (toque && toque.ativo ? 2 : 1), ativo: true, id: ev.pointerId };
       if (!desenhando() || ehControle(ev.target) || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
       ativos.add(ev.pointerId);
       if (ativos.size > 1) { largar(); return; }   // pinça: zoom do mapa
@@ -6715,6 +7251,7 @@
       });
     }
     function aoSubir(ev) {
+      if (toque && toque.id === ev.pointerId) toque.ativo = false;
       ativos.delete(ev.pointerId);
       if (!traco || ev.pointerId !== traco.id) return;
       var t = traco;
@@ -6724,7 +7261,13 @@
     }
     // em modo desenho, toques e cliques no mapa não abrem nada (só os controles do mapa respondem)
     function aoClicar(ev) {
-      if (est.desenho === dz && !dz.mover && !ehControle(ev.target)) { ev.stopPropagation(); ev.preventDefault(); }
+      if (est.desenho !== dz || dz.mover || ehControle(ev.target)) return;
+      ev.stopPropagation(); ev.preventDefault();
+      if (!porPontos()) return;
+      // ponto a ponto: só um toque parado vale (arrastar ou pinçar move o mapa)
+      var t = toque; toque = null;
+      if (!t || t.n > 1 || Math.abs(ev.clientX - t.x) + Math.abs(ev.clientY - t.y) > 8) return;
+      acrescentarPonto(dz, arredLL(mapa.mouseEventToLatLng(ev)));
     }
     cont.addEventListener('pointerdown', aoDescer, true);
     cont.addEventListener('pointermove', aoMover, true);
@@ -6739,7 +7282,7 @@
       cont.removeEventListener('pointerup', aoSubir, true);
       cont.removeEventListener('pointercancel', aoSubir, true);
       cont.removeEventListener('click', aoClicar, true);
-      cont.classList.remove('desenho-livre', 'desenho-mover');
+      cont.classList.remove('desenho-livre', 'desenho-mover', 'desenho-pontos');
       mapa.dragging.enable(); mapa.doubleClickZoom.enable(); mapa.boxZoom.enable();
     };
     aplicarModo();
@@ -6776,6 +7319,22 @@
     atualizarBarraTrilha();
   }
 
+  // Ponto a ponto: o ponto entra no fim da linha (cada ponto é um "traço" de 1, para o Desfazer).
+  function acrescentarPonto(dz, ll) {
+    if (est.desenho !== dz) return;
+    if (dz.pontos.length + 1 > MAX_PONTOS_TRILHA) {
+      UI.aviso('A linha chegou ao limite de detalhe (' + MAX_PONTOS_TRILHA + ' pontos). Conclua esta e desenhe a continuação separada.', 'erro', 8000);
+      return;
+    }
+    var u = dz.pontos[dz.pontos.length - 1];
+    if (u && u[0] === ll[0] && u[1] === ll[1]) return;
+    dz.pontos = dz.pontos.concat([ll]);
+    dz.tracos.push({ n: 1, inicio: false });
+    redesenharTemp();
+    if (dz.tipo === 'trilha') gravarRascunhoTrilha();
+    atualizarBarraTrilha();
+  }
+
   function desfazerTraco(dz) {
     var t = dz.tracos.pop();
     if (!t) return;
@@ -6793,21 +7352,37 @@
     var traj = dz.tipo === 'trajeto';
     var n = dz.pontos.length;
     var compr = n > 1 ? formatarComprimento(comprimentoLinhaM(dz.pontos)) : '';
+    var pontos = dz.modo === 'pontos';
     var texto = dz.mover
       ? 'Mover mapa: arraste e dê zoom. Toque em "Desenhar" para continuar.'
+      : pontos ? (n < 2 ? (traj ? 'Trajeto ponto a ponto: ' : dz.trilhaId ? 'Editando o traçado ponto a ponto: ' : 'Trilha ponto a ponto: ') +
+          'toque no mapa em cada ponto do caminho, na ordem; eles são ligados por retas. Arraste para mover o mapa.' + (n === 1 ? ' (1 ponto)' : '')
+        : (traj ? 'Trajeto · ' : dz.trilhaId ? 'Editando o traçado · ' : 'Trilha · ') + n + ' pontos · ' + compr + ' · toque para o próximo ponto.')
       : n < 2 ? (traj ? 'Trajeto para enviar: desenhe, na ordem, o caminho que a equipe deve fazer (segure e arraste).'
-        : (dz.trilhaId ? 'Editando o traçado: ' : 'Desenhar trilha ou trajeto: ') + 'segure e arraste sobre o mapa, como uma caneta. Ao concluir, escolha: trilha feita, planejada ou enviar para alguém percorrer.')
+        : (dz.trilhaId ? 'Editando o traçado: ' : 'Desenhar trilha ou trajeto: ') + 'segure e arraste sobre o mapa, como uma caneta. "✔ Concluir" salva como trilha planejada; "Mais opções…" escolhe trilha feita ou enviar para alguém.')
         : (traj ? 'Trajeto · ' : dz.trilhaId ? 'Editando o traçado · ' : 'Trilha · ') + compr + ' · continue arrastando a partir do círculo branco. Dois dedos: zoom.';
+    var rapido = !traj && !dz.trilhaId;
     mostrarBarraDesenho(texto, null, [
-      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-desfazer', texto: 'Desfazer traço', disabled: dz.tracos.length ? null : true, onclick: function () { desfazerTraco(dz); } }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-modo', 'aria-pressed': String(pontos), 'data-fixo': true,
+        title: pontos ? 'Voltar a desenhar à mão livre (segurar e arrastar)' : 'Marcar o caminho tocando ponto a ponto no mapa',
+        texto: pontos ? '✎ Mão livre' : '• Ponto a ponto', onclick: function () {
+          dz.modo = pontos ? 'livre' : 'pontos';
+          C.local.gravar(CHAVE_MODO_DESENHO, dz.modo);
+          dz.mover = false;
+          if (dz.aplicarModo) dz.aplicarModo();
+          atualizarBarraTrilha();
+        } }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-desfazer', texto: pontos ? 'Desfazer ponto' : 'Desfazer traço', disabled: dz.tracos.length ? null : true, onclick: function () { desfazerTraco(dz); } }),
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-limpar', texto: 'Limpar', disabled: n ? null : true, onclick: async function () {
         if (n >= 2 && !(await UI.confirmar({ titulo: 'Apagar o desenho?', texto: 'O traçado em andamento recomeça do zero (a trilha salva não muda).', ok: 'Limpar', perigo: true }))) return;
         if (est.desenho !== dz) return;
         dz.pontos = []; dz.tracos = []; redesenharTemp(); gravarRascunhoTrilha(); atualizarBarraTrilha();
       } }),
-      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-mover', 'aria-pressed': String(Boolean(dz.mover)),
+      pontos ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-mover', 'aria-pressed': String(Boolean(dz.mover)),
         texto: dz.mover ? '✎ Desenhar' : '✋ Mover mapa', onclick: function () { dz.mover = !dz.mover; if (dz.aplicarModo) dz.aplicarModo(); atualizarBarraTrilha(); } }),
-      UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'trilha-concluir', texto: traj ? 'Enviar trajeto…' : dz.trilhaId ? 'Salvar traçado' : 'Concluir…',
+      rapido ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'trilha-concluir-rapido', texto: '✔ Concluir',
+        title: 'Salvar já como trilha planejada, com nome automático (dá para editar depois)', disabled: n >= 2 ? null : true, onclick: concluirTrilhaRapido }) : null,
+      UI.el('button', { classe: 'btn btn-pequeno' + (rapido ? '' : ' btn-ok'), type: 'button', id: 'trilha-concluir', texto: traj ? 'Enviar trajeto…' : dz.trilhaId ? 'Salvar traçado' : 'Mais opções…',
         disabled: n >= 2 ? null : true, onclick: traj ? concluirTrajeto : concluirTrilha }),
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'trilha-cancelar', texto: 'Cancelar', onclick: cancelarDesenhoTrilha }),
     ]);
@@ -6829,7 +7404,7 @@
   // a um grupo; o celular segue a linha como foi desenhada (rotas.js → Rotas.deTracado).
   function iniciarDesenhoTrajeto(participantes, grupoId) {
     if (!est.mapa || !podeAlterar()) return;
-    iniciarDesenho('trajeto', { pontos: [], tracos: [], participantes: participantes || [], grupo_id: grupoId || null });
+    iniciarDesenho('trajeto', { pontos: [], tracos: [], participantes: participantes || [], grupo_id: grupoId || null, modo: modoDesenhoTrilha() });
     if (!est.desenho || est.desenho.tipo !== 'trajeto') return;
     ligarDesenhoLivre(est.desenho);
     redesenharTemp();
@@ -6846,6 +7421,29 @@
       aoCancelar: function () { if (est.desenho === dz) atualizarBarraTrilha(); },   // fechou sem enviar: volta ao desenho
       aoEnviar: function () { if (est.desenho === dz) cancelarDesenho(); },
     });
+  }
+
+  // Concluir sem formulário: salva como trilha planejada, com nome automático ("Trilha 3 · 14:05").
+  // Nome, situação, grupo e cor podem ser ajustados depois em Setores, trilhas e pontos.
+  async function concluirTrilhaRapido() {
+    var dz = est.desenho;
+    if (!dz || dz.tipo !== 'trilha' || dz.trilhaId || dz.pontos.length < 2) return;
+    var usados = new Set(Array.from(est.trilhasManuais.values()).map(function (t) { return t.d.nome.trim().toLowerCase(); }));
+    var n = est.trilhasManuais.size + 1, nome;
+    do { nome = 'Trilha ' + n + ' · ' + C.hora(new Date().toISOString(), false); n++; } while (usados.has(nome.toLowerCase()));
+    var btn = $('trilha-concluir-rapido');
+    if (btn) btn.disabled = true;
+    try {
+      var res = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: null,
+        p_dados: { client_id: dz.client_id, nome: nome, estado: 'planejada', meio: 'equipe', pontos: dz.pontos.slice() } });
+      apagarRascunhoTrilha();
+      cancelarDesenho();
+      aplicarTrilhasManuais([res]);
+      UI.aviso('Trilha "' + res.nome + '" salva como planejada. Para mudar nome ou situação, abra-a em Setores, trilhas e pontos.', 'ok');
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      UI.aviso('Trilha não salva: ' + e.message + ' O desenho continua na tela: tente de novo.', 'erro', 9000);
+    }
   }
 
   async function concluirTrilha() {
@@ -7366,10 +7964,10 @@
       v.marcadores.push(new window.maplibregl.Marker({ element: el }).setLngLat([pos.lng, pos.lat]).addTo(m));
     });
     est.pontosInt.forEach(function (pi) {
-      var d = pi.d, cat = CAT_PONTO[d.categoria] || CAT_PONTO.OUTRO;
+      var d = pi.d, cat = catDoPonto(d);
       var el = document.createElement('div');
       el.className = 'mk3d mk3d-poi';
-      el.innerHTML = '<div class="mk-poi poi-' + C.esc(d.categoria) + '"><span>' + C.esc(cat.letra) + '</span></div>';
+      el.innerHTML = htmlMarcaPonto(d);
       el.title = cat.rotulo + ': ' + d.titulo;
       v.marcadores.push(new window.maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([d.lng, d.lat]).addTo(m));
     });
@@ -7438,6 +8036,7 @@
     if (texto && est.avisoGpsFeito !== e) UI.aviso(texto, 'erro', 8000);
     est.avisoGpsFeito = texto ? e : null;
     atualizarFilaMinha();
+    atualizarBotaoMinhaTrilha();
   }
 
   function chaveMinhaPosAqui() { return 'gbs-minha-pos-aqui:' + (est.op ? est.op.id : ''); }
@@ -7454,28 +8053,96 @@
     return Boolean(d.rastreando && recente && !aqui);
   }
 
-  // Ao abrir (ou criar) uma operação ativa: a posição do responsável liga sempre
-  // (não há opção de desligar), a menos que o navegador bloqueie a localização.
-  async function iniciarMinhaPosicaoAuto() {
-    if (!est.op || est.op.status !== 'ativa') return;
+  // Registro da trilha do responsável: opcional, liga e desliga só pelo botão, sempre com confirmação.
+  // Menu Ferramentas em seções recolhíveis (o estado fica neste aparelho) e busca pelo nome da função.
+  var CHAVE_SECOES_MENU = 'gbs-menu-secoes-fechadas';
+  function iniciarSecoesMenu() {
+    var menu = $('menu-ferramentas'), filtro = $('menu-filtro');
+    if (!menu || !filtro) return;
+    var fechadas = new Set(C.local.ler(CHAVE_SECOES_MENU, []) || []);
+    var secoes = Array.prototype.slice.call(menu.querySelectorAll('.menu-secao'));
+    function aplicarSecao(sec) {
+      var aberta = !fechadas.has(sec.getAttribute('data-secao')) || Boolean(filtro.value.trim());
+      sec.classList.toggle('fechada', !aberta);
+      sec.querySelector('.menu-secao-titulo').setAttribute('aria-expanded', String(aberta));
+    }
+    secoes.forEach(function (sec) {
+      sec.querySelector('.menu-secao-titulo').addEventListener('click', function () {
+        if (filtro.value.trim()) return;
+        var id = sec.getAttribute('data-secao');
+        if (fechadas.has(id)) fechadas.delete(id); else fechadas.add(id);
+        C.local.gravar(CHAVE_SECOES_MENU, Array.from(fechadas));
+        aplicarSecao(sec);
+      });
+      aplicarSecao(sec);
+    });
+    function semAcento(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    filtro.addEventListener('input', function () {
+      var q = semAcento(filtro.value.trim());
+      Array.prototype.forEach.call(menu.querySelectorAll('.menu-lista .menu-item, .menu-lista .menu-tema'), function (it) {
+        it.classList.toggle('filtrado', Boolean(q) && semAcento(it.textContent + ' ' + (it.title || '')).indexOf(q) === -1);
+      });
+      secoes.forEach(function (sec) {
+        aplicarSecao(sec);
+        sec.hidden = Boolean(q) && !sec.querySelector('.menu-secao-itens > :not(.filtrado):not([hidden]):not(.menu-sol)');
+      });
+    });
+    // Enter: abre a primeira função encontrada
+    filtro.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter') return;
+      var it = menu.querySelector('.menu-lista .menu-item:not(.filtrado):not([hidden]):not(.fora-do-menu)');
+      if (it && it.tagName === 'BUTTON') { ev.preventDefault(); it.click(); }
+    });
+  }
+
+  function chaveMinhaTrilha() { return 'gbs-minha-trilha:' + (est.op ? est.op.id : ''); }
+  function acharMeuRegistro() {
+    if (est.meuPart || !est.usuario) return;
+    est.participantes.forEach(function (p) {
+      if (!est.meuPart && p.dados.user_id === est.usuario.id && p.dados.tipo === 'responsavel' && !p.dados.removido) est.meuPart = p.dados.id;
+    });
+    if (est.meuPart) verificarMensagensParaMim();
+  }
+  function atualizarBotaoMinhaTrilha() {
+    var b = $('menu-minha-trilha');
+    if (!b) return;
+    var ligado = est.compartilhando || est.iniciandoMinhaPos;
+    b.setAttribute('aria-pressed', String(Boolean(ligado)));
+    b.classList.toggle('btn-ativo', Boolean(ligado));
+    $('menu-minha-trilha-estado').textContent = est.iniciandoMinhaPos ? 'ligando…' : est.compartilhando ? (est.minhaPosEstado === 'ativa' ? 'gravando' : 'gravando · sem sinal') : 'desligado';
+  }
+  async function alternarMinhaTrilha() {
+    if (!est.op || est.op.status !== 'ativa' || est.iniciandoMinhaPos) return;
+    if (est.compartilhando) {
+      var parar = await UI.confirmar({ titulo: 'Interromper o registro da sua trilha?', ok: 'Interromper',
+        texto: 'Sua posição deixa de ser enviada à equipe e a sua trilha para de ser gravada. O que já foi gravado continua no mapa. Para voltar a gravar, toque de novo em "Registrar minha trilha".' });
+      if (!parar) return;
+      C.local.apagar(chaveMinhaTrilha());
+      pararMinhaPosicao(false);
+      UI.aviso('Registro da sua trilha interrompido.', 'ok');
+      return;
+    }
+    var iniciar = await UI.confirmar({ titulo: 'Iniciar o registro da sua trilha?', ok: 'Iniciar registro',
+      texto: 'Sua posição passa a aparecer no mapa para a equipe e a sua trilha é gravada até você interromper. Mantenha o painel aberto e a tela ligada.' });
+    if (!iniciar) return;
     if (!('geolocation' in navigator) || !window.isSecureContext) {
       est.minhaPosEstado = 'indisponivel';
       atualizarEstadoGps();
       return;
     }
     await verificarPermissaoMinha();
-    if (est.permissaoMinha === 'denied') {
-      est.minhaPosEstado = 'bloqueada';
-      atualizarEstadoGps();
-      return;
-    }
-    if (!est.meuPart) await entrarComoResponsavel();
-    if (outroAparelhoCompartilhando()) {
-      est.minhaPosEstado = 'outro_aparelho';
-      atualizarEstadoGps();
-      return;
-    }
-    ligarMinhaPosicao(true);
+    if (est.permissaoMinha === 'denied') { est.minhaPosEstado = 'bloqueada'; atualizarEstadoGps(); mostrarComoLiberarMinha(); return; }
+    C.local.gravar(chaveMinhaTrilha(), 1);
+    ligarMinhaPosicao(false);
+  }
+  async function oferecerRetomarMinhaTrilha() {
+    if (!Number(C.local.ler(chaveMinhaTrilha(), 0))) return;
+    var opId = est.op.id;
+    var sim = await UI.confirmar({ titulo: 'Retomar o registro da sua trilha?', ok: 'Retomar', cancelar: 'Não registrar',
+      texto: 'Você estava registrando a sua trilha neste aparelho quando o painel foi fechado. Quer continuar?' });
+    if (!est.op || est.op.id !== opId) return;
+    if (!sim) { C.local.apagar(chaveMinhaTrilha()); return; }
+    ligarMinhaPosicao(false);
   }
 
   // Permissions API: acompanha mudanças (ex.: o responsável liberou nas configurações).
@@ -7487,7 +8154,8 @@
       r.status.onchange = function () {
         est.permissaoMinha = r.status.state;
         if (!est.op || est.op.status !== 'ativa') return;
-        if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada') {
+        // liberou depois de tentar ligar: segue o pedido já confirmado
+        if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && Number(C.local.ler(chaveMinhaTrilha(), 0))) {
           ligarMinhaPosicao(true);
         } else if (est.permissaoMinha === 'denied' && est.compartilhando) {
           pararMinhaPosicao(true);
@@ -7496,7 +8164,7 @@
         }
       };
     }
-    if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && est.op && est.op.status === 'ativa') {
+    if (est.permissaoMinha === 'granted' && est.minhaPosEstado === 'bloqueada' && est.op && est.op.status === 'ativa' && Number(C.local.ler(chaveMinhaTrilha(), 0))) {
       ligarMinhaPosicao(true);
     }
   }
@@ -7506,7 +8174,7 @@
   async function garantirMinhaPosicao() {
     if (est.iniciandoMinhaPos) return;
     if (est.compartilhando) {
-      UI.aviso('Sua posição está sendo compartilhada com a equipe (fica sempre ligada durante a operação).', 'ok');
+      UI.aviso('Sua posição está sendo compartilhada com a equipe. Para parar, use "Registrar minha trilha" em Ferramentas.', 'ok');
       return;
     }
     if (!est.op || est.op.status !== 'ativa') return;
@@ -8500,6 +9168,19 @@
   }
 
   // Grupos de um participante: [{ id, nome, cor, papel }]
+  // Quadradinho da cor do grupo, com o ícone dele dentro (quando tem)
+  function chipGrupo(g) {
+    var ic = g && g.icone;
+    if (!ic && g && g.id && est.grupos.get(g.id)) ic = est.grupos.get(g.id).icone;
+    var c = UI.el('span', { classe: 'chip-cor' + (ic ? ' chip-icone' : ''), style: 'background:' + g.cor + (ic ? ';color:' + window.Cores.textoSobre(g.cor) : '') }, ic ? [ic] : null);
+    return c;
+  }
+  function htmlChipGrupo(g, classe, tag) {
+    tag = tag || 'span';
+    var ic = g.icone;
+    return '<' + tag + ' class="' + classe + (ic ? ' chip-cor chip-icone' : '') + '" style="background:' + C.esc(g.cor) + (ic ? ';color:' + window.Cores.textoSobre(g.cor) : '') + '">' + (ic ? C.esc(ic) : '') + '</' + tag + '>';
+  }
+
   function gruposDe(pid) {
     var lista = [];
     est.membros.forEach(function (mapa, gid) {
@@ -8614,7 +9295,7 @@
         // trajeto desenhado: a linha a seguir (uma vez por trajeto); senão, a direção em linha reta
         if (window.Rotas.temTrajeto(d)) {
           var chave = JSON.stringify(d.trajeto[0]) + d.trajeto.length;
-          if (!vistos[chave]) { vistos[chave] = 1; L.polyline(d.trajeto, { color: g.cor, weight: 3, opacity: 0.85, interactive: false, className: 'trajeto-grupo' }).addTo(camada); }
+          if (!vistos[chave]) { vistos[chave] = 1; L.polyline(d.trajeto, { color: g.cor, weight: Math.max(1.5, 3 * fatorTelaTrilha()), opacity: 0.85, interactive: false, className: 'trajeto-grupo' }).addTo(camada); }
         } else if (pos) L.polyline([[pos.lat, pos.lng], [d.lat, d.lng]], { color: g.cor, weight: 2, dashArray: '4 8', opacity: 0.75, interactive: false }).addTo(camada);
       });
     });
@@ -8637,7 +9318,7 @@
       var n = membrosDe(g.id).filter(function (x) { return !x.p.dados.removido; }).length;
       var rot = ativo ? 'Mostrar todos de novo' : 'Mostrar só o grupo ' + g.nome + ' no mapa';
       return UI.el('li', { classe: ativo ? 'ativo' : '' }, [
-        UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
+        chipGrupo(g),
         UI.el('span', { classe: 'grupo-mapa-nome', texto: g.nome }),
         UI.el('small', { classe: 'muted', title: n + ' pessoa(s) ativa(s)', texto: String(n) }),
         UI.el('button', { classe: 'btn btn-pequeno btn-olho' + (ativo ? ' btn-ativo' : ''), type: 'button', 'data-grupo': g.id,
@@ -8670,7 +9351,7 @@
     caixa.innerHTML = '';
     if (!meus.length) caixa.appendChild(UI.el('p', { classe: 'muted ficha-sem-grupo', texto: 'Não está em nenhum grupo.' }));
     else caixa.appendChild(UI.el('ul', { classe: 'ficha-lista-grupos' }, meus.map(function (g) {
-      return UI.el('li', null, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), UI.el('strong', { texto: g.nome }),
+      return UI.el('li', null, [chipGrupo(g), UI.el('strong', { texto: g.nome }),
         UI.el('small', { classe: 'muted', texto: (g.papel === 'responsavel' ? '★ responsável' : 'membro') + (g.origem === 'link' ? ' · entrou pelo link' : '') })]);
     })));
     if (editavel && outros.length && !p.dados.removido) {
@@ -8687,7 +9368,7 @@
       var n = (est.membros.get(g.id) || new Map()).size;
       return UI.el('label', { classe: 'opcao-modo' }, [
         UI.el('input', { type: 'radio', name: 'add-grupo', value: g.id, checked: i === 0 ? true : null }),
-        UI.el('span', null, [UI.el('strong', null, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome]),
+        UI.el('span', null, [UI.el('strong', null, [chipGrupo(g), ' ' + g.nome]),
           UI.el('small', { texto: n + ' pessoa(s)' })]),
       ]);
     }));
@@ -8766,7 +9447,7 @@
         var ativo = est.filtroGrupos.has(g.id);
         return UI.el('li', { classe: 'item-grupo', 'data-grupo': g.id }, [
           UI.el('div', { classe: 'item-grupo-topo' }, [
-            UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }),
+            chipGrupo(g),
             UI.el('strong', { texto: g.nome }),
             UI.el('small', { classe: 'muted', texto: mem.length + ' pessoa(s)' + (resp.length ? ' · ★ ' + resp.join(', ') : ' · sem responsável') +
               ' · link: ' + (g.permite_militar ? 'militares ou civis' : 'civis') }),
@@ -8802,18 +9483,10 @@
 
   function abrirFormGrupo(g) {
     var novo = !g;
-    var usadas = new Set(Array.from(est.grupos.values()).map(function (x) { return x.cor.toLowerCase(); }));
-    var corPadrao = g ? g.cor : (GRUPO_CORES.filter(function (c) { return !usadas.has(c.toLowerCase()); })[0] || GRUPO_CORES[0]);
-    // grupos antigos com outra cor continuam mostrando a cor que já têm
-    var opcoesCor = GRUPO_CORES.slice();
-    if (g && opcoesCor.indexOf(g.cor) < 0) opcoesCor.push(g.cor);
+    var corPadrao = g ? g.cor : window.Cores.livre(GRUPO_CORES, Array.from(est.grupos.values()).map(function (x) { return x.cor; }));
     var nome = UI.el('input', { classe: 'campo', id: 'grupo-nome', maxlength: '60', value: g ? g.nome : '', placeholder: 'Ex.: Polícia Civil' });
-    var cores = UI.el('div', { classe: 'cores-setor', role: 'radiogroup', 'aria-label': 'Cor do grupo' }, opcoesCor.map(function (c) {
-      return UI.el('label', { classe: 'cor-opcao', title: c }, [
-        UI.el('input', { type: 'radio', name: 'grupo-cor', value: c, checked: c.toLowerCase() === corPadrao.toLowerCase() ? true : null }),
-        UI.el('span', { style: 'background:' + c }),
-      ]);
-    }));
+    var icone = UI.seletorIcone({ id: 'grupo-icone', rotulo: 'Ícone do grupo', valor: g ? g.icone : null, cor: corPadrao, vazio: true });
+    var cores = UI.seletorCor({ rotulo: 'Cor do grupo', valor: corPadrao, padroes: GRUPO_CORES, aoMudar: function (c) { icone.definirCor(c); } });
     var mil = UI.el('input', { type: 'checkbox', id: 'grupo-militar', checked: g && g.permite_militar ? true : null });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'grupo-salvar', texto: novo ? 'Criar grupo' : 'Salvar' });
@@ -8823,6 +9496,7 @@
         UI.campo('Nome do grupo', nome, { para: 'grupo-nome', largo: true }),
       ]),
       UI.campo('Cor', cores, { largo: true }),
+      UI.campo('Ícone', icone, { largo: true, opcional: true, dica: 'Aparece junto da cor do grupo nas listas e no mapa (ex.: 🐕 canil, 🚤 embarcação, 🚁 aéreo).' }),
       UI.el('label', { classe: 'linha-opcao' }, [mil, ' Militar pelo link do grupo', UI.dica('Sem esta opção, quem entra pelo link do grupo aparece como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.')]),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
@@ -8832,9 +9506,10 @@
       erro.hidden = true;
       var dados = {
         nome: nome.value.replace(/\s+/g, ' ').trim(),
-        cor: (form.querySelector('input[name="grupo-cor"]:checked') || {}).value || corPadrao,
+        cor: cores.valor() || corPadrao,
         permite_militar: Boolean(mil.checked),
       };
+      if (icone.valor() || (g && g.icone)) dados.icone = icone.valor() || '';   // sem a migração 050 o campo não vai
       if (!dados.nome) { erro.textContent = 'Informe o nome do grupo.'; erro.hidden = false; return; }
       btn.disabled = true;
       try {
@@ -8906,7 +9581,7 @@
     render();
     est.renderGruposAberto = render;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-membros' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [chipGrupo(g), ' ' + g.nome,
         UI.dica('O responsável (★) pode receber o destino pelo grupo e avisar que a busca no setor terminou.')]),
       corpo,
       UI.rodape([
@@ -8947,7 +9622,7 @@
         .catch(function () { /* cancelado */ });
     } }));
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + g.cor }), ' ' + g.nome,
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [chipGrupo(g), ' ' + g.nome,
         UI.dica('Quem abrir este link entra na operação e no grupo, como membro' + (info.permite_militar ? ' (pode se identificar como militar).' : ', sempre como civil.') + ' O link não dá acesso ao painel.')]),
       UI.el('div', { classe: 'link-caixa' }, [entrada].concat(botoes)),
       qr,
@@ -9144,7 +9819,7 @@
       ]),
       UI.secao('Estado e encaminhamento', [obs]),
       erro,
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: noEncerramento ? 'Voltar' : 'Cancelar', onclick: function () { fechar(); if (pre.aoVoltar) pre.aoVoltar(); if (pre.depois) pre.depois(); } }), btn]),
     ]);
     var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo' });
 
@@ -9152,7 +9827,7 @@
     function estadoAtual() {
       var c = form.querySelector('input[name="vit-condicao"]:checked');
       return { condicao: c ? c.value : null, encontrou: quem.value || null, encontradaPor: quemTexto.value, vitimaId: ficha.value || null,
-        vitimaNome: fichaNome.value, localDescricao: localDesc.value, observacoes: obs.value, aoRegistrar: pre.aoRegistrar, aoVoltar: pre.aoVoltar };
+        vitimaNome: fichaNome.value, localDescricao: localDesc.value, observacoes: obs.value, aoRegistrar: pre.aoRegistrar, aoVoltar: pre.aoVoltar, depois: pre.depois };
     }
     btnMapa.addEventListener('click', function () {
       var e = estadoAtual();
@@ -9201,6 +9876,7 @@
         if (noEncerramento) { pre.aoRegistrar(r, e.condicao, dados); return; }
         UI.aviso('Vítima encontrada registrada. Os responsáveis receberam o alerta.', 'ok', 7000);
         sincronizar();
+        if (pre.depois) { pre.depois(); return; }   // veio do SCI: volta para ele (a vítima já está no quadro)
         if (args.p_lat != null && est.mapa) est.mapa.setView([args.p_lat, args.p_lng], Math.max(est.mapa.getZoom(), 16));
       } catch (e2) {
         btn.disabled = false;
@@ -9219,9 +9895,79 @@
       var r = await C.consultar(C.cliente.from('vitima_localizacoes').select('*').eq('operacao_id', opId).order('registrado_em').limit(500));
       if (!est.op || est.op.id !== opId) return;
       receberVitimasLoc(r || []);
+      carregarFichas();
     } catch (e) {
       if (ehTabelaAusente(e)) est.semVitimaLoc = true;
     }
+  }
+
+  // Fichas das vítimas (só os responsáveis leem): dão o nome ao marcador da vítima localizada.
+  async function carregarFichas() {
+    if (!est.op) return;
+    var opId = est.op.id;
+    try {
+      var r = await C.consultar(C.cliente.from('vitimas').select('id,nome,idade,idade_qualidade,sexo,cadastro_rapido').eq('operacao_id', opId).limit(200));
+      if (!est.op || est.op.id !== opId) return;
+      est.fichas = new Map((r || []).map(function (v) { return [v.id, v]; }));
+    } catch (e) { /* sem fichas (migração antiga): o marcador mostra "Vítima localizada" */ }
+  }
+
+  function textoFicha(f) {
+    if (!f) return '';
+    var idade = f.idade != null ? (f.idade_qualidade === 'estimada' ? '~' : '') + f.idade + ' anos' : '';
+    return f.nome + (idade ? ' · ' + idade : '');
+  }
+  // Registro da vítima localizada de uma mensagem VITIMA (ou null)
+  function registroDaMensagem(m) { return m ? est.vitimasLoc.get(m.id) || null : null; }
+  function nomeDaVitima(reg) {
+    var f = reg && reg.vitima_id ? est.fichas.get(reg.vitima_id) : null;
+    return f ? f.nome : 'Vítima localizada';
+  }
+  function setorDoPonto(lat, lng) {
+    var achado = null;
+    est.setores.forEach(function (x) {
+      var d = x.d;
+      if (achado) return;
+      if (d.forma === 'circulo') { if (C.distancia(d.centro_lat, d.centro_lng, lat, lng) <= d.raio_m) achado = d; return; }
+      var pts = d.pontos || [], dentro = false;
+      for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        if (((pts[i][0] > lat) !== (pts[j][0] > lat)) && (lng < (pts[j][1] - pts[i][1]) * (lat - pts[i][0]) / (pts[j][0] - pts[i][0]) + pts[i][1])) dentro = !dentro;
+      }
+      if (dentro) achado = d;
+    });
+    return achado;
+  }
+  // Participante que encontrou: o do alerta "vitima:<id>" (quando o registro tem um participante de campo)
+  function quemEncontrou(reg) {
+    var achado = null;
+    est.alertas.forEach(function (a) { if (a.tipo === 'vitima_localizada' && a.chave === 'vitima:' + reg.id) achado = a; });
+    var p = achado && achado.participante_id ? est.participantes.get(achado.participante_id) : null;
+    return p && p.id !== reg.participante_id ? p : null;
+  }
+
+  // Painel de comando SCI (js/sci.js) numa janela grande; "Outra janela" abre sci.html para o comando remoto
+  function abrirSci() {
+    if (!est.op || !window.SCI) return;
+    var caixa = UI.el('div', { classe: 'sci-no-painel' });
+    var ctl = null;
+    var fechar = UI.abrirModal(UI.el('div', null, [UI.el('h2', { id: 'modal-titulo', texto: 'Comando SCI' }), caixa]), { tamanho: 'cheio', aoFechar: function () { if (ctl) ctl.parar(); } });
+    ctl = window.SCI.montar(caixa, {
+      op: est.op, podeAlterar: podeAlterar,
+      setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },
+      irPara: function (lat, lng) { fechar(); if (est.mapa) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 16)); },
+      // o mesmo "Vítima encontrada" do app (ponto no mapa, quem encontrou, alerta, diário); ao terminar, volta ao SCI
+      registrarVitima: function (pre) { fechar(); abrirRegistroVitima(Object.assign({}, pre, { depois: abrirSci })); },
+      abrirFicha: function (id) { if (window.Cadastro) window.Cadastro.abrirFichaPorId(est.op, id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas }); },
+      cadastroRapido: function () { if (window.Cadastro) window.Cadastro.abrirRapido(est.op, { empilhar: true, aoSalvar: function () { carregarFichas(); } }); },
+      abrirBriefing: window.Briefing ? function () { fechar(); window.Briefing.abrir(); } : null,
+      abrirGrupos: function (gid) { fechar(); if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
+      abrirRecursos: window.RecursosEquipe ? function () { fechar(); window.RecursosEquipe.abrir(); } : null,
+    });
+  }
+
+  function abrirCadastroRapido() {
+    if (!est.op || est.op.status !== 'ativa' || !window.Cadastro) return;
+    window.Cadastro.abrirRapido(est.op, { aoSalvar: function () { carregarFichas(); } });
   }
 
   function receberVitimasLoc(lista) {
@@ -9795,6 +10541,7 @@
       abrirFormTrilha(null, null, extra);
     },
     admin: function () { return Boolean(est.responsavel && est.responsavel.admin); },
+    meuNome: function () { return (est.responsavel && est.responsavel.nome) || ''; },
     selecionado: function () { return est.selecionado; },
     participantes: function () { return Array.from(est.participantes.values()); },
     participante: function (id) { return est.participantes.get(id) || null; },
@@ -9809,7 +10556,10 @@
     podeAlterar: podeAlterar,
     missoes: function () { return Array.from(est.missoes.values()); },
     camadaProbabilidade: camadaProbabilidade,
+    agruparMarcadores: agruparMarcadores,
+    desagruparMarcadores: desagruparMarcadores,
     categorias: CAT_PONTO,
+    categoriaDoPonto: catDoPonto,   // { rotulo, letra, cor? } — fixa ou tipo criado pelos usuários
     raioAlertaPadrao: RAIO_ALERTA_PADRAO,
     formatoCoord: function () { return est.prefsMapa.coord || 'dec'; },
     minhaPosicao: function () { return obterMinhaPosicao(); },
@@ -9842,6 +10592,17 @@
     irPara: function (lat, lng) { if (est.mapa && lat != null && lng != null) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 17)); },
     recarregarGrupos: function () { return carregarGrupos().then(function () { if (est.renderGruposAberto) est.renderGruposAberto(); }); },
     abrirCentral: function (aba) { abrirCentral(aba); },
+    // link do civil.html da operação (com o código de um convite por e-mail, quando houver)
+    linkCivil: function (codigo) { return est.op ? linkPara(est.op.token_civil) + (codigo ? '&c=' + codigo : '') : ''; },
+    // link de cada categoria de convite: civil e bombeiro (com o código do convite) ou o painel da operação (responsável)
+    linkConvite: function (tipo, codigo) {
+      if (!est.op) return '';
+      if (tipo === 'responsavel') { var u = new URL('militar.html', location.href); u.search = ''; u.hash = 'op=' + est.op.id; return u.href; }
+      return linkPara(tipo === 'militar' ? est.op.token_militar : est.op.token_civil) + (codigo ? '&c=' + codigo : '');
+    },
+    atualizarCentral: function () { if (est.op) agendarCentral(); },
+    abrirRelato: function (id) { abrirRelato(id); },
+    mensagens: function () { return Array.from(est.mensagens.values()); },
   };
 
   iniciar();

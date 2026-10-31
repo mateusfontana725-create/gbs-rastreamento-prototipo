@@ -9,6 +9,8 @@
   var DESTINO_PADRAO = '2 CRBM / 3 BBM';
   var MEIOS = [['mar', 'Mar'], ['rio', 'Rio'], ['lago', 'Lago/represa/tanque'], ['cachoeira', 'Cachoeira']];
   var BUSCAS = [['sim', 'Sim'], ['nao', 'Não'], ['ainda_nao', 'Ainda não foi possível'], ['sem_necessidade', 'Sem necessidade (vítimas certamente perdidas)']];
+  // De onde vem a hora do último momento visto: ausente não é "agora" nem zero
+  var QUALIDADE_HORA = [['informado', 'Informado (testemunha, câmera, registro)'], ['estimado', 'Estimado'], ['desconhecido', 'Desconhecido']];
   var VIDA = [['sim', 'Sim'], ['nao_corpo', 'Não - busca de corpo'], ['desconhecido', 'Não apurado']];
   var PROCEDIMENTOS = [
     ['scuba', 'Mergulho com equipamento SCUBA'], ['livre', 'Mergulho livre'], ['rede', 'Rede de busca/garatéia'],
@@ -50,6 +52,19 @@
     return isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
   }
 
+  // Com hora: informado (padrão) ou estimado. Sem hora: só "desconhecido" (apurado e ninguém sabe) ou vazio (não informado).
+  function qualidadeHora(hora, q) {
+    var tem = Boolean(dataIso(hora));
+    q = opcao(QUALIDADE_HORA, q);
+    if (!tem) return q === 'desconhecido' ? 'desconhecido' : '';
+    return q === 'estimado' ? 'estimado' : 'informado';
+  }
+  function textoHoraVisto(ipo, fmt) {
+    ipo = ipo || {};
+    if (ipo.desaparecimento) return fmt(ipo.desaparecimento) + (ipo.desaparecimento_qualidade === 'estimado' ? ' (estimado)' : '');
+    return ipo.desaparecimento_qualidade === 'desconhecido' ? 'Desconhecido' : '';
+  }
+
   // Dados do formulário → objeto limpo, com tudo dentro dos limites que o banco aceita.
   function normalizarIpo(raw) {
     raw = raw || {};
@@ -59,6 +74,7 @@
       solicitante_nome: texto(raw.solicitante_nome, 120),
       solicitante_documento: texto(raw.solicitante_documento, 40),
       desaparecimento: dataIso(raw.desaparecimento),
+      desaparecimento_qualidade: qualidadeHora(raw.desaparecimento, raw.desaparecimento_qualidade),
       meio_liquido: opcao(MEIOS, raw.meio_liquido),
       pessoas_perdidas: inteiro(raw.pessoas_perdidas, 0, 999),
       buscas_preliminares: opcao(BUSCAS, raw.buscas_preliminares),
@@ -71,7 +87,7 @@
 
   raiz.Ipo = {
     normalizarIpo: normalizarIpo,
-    MEIOS: MEIOS, BUSCAS: BUSCAS, VIDA: VIDA, PROCEDIMENTOS: PROCEDIMENTOS, DESTINO_PADRAO: DESTINO_PADRAO,
+    MEIOS: MEIOS, BUSCAS: BUSCAS, QUALIDADE_HORA: QUALIDADE_HORA, qualidadeHora: qualidadeHora, textoHoraVisto: textoHoraVisto, VIDA: VIDA, PROCEDIMENTOS: PROCEDIMENTOS, DESTINO_PADRAO: DESTINO_PADRAO,
     NATUREZAS: NATUREZAS, OUTRA_NATUREZA: OUTRA_NATUREZA, PERFIS_VITIMA: PERFIS_VITIMA,
     ehAquatica: ehAquatica, tipoDaNatureza: tipoDaNatureza,
   };

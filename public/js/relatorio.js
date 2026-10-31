@@ -449,6 +449,15 @@
       g.lineWidth = 2.6; g.strokeStyle = e[0]; g.setLineDash(e[1]); g.stroke();
       g.setLineDash([]);
     });
+    // trilhas desenhadas no mapa (planejadas tracejadas, percorridas contínuas)
+    (o.manuais || []).forEach(function (t) {
+      if (!t.pontos || t.pontos.length < 2) return;
+      caminho(t.pontos, false);
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.lineWidth = 5; g.strokeStyle = 'rgba(255,255,255,0.75)'; g.setLineDash([]); g.stroke();
+      g.lineWidth = 2.6; g.strokeStyle = '#7c3aed'; g.setLineDash(t.estado === 'percorrida' ? [] : [6, 6]); g.stroke();
+      g.setLineDash([]);
+    });
     // nomes dos setores: logo abaixo da borda de cima (o centro costuma ter marcadores)
     var nomes = [];
     (o.setores || []).forEach(function (s) {
@@ -470,7 +479,14 @@
       g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffffff';
       g.fillText(letra, q[0], q[1] + 1);
     }
-    (o.pontos || []).forEach(function (p) { marcador(p.lat, p.lng, LETRA[p.categoria] || '•', p.categoria === 'RISCO' ? '#d97706' : p.categoria === 'VITIMA_ENCONTRADA' ? '#a21caf' : '#334155'); });
+    (o.pontos || []).forEach(function (p) {
+      // tipo criado pelos usuários: o ícone e a cor dele
+      // ícone e cor escolhidos para a categoria (migração 050), quando o painel está aberto
+      var c = !p.icone && P() && P().categoriaDoPonto ? P().categoriaDoPonto(p) : null;
+      marcador(p.lat, p.lng, p.icone || (c && c.cor ? c.letra : null) || LETRA[p.categoria] || '•',
+        p.cor || (c && c.cor) || (p.categoria === 'RISCO' ? '#d97706' : p.categoria === 'VITIMA_ENCONTRADA' ? '#a21caf' : '#334155'));
+    });
+    (o.fotos || []).forEach(function (f) { if (f.lat != null) marcador(f.lat, f.lng, 'F', '#475569', 8); });
     (o.achados || []).forEach(function (a) { marcador(a.lat, a.lng, a.letra || '!', a.cor || '#ea580c', a.raio || 11); });
     if (o.local) marcador(o.local[0], o.local[1], '★', '#b91c1c', 14);
     nomes.forEach(function (n) { rotulo(n[0], n[1], n[2], '#111827'); });
@@ -571,14 +587,15 @@
     return carregandoPdf;
   }
 
-  // Monta todos os recursos (mapas e fotos) e o documento. progresso(texto)
-  async function prepararDocumento(dados, opcoes, progresso) {
-    var RP = window.RelatorioPDF;
-    var limite = opcoes.fotos === 'todas' ? null : opcoes.fotos === 'nenhuma' ? 0 : 6;
-    var distrib = RP.distribuirFotos(dados.setores, dados.fotos, limite);
-    var recursos = { fotos: {}, fotosVitimas: {}, mapasSetor: {}, fotosPorSetor: distrib.porSetor, fotosOmitidas: distrib.omitidas, fotosForaSetor: distrib.fora };
-    if (limite === 0) { recursos.fotosPorSetor = {}; recursos.fotosForaSetor = []; recursos.fotosOmitidas = {}; }
+  // Trilhas desenhadas no mapa (para o mapa geral). Banco sem a tabela: sem elas.
+  async function trilhasDesenhadas(opId) {
+    try {
+      return (await C.consultar(C.cliente.from('trilhas_manuais').select('nome,estado,pontos').eq('operacao_id', opId))) || [];
+    } catch (e) { return []; }
+  }
 
+  // Elementos do mapa geral (todos os registrados, também as fotos) e a base dos mapas de setor.
+  function elementosMapa(dados, opcoes) {
     var op = dados.operacao;
     var trilhas = dados.trilhas || [];
     var achados = dados.diario.filter(function (e) { return e.categoria === 'encontro' && e.lat != null && /^relato_|^vitima_localizada$/.test(e.tipo); })
@@ -588,11 +605,29 @@
     trilhas.forEach(function (t) { (t.pontos || []).forEach(function (p) { enquadrarTudo.push(p); }); });
     dados.pontos.forEach(function (p) { enquadrarTudo.push([p.lat, p.lng]); });
     achados.forEach(function (a) { enquadrarTudo.push([a.lat, a.lng]); });
+    var manuais = dados.trilhasManuais || [];
+    manuais.forEach(function (t) { (t.pontos || []).forEach(function (p) { enquadrarTudo.push(p); }); });
+    var fotosMapa = (dados.fotos || []).filter(function (f) { return f.lat != null && f.lng != null; });
+    fotosMapa.forEach(function (f) { enquadrarTudo.push([f.lat, f.lng]); });
     if (op.local_lat != null) enquadrarTudo.push([op.local_lat, op.local_lng]);
-    var base = { setores: dados.setores, trilhas: trilhas, pontos: dados.pontos, achados: achados, local: op.local_lat != null ? [op.local_lat, op.local_lng] : null, fundo: opcoes.fundo !== false };
+    var base = { setores: dados.setores, trilhas: trilhas, manuais: manuais, pontos: dados.pontos, achados: achados, local: op.local_lat != null ? [op.local_lat, op.local_lng] : null, fundo: opcoes.fundo !== false };
 
+    return { base: base, geral: Object.assign({ largura: 1200, altura: 760, enquadrar: enquadrarTudo, fotos: fotosMapa }, base) };
+  }
+
+  // Monta todos os recursos (mapas e fotos) e o documento. progresso(texto)
+  async function prepararDocumento(dados, opcoes, progresso) {
+    var RP = window.RelatorioPDF;
+    var limite = opcoes.fotos === 'todas' ? null : opcoes.fotos === 'nenhuma' ? 0 : 6;
+    var distrib = RP.distribuirFotos(dados.setores, dados.fotos, limite);
+    var recursos = { fotos: {}, fotosVitimas: {}, mapasSetor: {}, fotosPorSetor: distrib.porSetor, fotosOmitidas: distrib.omitidas, fotosForaSetor: distrib.fora };
+    if (limite === 0) { recursos.fotosPorSetor = {}; recursos.fotosForaSetor = []; recursos.fotosOmitidas = {}; }
+
+    var g = elementosMapa(dados, opcoes);
+    var base = g.base;
     progresso('Desenhando o mapa geral…');
-    recursos.mapaGeral = await desenharMapa(Object.assign({ largura: 1200, altura: 760, enquadrar: enquadrarTudo }, base));
+    // mapa geral: todos os elementos registrados (também as fotos), haja ou não setores
+    recursos.mapaGeral = await desenharMapa(g.geral);
     for (var i = 0; i < dados.setores.length; i++) {
       var s = dados.setores[i];
       progresso('Desenhando o mapa do setor ' + s.nome + ' (' + (i + 1) + '/' + dados.setores.length + ')…');
@@ -700,6 +735,14 @@
     var progresso = UI.el('p', { classe: 'rel-progresso', id: 'rel-progresso', role: 'status', hidden: true });
     var btnGerar = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-gerar', texto: 'Gerar PDF' });
     var listaSalvos = UI.el('ul', { classe: 'rel-salvos', id: 'rel-salvos' });
+    var btnDiaHoje = UI.el('button', { classe: 'btn', type: 'button', id: 'rel-diario-hoje', texto: 'Relatório de hoje (PDF)', onclick: async function () {
+      btnDiaHoje.disabled = true;
+      try {
+        var r = await gerarDiario(op, diaLocal(Date.now()), { reservar: false, salvar: false, baixar: true });
+        if (r && r.blob) UI.aviso('Relatório de hoje (até agora) baixado. O do dia completo é guardado sozinho.', 'ok');
+      } catch (e) { UI.aviso('Não foi possível gerar: ' + (e.message || e), 'erro', 8000); }
+      btnDiaHoje.disabled = false;
+    } });
     var erro = UI.el('p', { classe: 'erro-form', hidden: true });
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-relatorio form-padrao' }, [
@@ -721,7 +764,8 @@
           UI.el('div', { classe: 'acoes-linha' }, [btnGerar]),
         ]),
       ]),
-      UI.secao('Relatórios já gerados', [listaSalvos]),
+      UI.secao('Relatórios já gerados', [listaSalvos, UI.el('div', { classe: 'acoes-linha' }, [btnDiaHoje])],
+        { dica: 'O relatório diário de cada dia da operação é gerado e guardado sozinho pelo painel aberto (dias já terminados; o de hoje a partir das 23h50). "Relatório de hoje" baixa agora o do dia, com o que houve até este momento.' }),
       UI.rodape([
         opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', onclick: function () { fechar(); abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
@@ -744,7 +788,9 @@
         if (!r || !r.length) { listaSalvos.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhum relatório gerado ainda.' })); return; }
         var ehAdmin = Boolean(P() && P().admin && P().admin());
         r.forEach(function (x) {
+          var rot = x.tipo === 'diario' ? 'Diário de ' + String(x.referencia || '').split('-').reverse().join('/') : x.tipo === 'passagem' ? 'Passagem de comando' : 'Final';
           listaSalvos.appendChild(UI.el('li', null, [
+            UI.el('span', { classe: 'selo selo-neutro rel-tipo', texto: rot }),
             UI.el('span', { texto: dataHora(x.gerado_em) + ' · ' + x.gerado_por_nome + (x.paginas ? ' · ' + x.paginas + ' pág.' : '') }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } }),
             ehAdmin ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { excluirRelatorio(x, op, carregarSalvos); } }) : null,
@@ -791,6 +837,7 @@
         var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
         // probabilidades de busca (cenários aprovados, buscas registradas): se falhar, o relatório sai sem a seção
         try { dados.busca = window.BuscaCenario ? await window.BuscaCenario.dadosRelatorio() : null; } catch (e) { dados.busca = null; }
+        dados.trilhasManuais = await trilhasDesenhadas(op.id);
         var doc = await prepararDocumento(dados, { fotos: selFotos.value, fundo: chkFundo.checked }, passo);
         passo('Gerando o PDF…');
         var r = await gerarBlob(pdfMake, doc);
@@ -815,18 +862,119 @@
     });
   }
 
-  // Quantos relatórios a operação já tem (para os avisos antes de encerrar/apagar)
+  // Quantos relatórios FINAIS a operação já tem (para os avisos antes de encerrar/apagar).
+  // Banco sem a migração 049 (sem a coluna tipo): conta todos, como antes.
   async function quantosRelatorios(opId) {
     try {
-      var r = await C.cliente.from('relatorios').select('id', { count: 'exact', head: true }).eq('operacao_id', opId);
+      var r = await C.cliente.from('relatorios').select('id', { count: 'exact', head: true }).eq('operacao_id', opId).eq('tipo', 'final');
+      if (r.error) r = await C.cliente.from('relatorios').select('id', { count: 'exact', head: true }).eq('operacao_id', opId);
       return r.error ? null : r.count;
     } catch (e) { return null; }
+  }
+
+  /* ---------- relatório diário e da passagem de comando (migração 049) ---------- */
+  function diaLocal(ms) { var d = new Date(ms); return d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate()); }
+  function nomeArquivoTipo(op, prefixo, sufixo) {
+    var cod = String(op.codigo || 'operacao').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+    return prefixo + '-' + cod + '-' + sufixo + '.pdf';
+  }
+  // Gera o PDF, envia ao bucket e registra (tipo 'diario' ou 'passagem'). Devolve { blob, paginas, registro }.
+  async function salvarDocumento(op, doc, tipo, referencia) {
+    var pdfMake = await carregarPdfMake();
+    var r = await gerarBlob(pdfMake, doc);
+    var caminho = op.id + '/' + C.uuid() + '.pdf';
+    var up = await C.cliente.storage.from('relatorios').upload(caminho, r.blob, { contentType: 'application/pdf', upsert: false });
+    if (up.error) throw new Error('A cópia não foi guardada no servidor: ' + (up.error.message || up.error));
+    r.registro = await C.rpc('registrar_documento', { p_operacao: op.id, p_caminho: caminho, p_paginas: r.paginas || null, p_bytes: r.blob.size,
+      p_sha256: await sha256(r.blob), p_tipo: tipo, p_referencia: referencia });
+    return r;
+  }
+
+  // Relatório diário de um dia ('AAAA-MM-DD'): situação ao fim do dia e o que aconteceu nele.
+  // reservar: pede a vez ao banco (dois painéis abertos não geram o mesmo dia). baixar: também baixa o PDF.
+  async function gerarDiario(op, dia, opcoes) {
+    opcoes = opcoes || {};
+    if (opcoes.reservar !== false) {
+      var vez = await C.rpc('relatorio_diario_reservar', { p_operacao: op.id, p_dia: dia });
+      if (!vez || !vez.ok) return { pulado: vez ? vez.motivo : 'sem_resposta' };
+    }
+    var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+    dados.trilhasManuais = await trilhasDesenhadas(op.id);
+    var g = elementosMapa(dados, { fundo: true });
+    var recursos = { mapaGeral: await desenharMapa(g.geral), logo: await carregarLogo() };
+    var doc = window.RelatorioPDF.montarDiario(dados, recursos, dia);
+    // salvar = false: só baixa (ex.: o de hoje antes de o dia terminar; o do dia completo é guardado sozinho)
+    var r = opcoes.salvar === false ? await gerarBlob(await carregarPdfMake(), doc) : await salvarDocumento(op, doc, 'diario', dia);
+    if (opcoes.baixar) baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-diario', dia.replace(/-/g, '')));
+    return r;
+  }
+
+  // Automático: com o painel aberto numa operação ativa, gera os diários dos dias já terminados que faltam
+  // (até 3 por vez, do mais recente) e o de hoje a partir das 23h50. Sem a migração 049, não faz nada.
+  var auto = { timer: null, opId: null, rodando: false, semSuporte: false };
+  async function verificarDiarios() {
+    var PN = P(), op = PN && PN.op && PN.op();
+    if (!op || op.status !== 'ativa' || auto.rodando || auto.semSuporte) return;
+    if (PN.podeAlterar && !PN.podeAlterar()) return;
+    auto.rodando = true;
+    try {
+      var feitos = await C.consultar(C.cliente.from('relatorios').select('referencia').eq('operacao_id', op.id).eq('tipo', 'diario'));
+      var tem = new Set((feitos || []).map(function (x) { return x.referencia; }));
+      var inicio = C.paraMs(op.acionado_em || op.criada_em) || Date.now();
+      var agora = new Date();
+      var dias = [];
+      for (var t = new Date(inicio); diaLocal(t) < diaLocal(agora); t = new Date(t.getTime() + 86400000)) dias.push(diaLocal(t));
+      if (agora.getHours() === 23 && agora.getMinutes() >= 50) dias.push(diaLocal(agora));
+      var faltam = dias.filter(function (x) { return !tem.has(x); }).reverse().slice(0, 3);
+      for (var i = 0; i < faltam.length; i++) {
+        if (!PN.op() || PN.op().id !== op.id) break;
+        var r = await gerarDiario(op, faltam[i], {});
+        if (r && r.registro) UI.aviso('Relatório diário de ' + faltam[i].split('-').reverse().join('/') + ' gerado e guardado.', 'ok');
+      }
+    } catch (e) {
+      if (/tipo|referencia|relatorio_diario_reservar|registrar_documento/.test(String(e.message)) || e.codigo === 'funcao_ausente') auto.semSuporte = true;
+      else console.warn('Relatório diário automático:', e.message || e);
+    } finally {
+      auto.rodando = false;
+    }
+  }
+  function iniciarDiarios() {
+    pararDiarios();
+    auto.semSuporte = false;
+    setTimeout(verificarDiarios, 20000);   // depois que o painel terminou de carregar
+    auto.timer = setInterval(verificarDiarios, 10 * 60 * 1000);
+  }
+  function pararDiarios() { clearInterval(auto.timer); auto.timer = null; }
+
+  // Relatório da passagem de comando: dados da passagem e o briefing entregue (a "foto" guardada na passagem).
+  // opcoes.baixar = false: só guarda (feito sozinho quando a passagem é aceita).
+  async function gerarPassagem(op, pas, opcoes) {
+    var baixar = !opcoes || opcoes.baixar !== false;
+    try {
+      if (baixar) UI.aviso('Gerando o relatório da passagem…', 'ok', 3000);
+      var linhas = pas.resumo && pas.resumo.operacao && window.Briefing ? window.Briefing.textoPuro(pas.resumo).split('\n') : [];
+      var PN = P();
+      var doc = window.RelatorioPDF.montarPassagem(op, pas, linhas, { logo: await carregarLogo() },
+        { gerado_por_nome: PN && PN.meuNome ? PN.meuNome() : '', observacoes: pas.resumo && pas.resumo.observacoes ? pas.resumo.observacoes : '' });
+      var r = await salvarDocumento(op, doc, 'passagem', pas.id);
+      if (baixar) {
+        baixarBlob(r.blob, nomeArquivoTipo(op, 'Passagem-de-comando', diaLocal(C.paraMs(pas.criada_em) || Date.now()).replace(/-/g, '')));
+        UI.aviso('Relatório da passagem baixado e guardado.', 'ok');
+      } else UI.aviso('Relatório da passagem de comando guardado com os relatórios da operação.', 'ok');
+    } catch (e) {
+      UI.aviso('Não foi possível gerar o relatório da passagem: ' + (e.message || e), 'erro', 8000);
+    }
   }
 
   window.Relatorio = {
     abrirDiario: abrirDiario,
     abrirRelatorio: abrirRelatorio,
     quantosRelatorios: quantosRelatorios,
+    gerarDiario: gerarDiario,
+    gerarPassagem: gerarPassagem,
+    iniciarDiarios: iniciarDiarios,
+    verificarDiarios: verificarDiarios,
+    pararDiarios: pararDiarios,
     desenharMapa: desenharMapa,
     prepararDocumento: prepararDocumento,
     carregarPdfMake: carregarPdfMake,

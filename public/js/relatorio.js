@@ -968,16 +968,36 @@
     return gerarDiario(op, dia, { reservar: false, baixar: true, salvar: guardar });
   }
 
+  // Uma linha de relatório: título e data em cima, ações à direita (sem bolinhas nem texto colado no botão)
+  function itemRelatorio(titulo, meta, acoes, selo) {
+    return UI.el('li', { classe: 'rel-item' }, [
+      UI.el('div', { classe: 'rel-item-texto' }, [
+        UI.el('strong', { texto: titulo }),
+        meta ? UI.el('small', { classe: 'muted', texto: meta }) : null,
+        selo || null,
+      ]),
+      UI.el('div', { classe: 'rel-item-acoes' }, acoes),
+    ]);
+  }
+  function listaRelatorios(itens) { return UI.el('ul', { classe: 'rel-itens' }, itens); }
+  function semRelatorios(texto) { return UI.el('p', { classe: 'muted rel-vazio', texto: texto }); }
+
   function abrirRelatoriosOperacao(op) {
     var hoje = diaLocal(Date.now());
     var primeiroDia = diaLocal(C.paraMs(op.acionado_em || op.criada_em) || Date.now());
     var corpo = UI.el('div', { classe: 'relatorios-operacao' });
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+    var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Relatórios' }, [UI.dica(
         'Você escolhe quando gerar. O diário é de um dia; o do comando vai de uma passagem até a próxima, para saber o que cada comando fez.')]),
       corpo,
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
-    ]), { fecharNoFundo: false, tamanho: 'largo' });
+    ]), {
+      fecharNoFundo: false,
+      tamanho: 'largo',
+      // Fora da área que rola: o botão Fechar fica sempre à vista
+      rodape: UI.el('div', { classe: 'modal-rodape' }, [
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
+    });
 
     function ocupar(botao, rotulo, fn) {
       botao.disabled = true;
@@ -998,9 +1018,8 @@
 
       // Final
       corpo.appendChild(UI.secao('Relatório final', [
-        UI.el('p', { classe: 'ajuda', texto: 'Relatório completo da operação, para encerrar.' }),
-        UI.el('button', { classe: 'btn', type: 'button', texto: 'Abrir relatório final (PDF)', onclick: function () { fechar(); abrirRelatorio(op); } }),
-      ]));
+        UI.el('button', { classe: 'btn rel-cheio', type: 'button', texto: 'Abrir relatório final (PDF)', onclick: function () { fechar(); abrirRelatorio(op); } }),
+      ], { dica: 'Relatório completo da operação, para encerrar.' }));
 
       // Diário por data
       var dataCampo = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-data', value: hoje, min: primeiroDia, max: hoje });
@@ -1015,51 +1034,46 @@
           await desenhar();
         });
       });
-      var listaDias = diarios.length
-        ? UI.el('ul', { classe: 'relatorios-lista' }, diarios.map(function (x) {
-          return UI.el('li', null, [UI.el('span', { texto: diaBr(x.referencia) + (x.referencia === hoje ? ' (hoje)' : '') }),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } })]);
-        }))
-        : UI.el('p', { classe: 'muted', texto: 'Nenhum diário guardado ainda.' });
       corpo.appendChild(UI.secao('Relatório diário', [
-        UI.grade([UI.campo('Dia', dataCampo, { para: 'rel-dia-data' }), UI.el('div', { classe: 'campo-bloco' }, [botaoDia])]),
-        listaDias,
-      ]));
+        UI.el('div', { classe: 'rel-linha-dia' }, [UI.campo('Dia', dataCampo, { para: 'rel-dia-data' }), botaoDia]),
+        diarios.length
+          ? listaRelatorios(diarios.map(function (x) {
+            return itemRelatorio(diaBr(x.referencia) + (x.referencia === hoje ? ' · hoje' : ''), 'PDF guardado', [
+              UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } }),
+            ]);
+          }))
+          : semRelatorios('Nenhum diário guardado ainda.'),
+      ], { dica: 'Dias anteriores ficam guardados no servidor. O dia de hoje só é baixado, pois ainda está aberto.' }));
 
       // Comandos
-      var listaCmd = UI.el('ul', { classe: 'relatorios-lista' }, comandos.map(function (c) {
-        var quando = dataHora(c.ini) + ' até ' + (c.fim ? dataHora(c.fim) : 'agora');
-        var linha = [UI.el('span', null, [UI.el('strong', { texto: c.rotulo + ' · ' + (c.comandante || '—') }), UI.el('small', { classe: 'muted', texto: ' ' + quando + (c.passadoA ? ' · passado a ' + c.passadoA : ' · em andamento') })])];
-        var guardado = porRef[c.ref];
-        linha.push(guardado && c.fim
-          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(guardado, op); } })
-          : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
-              ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await desenhar(); });
-            } }));
-        return UI.el('li', null, linha);
-      }));
       corpo.appendChild(UI.secao('Relatório de comando', [
-        UI.el('p', { classe: 'ajuda', texto: 'Cada comando termina na passagem seguinte. Gerado de um comando encerrado, ele fica guardado.' }),
-        listaCmd,
-      ]));
+        listaRelatorios(comandos.map(function (c) {
+          var quando = dataHora(c.ini) + ' até ' + (c.fim ? dataHora(c.fim) : 'agora') + (c.passadoA ? ' · passado a ' + c.passadoA : '');
+          var guardado = porRef[c.ref];
+          var acao = guardado && c.fim
+            ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(guardado, op); } })
+            : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
+                ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await desenhar(); });
+              } });
+          var selo = c.fim ? null : UI.el('span', { classe: 'selo selo-alerta', texto: 'em andamento' });
+          return itemRelatorio(c.rotulo + ' · ' + (c.comandante || '—'), quando, [acao], selo);
+        })),
+      ], { dica: 'Cada comando termina na passagem seguinte. Gerado de um comando encerrado, ele fica guardado.' }));
 
       // Passagens (o documento do briefing entregue)
-      var listaPas = passagens.length
-        ? UI.el('ul', { classe: 'relatorios-lista' }, passagens.map(function (p) {
-          var guardado = porPas[p.id];
-          return UI.el('li', null, [
-            UI.el('span', null, [UI.el('strong', { texto: (p.de_nome || '—') + ' → ' + p.para_nome }), UI.el('small', { classe: 'muted', texto: ' ' + dataHora(p.respondida_em) })]),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: guardado ? 'Baixar' : 'Gerar', onclick: function (ev) {
-              if (guardado) { baixarSalvo(guardado, op); return; }
-              ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
-            } }),
-          ]);
-        }))
-        : UI.el('p', { classe: 'muted', texto: 'Nenhuma passagem de comando ainda.' });
       corpo.appendChild(UI.secao('Relatório de passagem de comando', [
-        UI.el('p', { classe: 'ajuda', texto: 'O documento do briefing entregue na passagem: quem passou, quem recebeu e a situação naquele momento.' }),
-        listaPas,
-      ]));
+        passagens.length
+          ? listaRelatorios(passagens.map(function (p) {
+            var guardado = porPas[p.id];
+            return itemRelatorio((p.de_nome || '—') + ' → ' + p.para_nome, dataHora(p.respondida_em), [
+              UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: guardado ? 'Baixar' : 'Gerar', onclick: function (ev) {
+                if (guardado) { baixarSalvo(guardado, op); return; }
+                ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
+              } }),
+            ]);
+          }))
+          : semRelatorios('Nenhuma passagem de comando ainda.'),
+      ], { dica: 'O documento do briefing entregue na passagem: quem passou, quem recebeu e a situação naquele momento.' }));
     }
     desenhar().catch(function (e) { corpo.appendChild(UI.el('p', { classe: 'erro-form', texto: 'Não foi possível carregar: ' + (e.message || e) })); });
   }

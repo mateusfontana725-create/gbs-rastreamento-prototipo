@@ -1104,7 +1104,10 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - **Modais e formulários** (padrão único, `UI.abrirModal` em `js/interface.js`): cabeçalho fixo com o título, o **i**
   (explicação, em vez de parágrafos de texto) e o **×**; corpo que rola; rodapé com as ações sempre à vista. Campos
   agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
-  e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo.
+  e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo. Quando as ações precisam ficar fora da
+  área que rola (ex.: Relatórios), a opção `rodape` de `abrirModal` coloca o rodapé fixo embaixo da caixa.
+- **Relatórios** (modal da operação): quatro cartões (final, diário, comando e passagem), dois por linha no computador.
+  Cada linha mostra o relatório com a data em cima e a ação à direita; o que estiver guardado aparece com **Baixar**.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.

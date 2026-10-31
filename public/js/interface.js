@@ -68,6 +68,7 @@
   // (.form-rodape) sempre à vista. O título (#modal-titulo) é levado para o cabeçalho, mesmo
   // quando o conteúdo é redesenhado. No celular o modal vira uma folha que sobe de baixo.
   // opcoes.tamanho: 'estreito' | 'largo' | 'cheio' (padrão: médio).
+  // opcoes.rodape: nó fixo embaixo do modal, fora da área que rola (ações sempre à vista).
   function abrirModal(conteudo, opcoes) {
     opcoes = opcoes || {};
     if (!opcoes.empilhar) fecharTodos();
@@ -75,7 +76,7 @@
     var btnX = el('button', { classe: 'modal-x', type: 'button', 'aria-label': 'Fechar', title: 'Fechar', texto: '×' });
     var cabeca = el('div', { classe: 'modal-cabeca' }, [btnX]);
     var corpo = el('div', { classe: 'modal-corpo' }, [conteudo]);
-    var caixa = el('div', { classe: 'modal form-padrao' + (opcoes.tamanho ? ' modal-' + opcoes.tamanho : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [cabeca, corpo]);
+    var caixa = el('div', { classe: 'modal form-padrao' + (opcoes.tamanho ? ' modal-' + opcoes.tamanho : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [cabeca, corpo].concat(opcoes.rodape ? [opcoes.rodape] : []));
     var fundo = el('div', { classe: 'modal-fundo' }, [caixa]);
     fundo.addEventListener('click', function (ev) {
       if (ev.target === fundo && opcoes.fecharNoFundo !== false) fechar(null);

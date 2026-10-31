@@ -2111,6 +2111,39 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 .meta-area { margin: 0; align-self: end; padding: 10px 0; font-size: .85rem; color: var(--texto-2); font-variant-numeric: tabular-nums; }
 .acoes-iguais { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 0 0 14px; }
 
+/* Modal Relatórios (js/relatorio.js → abrirRelatoriosOperacao): quatro cartões, dois por linha no computador */
+.relatorios-operacao { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.relatorios-operacao > .secao-form { margin: 0; }
+.rel-cheio { width: 100%; }
+/* Dia escolhido: data e botão alinhados pela base dos controles */
+.rel-linha-dia { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.rel-linha-dia > .campo-bloco { flex: 1 1 180px; min-width: 0; }
+.rel-linha-dia > .btn { flex: 0 0 auto; }
+/* Lista de relatórios: título e data em cima, ações à direita */
+.rel-itens { list-style: none; margin: 0; padding: 0; }
+.rel-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+.rel-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.rel-item:first-child { padding-top: 0; }
+.rel-item-texto { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.rel-item-texto strong { font-size: .95rem; overflow-wrap: anywhere; }
+.rel-item-texto small { font-size: .8rem; line-height: 1.35; overflow-wrap: anywhere; }
+.rel-item-texto .selo { margin-top: 4px; }
+.rel-item-acoes { flex: none; display: flex; gap: 6px; }
+.rel-item-acoes .btn { min-width: 96px; }
+.rel-vazio { margin: 0; font-size: .88rem; }
+/* Rodapé fixo do modal (opção rodape de UI.abrirModal) */
+.modal-rodape { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 22px; background: var(--superficie); border-top: 1px solid var(--borda); }
+.modal-rodape .btn { flex: 0 0 auto; min-width: 128px; }
+@media (min-width: 720px) {
+  .relatorios-operacao { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+@media (max-width: 600px) {
+  .modal-rodape { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .modal-rodape .btn { flex: 1 1 0; min-width: 0; }
+  .rel-item { flex-wrap: wrap; }
+  .rel-item-acoes { width: 100%; justify-content: flex-end; }
+}
+
 /* Quadros de leitura: rótulo pequeno em cima, valor embaixo (Dados da operação, briefing) */
 .kv-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0; }
 .kv { min-width: 0; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie); }

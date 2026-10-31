@@ -921,10 +921,14 @@
       return i > 0 ? [l.slice(0, i).charAt(0) + l.slice(1, i).toLowerCase(), l.slice(i + 2)] : ['', l];
     });
   }
-  async function listarComandos(op) {
-    var pas = (await C.consultar(C.cliente.from('passagens_comando')
-      .select('id,de_nome,para_nome,estado,respondida_em,resumo')
+  // Passagens que de fato passaram o comando (aceitas ou assumidas), na ordem em que aconteceram.
+  async function listarPassagensAceitas(op) {
+    return (await C.consultar(C.cliente.from('passagens_comando')
+      .select('id,tipo,de_nome,para_nome,estado,criada_em,respondida_em,nota,motivo,resposta_nota,resumo')
       .eq('operacao_id', op.id).in('estado', ['aceita', 'assumida']).order('respondida_em', { ascending: true }))) || [];
+  }
+  async function listarComandos(op) {
+    var pas = await listarPassagensAceitas(op);
     var inicio = C.paraMs(op.acionado_em || op.criada_em) || Date.now();
     var cmds = [];
     for (var k = 0; k <= pas.length; k++) {
@@ -986,9 +990,11 @@
 
     async function desenhar() {
       corpo.innerHTML = '';
-      var [diarios, comandos, salvosComando] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op), listarSalvos(op, 'comando')]);
+      var [diarios, comandos, salvosComando, passagens, salvosPassagem] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
+        listarSalvos(op, 'comando'), listarPassagensAceitas(op), listarSalvos(op, 'passagem')]);
       var porDia = {}; diarios.forEach(function (x) { porDia[x.referencia] = x; });
       var porRef = {}; salvosComando.forEach(function (x) { porRef[x.referencia] = x; });
+      var porPas = {}; salvosPassagem.forEach(function (x) { porPas[x.referencia] = x; });
 
       // Final
       corpo.appendChild(UI.secao('Relatório final', [
@@ -1035,6 +1041,24 @@
       corpo.appendChild(UI.secao('Relatório de comando', [
         UI.el('p', { classe: 'ajuda', texto: 'Cada comando termina na passagem seguinte. Gerado de um comando encerrado, ele fica guardado.' }),
         listaCmd,
+      ]));
+
+      // Passagens (o documento do briefing entregue)
+      var listaPas = passagens.length
+        ? UI.el('ul', { classe: 'relatorios-lista' }, passagens.map(function (p) {
+          var guardado = porPas[p.id];
+          return UI.el('li', null, [
+            UI.el('span', null, [UI.el('strong', { texto: (p.de_nome || '—') + ' → ' + p.para_nome }), UI.el('small', { classe: 'muted', texto: ' ' + dataHora(p.respondida_em) })]),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: guardado ? 'Baixar' : 'Gerar', onclick: function (ev) {
+              if (guardado) { baixarSalvo(guardado, op); return; }
+              ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
+            } }),
+          ]);
+        }))
+        : UI.el('p', { classe: 'muted', texto: 'Nenhuma passagem de comando ainda.' });
+      corpo.appendChild(UI.secao('Relatório de passagem de comando', [
+        UI.el('p', { classe: 'ajuda', texto: 'O documento do briefing entregue na passagem: quem passou, quem recebeu e a situação naquele momento.' }),
+        listaPas,
       ]));
     }
     desenhar().catch(function (e) { corpo.appendChild(UI.el('p', { classe: 'erro-form', texto: 'Não foi possível carregar: ' + (e.message || e) })); });

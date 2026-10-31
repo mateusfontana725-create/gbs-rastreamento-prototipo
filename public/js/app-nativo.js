@@ -42,12 +42,11 @@
     if (!e) return '';
     agora = agora || Date.now();
     var partes = [];
-    if (!e.rastreando) partes.push('📱 Aplicativo: registro parado');
-    else partes.push('📱 Registro pelo aplicativo (continua com a tela apagada)');
-    if (e.pendentes > 0) partes.push(e.pendentes + ' ponto' + (e.pendentes > 1 ? 's' : '') + ' guardado' + (e.pendentes > 1 ? 's' : '') + ' no celular, aguardando envio');
-    if (e.ultimoEnvioEm) partes.push('último envio confirmado há ' + duracao(agora - e.ultimoEnvioEm));
-    if (e.falhaGravacao) partes.push('⚠ não foi possível gravar no celular (espaço cheio?)');
-    if (e.ultimoErro === 'funcao_ausente') partes.push('⚠ servidor desatualizado: avise os bombeiros');
+    partes.push(e.rastreando ? '📱 Pelo aplicativo' : '📱 Aplicativo parado');
+    if (e.pendentes > 0) partes.push(e.pendentes + ' guardado' + (e.pendentes > 1 ? 's' : '') + ' no celular');
+    if (e.ultimoEnvioEm) partes.push('enviado há ' + duracao(agora - e.ultimoEnvioEm));
+    if (e.falhaGravacao) partes.push('⚠ sem espaço para gravar');
+    if (e.ultimoErro === 'funcao_ausente') partes.push('⚠ servidor desatualizado');
     return partes.join(' · ');
   }
 

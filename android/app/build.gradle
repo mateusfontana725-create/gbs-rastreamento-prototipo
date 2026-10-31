@@ -63,6 +63,16 @@ android {
   }
 }
 
+// Ícone do aplicativo: o brasão do CBMPR (public/img), copiado para os recursos antes de compilar.
+def pastaBrasao = file("${buildDir}/generated/brasao/res")
+tasks.register('copiarBrasao', Copy) {
+  from file("${rootDir}/../public/img/brasao-cbmpr.png")
+  into file("${pastaBrasao}/mipmap-nodpi")
+  rename { 'ic_brasao.png' }
+}
+android.sourceSets.main.res.srcDir pastaBrasao
+tasks.matching { (it.name.startsWith('map') || it.name.startsWith('merge') || it.name.startsWith('generate')) && it.name.endsWith('Resources') || it.name.endsWith('SourceSetPaths') }.configureEach { dependsOn 'copiarBrasao' }
+
 dependencies {
   implementation 'androidx.core:core:1.13.1'
   implementation 'androidx.webkit:webkit:1.12.1'

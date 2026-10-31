@@ -40,11 +40,11 @@ function resposta() {
     const agora = 1.79e12;
     assert.strictEqual(A.textoEstado(null), '');
     const t = A.textoEstado({ rastreando: true, pendentes: 12, ultimoEnvioEm: agora - 125000 }, agora);
-    assert.ok(t.includes('continua com a tela apagada'), t);
-    assert.ok(t.includes('12 pontos guardados no celular'), t);
-    assert.ok(t.includes('há 2 min'), t);
+    assert.ok(t.includes('Pelo aplicativo'), t);
+    assert.ok(t.includes('12 guardados no celular'), t);
+    assert.ok(t.includes('enviado há 2 min'), t);
     assert.ok(A.textoEstado({ rastreando: true, pendentes: 1, ultimoErro: 'funcao_ausente' }, agora).includes('servidor desatualizado'));
-    assert.ok(A.textoEstado({ rastreando: false, pendentes: 0 }, agora).includes('registro parado'));
+    assert.ok(A.textoEstado({ rastreando: false, pendentes: 0 }, agora).includes('Aplicativo parado'));
   });
   await teste('ponte do aplicativo: pedido e resposta pelo id, eventos para os ouvintes', async () => {
     const enviados = [];

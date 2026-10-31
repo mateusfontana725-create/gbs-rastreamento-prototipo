@@ -1504,9 +1504,6 @@
     estado.equipe.forEach(function (mk, id) {
       if (!vistos.has(id)) { mk.remove(); estado.equipe.delete(id); }
     });
-    var nota = $('mapa-nota');
-    nota.hidden = vistos.size > 0;
-    nota.textContent = 'Nenhum integrante com localização no mapa agora.';
     // Na primeira vez, mostra você e a equipe juntos.
     if (!estado.jaEnquadrou && vistos.size && estado.ultimaLeitura) {
       estado.jaEnquadrou = true;
@@ -3004,10 +3001,10 @@
       cod = 'parado'; titulo = 'Localização desligada'; sub = 'Toque em CONTINUAR para voltar a ajudar.';
     } else if (estado.gps === 'negado') {
       cod = 'erro'; titulo = 'A localização está bloqueada';
-      sub = 'Os bombeiros NÃO estão vendo onde você está. Toque em "Como resolver".';
+      sub = 'Os bombeiros NÃO estão vendo você. Toque em "Como resolver".';
     } else if (estado.gps === 'indisponivel') {
       cod = 'erro'; titulo = 'A localização do celular está desligada';
-      sub = 'Os bombeiros NÃO estão vendo onde você está. Toque em "Como resolver".';
+      sub = 'Os bombeiros NÃO estão vendo você. Toque em "Como resolver".';
     } else if (estado.gps !== 'ok' && estado.gps !== 'fraco') {
       cod = 'sem-gps'; titulo = 'Procurando o sinal de GPS…'; sub = 'Se puder, vá para um lugar aberto, longe de paredes e árvores.';
     } else if (net === 'offline' || net === 'falha') {
@@ -3016,8 +3013,8 @@
     } else if (net === 'conectando' && !estado.ultimoEnviadoT) {
       cod = 'sem-gps'; titulo = 'Conectando com os bombeiros…'; sub = 'Só um instante.';
     } else {
-      cod = 'ok'; titulo = 'Os bombeiros estão vendo onde você está';
-      sub = NATIVO ? 'Pode bloquear a tela: o aplicativo continua enviando.' : 'Deixe esta tela aberta.';
+      cod = 'ok'; titulo = 'Os bombeiros estão vendo você';
+      sub = NATIVO ? 'Pode bloquear a tela.' : 'Deixe esta tela aberta.';
     }
     var acao = $('status-acao');
     var precisaAjuda = estado.rastreando && (estado.gps === 'negado' || estado.gps === 'indisponivel' ||

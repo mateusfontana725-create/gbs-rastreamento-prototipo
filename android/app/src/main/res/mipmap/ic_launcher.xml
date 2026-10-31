@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
   <item>
-    <shape android:shape="oval">
+    <shape android:shape="rectangle">
       <solid android:color="@color/icone_fundo" />
     </shape>
   </item>
-  <item android:drawable="@drawable/ic_frente" />
+  <item android:drawable="@drawable/ic_brasao_frente" />
 </layer-list>

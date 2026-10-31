@@ -676,12 +676,14 @@
   /* ---------- relatório diário ------------------------------------------ */
   // dia = 'AAAA-MM-DD' (dia local). Situação ao fim do dia (mapa geral, setores, vítimas) e o que aconteceu no dia
   // (números, encontros e o diário daquele dia). Mesmo cabeçalho e estilos do relatório final, sem sumário.
-  function montarDiario(d, recursos, dia) {
+  // Relatório de um período (um dia ou um comando): p = { ini, fim (ms), ref (Date), sobretitulo, subtitulo, rotuloMapa,
+  // geradoTexto, titulo, assunto, marca, sufixo ('do dia' | 'do comando'), linhasExtra, fechamento }.
+  function montarPeriodo(d, recursos, p) {
     recursos = recursos || {};
     var op = d.operacao;
-    var ref = data(dia + 'T12:00:00');
+    var ref = p.ref;
     ANO_REF = ref ? ref.getFullYear() : null;
-    function noDia(v) { return chaveDia(v) === dia; }
+    function noDia(v) { var t = data(v); return Boolean(t) && t.getTime() >= p.ini && t.getTime() < p.fim; }
     var doDia = registrosDiario(d).filter(function (e) { return noDia(e.ocorrido_em); });
     var encontros = doDia.filter(function (e) { return e.categoria === 'encontro'; });
     var concluidos = doDia.filter(function (e) { return e.tipo === 'setor_concluido'; });
@@ -694,16 +696,17 @@
     ];
     var conteudo = [];
     if (recursos.logo) conteudo.push({ image: recursos.logo, width: 150, margin: [0, 0, 0, 14] });
-    conteudo.push({ text: 'RELATÓRIO DIÁRIO DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
+    conteudo.push({ text: p.sobretitulo, style: 'sobretitulo', margin: [0, 0, 0, 6] });
     conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
     conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20 });
-    conteudo.push({ text: diaExtenso(dia + 'T12:00:00'), style: 'subtituloCapa', margin: [0, 4, 0, 12] });
+    conteudo.push({ text: p.subtitulo, style: 'subtituloCapa', margin: [0, 4, 0, 12] });
     conteudo.push(ficha([
       ['Acionamento', dataHora(op.acionado_em)],
       ['Situação', op.status === 'encerrada' ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'Em andamento'],
       ['Dia da operação', ref && data(op.acionado_em || op.criada_em) ? String(Math.floor((ref - new Date(chaveDia(op.acionado_em || op.criada_em) + 'T12:00:00')) / 86400000) + 1) + 'º dia' : '—'],
-      ['Gerado', 'automaticamente pelo painel, com os dados do fim do dia'],
+      ['Gerado', p.geradoTexto],
     ]));
+    if (p.linhasExtra) conteudo.push(ficha(p.linhasExtra));
     conteudo.push({
       table: { widths: ['*', '*', '*', '*', '*'], body: [numeros.map(function (n) {
         return { stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }], fillColor: COR.fundo, margin: [8, 7, 4, 7] };
@@ -713,7 +716,7 @@
       margin: [0, 0, 0, 14],
     });
     if (recursos.mapaGeral) {
-      conteudo.push(subtitulo('Mapa geral (situação até o fim do dia)'));
+      conteudo.push(subtitulo(p.rotuloMapa));
       conteudo.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
       conteudo.push(legendaMapa());
     }
@@ -728,14 +731,14 @@
     else conteudo.push(tabela(['Vítima', 'Idade', 'Características'], d.vitimas.map(function (v) {
       return [{ text: v.nome, style: 'td', bold: true }, v.idade == null ? '—' : String(v.idade), txt([v.caracteristicas, v.roupas].filter(function (x) { return !vazio(x); }).join(' · '))];
     }), ['*', 40, 230]));
-    conteudo.push(subtitulo('Encontros e relatos do dia'));
-    if (!encontros.length) conteudo.push(nota('Nenhum encontro ou relato de campo neste dia.'));
+    conteudo.push(subtitulo('Encontros e relatos ' + p.sufixo));
+    if (!encontros.length) conteudo.push(nota('Nenhum encontro ou relato de campo neste período.'));
     else conteudo.push(tabela(['Hora', 'Registro', 'Local', 'Por'], encontros.map(function (e) {
       return [hora(e.ocorrido_em), { stack: [{ text: e.titulo, style: 'td', bold: true }, vazio(e.detalhe) ? null : { text: e.detalhe, style: 'tdSuave' }].filter(Boolean) },
         { text: coord(e.lat, e.lng), style: 'tdMono' }, e.autor_nome];
     }), [36, '*', 92, 80]));
-    conteudo.push(subtitulo('Diário do dia'));
-    if (!doDia.length) conteudo.push(nota('Nenhum registro no diário neste dia.'));
+    conteudo.push(subtitulo('Diário ' + p.sufixo));
+    if (!doDia.length) conteudo.push(nota('Nenhum registro no diário neste período.'));
     else conteudo.push(tabela(['Hora', 'Tipo', 'Registro', 'Por'], doDia.map(function (e) {
       return [{ text: hora(e.ocorrido_em), style: 'tdMono', bold: true }, { text: CATEGORIA[e.categoria] || e.categoria, style: 'tdSuave' },
         { stack: [{ text: e.titulo, style: 'td' }, vazio(e.detalhe) ? null : { text: e.detalhe, style: 'tdSuave' }].filter(Boolean) }, { text: txt(e.autor_nome), style: 'tdSuave' }];
@@ -746,9 +749,49 @@
         return [hora(p.criado_em), p.tipo_nome || PONTO[p.categoria] || p.categoria, { text: p.titulo, style: 'td', bold: true }, { text: coord(p.lat, p.lng), style: 'tdMono' }];
       }), [36, 100, '*', 92]));
     }
-    var data0 = dia.split('-');
-    return documento(d, recursos, conteudo, { titulo: 'Relatório diário ' + data0[2] + '/' + data0[1] + '/' + data0[0] + ' — ' + op.codigo,
-      assunto: 'Relatório diário de operação de busca e salvamento', marca: 'RELATÓRIO DIÁRIO ' + data0[2] + '/' + data0[1] });
+    if (p.fechamento) {
+      conteudo.push(subtitulo('Situação ao passar o comando'));
+      conteudo.push(p.fechamento.length ? ficha(p.fechamento) : nota('Briefing indisponível.'));
+    }
+    return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: p.assunto, marca: p.marca });
+  }
+
+  // Relatório diário de um dia ('AAAA-MM-DD'): o que aconteceu no dia e a situação ao fim dele (feito à mão pelo painel).
+  function montarDiario(d, recursos, dia) {
+    var ini = data(dia + 'T00:00:00');
+    var fim = new Date(ini.getTime()); fim.setDate(fim.getDate() + 1);
+    var partes = dia.split('-');
+    return montarPeriodo(d, recursos, {
+      ini: ini.getTime(), fim: fim.getTime(), ref: data(dia + 'T12:00:00'),
+      sobretitulo: 'RELATÓRIO DIÁRIO DA OPERAÇÃO', subtitulo: diaExtenso(dia + 'T12:00:00'),
+      rotuloMapa: 'Mapa geral (situação até o fim do dia)', geradoTexto: 'pelo painel, com os dados do momento da geração',
+      titulo: 'Relatório diário ' + partes[2] + '/' + partes[1] + '/' + partes[0] + ' — ' + d.operacao.codigo,
+      assunto: 'Relatório diário de operação de busca e salvamento', marca: 'RELATÓRIO DIÁRIO ' + partes[2] + '/' + partes[1],
+      sufixo: 'do dia',
+    });
+  }
+
+  // Relatório de um comando: cmd = { rotulo, ini (ms), fim (ms ou null = ainda em andamento), comandante, passadoA, fechamento }.
+  // Mostra o que o comando fez no período e, se já foi passado, o briefing entregue na passagem.
+  function montarComando(d, recursos, cmd) {
+    var ini = cmd.ini;
+    var fim = cmd.fim || Date.now() + 1;
+    var quando = dataHora(ini);
+    return montarPeriodo(d, recursos, {
+      ini: ini, fim: fim, ref: new Date(ini),
+      sobretitulo: 'RELATÓRIO DO COMANDO', subtitulo: cmd.rotulo,
+      rotuloMapa: 'Mapa geral da operação', geradoTexto: 'pelo painel, com os dados do momento da geração',
+      titulo: 'Relatório do comando — ' + cmd.rotulo + ' — ' + d.operacao.codigo,
+      assunto: 'Relatório de comando de operação de busca e salvamento', marca: 'RELATÓRIO DO COMANDO',
+      sufixo: 'do comando',
+      linhasExtra: [
+        ['Comandante', txt(cmd.comandante)],
+        ['Início do comando', quando],
+        ['Fim do comando', cmd.fim ? dataHora(cmd.fim) : 'em andamento'],
+        ['Passado a', txt(cmd.passadoA)],
+      ],
+      fechamento: cmd.fechamento || null,
+    });
   }
 
   /* ---------- relatório da passagem de comando --------------------------- */
@@ -815,7 +858,7 @@
     return dentro;
   }
 
-  var api = { montarDocumento: montarDocumento, montarDiario: montarDiario, montarPassagem: montarPassagem, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

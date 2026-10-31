@@ -2122,19 +2122,23 @@ body.personalizando .acoes-topo .btn-acao-topo[hidden] { display: inline-flex !i
 body.pers-arrastando, body.pers-arrastando * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 
 .pers-painel {
-  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2400; width: min(1100px, calc(100vw - 24px));
-  display: grid; gap: 10px; padding: 12px 14px; max-height: 50vh; max-height: 50dvh; overflow: auto;
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2400; width: min(980px, calc(100vw - 24px));
+  display: block; padding: 0 0 12px; max-height: 64vh; max-height: 64dvh; overflow: auto; overscroll-behavior: contain;
   background: var(--superficie); border: 1px solid var(--borda-forte); border-top: 3px solid var(--acento); border-radius: var(--raio);
   box-shadow: 0 18px 48px rgba(0, 0, 0, .6);
 }
 .pers-painel.pers-alvo { border-color: var(--perigo); box-shadow: 0 0 0 3px rgba(239, 68, 68, .35), 0 18px 48px rgba(0, 0, 0, .6); }
-.pers-cabeca { display: flex; align-items: center; gap: 8px; }
+.pers-cabeca { display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 2; padding: 12px 14px; margin-bottom: 12px;
+  background: var(--superficie); border-bottom: 1px solid var(--borda); }
+.pers-corpo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; padding: 0 14px; }
 .pers-cabeca strong { flex: 1 1 auto; font-family: var(--fonte-titulo); text-transform: uppercase; letter-spacing: .06em; font-size: .95rem; flex-wrap: wrap; }
 .pers-cabeca .dica-texto { flex-basis: 100%; text-transform: none; font-family: var(--fonte); letter-spacing: 0; font-weight: 400; }
-.pers-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: start; }
-.pers-bloco { display: grid; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
-.pers-rotulo { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--texto-3); }
-.pers-bandeja { display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px; }
+.pers-bloco { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.pers-bloco-bandeja { grid-column: 1 / -1; order: -1; }
+.pers-corpo > .pers-bloco:first-child { grid-column: span 2; }
+.pers-fonte .seg-opcao { padding: 0 8px; font-size: .8rem; }
+.pers-rotulo { font-size: .76rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+.pers-bandeja { display: flex; flex-wrap: wrap; gap: 6px; min-height: 52px; padding: 8px; border: 1px dashed var(--borda-forte); border-radius: var(--raio); background: var(--fundo); }
 .pers-chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px 0 10px; cursor: grab; touch-action: none;
   border: 1px solid var(--borda-forte); border-radius: 999px; background: var(--superficie); color: var(--texto); font-size: .8rem; font-weight: 600;
@@ -2161,9 +2165,10 @@ body.personalizando .controle-grupos[hidden] > * { display: none; }
 .pers-alvo-canto.pers-canto-bottomright { bottom: 10px; right: 10px; }
 @media (max-width: 760px) {
   .pers-painel { left: 0; right: 0; bottom: 0; transform: none; width: 100%; border-radius: 14px 14px 0 0; border-left: 0; border-right: 0; border-bottom: 0;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-height: 56vh; max-height: 56dvh; }
-  .pers-linha { grid-template-columns: minmax(0, 1fr) auto; }
-  .pers-bloco-bandeja { grid-column: 1 / -1; }
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-height: 60vh; max-height: 60dvh; }
+  .pers-corpo { grid-template-columns: 1fr 1fr; padding: 0 10px; }
+  .pers-corpo > .pers-bloco:nth-child(-n+2) { grid-column: 1 / -1; }
+  .pers-letra .seg-opcao { padding: 0 6px; font-size: .75rem; }
   .pers-fonte .seg-opcao { padding: 0 6px; font-size: .72rem; }
 }
 /* Cadastro da operação: seções em cartão, como as linhas do POA/POD */

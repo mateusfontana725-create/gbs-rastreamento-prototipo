@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2297,5 +2297,36 @@ console.log('Aplicativo Android: passagem do navegador para o app e aparelho com
   await rpc(resp1, 'excluir_operacao', { p_operacao: opA.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–051 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Relatório do comando (migração 052)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opC = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 052', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await db.query(`insert into public.responsaveis (user_id, nome) values ($1, 'Sgt Três') on conflict do nothing`, [resp3]);
+  await db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2), ($1, $3)`, [opC.id, resp2, resp3]);
+  const pc1 = await rpc(resp1, 'passagem_iniciar', { p_operacao: opC.id, p_para: resp2, p_nota: '' });
+  await rpc(resp2, 'passagem_responder', { p_passagem: pc1.id, p_aceitar: true, p_nota: '' });
+  const pc2 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opC.id, p_para: resp3, p_nota: '' });
+  await rpc(resp3, 'passagem_responder', { p_passagem: pc2.id, p_aceitar: true, p_nota: '' });
+  const pc3 = await rpc(resp3, 'passagem_iniciar', { p_operacao: opC.id, p_para: resp1, p_nota: '' });
+  const u52 = (n) => '5a5a5a5a-0000-4000-8000-' + String(n).padStart(12, '0');
+  const caminho = (n) => opC.id + '/' + u52(n) + '.pdf';
+  for (const n of [1, 2, 3, 4, 5, 6]) await como(resp1, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [caminho(n)]);
+  const cmd0 = await rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(1), p_paginas: 4, p_bytes: 900, p_sha256: null, p_tipo: 'comando', p_referencia: 'inicio' });
+  chk(cmd0.tipo === 'comando' && cmd0.referencia === 'inicio', 'comando desde o início da operação: registrado');
+  const repete = await rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(2), p_paginas: 4, p_bytes: 900, p_sha256: null, p_tipo: 'comando', p_referencia: 'inicio' });
+  chk(repete.id === cmd0.id, 'o mesmo comando repetido devolve o que já foi guardado (não duplica)');
+  const cmd1 = await rpc(resp2, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(3), p_paginas: 5, p_bytes: 900, p_sha256: null, p_tipo: 'comando', p_referencia: pc1.id });
+  chk(cmd1.tipo === 'comando' && cmd1.referencia === pc1.id, 'comando iniciado por uma passagem aceita: registrado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(4), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'comando', p_referencia: pc3.id }))), 'passagem ainda pendente não inicia um comando');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(5), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'comando', p_referencia: 'ontem' }))), 'referência de comando inválida: recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(6), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'comando', p_referencia: u52(99) }))), 'passagem de outra ou inexistente: recusada');
+  chk(/permission denied|row-level|relatorios_tipo_ok|check/.test(await erroDe(como(resp1, `insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por, gerado_por_nome, tipo, referencia) values ($1, $2, 1, 1, null, $3, 'Sgt Um', 'comando', 'x')`, [opC.id, caminho(7), resp1]))), 'o banco também recusa comando com referência inválida');
+  const lista = (await como(resp1, `select tipo, referencia from public.relatorios where operacao_id = $1 and tipo = 'comando' order by referencia`, [opC.id])).rows;
+  chk(lista.length === 2, 'dois comandos guardados para a operação', lista);
+  chk((await como(resp2, `select count(*)::int n from public.relatorios where operacao_id = $1`, [opC.id])).rows[0].n === 2, 'responsável da operação lê os relatórios de comando');
+  chk((await como(await usuario('r6@cbm', false), `select count(*)::int n from public.relatorios where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'responsável de fora da operação não lê');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opC.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–052 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

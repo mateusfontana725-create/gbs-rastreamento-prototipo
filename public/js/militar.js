@@ -287,7 +287,7 @@
       b.addEventListener('click', function () { setVista(b.getAttribute('data-vista')); });
     });
     $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
-    $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
+    $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatoriosOperacao(est.op); });
     $('menu-grupos').addEventListener('click', abrirGrupos);
     $('menu-missoes').addEventListener('click', abrirMissoes);
     $('opt-local').addEventListener('click', function () { definirPrefMapa('local', !est.prefsMapa.local); });
@@ -894,7 +894,7 @@
       funcoes.push({ texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver painel (só leitura)', acao: function () { abrirOperacao(op); } });
       if (window.Relatorio) {
         funcoes.push({ texto: 'Diário da operação', acao: function () { window.Relatorio.abrirDiario(op); } });
-        funcoes.push({ texto: 'Relatório final (PDF)', acao: function () { window.Relatorio.abrirRelatorio(op); } });
+        funcoes.push({ texto: 'Relatórios (diário, comando e final)', acao: function () { window.Relatorio.abrirRelatoriosOperacao(op); } });
       }
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
@@ -1436,8 +1436,6 @@
       }, CFG_GPS.sinalVidaMs);
       // Estava registrando neste aparelho (a página recarregou)? Pergunta antes de retomar.
       oferecerRetomarMinhaTrilha();
-      // relatório diário: gerado e guardado sozinho para os dias que já terminaram (migração 049)
-      if (window.Relatorio && window.Relatorio.iniciarDiarios) window.Relatorio.iniciarDiarios();
     }
     atualizarEstadoGps();
     if (est.abrirConvite) {
@@ -1448,7 +1446,6 @@
 
   function fecharPainel() {
     carregandoPainel(false);
-    if (window.Relatorio && window.Relatorio.pararDiarios) window.Relatorio.pararDiarios();
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
     est.timerMeuSinal = null;

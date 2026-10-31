@@ -50,6 +50,17 @@ teste('diário: só o que aconteceu no dia, com a situação ao fim dele', () =>
   assert.deepStrictEqual(n, ['3', '1', '1', '1', '1'], 'registros, encontros, setores concluídos, pessoas que entraram e fotos do dia');
   assert.ok(doc.content.some((c) => c.image === 'data:image/png;base64,AA'), 'mapa geral');
   assert.ok(/RELATÓRIO DIÁRIO 29\/10/.test(JSON.stringify(doc.header(2))), 'cabeçalho com o dia');
+
+  // Relatório de comando: o período do comando (não o dia) define o que entra; o briefing passado aparece no fim
+  const ini = new Date(2026, 9, 29, 13).getTime(), fim = new Date(2026, 9, 29, 16).getTime();
+  const cmd = RP.montarComando(dados, { mapaGeral: null }, { rotulo: 'Comando 2', ini: ini, fim: fim, comandante: 'Sgt Dois', passadoA: 'Sgt Três',
+    fechamento: [['Objetivo', 'Localizar o segundo ponto']] });
+  const txc = textos(cmd.content).join(' | ');
+  assert.ok(/RELATÓRIO DO COMANDO/.test(txc) && /Comando 2/.test(txc), 'título do comando');
+  assert.ok(/Setor A concluído/.test(txc), 'registro dentro do período do comando');
+  assert.ok(!/Vestígio: boné/.test(txc) && !/Cb Silva entrou/.test(txc), 'registros fora do período ficam de fora');
+  assert.ok(/Sgt Dois/.test(txc) && /Sgt Três/.test(txc), 'comandante e quem recebeu');
+  assert.ok(/Situação ao passar o comando/.test(txc) && /Localizar o segundo ponto/.test(txc), 'briefing passado no fim do comando');
 });
 teste('passagem de comando: quem passou, quem recebeu, horários e o briefing entregue', () => {
   const pas = { de_nome: 'Ten Um', para_nome: 'Cap Dois', estado: 'aceita', criada_em: t(18), respondida_em: t(18.5), nota: 'Equipe Alfa no setor B', resumo: { gerado_em: t(18) } };

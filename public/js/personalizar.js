@@ -137,12 +137,12 @@
         el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'pers-padrao', texto: 'Padrão', onclick: function () { ap.restaurar(); UI.aviso('Tela no padrão.', 'ok', 2500); } }),
         el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', id: 'pers-concluir', texto: 'Concluir', onclick: concluir }),
       ]),
-      el('div', { classe: 'pers-linha' }, [
-        el('div', { classe: 'pers-bloco pers-bloco-bandeja' }, [el('span', { classe: 'pers-rotulo', texto: 'Em Ferramentas' }), bandeja]),
-        el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Texto' }), fonteSeg]),
+      el('div', { classe: 'pers-corpo' }, [
+        el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Tamanho do texto' }), fonteSeg]),
         el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Letra' }), letraSeg]),
-        el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Grupos no mapa' }), cantos]),
         el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Botões de ação' }), ladoSeg]),
+        el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Painel de grupos' }), cantos]),
+        el('div', { classe: 'pers-bloco pers-bloco-bandeja' }, [el('span', { classe: 'pers-rotulo', texto: 'Em Ferramentas (arraste para cá)' }), bandeja]),
       ]),
     ]);
     document.body.appendChild(painel);

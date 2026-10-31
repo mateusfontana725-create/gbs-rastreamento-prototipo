@@ -158,10 +158,9 @@
   function popup(o) {
     var t = TIPOS[o.tipo];
     return el('div', { classe: 'popup-binomio' }, [
-      el('strong', { texto: t.ico + ' ' + t.rotulo + ': ' + o.titulo }),
+      el('strong', { texto: t.ico + ' ' + t.rotulo + ': ' + o.titulo }, [UI.dica(t.nota)]),
       el('div', null, [el('span', { classe: 'selo ' + ESTADOS[o.estado].classe, texto: ESTADOS[o.estado].rotulo })]),
       el('div', { classe: 'muted', texto: (o.observado_em ? C.hora(o.observado_em, false) : 'hora não informada') + (o.fonte ? ' · ' + o.fonte : '') }),
-      el('div', { classe: 'muted', texto: t.nota }),
       el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Abrir', onclick: function () { abrir(t.modalidade, o.id); } }),
     ]);
   }

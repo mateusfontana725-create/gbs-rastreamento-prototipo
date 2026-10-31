@@ -3695,9 +3695,8 @@
     if (pendente) {
       caixaSaida.innerHTML = '';
       caixaSaida.appendChild(UI.el('div', { classe: 'nota nota-saida' }, [
-        UI.el('strong', { texto: 'PEDIU PARA ENCERRAR às ' + C.hora(d.saida_solicitada_em, false) + '.' }),
+        UI.el('strong', { texto: 'PEDIU PARA ENCERRAR às ' + C.hora(d.saida_solicitada_em, false) + '.' }, [UI.dica('O rastreamento continua até você decidir.')]),
         d.saida_motivo ? UI.el('div', { texto: 'Motivo: ' + d.saida_motivo }) : null,
-        UI.el('div', { classe: 'muted', texto: 'O rastreamento continua até você decidir.' }),
         podeAlterar() ? UI.el('div', { classe: 'acoes-linha' }, [
           UI.el('button', { classe: 'btn btn-ok btn-pequeno', type: 'button', texto: 'Liberar saída', onclick: function () { liberarSaida(p.id); } }),
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Pedir para continuar', onclick: function () { recusarSaida(p.id); } }),

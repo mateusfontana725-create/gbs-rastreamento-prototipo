@@ -119,13 +119,12 @@
     var fechar = null;
     var caixa = el('div', { classe: 'dash-det' }, [
       el('div', { classe: 'dash-det-topo' }, [
-        el('h2', { id: 'modal-titulo', texto: o.titulo }),
+        el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: o.titulo }, [o.nota && window.UI ? UI.dica(o.nota) : null]),
         el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
       o.subtitulo ? el('p', { classe: 'muted dash-det-sub', texto: o.subtitulo }) : null,
       o.medidas ? medidas(o.medidas) : null,
       o.lista ? listaDetalhe(o.lista, o.vazio) : null,
-      o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
       o.acoes && o.acoes.length ? el('div', { classe: 'dash-det-acoes' }, o.acoes.map(function (a) {
         return el('button', { classe: 'btn' + (a.principal ? ' btn-primario' : ''), type: 'button', texto: a.texto, onclick: a.fn });
       })) : null,
@@ -206,16 +205,21 @@
     ]), aoClicar, 'Ver detalhes: ' + rotulo);
   }
 
+  // Explicações (pergunta e nota) ficam no "i" ao lado do título, não em texto na tela.
+  function textoDaExplicacao(o) {
+    var texto = [o.pergunta, o.nota].filter(Boolean).join(' ');
+    return texto && window.UI ? UI.dica(texto) : null;
+  }
+
   // Cartão com estrutura fixa: título, n (tamanho da amostra), pergunta, corpo e nota.
   // span: colunas da grade (12 = largura toda).
   function cartao(o) {
     var amostra = o.n == null ? el('span', { classe: 'dash-n dash-n-baixo', texto: 'n < 5' })
       : el('span', { classe: 'dash-n', texto: 'n = ' + o.n });
     return clicavel(el('section', { classe: 'dash-card dash-s' + (o.span || 12) }, [
-      el('header', { classe: 'dash-card-topo' }, [el('h3', { classe: 'titulo-com-dica' }, [o.titulo, o.pergunta && window.UI ? UI.dica(o.pergunta) : null]), o.n === undefined ? null : amostra,
+      el('header', { classe: 'dash-card-topo' }, [el('h3', { classe: 'titulo-com-dica' }, [o.titulo, textoDaExplicacao(o)]), o.n === undefined ? null : amostra,
         o.aoClicar ? el('span', { classe: 'dash-card-dica', texto: o.dica || 'Detalhes ›' }) : null]),
       el('div', { classe: 'dash-card-corpo' }, o.corpo),
-      o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
     ]), o.aoClicar, 'Ver detalhes: ' + o.titulo);
   }
 
@@ -462,7 +466,6 @@
         function () { detalheLocalizadas(d); }),
     ]);
 
-    var notaOculto = temOculto(d) ? el('p', { classe: 'dash-nota-oculto muted', texto: 'Números com menos de ' + d.k_minimo + ' casos aparecem como "oculto", para que ninguém seja identificado.' }) : null;
 
     // Por mês: duas colunas (aquática e terrestre), contadas da lista de operações do usuário.
     // Sem a lista (falha ao carregar), volta à coluna única do total.
@@ -566,7 +569,7 @@
             ['Operações com vítima localizada', valorOu(p.operacoes_com_localizacao)],
             ['Distância mediana até a localização', valorOu(p.mediana_km, km)],
           ],
-          nota: 'Uma ficha pode ter mais de um perfil. Números com menos de ' + d.k_minimo + ' casos ficam ocultos.',
+          nota: 'Uma ficha pode ter mais de um perfil.',
         });
       })],
       nota: 'Fichas podem ter perfil em branco. A distância mediana por perfil só aparece com 5 ou mais casos. Toque num perfil para detalhes.',
@@ -588,7 +591,7 @@
     });
 
     return [
-      topo, kpis, notaOculto, secaoMapaParana(),
+      topo, kpis, secaoMapaParana(),
       el('div', { classe: 'dash-grade' }, [grafMeses, grafTipos, grafDist, resumoDist, grafPerfis, grafCond, cartaoQualidade(d.qualidade)]),
     ];
   }

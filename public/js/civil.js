@@ -2063,8 +2063,7 @@
   function escolherCondicaoVitima() {
     if (!estado.part || estado.finalizado) return;
     var fechar = UI.abrirModal(UI.el('div', { classe: 'encontrei' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Encontrei a vítima' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Só os bombeiros responsáveis veem.' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Encontrei a vítima' }, [UI.dica('Só os bombeiros responsáveis veem.')]),
       UI.el('div', { classe: 'encontrei-opcoes' }, [
         UI.el('button', { classe: 'opcao-encontrei opcao-condicao', type: 'button', id: 'vitima-viva', onclick: function () { fechar(); confirmarVitima('viva', 'Viva'); } }, [
           UI.el('strong', { texto: 'Viva' }),
@@ -2080,9 +2079,8 @@
   function confirmarVitima(condicao, rotulo) {
     var btnEnviar = UI.el('button', { classe: 'btn btn-primario btn-gigante', type: 'button', id: 'vitima-confirmar', texto: 'CONFIRMAR E ENVIAR' });
     var fechar = UI.abrirModal(UI.el('div', null, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Confirmar envio?' }),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Confirmar envio?' }, [UI.dica('Sua localização vai junto. Depois, este celular mostra só "' + TEXTO_VITIMA + '".')]),
       UI.el('p', { classe: 'confirma-condicao', texto: 'Vítima: ' + rotulo }),
-      UI.el('p', { classe: 'ajuda', texto: 'Sua localização vai junto. Depois, este celular mostra só "' + TEXTO_VITIMA + '".' }),
       UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar]),
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); escolherCondicaoVitima(); } })]),
     ]), { fecharNoFundo: false });

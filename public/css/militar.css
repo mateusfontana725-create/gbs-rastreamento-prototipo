@@ -1607,10 +1607,14 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 }
 @media (max-width: 860px) {
   .painel-topo { grid-template-areas: "voltar titulo pilula acoes" "rapidas rapidas rapidas rapidas"; }
-  .acoes-topo { grid-area: rapidas; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
+  .acoes-topo { grid-area: rapidas; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; width: 100%; min-width: 0; }
   .acoes-topo { align-items: stretch; }
   .acoes-topo .btn-acao-topo { flex-direction: column; justify-content: center; gap: 2px; padding: 4px 2px; min-height: 44px; height: auto; min-width: 0; font-size: .6rem; line-height: 1.05; white-space: normal; text-align: center; letter-spacing: .04em; }
   .btn-acao-topo .ico-acao { font-size: .95rem; }
+}
+/* Celular em pé: duas linhas de cinco botões (todos à vista, alinhados) */
+@media (max-width: 860px) and (orientation: portrait) {
+  .acoes-topo { grid-auto-flow: row; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 @media (orientation: landscape) and (max-height: 540px) {
   .acoes-topo { display: flex; }
@@ -2220,10 +2224,6 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
   .modal .briefing-modal .form-rodape .btn { flex: 1 1 calc(50% - 32px); white-space: normal; line-height: 1.1; }
   .modal .briefing-modal .form-rodape #briefing-atualizar { flex: 0 0 48px; margin-right: 0; }
 }
-/* Convidar: o nome aparece também no notebook (é o único botão de ação com texto curto e pouco óbvio sem ele) */
-@media (min-width: 861px) and (max-width: 1280px) {
-  #btn-convite .rotulo-acao { display: inline; }
-}
 
 /* Meteorologia: legendas por camada e fontes com horário */
 .meteo-legenda-bloco { display: grid; gap: 2px; }
@@ -2493,14 +2493,32 @@ body.janela-sci { background: var(--fundo); }
 .meteo-area-grade .meteo-chip[aria-checked="true"] { background: var(--acento); border-color: var(--acento); color: #0a0d10; }
 .meteo-barra-sat { background: linear-gradient(to right, rgba(235, 235, 235, .6) 0%, #22d3ee 25%, #22c55e 45%, #facc15 65%, #ef4444 85%, #7f1d1d 100%); }
 
-/* Cabeçalho recolhido: uma seta no topo traz de volta */
-.btn-recolher-topo { min-height: 32px; min-width: 34px; padding: 0 8px; font-size: .8rem; }
-html.topo-oculto .painel-topo { display: none; }
-.btn-mostrar-topo {
-  position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 1200;
-  display: none; min-height: 26px; padding: 0 14px; border-radius: 0 0 10px 10px; font-size: .8rem;
+/* Etiqueta de recolher/mostrar o cabeçalho: pendurada no centro da borda de baixo (cor de destaque, sempre visível) */
+.painel-topo { position: relative; }
+.etiqueta-topo {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 1200; top: 100%;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 14px;
+  border: 0; border-radius: 0 0 10px 10px; background: var(--acento); color: #111827;
+  font-weight: 800; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .35); cursor: pointer;
 }
-html.topo-oculto .btn-mostrar-topo { display: inline-flex; align-items: center; }
+.etiqueta-topo:hover { filter: brightness(1.08); }
+.etiqueta-topo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.btn-recolher-topo { min-height: 26px; }
+html.topo-oculto .painel-topo { display: none; }
+.btn-mostrar-topo { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 1200; display: none; }
+html.topo-oculto .btn-mostrar-topo { display: inline-flex; }
+
+/* SCI: o painel de comando tem destaque próprio na barra de ações */
+#menu-sci { background: #7c3aed; border-color: #a78bfa; color: #ffffff; font-weight: 800; box-shadow: 0 0 0 2px rgba(167, 139, 250, .35); }
+#menu-sci:hover { background: #6d28d9; }
+#menu-sci .ico-acao { font-size: 1.1rem; }
+
+/* Alinhamento: ícone numa caixa de altura fixa, para que o rótulo fique na mesma linha em todos os botões */
+/* Cada ícone ocupa 20 px de altura (com a borda), para os rótulos ficarem na mesma linha */
+.acoes-topo .btn-acao-topo .ico-acao { display: inline-flex; align-items: center; justify-content: center; height: 20px; line-height: 20px; }
+.acoes-topo .btn-acao-topo .ico-camera { height: 17px; margin: 1.5px 0; }
+.acoes-topo .btn-acao-topo .ico-msg { height: 16px; margin: 2px 0; }
 
 /* Botões de ação numa coluna à direita do mapa (tablet e computador) */
 @media (min-width: 861px) {

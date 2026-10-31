@@ -383,33 +383,6 @@
     return el('dl', { classe: 'dash-medidas' }, nodos);
   }
 
-  /* ------------------------------ leitura em texto ------------------------------ */
-  function frases(d) {
-    var ops = d.operacoes, dist = d.distancia_km, loc = d.localizacoes;
-    if (ops.total === 0) return ['Ainda não há operações no seu acesso.'];
-    var out = [];
-    out.push('Você tem ' + ops.total + ' operaç' + (ops.total === 1 ? 'ão' : 'ões') + ': ' + ops.abertas + ' abert' + (ops.abertas === 1 ? 'a' : 'as') +
-      ' e ' + ops.encerradas + ' encerrada' + (ops.encerradas === 1 ? '' : 's') + '.');
-    var pico = ultimos12(ops.por_mes).reduce(function (m, x) { return x.n > m.n ? x : m; }, { mes: null, n: 0 });
-    if (pico.n > 0) out.push('O mês com mais operações nos últimos 12 meses foi ' + rotuloMes(pico.mes) + ', com ' + pico.n + '.');
-    if (dist.mediana != null) {
-      out.push('Em ' + dist.casos + ' casos com vítima localizada, a distância mediana entre o último local visto (ULV) e o local da localização é de ' +
-        km(dist.mediana) + '. Metade dos casos fica entre ' + km(dist.p25) + ' e ' + km(dist.p75) + '.');
-    }
-    if (loc.minutos_ate_mediana != null) out.push('A localização acontece, em mediana, ' + minutos(loc.minutos_ate_mediana) + ' depois do início das operações.');
-    var perfis = d.perfis.filter(function (p) { return p.fichas != null; }).sort(function (a, b) { return b.fichas - a.fichas; });
-    if (perfis.length) out.push('O perfil mais frequente entre as vítimas é "' + nomePerfil(perfis[0].perfil) + '", com ' + perfis[0].fichas + ' ficha' + (perfis[0].fichas === 1 ? '' : 's') + '.');
-    var cond = loc.por_condicao || {};
-    if (cond.viva != null || cond.obito != null) {
-      out.push('Entre as vítimas localizadas: ' + (cond.viva != null ? cond.viva + ' com vida' : 'um número oculto com vida') +
-        ' e ' + (cond.obito != null ? cond.obito + ' em óbito' : 'um número oculto em óbito') + '.');
-    }
-    return out;
-  }
-
-  /* ------------------------------ qualidade dos dados (denominadores) ------------------------------ */
-  // Diz sobre o que os números foram calculados. Ausente aparece como ausente (nunca zero);
-  // não localizados ficam fora das medianas (censurados), não entram como "distância zero".
   function cartaoQualidade(q) {
     if (!q) {
       return cartao({ span: 12, titulo: 'Qualidade dos dados', pergunta: 'Sobre quantos casos cada número foi calculado.',
@@ -463,13 +436,8 @@
     var totalCond = typeof vitLocalizadas === 'number' ? vitLocalizadas : condicoes.reduce(function (t, i) { return t + (i.valor || 0); }, 0);
 
     var topo = el('header', { classe: 'dash-topo' }, [
-      el('div', null, [
-        el('h2', { texto: 'Dashboard' }),
-        el('p', { classe: 'muted', texto: 'Todas as operações a que você tem acesso. Os números não identificam vítimas; o mapa mostra o local de cada operação.' }),
-      ]),
+      el('h2', { texto: 'Dashboard' }),
       el('div', { classe: 'dash-acoes' }, [
-        el('span', { classe: 'dash-atualizado muted', texto: 'Atualizado em ' + dataHora(d.gerado_em) }),
-        seloAutomatico(ATUALIZAR_GERAL_MS),
         janelaPropria() ? null : el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-nova-janela', texto: '↗ Abrir em outra janela',
           title: 'Abre só o dashboard numa janela própria (ou outro monitor)',
           onclick: function () { abrirJanelaDashboard(''); } }),
@@ -494,11 +462,7 @@
         function () { detalheLocalizadas(d); }),
     ]);
 
-    var leitura = el('section', { classe: 'dash-leitura' }, [
-      el('h3', { texto: 'Leitura rápida' }),
-      el('ul', null, frases(d).map(function (f) { return el('li', { texto: f }); })),
-      temOculto(d) ? el('p', { classe: 'dash-nota-oculto muted', texto: 'Números com menos de ' + d.k_minimo + ' casos aparecem como "oculto", para que ninguém seja identificado.' }) : null,
-    ]);
+    var notaOculto = temOculto(d) ? el('p', { classe: 'dash-nota-oculto muted', texto: 'Números com menos de ' + d.k_minimo + ' casos aparecem como "oculto", para que ninguém seja identificado.' }) : null;
 
     // Por mês: duas colunas (aquática e terrestre), contadas da lista de operações do usuário.
     // Sem a lista (falha ao carregar), volta à coluna única do total.
@@ -624,7 +588,7 @@
     });
 
     return [
-      topo, kpis, secaoMapaParana(), leitura,
+      topo, kpis, notaOculto, secaoMapaParana(),
       el('div', { classe: 'dash-grade' }, [grafMeses, grafTipos, grafDist, resumoDist, grafPerfis, grafCond, cartaoQualidade(d.qualidade)]),
     ];
   }

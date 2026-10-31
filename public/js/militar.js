@@ -1695,6 +1695,29 @@
     });
     new BotaoMeteo().addTo(mapa);   // adicionado depois: fica acima da legenda
 
+    // Bússola pequena no canto: o mapa é sempre norte para cima, então a rosa mostra onde fica o norte e o sul.
+    var Bussola = L.Control.extend({
+      options: { position: 'bottomright' },
+      onAdd: function () {
+        var div = L.DomUtil.create('div', 'bussola-mapa');
+        div.title = 'Norte: o mapa sempre fica com o norte para cima';
+        div.setAttribute('role', 'img');
+        div.setAttribute('aria-label', 'Bússola: norte para cima');
+        div.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true">' +
+          '<circle cx="24" cy="24" r="22.5" fill="none" stroke="currentColor" stroke-opacity=".3"/>' +
+          '<path d="M24 13 L28.5 25 L24 23 L19.5 25 Z" fill="#ef4444"/>' +
+          '<path d="M24 35 L28.5 23 L24 25 L19.5 23 Z" fill="currentColor" fill-opacity=".45"/>' +
+          '<text x="24" y="10.5" text-anchor="middle" font-size="7.5" font-weight="700" fill="#ef4444">N</text>' +
+          '<text x="24" y="46" text-anchor="middle" font-size="6.5" font-weight="600" fill="currentColor" fill-opacity=".7">S</text>' +
+          '<text x="42.5" y="26.5" text-anchor="middle" font-size="6.5" font-weight="600" fill="currentColor" fill-opacity=".7">L</text>' +
+          '<text x="5.5" y="26.5" text-anchor="middle" font-size="6.5" font-weight="600" fill="currentColor" fill-opacity=".7">O</text>' +
+          '</svg>';
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+      },
+    });
+    new Bussola().addTo(mapa);
+
     // Grupos: cada grupo com o ícone de olho (mostrar só o grupo / restaurar tudo).
     var Grupos = L.Control.extend({
       options: { position: UI.aparencia.posicaoGrupos() },

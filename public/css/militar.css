@@ -710,7 +710,7 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 
 /* ---- painel de estatísticas (tela inicial e da operação) ---- */
 .dash { display: grid; gap: 18px; font-variant-numeric: tabular-nums; }
-.dash-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dash-topo h2 { margin: 0; font-size: 1.3rem; }
 .dash-topo p { margin: 3px 0 0; font-size: .84rem; }
 .dash-acoes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -729,10 +729,6 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .dash-kpi-detalhe { font-size: .74rem; color: var(--texto-3); }
 
 /* leitura em texto */
-.dash-leitura { padding: 16px 18px; border-radius: 14px; border: 1px solid var(--borda); background: var(--superficie); }
-.dash-leitura h3 { margin: 0 0 10px; font-size: .92rem; }
-.dash-leitura ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; color: var(--texto-2); font-size: .88rem; line-height: 1.5; }
-.dash-leitura li { padding-left: 12px; border-left: 2px solid var(--acento); }
 .dash-nota-oculto { margin: 10px 0 0; font-size: .76rem; }
 
 /* grade de cartões: 12 colunas, cartões da mesma linha com a mesma altura */
@@ -1124,6 +1120,12 @@ body { font-size: 0.9375rem; }
   .painel-topo .pilula-conexao { padding: 6px; }
   .painel-topo .pilula-conexao span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+
+.bussola-mapa {
+  width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; pointer-events: none;
+  background: var(--superficie); color: var(--texto-2); border: 1px solid var(--borda-forte); box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+.bussola-mapa svg { width: 42px; height: 42px; display: block; }
 
 /* Faixa de alerta crítico: uma linha; tocar no texto abre o alerta inteiro */
 .faixa-alerta { padding: 5px 10px; gap: 8px; flex-wrap: nowrap; border-bottom-width: 2px; }
@@ -1597,9 +1599,11 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .btn-acao-topo .ico-acao { font-size: 1rem; line-height: 1; }
 .btn-acao-topo .ico-camera { flex: none; }
 .acoes-topo[hidden], .btn-acao-topo[hidden] { display: none !important; }
+/* Tablet e notebook (861–1280 px): a linha de ações desce para uma faixa cheia, com o nome sempre visível embaixo do ícone */
 @media (min-width: 861px) and (max-width: 1280px) {
-  .btn-acao-topo .rotulo-acao { display: none; }   /* notebook: só o ícone (o nome aparece ao passar o mouse) */
-  .btn-acao-topo { padding: 0 9px; }
+  .acoes-topo { order: 10; width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: stretch; }
+  .acoes-topo .btn-acao-topo { flex-direction: column; justify-content: center; gap: 3px; padding: 5px 2px; min-height: 50px; height: auto; min-width: 0; font-size: .72rem; line-height: 1.1; white-space: normal; text-align: center; letter-spacing: .02em; }
+  .btn-acao-topo .ico-acao { font-size: 1.05rem; }
 }
 @media (max-width: 860px) {
   .painel-topo { grid-template-areas: "voltar titulo pilula acoes" "rapidas rapidas rapidas rapidas"; }

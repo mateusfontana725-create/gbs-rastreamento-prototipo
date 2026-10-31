@@ -90,7 +90,7 @@
     API.bateria = function () { return pedir('bateria'); };
     API.configuracoes = function () { return pedir('configuracoes'); };
     API.localizacaoDoCelular = function () { return pedir('localizacaoDoCelular'); };
-    API.notificar = function (titulo, texto) { return pedir('notificar', { titulo: titulo, texto: texto }); };
+    API.notificar = function (titulo, texto, id) { return pedir('notificar', id ? { titulo: titulo, texto: texto, id: String(id) } : { titulo: titulo, texto: texto }); };
   }
 
   if (typeof module !== 'undefined' && module.exports) module.exports = API;

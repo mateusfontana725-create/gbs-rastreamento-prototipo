@@ -177,6 +177,64 @@ public final class Sincronizador {
     }
   }
 
+  /** Mensagem dos bombeiros ainda não confirmada (app_mensagens_pendentes, migração 056). */
+  public static final class Mensagem {
+    public final String id, tipo, texto, remetente;
+    public final long criadaEmMs;
+    Mensagem(String id, String tipo, String texto, String remetente, long criadaEmMs) {
+      this.id = id; this.tipo = tipo; this.texto = texto; this.remetente = remetente; this.criadaEmMs = criadaEmMs;
+    }
+  }
+
+  /** Mensagens para avisar com o app fechado. null = não deu para saber agora (sem rede, servidor sem a 056...). */
+  public List<Mensagem> mensagensPendentes() {
+    JSONObject args = new JSONObject();
+    try {
+      args.put("p_dispositivo", dispositivo).put("p_segredo", segredo);
+    } catch (JSONException e) {
+      return null;
+    }
+    Resposta r;
+    try {
+      r = chamar("app_mensagens_pendentes", args, 12000);
+    } catch (IOException e) {
+      return null;
+    }
+    if (r.status < 200 || r.status >= 300) return null;
+    try {
+      JSONArray a = new JSONArray(r.corpo);
+      List<Mensagem> l = new ArrayList<>();
+      for (int i = 0; i < a.length(); i++) {
+        JSONObject o = a.getJSONObject(i);
+        String id = o.optString("id", "");
+        if (id.isEmpty()) continue;
+        l.add(new Mensagem(id, o.optString("tipo", "PERSONALIZADA"), o.optString("texto", ""), o.optString("remetente_nome", ""),
+            dataIso(o.optString("criada_em", null))));
+      }
+      return l;
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  /** "2026-10-31T22:05:09.123456+00:00" → ms (0 se não der para ler). */
+  static long dataIso(String v) {
+    if (v == null || v.length() < 19) return 0;
+    try {
+      SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
+      f.setTimeZone(TimeZone.getTimeZone("GMT"));
+      long ms = f.parse(v.substring(0, 19)).getTime();
+      java.util.regex.Matcher m = java.util.regex.Pattern.compile("([+-])(\\d{2}):?(\\d{2})$").matcher(v);
+      if (m.find()) {
+        long desloc = (Long.parseLong(m.group(2)) * 60 + Long.parseLong(m.group(3))) * 60000L;
+        ms -= "+".equals(m.group(1)) ? desloc : -desloc;
+      }
+      return ms;
+    } catch (Exception e) {
+      return 0;
+    }
+  }
+
   /** HTTP simples (HttpURLConnection): sem bibliotecas extras. */
   public static final class HttpPadrao implements Http {
     @Override

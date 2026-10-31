@@ -2435,7 +2435,8 @@
     if (NATIVO && document.hidden) {
       var pa = pendentesDeConfirmacao()[0];
       var ta = pa ? (C.TIPOS_MENSAGEM[pa.tipo] || C.TIPOS_MENSAGEM.PERSONALIZADA) : null;
-      APP.notificar('Bombeiros: ' + (ta && pa.tipo !== 'PERSONALIZADA' ? ta.titulo : 'nova mensagem'), pa ? (pa.texto || ta.padrao) : 'Abra o aplicativo.').catch(function () { /* sem aviso */ });
+      // o id evita aviso repetido: o serviço do aplicativo também avisa as mensagens com a tela apagada
+      APP.notificar('Bombeiros: ' + (ta && pa.tipo !== 'PERSONALIZADA' ? ta.titulo : 'nova mensagem'), pa ? (pa.tipo !== 'PERSONALIZADA' ? ta.titulo + ': ' : '') + (pa.texto || ta.padrao) : 'Abra o aplicativo.', pa ? pa.id : null).catch(function () { /* sem aviso */ });
       return;
     }
     if (document.hidden && estado.swReg && window.Notification && Notification.permission === 'granted') {
@@ -2757,6 +2758,7 @@
       if (d.ultimoContatoEm && d.ultimoContatoEm > estado.ultimoSucesso) estado.ultimoSucesso = d.ultimoContatoEm;
       atualizarUI();
     });
+    APP.ao('mensagens', function () { if (estado.part && !estado.finalizado) buscarMensagens(); });   // o serviço viu mensagem nova
     APP.ao('finalizado', function (d) { if (estado.part && !estado.finalizado) finalizar(d.motivo || 'encerrada'); });
   }
 

@@ -186,4 +186,41 @@ public class FilaSincronizadorTest {
     assertEquals("removido", new Sincronizador("https://x", "k", "d", "s", f, fim).sinal(null).motivo);
     assertFalse(Sincronizador.dataHttp("Fri, 30 Oct 2026 17:33:49 GMT") == 0);
   }
+
+  @Test
+  public void mensagensParaAvisarComATelaApagada() throws Exception {
+    FilaPontos f = new FilaPontos(pasta());
+    final String[] corpo = { "[{\"id\":\"m1\",\"tipo\":\"RETORNE\",\"texto\":\"\",\"remetente_nome\":\"Sgt Um\",\"criada_em\":\"2026-10-31T22:05:09.123456+00:00\"},"
+        + "{\"id\":\"m2\",\"tipo\":\"PERSONALIZADA\",\"texto\":\"Volte pela trilha\",\"remetente_nome\":\"Sgt Um\",\"criada_em\":\"2026-10-31T19:05:09-03:00\"}]" };
+    final int[] status = { 200 };
+    final List<String> urls = new ArrayList<>();
+    Sincronizador.Http http = (url, h, c, t) -> { urls.add(url + " " + c); return new Sincronizador.Resposta(status[0], corpo[0], 0); };
+    Sincronizador sync = new Sincronizador("https://x", "k", "disp", "seg", f, http);
+    List<Sincronizador.Mensagem> l = sync.mensagensPendentes();
+    assertEquals(2, l.size());
+    assertTrue(urls.get(0).contains("/rest/v1/rpc/app_mensagens_pendentes") && urls.get(0).contains("\"p_dispositivo\":\"disp\"") && urls.get(0).contains("\"p_segredo\":\"seg\""));
+    assertEquals("m1", l.get(0).id);
+    assertEquals("RETORNE", l.get(0).tipo);
+    assertEquals("mesmo instante em UTC e em -03:00", l.get(0).criadaEmMs, l.get(1).criadaEmMs);
+    assertEquals(1_793_484_309_000L, l.get(0).criadaEmMs);
+    status[0] = 404;
+    corpo[0] = "{\"code\":\"PGRST202\"}";
+    assertNull("servidor sem a migração 056: nada a avisar, sem erro", sync.mensagensPendentes());
+    status[0] = 200;
+    corpo[0] = "não é json";
+    assertNull(sync.mensagensPendentes());
+    Sincronizador semRede = new Sincronizador("https://x", "k", "d", "s", f, (url, h, c, t) -> { throw new IOException("sem rede"); });
+    assertNull(semRede.mensagensPendentes());
+    assertEquals(0, Sincronizador.dataIso("lixo"));
+  }
+
+  @Test
+  public void textoDaNotificacaoDeMensagem() {
+    assertEquals("RETORNE: Retorne ao ponto de apoio ou ao local indicado.", Avisos.linha("RETORNE", ""));
+    assertEquals("PARE: Fique onde está", Avisos.linha("PARE", " Fique onde está "));
+    assertEquals("Volte pela trilha", Avisos.linha("PERSONALIZADA", "Volte pela trilha"));
+    assertEquals("Nova mensagem", Avisos.linha("PERSONALIZADA", "  "));
+    assertEquals("ATENÇÃO — CUIDADO", Avisos.titulo("ATENCAO"));
+    assertEquals("Mensagem", Avisos.titulo("QUALQUER"));
+  }
 }

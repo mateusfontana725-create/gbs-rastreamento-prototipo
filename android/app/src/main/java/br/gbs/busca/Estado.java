@@ -30,6 +30,7 @@ final class Estado {
   volatile String fim;
   volatile long iniciadoEm;
   volatile String fonte = "";
+  volatile boolean telaVisivel;   // a página está na frente: ela mesma mostra as mensagens (sem notificação repetida)
 
   void ouvir(Ouvinte o) { ouvintes.addIfAbsent(o); }
   void deixar(Ouvinte o) { ouvintes.remove(o); }

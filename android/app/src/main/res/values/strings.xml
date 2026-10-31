@@ -4,6 +4,11 @@
   <string name="canal_rastreio">Registro da localização</string>
   <string name="canal_rastreio_desc">Aviso fixo enquanto a sua localização é enviada aos bombeiros.</string>
   <string name="canal_mensagens">Mensagens dos bombeiros</string>
+  <string name="canal_mensagens_desc">Avisa com som e vibração quando os bombeiros mandam uma mensagem, mesmo com o aplicativo fechado ou a tela apagada.</string>
+  <string name="notif_msgs_titulo">Mensagem dos bombeiros</string>
+  <string name="notif_msgs_abrir">Abrir</string>
+  <string name="notif_sub_ok">Os bombeiros estão vendo você</string>
+  <string name="notif_enviados">%1$d ponto(s) enviado(s) · deixe o aplicativo ligado</string>
   <string name="notif_titulo">Busca %1$s</string>
   <string name="notif_ok">Enviando sua localização aos bombeiros</string>
   <string name="notif_sem_internet">Sem internet: %1$d ponto(s) guardado(s) no celular, enviados quando o sinal voltar</string>

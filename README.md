@@ -1607,7 +1607,7 @@ rastreamento-sar/
 │   ├── app/src/main/java/br/gbs/busca/   MainActivity (página e ponte), RastreioService, FiltroGps, FilaPontos, Sincronizador
 │   ├── app/src/test/           testes do filtro (casos do gps.js), da fila e do envio
 │   └── ferramentas/gerar-casos-filtro.js  casos do teste do filtro gerados a partir do public/js/gps.js
-├── .github/workflows/apk.yml   gera o APK e publica no Release "app-android"
+├── .github/workflows/apk.yml   gera o APK e publica no Release "app-android" (main) ou "app-android-testes" (testes)
 ├── vercel.json                 diretório publicado, agendamento da limpeza e cabeçalhos de segurança
 ├── .env.example                nomes das variáveis de ambiente
 └── package.json
@@ -2035,7 +2035,16 @@ da lista de recentes, e sem internet.
   obrigatório. A página não guarda o segredo.
 - **Mapa sem internet**: ao entrar, o aplicativo guarda o mapa da **região da operação** (setores e pontos, raio de até
   15 km, dentro do limite do OpenStreetMap), além da área em volta da posição que a página já guarda.
-- **Mensagens**: com o aplicativo em segundo plano, mensagem dos bombeiros vira notificação do Android (som e vibração).
+- **Mensagens com o aplicativo fechado ou a tela apagada** (migração 056): a cada sinal de vida (15 s) o serviço pergunta
+  ao servidor (`app_mensagens_pendentes`, com o segredo do aparelho) se há mensagem dos bombeiros ainda não confirmada e
+  mostra a notificação como num aplicativo de conversa: **som, vibração, aparece por cima dos outros aplicativos e na tela
+  bloqueada**, juntando as mensagens numa conversa "Bombeiros" (tocar abre o aplicativo). Cada mensagem avisa uma vez só
+  (o id fica guardado no aparelho); com a página na frente, a própria página mostra o alerta. A mensagem buscada fica como
+  **entregue** no painel. Não usa Firebase: o aviso depende do serviço do aplicativo estar ligado (é o mesmo que envia a
+  localização durante toda a busca).
+- **Aviso fixo de monitoramento** (como o de navegação de um aplicativo de mapas): colorido (verde enviando, laranja com
+  problema), com o tempo de busca correndo, quantos pontos já foram enviados, visível na tela bloqueada e com a tela apagada.
+  No Android 14, se for arrastado para fora, volta sozinho enquanto o registro continua.
 - **Bateria**: a página oferece **Liberar a bateria (recomendado)**, que tira o aplicativo da economia de bateria do Android
   (alguns fabricantes encerram serviços de fundo mesmo assim; o aviso fixo e a liberação reduzem isso).
 - Permissões: localização precisa (durante o uso basta, pois o registro começa com o aplicativo aberto e segue pelo serviço
@@ -2044,9 +2053,17 @@ da lista de recentes, e sem internet.
 
 **Gerar e publicar o APK** (`.github/workflows/apk.yml`)
 
-- A cada mudança em `android/` (branches `main` e `v3-apk`) ou pelo botão **Run workflow** em Actions, o GitHub roda os
-  testes do aplicativo, a verificação do Android (lint) e gera o APK, publicado no Release **app-android** do repositório
-  (`gbs-busca.apk` e o SHA-256). O botão da página baixa por `/api/app?baixar=1`, que redireciona para esse arquivo.
+- A cada mudança em `android/` ou pelo botão **Run workflow** em Actions, o GitHub roda os testes do aplicativo, a
+  verificação do Android (lint) e gera o APK (`gbs-busca.apk` e o SHA-256):
+  - branch **main** → Release **app-android** (produção);
+  - branch **testes** → Release **app-android-testes** (não troca o APK de produção).
+  Um build mais antigo (ex.: **Re-run** de uma execução velha) nunca substitui um APK mais novo no Release (o Android
+  não instala versão menor por cima de maior); depois de publicar, o workflow baixa o arquivo de volta e confere o SHA-256.
+- **Download**: o botão da página usa `/api/app?baixar=1`, que **entrega o APK pelo próprio site** (tipo
+  `application/vnd.android.package-archive`, nome `gbs-busca.apk`). Antes redirecionava para o GitHub, que manda o
+  navegador para um link assinado que vale poucos minutos: no Android o download às vezes começava depois e chegava
+  "expirado" (o arquivo vinha corrompido e não instalava). Se o servidor não conseguir buscar o arquivo, volta a
+  redirecionar. No deploy da branch testes (Vercel), entrega o APK de testes (sem ele, o de produção).
   `APP_ANDROID_URL` (Vercel) troca o endereço; `APP_ANDROID_URL=desligado` esconde o botão.
 - **Assinatura (faça uma vez)**: sem ela, cada build sai com uma chave de teste diferente e o celular só atualiza
   desinstalando a versão anterior. Gere a chave e guarde-a em lugar seguro (perdeu a chave, os celulares precisam
@@ -2063,6 +2080,7 @@ da lista de recentes, e sem internet.
   Em **Settings → Secrets and variables → Actions → Secrets**, cadastre `ANDROID_KEYSTORE_BASE64` (o texto do segundo
   comando), `ANDROID_KEYSTORE_SENHA`, `ANDROID_CHAVE_ALIAS` (`gbs-busca`) e `ANDROID_CHAVE_SENHA`.
 - **Servidor fixo (recomendado)**: em **Variables**, `GBS_ORIGEM` = endereço do site (ex.: `https://rastreamento-sar.vercel.app`).
+  Opcional: `GBS_ORIGEM_TESTES` = endereço do deploy da branch testes, para o APK de testes abrir as páginas de testes.
   Com ele, o aplicativo só abre esse servidor. Sem ele, o aplicativo aceita o servidor do primeiro link de abertura
   (sempre https) e pede confirmação antes de trocar de busca enquanto registra.
 - **Compilar no computador** (Android Studio ou Android SDK + JDK 17), na pasta `android/`:
@@ -2180,6 +2198,9 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 42d | No modo avião, abrir o aplicativo | a página abre (guardada) e o mapa mostra a região da operação |
 | 42e | Liberar a saída do participante no painel | o aplicativo para de registrar, o aviso fixo some e a tela mostra "Saída liberada" |
 | 42f | Abrir **📱 Baixar aplicativo** de novo em outro celular e abrir no aplicativo de lá | o primeiro aplicativo para ("Participação encerrada neste celular"); o segundo continua a mesma trilha |
+| 42g | No aplicativo registrando, **fechar o aplicativo** (tirar da lista de recentes) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
+| 42h | Com o aplicativo registrando, puxar a barra de notificações e a tela bloqueada | o aviso fixo verde "Busca …" mostra "Enviando sua localização aos bombeiros", o tempo de busca correndo e os pontos enviados; no Android 14, arrastar o aviso para fora: ele volta |
+| 42i | No Chrome do Android, tocar em **Baixar aplicativo**, esperar alguns minutos com o download pausado e continuar | o arquivo baixa de `/api/app?baixar=1` como `gbs-busca.apk` e instala (sem erro de link expirado) |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

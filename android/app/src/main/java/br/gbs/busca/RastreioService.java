@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.graphics.Color;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -35,6 +36,8 @@ import org.json.JSONObject;
 public class RastreioService extends Service {
 
   static final String PARAR = "br.gbs.busca.PARAR";
+  /** O aviso fixo foi arrastado para fora (Android 14 permite): volta para a barra enquanto o registro continua. */
+  static final String REEXIBIR = "br.gbs.busca.REEXIBIR";
   static final String EXTRA_MOTIVO = "motivo";
   private static final String CANAL = "rastreio";
   private static final int NOTIF = 7;
@@ -87,11 +90,22 @@ public class RastreioService extends Service {
       NotificationChannel ch = new NotificationChannel(CANAL, getString(R.string.canal_rastreio), NotificationManager.IMPORTANCE_LOW);
       ch.setDescription(getString(R.string.canal_rastreio_desc));
       ch.setShowBadge(false);
+      ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
       nm.createNotificationChannel(ch);
     }
   }
 
   @Override public int onStartCommand(Intent intent, int flags, int startId) {
+    if (intent != null && REEXIBIR.equals(intent.getAction())) {
+      if (ativo) {
+        ultimoTextoNotif = "";
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) { try { nm.notify(NOTIF, notificacao()); } catch (Exception e) { /* sem permissão de aviso */ } }
+        return START_STICKY;
+      }
+      stopSelf();
+      return START_NOT_STICKY;
+    }
     if (intent != null && PARAR.equals(intent.getAction())) {
       // precisa entrar em primeiro plano mesmo para parar (pedido feito com startForegroundService em alguns casos)
       if (!ativo) { cfg.encerrar(intent.getStringExtra(EXTRA_MOTIVO)); stopSelf(); return START_NOT_STICKY; }
@@ -203,12 +217,12 @@ public class RastreioService extends Service {
     ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
     if (cm != null) {
       aoTerRede = new ConnectivityManager.NetworkCallback() {
-        @Override public void onAvailable(Network n) { rede.post(() -> { Estado.I.falhas = 0; enviar(); sinal(true); }); }
+        @Override public void onAvailable(Network n) { rede.post(() -> { Estado.I.falhas = 0; enviar(); sinal(true); mensagens(); }); }
       };
       try { cm.registerDefaultNetworkCallback(aoTerRede); } catch (Exception ex) { aoTerRede = null; }
     }
     gps.postDelayed(this::vigiarGps, 10000);
-    rede.post(() -> sinal(true));
+    rede.post(() -> { sinal(true); mensagens(); });
     rede.postDelayed(this::sinalPeriodico, SINAL_MS);
     agendarEnvio(0);
     avisarEstado();
@@ -328,7 +342,26 @@ public class RastreioService extends Service {
   private void sinalPeriodico() {
     if (!ativo) return;
     sinal(false);
+    mensagens();
     rede.postDelayed(this::sinalPeriodico, SINAL_MS);
+  }
+
+  /**
+   * Mensagens dos bombeiros com o app fechado ou a tela apagada (migração 056): a cada sinal de vida o serviço
+   * pergunta e mostra a notificação com som e vibração. Com a página na frente, ela mesma mostra (só guarda o id).
+   */
+  private void mensagens() {
+    if (!ativo || sync == null) return;
+    List<Sincronizador.Mensagem> l = sync.mensagensPendentes();
+    if (l == null) return;
+    boolean nova = false;
+    for (Sincronizador.Mensagem m : l) {
+      if (Avisos.jaAvisada(this, m.id)) continue;
+      nova = true;
+      if (Estado.I.telaVisivel) Avisos.marcar(this, m.id);
+      else Avisos.mensagem(this, m.id, Avisos.titulo(m.tipo), Avisos.linha(m.tipo, m.texto), m.criadaEmMs);
+    }
+    if (nova) Estado.I.emitir("mensagens", new JSONObject());   // a página (se aberta) busca na hora
   }
 
   private void sinal(boolean sempre) {
@@ -424,19 +457,41 @@ public class RastreioService extends Service {
     return getString(R.string.notif_ok);
   }
 
+  /**
+   * Aviso fixo do registro, como o de navegação de um aplicativo de mapas: colorido, com o tempo de busca correndo,
+   * visível na tela bloqueada e com a tela apagada; se for arrastado para fora, volta (REEXIBIR).
+   */
   private Notification notificacao() {
     Intent abrir = new Intent(this, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
     PendingIntent pi = PendingIntent.getActivity(this, 0, abrir, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    PendingIntent volta = PendingIntent.getService(this, 2, new Intent(this, RastreioService.class).setAction(REEXIBIR),
+        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     String op = cfg.operacao();
-    return new NotificationCompat.Builder(this, CANAL)
+    Estado e = Estado.I;
+    String texto = textoNotificacao();
+    boolean ok = getString(R.string.notif_ok).equals(texto);
+    String detalhe = e.enviados > 0 ? getString(R.string.notif_enviados, (int) Math.min(Integer.MAX_VALUE, e.enviados)) : null;
+    long inicio = e.iniciadoEm > 0 ? e.iniciadoEm : System.currentTimeMillis();
+    NotificationCompat.Builder b = new NotificationCompat.Builder(this, CANAL)
         .setSmallIcon(R.drawable.ic_notificacao)
         .setContentTitle(op.isEmpty() ? getString(R.string.app_name) : getString(R.string.notif_titulo, op))
-        .setContentText(textoNotificacao())
+        .setContentText(texto)
+        .setSubText(ok ? getString(R.string.notif_sub_ok) : null)
+        .setStyle(new NotificationCompat.BigTextStyle().bigText(detalhe == null ? texto : texto + "\n" + detalhe))
+        .setWhen(inicio)
+        .setShowWhen(true)
+        .setUsesChronometer(true)   // tempo de busca correndo, sem precisar atualizar o aviso
+        .setColor(ok ? Color.rgb(22, 163, 74) : Color.rgb(217, 119, 6))
+        .setColorized(true)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setOngoing(true)
         .setOnlyAlertOnce(true)
-        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setSilent(true)
+        .setCategory(NotificationCompat.CATEGORY_LOCATION_SHARING)
         .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         .setContentIntent(pi)
-        .build();
+        .setDeleteIntent(volta)
+        .addAction(0, getString(R.string.notif_msgs_abrir), pi);
+    return b.build();
   }
 }

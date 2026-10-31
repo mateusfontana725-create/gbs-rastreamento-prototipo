@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–033) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–056) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2498,5 +2498,42 @@ console.log('Arquivamento de operações encerradas (migração 055)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: opB.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–055 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Mensagens no aplicativo com a tela apagada (migração 056)');
+{
+  const J = (o) => JSON.stringify(o);
+  const op56 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 056', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const app = await usuario(null, true), vizinho = await usuario(null, true);
+  const p = await rpc(app, 'ingressar', { p_token: op56.token_civil, p_nome: 'Fabi', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765440' });
+  const q = await rpc(vizinho, 'ingressar', { p_token: op56.token_civil, p_nome: 'Gil', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765441' });
+  const d = await rpc(app, 'app_dispositivo_registrar', { p_participante: p.participante_id, p_modelo: 'Moto G' });
+  const pend = (dd, s) => como(null, 'select public.app_mensagens_pendentes($1, $2) r', [dd, s], 'anon').then((x) => x.rows[0].r);
+  chk(J(await pend(d.dispositivo_id, d.segredo)) === '[]', 'sem mensagens: lista vazia');
+  const m1 = await rpc(resp1, 'enviar_mensagem', { p_participante: p.participante_id, p_tipo: 'RETORNE', p_texto: '' });
+  const m2 = await rpc(resp1, 'enviar_mensagem', { p_participante: p.participante_id, p_tipo: 'PERSONALIZADA', p_texto: 'Volte pela trilha norte' });
+  await rpc(resp1, 'enviar_mensagem', { p_participante: q.participante_id, p_tipo: 'PARE', p_texto: '' });
+  await rpc(app, 'participante_enviar_mensagem', { p_participante: p.participante_id, p_categoria: 'MENSAGEM', p_texto: 'Estou no rio' });
+  const l1 = await pend(d.dispositivo_id, d.segredo);
+  chk(l1.length === 2 && l1[0].id === m1.id && l1[1].id === m2.id && l1[1].texto === 'Volte pela trilha norte' && l1[0].tipo === 'RETORNE',
+    'o app recebe as mensagens dos bombeiros para este participante, em ordem (sem as de outros nem as que ele mesmo enviou)', l1);
+  chk(l1.every((m) => m.remetente_nome && m.criada_em), 'cada mensagem vem com quem enviou e o horário');
+  const ent = (await db.query('select count(*)::int n from public.mensagens where id = any($1) and entregue_em is not null', [[m1.id, m2.id]])).rows[0].n;
+  chk(ent === 2, 'as mensagens buscadas pelo app ficam como entregues (o painel mostra "entregue")');
+  const outra = (await db.query('select entregue_em from public.mensagens where participante_id = $1', [q.participante_id])).rows[0];
+  chk(outra.entregue_em === null, 'a mensagem de outro participante não é marcada');
+  await rpc(app, 'confirmar_mensagem', { p_mensagem: m1.id, p_resposta: 'CIENTE' });
+  const l2 = await pend(d.dispositivo_id, d.segredo);
+  chk(l2.length === 1 && l2[0].id === m2.id, 'confirmada no aparelho: sai da lista', l2);
+  await db.query(`update public.mensagens set criada_em = now() - interval '13 hours' where id = $1`, [m2.id]);
+  chk((await pend(d.dispositivo_id, d.segredo)).length === 0, 'mensagem com mais de 12 h não é mais avisada');
+  chk(/aparelho_app_invalido/.test(await erroDe(pend(d.dispositivo_id, 'a'.repeat(64)))), 'segredo errado: recusado');
+  chk(/aparelho_app_invalido/.test(await erroDe(pend(d.dispositivo_id, 'curto'))), 'segredo malformado: recusado');
+  chk((await como(null, 'select auth.uid() u', [], 'anon')).rows[0].u === null, 'a identidade usada pelo serviço não sobra para a próxima chamada');
+  const m3 = await rpc(resp1, 'enviar_mensagem', { p_participante: p.participante_id, p_tipo: 'ATENCAO', p_texto: '' });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op56.id }).catch(async () => { await db.query(`update public.operacoes set status = 'encerrada', encerrada_em = now() where id = $1`, [op56.id]); });
+  const l3 = await pend(d.dispositivo_id, d.segredo);
+  chk(Array.isArray(l3) && l3.some((m) => m.id === m3.id), 'operação encerrada: a lista ainda responde (sem erro)', l3);
+  await rpc(resp1, 'excluir_operacao', { p_operacao: op56.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–056 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

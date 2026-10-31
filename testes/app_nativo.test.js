@@ -9,7 +9,7 @@ const ARQ_API = path.join(__dirname, '..', 'api', 'app.js');
 function api() { delete require.cache[ARQ_API]; return require(ARQ_API); }
 function resposta() {
   return { code: 200, body: null, headers: {}, fim: false, setHeader(k, v) { this.headers[k] = v; },
-    status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, end() { this.fim = true; return this; } };
+    status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, end(dados) { this.fim = true; if (dados) this.dados = dados; return this; } };
 }
 
 (async () => {
@@ -65,34 +65,88 @@ function resposta() {
     g.GBSNativo.onmessage({ data: 'não é json' });
   });
 
-  await teste('/api/app: informa o link de download', () => {
+  await teste('/api/app: informa o link de download', async () => {
     delete process.env.APP_ANDROID_URL;
     const r = resposta();
-    api()({ method: 'GET', query: {} }, r);
+    await api()({ method: 'GET', query: {} }, r);
     assert.strictEqual(r.code, 200);
     assert.deepStrictEqual(r.body, { disponivel: true, baixar: '/api/app?baixar=1', pacote: 'br.gbs.busca' });
   });
-  await teste('/api/app?baixar=1 redireciona para o APK do Release', () => {
+  const APK = Buffer.concat([Buffer.from('PK\u0003\u0004'), Buffer.alloc(200, 7)]);
+  function fetchFalso(resp) {
+    const chamadas = [];
+    global.fetch = async (url, op) => { chamadas.push({ url, op }); if (resp instanceof Error) throw resp; return resp; };
+    return chamadas;
+  }
+  const respostaHttp = (corpo, status, cab) => ({ ok: (status || 200) < 300, status: status || 200,
+    headers: { get: (k) => (cab || {})[k.toLowerCase()] || null }, arrayBuffer: async () => corpo.buffer.slice(corpo.byteOffset, corpo.byteOffset + corpo.length) });
+  const fetchOriginal = global.fetch;
+
+  await teste('/api/app?baixar=1 entrega o APK do Release por este endereço (sem link do GitHub que expira)', async () => {
+    const chamadas = fetchFalso(respostaHttp(APK));
     const r = resposta();
-    api()({ method: 'GET', query: { baixar: '1' } }, r);
-    assert.strictEqual(r.code, 302);
-    assert.ok(/^https:\/\/github\.com\/.+\/releases\/download\/app-android\/gbs-busca\.apk$/.test(r.headers.Location), r.headers.Location);
-    assert.strictEqual(r.headers['Cache-Control'], 'no-store');
+    await api()({ method: 'GET', query: { baixar: '1' } }, r);
+    assert.strictEqual(r.code, 200);
+    assert.ok(/^https:\/\/github\.com\/.+\/releases\/download\/app-android\/gbs-busca\.apk$/.test(chamadas[0].url), chamadas[0].url);
+    assert.strictEqual(chamadas[0].op.redirect, 'follow');
+    assert.strictEqual(r.headers['Content-Type'], 'application/vnd.android.package-archive');
+    assert.ok(/attachment; filename="gbs-busca\.apk"/.test(r.headers['Content-Disposition']));
+    assert.strictEqual(r.headers['Content-Length'], String(APK.length));
+    assert.ok(r.dados.equals(APK));
   });
-  await teste('APP_ANDROID_URL troca o endereço; http e lixo são recusados; "desligado" esconde o botão', () => {
+  await teste('baixar: página de erro (não é ZIP), falha de rede ou arquivo grande demais → redireciona como antes', async () => {
+    for (const resp of [respostaHttp(Buffer.from('<?xml version="1.0"?><Error>Request has expired</Error>')), new Error('rede'),
+      respostaHttp(APK, 404), respostaHttp(APK, 200, { 'content-length': String(10 * 1024 * 1024) })]) {
+      fetchFalso(resp);
+      const r = resposta();
+      await api()({ method: 'GET', query: { baixar: '1' } }, r);
+      assert.strictEqual(r.code, 302);
+      assert.ok(/releases\/download\/app-android\/gbs-busca\.apk$/.test(r.headers.Location));
+      assert.strictEqual(r.headers['Cache-Control'], 'no-store');
+      assert.ok(!r.dados, 'nada de corpo quando redireciona');
+    }
+  });
+  await teste('baixar com HEAD: cabeçalhos do APK, sem corpo', async () => {
+    fetchFalso(respostaHttp(APK));
+    const r = resposta();
+    await api()({ method: 'HEAD', query: { baixar: '1' } }, r);
+    assert.strictEqual(r.code, 200);
+    assert.strictEqual(r.headers['Content-Type'], 'application/vnd.android.package-archive');
+    assert.ok(!r.dados);
+  });
+  await teste('deploy da branch testes: entrega o APK de testes; sem ele, o de produção', async () => {
+    process.env.VERCEL_GIT_COMMIT_REF = 'testes';
+    let chamadas = fetchFalso(respostaHttp(APK));
+    let r = resposta(); await api()({ method: 'GET', query: { baixar: '1' } }, r);
+    assert.strictEqual(r.code, 200);
+    assert.ok(/\/app-android-testes\/gbs-busca\.apk$/.test(chamadas[0].url), chamadas[0].url);
+    const urls = [];
+    global.fetch = async (url) => { urls.push(url); return /testes/.test(url) ? respostaHttp(APK, 404) : respostaHttp(APK); };
+    r = resposta(); await api()({ method: 'GET', query: { baixar: '1' } }, r);
+    assert.strictEqual(r.code, 200);
+    assert.ok(/\/app-android-testes\//.test(urls[0]) && /\/app-android\/gbs-busca\.apk$/.test(urls[1]), urls.join(' '));
+    process.env.VERCEL_GIT_COMMIT_REF = 'main';
+    chamadas = fetchFalso(respostaHttp(APK));
+    r = resposta(); await api()({ method: 'GET', query: { baixar: '1' } }, r);
+    assert.ok(/\/app-android\/gbs-busca\.apk$/.test(chamadas[0].url));
+    delete process.env.VERCEL_GIT_COMMIT_REF;
+  });
+  await teste('APP_ANDROID_URL troca o endereço; http e lixo são recusados; "desligado" esconde o botão', async () => {
+    fetchFalso(new Error('sem rede'));
     process.env.APP_ANDROID_URL = 'https://arquivos.exemplo.com/gbs.apk';
-    let r = resposta(); api()({ method: 'GET', query: { baixar: '' } }, r);
+    let r = resposta(); await api()({ method: 'GET', query: { baixar: '' } }, r);
     assert.strictEqual(r.headers.Location, 'https://arquivos.exemplo.com/gbs.apk');
     process.env.APP_ANDROID_URL = 'http://inseguro.exemplo.com/gbs.apk';
-    r = resposta(); api()({ method: 'GET', query: {} }, r);
+    r = resposta(); await api()({ method: 'GET', query: {} }, r);
     assert.strictEqual(r.body.disponivel, false);
     process.env.APP_ANDROID_URL = 'javascript:alert(1)';
-    r = resposta(); api()({ method: 'GET', query: { baixar: '1' } }, r);
+    r = resposta(); await api()({ method: 'GET', query: { baixar: '1' } }, r);
     assert.strictEqual(r.code, 404);
     process.env.APP_ANDROID_URL = 'desligado';
-    r = resposta(); api()({ method: 'GET', query: {} }, r);
+    r = resposta(); await api()({ method: 'GET', query: {} }, r);
     assert.deepStrictEqual(r.body, { disponivel: false, baixar: null, pacote: 'br.gbs.busca' });
     delete process.env.APP_ANDROID_URL;
+    global.fetch = fetchOriginal;
   });
   await teste('/api/app só aceita GET', () => {
     const r = resposta(); api()({ method: 'POST', query: {} }, r);

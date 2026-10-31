@@ -92,9 +92,16 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
 
   @Override protected void onResume() {
     super.onResume();
+    Estado.I.telaVisivel = true;
+    Avisos.limpar(this);   // a página mostra as mensagens: a conversa da barra sai
     // o serviço pode ter sido parado pelo sistema: volta a registrar ao abrir o aplicativo
     if (cfg.rastreando() && cfg.prontoParaRastrear() && !Estado.I.rastreando && FonteLocalizacao.temPermissao(this)) RastreioService.iniciar(this);
     enviarEvento("estado", Estado.I.resumo());
+  }
+
+  @Override protected void onPause() {
+    Estado.I.telaVisivel = false;
+    super.onPause();
   }
 
   @Override protected void onDestroy() {
@@ -327,7 +334,10 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
         case "bateria": responder(id, new JSONObject().put("ignorando", pedirBateria())); break;
         case "configuracoes": abrirConfiguracoesDoApp(); responder(id, new JSONObject().put("ok", true)); break;
         case "localizacaoDoCelular": startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)); responder(id, new JSONObject().put("ok", true)); break;
-        case "notificar": Avisos.mensagem(this, d.optString("titulo"), d.optString("texto")); responder(id, new JSONObject().put("ok", true)); break;
+        case "notificar":
+          Avisos.mensagem(this, d.has("id") ? d.optString("id") : null, d.optString("titulo"), d.optString("texto"), System.currentTimeMillis());
+          responder(id, new JSONObject().put("ok", true));
+          break;
         default: responder(id, new JSONObject().put("erro", "acao_desconhecida"));
       }
     } catch (Exception e) {

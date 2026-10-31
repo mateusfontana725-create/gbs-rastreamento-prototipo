@@ -280,6 +280,7 @@
   var FONTES = { minimo: 'Mínimo', menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
   var LETRAS = { industrial: 'Industrial', tecnica: 'Técnica', sistema: 'Do aparelho' };
   var POSICOES_GRUPOS = { topright: 'Canto superior direito', topleft: 'Canto superior esquerdo', bottomright: 'Canto inferior direito', bottomleft: 'Canto inferior esquerdo' };
+  var LADOS_ACOES = { topo: 'No topo', direita: 'Lateral direita' };
   function listaTexto(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : []; }
   function lerAparencia() {
     var v;
@@ -290,6 +291,8 @@
       letra: LETRAS[v.letra] ? v.letra : 'industrial',
       topo: Array.isArray(v.topo) ? listaTexto(v.topo) : null,   // null = o padrão da página
       gruposPos: POSICOES_GRUPOS[v.gruposPos] ? v.gruposPos : 'topright',
+      acoesLado: LADOS_ACOES[v.acoesLado] ? v.acoesLado : 'topo',
+      topoOculto: v.topoOculto === true,
       // versão anterior (escolhas por botão): convertida em "topo" na primeira leitura
       ocultos: listaTexto(v.ocultos), noMenu: listaTexto(v.noMenu), ordem: listaTexto(v.ordem),
     };
@@ -297,7 +300,7 @@
   var ouvintes = [];
   function gravarAparencia(v) {
     try {
-      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, letra: v.letra, topo: v.topo, gruposPos: v.gruposPos }));
+      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, letra: v.letra, topo: v.topo, gruposPos: v.gruposPos, acoesLado: v.acoesLado, topoOculto: v.topoOculto }));
     } catch (e) { /* sem armazenamento: vale só até recarregar */ memoria = v; }
     aplicarAparencia(v);
   }
@@ -307,6 +310,8 @@
     v = v || atual();
     document.documentElement.setAttribute('data-fonte', v.fonte);
     document.documentElement.setAttribute('data-letra', v.letra || 'industrial');
+    document.documentElement.classList.toggle('topo-oculto', Boolean(v.topoOculto));
+    document.documentElement.classList.toggle('acoes-lado-direita', v.acoesLado === 'direita');
     ouvintes.forEach(function (f) { try { f(v); } catch (e) { /* um ouvinte com erro não para os outros */ } });
   }
   function mudar(fn) { var v = atual(); fn(v); gravarAparencia(v); }
@@ -328,7 +333,14 @@
     definirTopo: function (ids) { mudar(function (v) { v.topo = listaTexto(ids); }); },
     definirPosicaoGrupos: function (pos) { mudar(function (v) { v.gruposPos = POSICOES_GRUPOS[pos] ? pos : 'topright'; }); },
     posicaoGrupos: function () { return atual().gruposPos; },
-    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', letra: 'industrial', topo: null, gruposPos: 'topright' }); },
+    // Botões de ação: no topo ou numa coluna à direita do mapa (só em tela de tablet ou maior)
+    ladosAcoes: LADOS_ACOES,
+    acoesLado: function () { return atual().acoesLado; },
+    definirAcoesLado: function (l) { mudar(function (v) { v.acoesLado = LADOS_ACOES[l] ? l : 'topo'; }); },
+    // Cabeçalho recolhido: ganha altura para o mapa (um botão ▼ no topo traz de volta)
+    topoOculto: function () { return atual().topoOculto; },
+    definirTopoOculto: function (b) { mudar(function (v) { v.topoOculto = b === true; }); },
+    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', letra: 'industrial', topo: null, gruposPos: 'topright', acoesLado: 'topo', topoOculto: false }); },
     aoMudar: function (f) { ouvintes.push(f); },
     aplicar: function () { aplicarAparencia(); },
   };

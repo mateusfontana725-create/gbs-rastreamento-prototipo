@@ -14,6 +14,19 @@
   var UI = window.UI;
   function $(id) { return document.getElementById(id); }
 
+  // Botões de ação: no topo (padrão) ou numa coluna à direita do mapa, só com tela de tablet ou maior.
+  function aplicarLadoAcoes() {
+    var acoes = $('acoes-topo'), cabeca = document.querySelector('.painel-topo'), corpo = $('painel-corpo');
+    if (!acoes || !cabeca || !corpo) return;
+    var lateral = UI.aparencia.acoesLado() === 'direita' && window.matchMedia('(min-width: 861px)').matches;
+    if (lateral) {
+      if (acoes.parentNode !== corpo) corpo.appendChild(acoes);
+    } else if (acoes.parentNode !== cabeca) {
+      cabeca.insertBefore(acoes, cabeca.querySelector('.painel-acoes'));
+    }
+    acoes.classList.toggle('acoes-lateral-col', lateral);
+  }
+
   var LIM = {
     conectadoMs: 45000,          // contato nos últimos 45 s = conectado
     instavelMs: 120000,          // 45 s a 2 min = sinal instável; acima = sem atualização
@@ -362,6 +375,11 @@
     $('menu-aparencia').addEventListener('click', function () { fecharMenu(false); if (window.Personalizar) window.Personalizar.iniciar(); });
     $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
     $('btn-regua').addEventListener('click', alternarRegua);
+    $('btn-recolher-topo').addEventListener('click', function () { UI.aparencia.definirTopoOculto(true); });
+    $('btn-mostrar-topo').addEventListener('click', function () { UI.aparencia.definirTopoOculto(false); });
+    UI.aparencia.aoMudar(aplicarLadoAcoes);
+    window.matchMedia('(min-width: 861px)').addEventListener('change', aplicarLadoAcoes);
+    aplicarLadoAcoes();
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('menu-sci').addEventListener('click', function () { fecharMenu(false); abrirSci(); });

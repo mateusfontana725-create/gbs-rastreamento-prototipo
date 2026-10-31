@@ -117,7 +117,7 @@
   /* ------------------------------------------------------------------ */
   /* Modo "Personalizar tela"                                            */
   /* ------------------------------------------------------------------ */
-  var ativo = false, painel = null, bandeja = null, fonteSeg = null, letraSeg = null, cantos = null;
+  var ativo = false, painel = null, bandeja = null, fonteSeg = null, letraSeg = null, cantos = null, ladoSeg = null;
 
   function iniciar() {
     if (ativo) return;
@@ -129,6 +129,7 @@
     fonteSeg = el('div', { classe: 'seg pers-fonte', role: 'radiogroup', 'aria-label': 'Tamanho do texto' });
     letraSeg = el('div', { classe: 'seg pers-letra', role: 'radiogroup', 'aria-label': 'Letra' });
     cantos = el('div', { classe: 'pers-cantos', role: 'radiogroup', 'aria-label': 'Canto do painel de grupos' });
+    ladoSeg = el('div', { classe: 'seg pers-lado', role: 'radiogroup', 'aria-label': 'Botões de ação' });
     painel = el('section', { classe: 'pers-painel', id: 'personalizar', role: 'region', 'aria-label': 'Personalizar tela' }, [
       el('div', { classe: 'pers-cabeca' }, [
         el('strong', { classe: 'titulo-com-dica' }, ['Personalizar tela', UI.dica('Arraste os botões do topo para mudar a ordem, ou para fora do topo para mandá-los para Ferramentas. ' +
@@ -141,6 +142,7 @@
         el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Texto' }), fonteSeg]),
         el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Letra' }), letraSeg]),
         el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Grupos no mapa' }), cantos]),
+        el('div', { classe: 'pers-bloco' }, [el('span', { classe: 'pers-rotulo', texto: 'Botões de ação' }), ladoSeg]),
       ]),
     ]);
     document.body.appendChild(painel);
@@ -163,7 +165,7 @@
     ligarGrupos(false);
     marcarTopo(false);
     if (painel) painel.remove();
-    painel = bandeja = fonteSeg = letraSeg = cantos = null;
+    painel = bandeja = fonteSeg = letraSeg = cantos = ladoSeg = null;
     UI.aviso('Tela salva neste aparelho.', 'ok', 2500);
   }
 
@@ -246,6 +248,12 @@
     });
     // canto do painel de grupos
     var pos = ap.posicaoGrupos();
+    ladoSeg.innerHTML = '';
+    var lado = ap.acoesLado();
+    Object.keys(ap.ladosAcoes).forEach(function (k) {
+      ladoSeg.appendChild(el('button', { classe: 'seg-opcao', type: 'button', role: 'radio', 'aria-checked': String(lado === k), 'data-lado': k, texto: ap.ladosAcoes[k],
+        onclick: function () { ap.definirAcoesLado(k); } }));
+    });
     cantos.innerHTML = '';
     ['topleft', 'topright', 'bottomleft', 'bottomright'].forEach(function (k) {
       cantos.appendChild(el('button', { classe: 'pers-canto pers-canto-' + k, type: 'button', role: 'radio', 'aria-checked': String(pos === k), 'data-canto': k,

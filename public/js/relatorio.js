@@ -931,12 +931,15 @@
       .eq('operacao_id', op.id).eq('tipo', tipo).order('gerado_em', { ascending: false }))) || [];
   }
   // Nome do PDF guardado, com o tipo no nome (Relatorio-diario-…, -passagem-, -comando-, -final-)
+  function quandoArquivo(ms) {
+    var d = new Date(C.paraMs(ms) || ms || Date.now());
+    return d.getFullYear() + dd(d.getMonth() + 1) + dd(d.getDate()) + '-' + dd(d.getHours()) + dd(d.getMinutes());
+  }
   function nomeSalvo(op, r) {
     if (r.tipo === 'diario') return nomeArquivoTipo(op, 'Relatorio-diario', r.referencia);
-    var d = new Date(C.paraMs(r.gerado_em) || Date.now());
-    var quando = d.getFullYear() + dd(d.getMonth() + 1) + dd(d.getDate()) + '-' + dd(d.getHours()) + dd(d.getMinutes());
-    if (r.tipo === 'passagem') return nomeArquivoTipo(op, 'Relatorio-passagem', quando);
-    if (r.tipo === 'comando') return nomeArquivoTipo(op, 'Relatorio-comando', quando);
+    if (r.tipo === 'passagem') return nomeArquivoTipo(op, 'Relatorio-passagem', quandoArquivo(r.gerado_em));
+    if (r.tipo === 'comando') return nomeArquivoTipo(op, 'Relatorio-comando', quandoArquivo(r.gerado_em));
+    if (r.tipo === 'imprensa') return nomeArquivoTipo(op, 'Relatorio-imprensa', quandoArquivo(r.gerado_em));
     return nomeArquivo(op, r.gerado_em);
   }
   async function dadosDoPeriodo(op) {
@@ -960,7 +963,15 @@
   }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
-  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', final: 'Final' };
+  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', final: 'Final', imprensa: 'Imprensa' };
+  var TITULO_TIPO = { diario: 'Relatórios diários', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', final: 'Relatórios finais', imprensa: 'Relatórios para imprensa' };
+  var DICA_TIPO = {
+    diario: 'Um relatório por dia, do acionamento até hoje. Dias anteriores ficam guardados; o de hoje só é baixado, pois ainda está aberto.',
+    passagem: 'O documento do briefing entregue em cada passagem: quem passou, quem recebeu e a situação naquele momento.',
+    comando: 'O que cada comando fez, do início até a passagem seguinte. Gerado de um comando encerrado, ele fica guardado.',
+    final: 'Tudo da operação: cadastro, pessoas, setores, diário, desfecho e todas as fotos. Só o administrador pode excluir.',
+    imprensa: 'Versão para divulgação, com dados reduzidos: números gerais, desfecho geral e linha do tempo. Sem nomes, documentos, fotos, trilhas ou posições.',
+  };
   function rotuloDesfecho(chave) {
     var r = RESULTADOS.filter(function (x) { return x[0] === chave; })[0];
     return r ? r[1] : chave;
@@ -1052,13 +1063,24 @@
     return r;
   }
 
+  // Relatório para imprensa: dados reduzidos (montarImprensa) e guardado como os demais.
+  async function gerarImprensa(op) {
+    var dadosOp = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+    var doc = window.RelatorioPDF.montarImprensa(dadosOp, { logo: await carregarLogo() });
+    var r = await salvarDocumento(op, doc, 'imprensa', null);
+    baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-imprensa', quandoArquivo(Date.now())));
+    return r;
+  }
+
   function abrirRelatoriosOperacao(op) {
     var hoje = diaLocal(Date.now());
     var primeiroDia = diaLocal(C.paraMs(op.acionado_em || op.criada_em) || Date.now());
     var corpo = UI.el('div', { classe: 'relatorios-operacao' });
+    var vista = 'tipos';   // 'tipos' ou o tipo cuja lista está aberta
+    var dados = null;      // o que está guardado e o que a operação tem (carregado do servidor)
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Relatórios' }, [UI.dica(
-        'Você escolhe quando gerar. O diário é de um dia; o do comando vai de uma passagem até a próxima, para saber o que cada comando fez.')]),
+        'Escolha o tipo e toque em Gerar. Em Ver lista estão os relatórios já gerados daquele tipo.')]),
       corpo,
     ]), {
       fecharNoFundo: false,
@@ -1077,75 +1099,89 @@
         UI.aviso('Não foi possível gerar: ' + (e.message || e), 'erro', 8000);
       }).then(function () { botao.disabled = false; botao.textContent = antes; });
     }
+    // Excluir: só o administrador (a função no banco confere de novo)
+    var ehAdmin = Boolean(P() && P().admin && P().admin());
+    function botaoBaixar(x) {
+      return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } });
+    }
+    function botaoExcluir(x) {
+      return ehAdmin ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { excluirRelatorio(x, op, desenhar); } }) : null;
+    }
+    function mudarVista(v) { vista = v; desenhar(); }
 
-    async function desenhar() {
-      corpo.innerHTML = '';
-      var [diarios, comandos, salvosComando, passagens, salvosPassagem, finais] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
-        listarSalvos(op, 'comando'), listarPassagensAceitas(op), listarSalvos(op, 'passagem'), listarSalvos(op, 'final')]);
+    async function carregar() {
+      var [diarios, comandos, salvosComando, passagens, salvosPassagem, finais, imprensa] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
+        listarSalvos(op, 'comando'), listarPassagensAceitas(op), listarSalvos(op, 'passagem'), listarSalvos(op, 'final'), listarSalvos(op, 'imprensa')]);
       var porDia = {}; diarios.forEach(function (x) { porDia[x.referencia] = x; });
       var porRef = {}; salvosComando.forEach(function (x) { porRef[x.referencia] = x; });
       var porPas = {}; salvosPassagem.forEach(function (x) { porPas[x.referencia] = x; });
-      // Excluir: só o administrador (a função no banco confere de novo)
-      var ehAdmin = Boolean(P() && P().admin && P().admin());
-      function botaoBaixar(x) {
-        return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } });
-      }
-      function botaoExcluir(x) {
-        return ehAdmin ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { excluirRelatorio(x, op, desenhar); } }) : null;
-      }
+      dados = { diarios: diarios, comandos: comandos, passagens: passagens, finais: finais, imprensa: imprensa, porDia: porDia, porRef: porRef, porPas: porPas };
+    }
 
-      // Esquerda: diário por data
+    // ----- vista "tipos": um cartão por tipo, com Gerar e Ver lista -----
+    function cartao(tipo, contagem, extra, acoes) {
+      return UI.el('section', { classe: 'rel-card', 'data-tipo': tipo }, [
+        UI.el('div', { classe: 'rel-card-topo' }, [
+          UI.el('h3', { classe: 'rel-card-titulo', texto: TIPO_ROTULO[tipo] }),
+          UI.dica(DICA_TIPO[tipo]),
+          UI.el('small', { classe: 'muted rel-card-contagem', texto: contagem }),
+        ]),
+        extra || null,
+        UI.el('div', { classe: 'rel-card-acoes' }, acoes.concat([
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + listaDoTipo(tipo).n + ')', onclick: function () { mudarVista(tipo); } }),
+        ])),
+      ]);
+    }
+    // "1 diário guardado", "2 passagens guardadas" (concordância com o nome)
+    function contar(n, singular, plural, feminino) {
+      return n + ' ' + (n === 1 ? singular : plural) + ' ' + (feminino ? 'guardada' : 'guardado') + (n === 1 ? '' : 's');
+    }
+
+    function cartoes() {
+      var out = [];
+      // Diário: escolhe o dia (entre o acionamento e hoje)
       var dataCampo = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-data', value: hoje, min: primeiroDia, max: hoje });
-      var botaoDia = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-dia-gerar', texto: 'Gerar do dia' });
+      var botaoDia = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-dia-gerar', texto: 'Gerar' });
       botaoDia.addEventListener('click', function () {
         var dia = dataCampo.value;
         if (!dia || dia < primeiroDia || dia > hoje) { UI.aviso('Escolha um dia entre o acionamento e hoje.', 'erro', 5000); return; }
         ocupar(botaoDia, 'Gerando…', async function () {
-          var guardado = porDia[dia];
+          var guardado = dados.porDia[dia];
           if (guardado) { await baixarSalvo(guardado, op); return; }
           await gerarDiarioEscolhido(op, dia);
           await desenhar();
         });
       });
-      corpo.appendChild(UI.secao('Relatório diário', [
-        UI.el('div', { classe: 'rel-linha-dia' }, [UI.campo('Dia', dataCampo, { para: 'rel-dia-data' }), botaoDia]),
-        diarios.length
-          ? listaRelatorios(diarios.map(function (x) {
-            return itemRelatorio('diario', diaBr(x.referencia) + (x.referencia === hoje ? ' · hoje' : ''), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
-          }))
-          : semRelatorios('Nenhum diário guardado ainda.'),
-      ], { dica: 'Dias anteriores ficam guardados no servidor. O dia de hoje só é baixado, pois ainda está aberto.' }));
+      out.push(cartao('diario', contar(dados.diarios.length, 'diário', 'diários'),
+        UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Dia', dataCampo, { para: 'rel-dia-data' })]), [botaoDia]));
 
-      // Direita: passagens de comando (o documento do briefing entregue)
-      corpo.appendChild(UI.secao('Relatório de passagem de comando', [
-        passagens.length
-          ? listaRelatorios(passagens.map(function (p) {
-            var x = porPas[p.id];
-            var acoes = x ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Gerar', onclick: function (ev) {
-              ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
-            } })];
-            return itemRelatorio('passagem', (p.de_nome || '—') + ' → ' + p.para_nome, x ? quemQuando(x) : dataHora(p.respondida_em), acoes);
-          }))
-          : semRelatorios('Nenhuma passagem de comando ainda.'),
-      ], { dica: 'O documento do briefing entregue na passagem: quem passou, quem recebeu e a situação naquele momento.' }));
+      // Passagem de comando: Gerar/Baixar a passagem mais recente (as outras estão na lista)
+      var ultPas = dados.passagens[dados.passagens.length - 1];
+      var botaoPas = ultPas
+        ? (dados.porPas[ultPas.id]
+          ? botaoBaixar(dados.porPas[ultPas.id])
+          : UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-pas-gerar', texto: 'Gerar', onclick: function (ev) {
+            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, ultPas); await desenhar(); });
+          } }))
+        : UI.el('button', { classe: 'btn', type: 'button', disabled: true, texto: 'Gerar' });
+      out.push(cartao('passagem', contar(Object.keys(dados.porPas).length, 'passagem', 'passagens', true) + (ultPas ? '' : ' (nenhuma ainda)'),
+        ultPas ? UI.el('div', { classe: 'rel-card-extra', texto: 'Última: ' + (ultPas.de_nome || '—') + ' → ' + ultPas.para_nome }) : null, [botaoPas]));
 
-      // Comando (faixa do meio): cada comando termina na passagem seguinte
-      corpo.appendChild(UI.secao('Relatório de comando', [
-        listaRelatorios(comandos.map(function (c) {
-          var quando = dataHora(c.ini) + ' até ' + (c.fim ? dataHora(c.fim) : 'agora') + (c.passadoA ? ' · passado a ' + c.passadoA : '');
-          var x = porRef[c.ref];
-          var acoes = x && c.fim ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
-            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await desenhar(); });
-          } })];
-          var andamento = c.fim ? null : UI.el('span', { classe: 'selo selo-alerta', texto: 'em andamento' });
-          return itemRelatorio('comando', c.rotulo + ' · ' + (c.comandante || '—'), quando, acoes, andamento);
-        })),
-      ], { dica: 'Cada comando termina na passagem seguinte. Gerado de um comando encerrado, ele fica guardado.', classe: 'rel-largo' }));
+      // Comando: Gerar/Baixar o comando mais recente (em andamento: baixa o que houve até agora)
+      var ultCmd = dados.comandos[dados.comandos.length - 1];
+      var guardadoCmd = ultCmd && dados.porRef[ultCmd.ref];
+      var botaoCmd = ultCmd && guardadoCmd && ultCmd.fim
+        ? botaoBaixar(guardadoCmd)
+        : UI.el('button', { classe: 'btn ' + (ultCmd && ultCmd.fim ? 'btn-primario' : ''), type: 'button', id: 'rel-cmd-gerar', texto: ultCmd && ultCmd.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
+          ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, ultCmd); await desenhar(); });
+        } });
+      out.push(cartao('comando', contar(dados.comandos.filter(function (c) { return dados.porRef[c.ref]; }).length, 'comando', 'comandos'),
+        ultCmd ? UI.el('div', { classe: 'rel-card-extra', texto: 'Último: ' + ultCmd.rotulo + ' · ' + (ultCmd.fim ? 'encerrado' : 'em andamento') }) : null, [botaoCmd]));
 
-      // Embaixo: relatório final. Um botão, sem formulário: usa o desfecho já registrado e todas as fotos.
+      // Final: usa o desfecho já registrado e todas as fotos. Sem desfecho, não gera: registra antes.
       var progressoFinal = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
       var erroFinal = UI.el('p', { classe: 'erro-form', hidden: true });
-      var btnFinal = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-final-gerar', texto: 'Gerar relatório final (PDF)', disabled: op.resultado ? null : true, onclick: async function () {
+      var btnFinal = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-final-gerar', texto: 'Gerar', disabled: op.resultado ? null : true, onclick: async function () {
         btnFinal.disabled = true;
         erroFinal.hidden = true;
         progressoFinal.hidden = false;
@@ -1161,28 +1197,90 @@
         }
       } });
       var desfecho = op.resultado
-        ? UI.el('div', { classe: 'rel-desfecho' }, [
+        ? UI.el('div', { classe: 'rel-card-extra' }, [
           UI.el('strong', { texto: 'Desfecho: ' + rotuloDesfecho(op.resultado) }),
-          op.resultado_texto ? UI.el('small', { classe: 'muted', texto: op.resultado_texto }) : null,
           UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Alterar', onclick: function () { abrirDesfecho(op, desenhar); } }),
         ])
         : UI.el('div', { classe: 'rel-aviso rel-desfecho-falta' }, [
-          UI.el('span', { texto: 'Registre o desfecho antes de gerar o relatório final.' }),
+          UI.el('span', { texto: 'Registre o desfecho antes de gerar.' }),
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Registrar desfecho', onclick: function () { abrirDesfecho(op, desenhar); } }),
         ]);
-      corpo.appendChild(UI.secao('Relatório final', [
-        desfecho,
-        UI.el('div', { classe: 'rel-final-acoes' }, [btnFinal]),
-        progressoFinal,
-        erroFinal,
-        finais.length
-          ? listaRelatorios(finais.map(function (x) {
-            return itemRelatorio('final', dataHora(x.gerado_em), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
-          }))
-          : semRelatorios('Nenhum relatório final gerado ainda.'),
-      ], { dica: 'Tudo da operação: cadastro, pessoas, setores, diário, desfecho e todas as fotos. Cada relatório gerado fica guardado; só o administrador pode excluir.', classe: 'rel-largo' }));
+      out.push(cartao('final', contar(dados.finais.length, 'relatório', 'relatórios'), UI.el('div', { classe: 'rel-card-extra' }, [desfecho, progressoFinal, erroFinal]), [btnFinal]));
+
+      // Imprensa: versão reduzida, para divulgação
+      var btnImp = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-imprensa-gerar', texto: 'Gerar', onclick: function (ev) {
+        ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarImprensa(op); await desenhar(); });
+      } });
+      out.push(cartao('imprensa', contar(dados.imprensa.length, 'relatório', 'relatórios'), null, [btnImp]));
+      return out;
     }
-    desenhar().catch(function (e) { corpo.appendChild(UI.el('p', { classe: 'erro-form', texto: 'Não foi possível carregar: ' + (e.message || e) })); });
+
+    // ----- lista de um tipo: a vista abre só essa lista, com "← Tipos" para voltar -----
+    function listaDoTipo(tipo) {
+      var itens = [];
+      if (tipo === 'diario') {
+        itens = dados.diarios.map(function (x) {
+          return itemRelatorio('diario', diaBr(x.referencia) + (x.referencia === hoje ? ' · hoje' : ''), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
+        });
+      } else if (tipo === 'passagem') {
+        itens = dados.passagens.map(function (p) {
+          var x = dados.porPas[p.id];
+          var acoes = x ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Gerar', onclick: function (ev) {
+            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
+          } })];
+          return itemRelatorio('passagem', (p.de_nome || '—') + ' → ' + p.para_nome, x ? quemQuando(x) : dataHora(p.respondida_em), acoes);
+        });
+      } else if (tipo === 'comando') {
+        itens = dados.comandos.map(function (c) {
+          var quando = dataHora(c.ini) + ' até ' + (c.fim ? dataHora(c.fim) : 'agora') + (c.passadoA ? ' · passado a ' + c.passadoA : '');
+          var x = dados.porRef[c.ref];
+          var acoes = x && c.fim ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
+            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await desenhar(); });
+          } })];
+          var andamento = c.fim ? null : UI.el('span', { classe: 'selo selo-alerta', texto: 'em andamento' });
+          return itemRelatorio('comando', c.rotulo + ' · ' + (c.comandante || '—'), quando, acoes, andamento);
+        });
+      } else if (tipo === 'final') {
+        itens = dados.finais.map(function (x) {
+          return itemRelatorio('final', dataHora(x.gerado_em), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
+        });
+      } else if (tipo === 'imprensa') {
+        itens = dados.imprensa.map(function (x) {
+          return itemRelatorio('imprensa', dataHora(x.gerado_em), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
+        });
+      }
+      return { n: itens.length, itens: itens };
+    }
+
+    function render() {
+      corpo.innerHTML = '';
+      if (vista === 'tipos') {
+        corpo.appendChild(UI.el('div', { classe: 'rel-tipos' }, cartoes()));
+        return;
+      }
+      var l = listaDoTipo(vista);
+      corpo.appendChild(UI.el('div', { classe: 'rel-lista-cabeca' }, [
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'rel-voltar-tipos', texto: '← Tipos', onclick: function () { mudarVista('tipos'); } }),
+        UI.el('h3', { classe: 'rel-lista-titulo', texto: TITULO_TIPO[vista] + ' (' + l.n + ')' }),
+        UI.dica(DICA_TIPO[vista]),
+      ]));
+      corpo.appendChild(UI.secao(null, [
+        l.n ? listaRelatorios(l.itens) : semRelatorios(vista === 'diario' ? 'Nenhum diário guardado ainda. Gere pelo cartão Diário.'
+          : vista === 'imprensa' ? 'Nenhum relatório para imprensa guardado ainda.'
+          : vista === 'final' ? 'Nenhum relatório final guardado ainda.' : 'Nada para listar ainda.'),
+      ], { classe: 'rel-lista-cartao' }));
+    }
+
+    async function desenhar() {
+      try {
+        await carregar();
+        render();
+      } catch (e) {
+        corpo.innerHTML = '';
+        corpo.appendChild(UI.el('p', { classe: 'erro-form', texto: 'Não foi possível carregar: ' + (e.message || e) }));
+      }
+    }
+    desenhar();
   }
 
   function diaBr(chave) { var p = chave.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }

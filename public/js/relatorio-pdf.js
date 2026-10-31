@@ -600,6 +600,52 @@
     return documento(d, recursos, conteudo, { titulo: 'Relatório final — ' + op.codigo, assunto: 'Relatório final de operação de busca e salvamento', marca: 'RELATÓRIO FINAL' });
   }
 
+  // Relatório para imprensa (divulgação): dados reduzidos. Sem nomes, documentos, telefones, fotos, trilhas, posições,
+  // observações e registros de pessoas. Traz só números gerais, o desfecho geral e a linha do tempo dos marcos
+  // automáticos da operação e dos setores (horário e título).
+  function montarImprensa(d, recursos) {
+    recursos = recursos || {};
+    var op = d.operacao;
+    var pessoas = d.participantes.filter(function (p) { return !p.removido; }).length;
+    var concluidos = d.setores.filter(function (s) { return s.status === 'concluido'; }).length;
+    var numeros = [
+      [String(pessoas), 'pessoas de campo'],
+      [String(d.setores.length), 'setores de busca'],
+      [concluidos + ' / ' + d.setores.length, 'setores concluídos'],
+      [String(d.vitimas.length), 'pessoas procuradas'],
+    ];
+    var marcos = (d.diario || []).filter(function (e) {
+      return e.origem !== 'manual' && (e.categoria === 'operacao' || e.categoria === 'setor');
+    });
+    var resultado = op.resultado && RESULTADO[op.resultado] ? RESULTADO[op.resultado].rotulo : 'Ainda não definido';
+    var periodo = 'Início: ' + dataHora(op.acionado_em || op.criada_em) + '   ·   ' +
+      (op.encerrada_em ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'em andamento');
+    var conteudo = [
+      { text: 'DIVULGAÇÃO PÚBLICA', style: 'sobretitulo', margin: [0, 0, 0, 10] },
+      { text: 'Operação de busca e salvamento', style: 'tituloCapa' },
+      { text: op.codigo, fontSize: 14, bold: true, margin: [0, 8, 0, 4] },
+      { text: periodo, style: 'subtituloCapa', margin: [0, 0, 0, 22] },
+      { columns: numeros.map(function (n) {
+        return { width: '*', stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }] };
+      }), columnGap: 10, margin: [0, 0, 0, 22] },
+      { text: 'Resultado geral', style: 'h2' },
+      { text: resultado, fontSize: 11, bold: true, margin: [0, 0, 0, 16] },
+      { text: 'Linha do tempo', style: 'h2' },
+    ];
+    if (marcos.length) {
+      conteudo.push({ table: { headerRows: 1, widths: [96, '*'], body: [
+        [{ text: 'HORÁRIO', style: 'rotuloCaixa' }, { text: 'O QUE ACONTECEU', style: 'rotuloCaixa' }],
+      ].concat(marcos.map(function (e) {
+        return [{ text: dataHora(e.ocorrido_em), fontSize: 8.5, color: COR.suave }, { text: txt(e.titulo) }];
+      })) }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 10] });
+    } else {
+      conteudo.push({ text: 'Nenhum marco registrado até agora.', color: COR.suave });
+    }
+    conteudo.push({ text: 'Documento preparado para divulgação. Não traz nomes, documentos, telefones, fotos, trilhas, posições nem observações de campo.',
+      fontSize: 8, color: COR.suave, margin: [0, 18, 0, 0] });
+    return documento(d, recursos, conteudo, { titulo: 'Relatório para imprensa — ' + op.codigo, assunto: 'Relatório para divulgação', marca: 'DIVULGAÇÃO', publico: true });
+  }
+
   // Página com cabeçalho (logo e código), rodapé (gerado em, página X de Y) e estilos comuns aos relatórios.
   // o: { titulo, assunto, marca (texto do cabeçalho), cabecalhoNaPrimeira }
   function documento(d, recursos, conteudo, o) {
@@ -609,7 +655,7 @@
       pageMargins: [40, 58, 40, 52],
       info: {
         title: o.titulo,
-        author: d.gerado_por_nome || '',
+        author: o.publico ? '' : (d.gerado_por_nome || ''),
         subject: o.assunto,
         creator: 'Rastreamento GBS',
       },
@@ -627,7 +673,7 @@
               marca,
               { width: '*', stack: [
                 { text: op.codigo, fontSize: 8, bold: true, color: COR.texto, alignment: 'right' },
-                { text: o.marca + '  ·  DOCUMENTO RESTRITO', fontSize: 7.5, color: COR.acento, bold: true, alignment: 'right', characterSpacing: 0.6, margin: [0, 2, 0, 0] },
+                { text: o.marca + (o.publico ? '' : '  ·  DOCUMENTO RESTRITO'), fontSize: 7.5, color: COR.acento, bold: true, alignment: 'right', characterSpacing: 0.6, margin: [0, 2, 0, 0] },
               ] },
             ] },
             { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 0.5, lineColor: COR.linha }] },
@@ -638,7 +684,9 @@
         return {
           margin: [40, 16, 40, 0],
           columns: [
-            { text: 'Gerado em ' + dataHora(d.gerado_em) + ' por ' + txt(d.gerado_por_nome) + '. Contém dados pessoais e informações sensíveis: uso restrito.', fontSize: 7, color: COR.suave },
+            { text: o.publico
+              ? 'Gerado em ' + dataHora(d.gerado_em) + '. Divulgação: sem dados pessoais.'
+              : 'Gerado em ' + dataHora(d.gerado_em) + ' por ' + txt(d.gerado_por_nome) + '. Contém dados pessoais e informações sensíveis: uso restrito.', fontSize: 7, color: COR.suave },
             { text: 'Página ' + pagina + ' de ' + total, fontSize: 7.5, color: COR.suave, alignment: 'right', width: 80 },
           ],
         };
@@ -858,7 +906,7 @@
     return dentro;
   }
 
-  var api = { montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

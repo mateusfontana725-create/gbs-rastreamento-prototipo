@@ -1120,9 +1120,15 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
   e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo. Quando as ações precisam ficar fora da
   área que rola (ex.: Relatórios), a opção `rodape` de `abrirModal` coloca o rodapé fixo embaixo da caixa.
-- **Relatórios** (modal da operação): à esquerda o **diário** (por dia), à direita a **passagem de comando**; no meio o **comando**;
-  embaixo o **relatório final**, com um botão só. Cada item tem o selo do tipo (Diário, Passagem, Comando, Final) e o arquivo baixado
-  leva o tipo no nome. O que estiver guardado aparece com **Baixar**; **Excluir** aparece só para o administrador.
+- **Relatórios** (modal da operação): a tela mostra só os **tipos**, um cartão cada (Diário, Passagem, Comando, Final e
+  **Imprensa**), com **Gerar** e **Ver lista (n)**. Ver lista abre só a lista daquele tipo, com **← Tipos** para voltar. Passagem
+  e Comando geram o mais recente (as outras estão na lista); o Final usa o desfecho registrado e todas as fotos (sem desfecho,
+  o botão fica desabilitado e **Registrar desfecho** abre um formulário pequeno). Cada item tem o selo do tipo e o arquivo baixado
+  leva o tipo no nome. **Excluir** aparece só para o administrador.
+- **Relatório para imprensa** (migração 054): versão de divulgação, com dados reduzidos: números gerais (pessoas de campo,
+  setores, pessoas procuradas), desfecho geral e a linha do tempo só dos marcos automáticos da operação e dos setores. Sem nomes,
+  documentos, telefones, fotos, trilhas, posições e observações; sem o autor no rodapé e nos metadados do PDF. O teste
+  `testes/relatorio_imprensa.test.js` confere que nada disso aparece.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.

@@ -118,7 +118,7 @@
     // operação encerrada: diário só para leitura (o servidor também recusa, migração 026)
     var btnNova = op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-nova', texto: '+ Novo registro', onclick: function () { formObservacao(null); } }) : null;
     var btnAtualizar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Atualizar', onclick: function () { recarregar(); } });
-    var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatório final (PDF)', onclick: function () { fechar(); abrirRelatorio(op); } });
+    var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatórios (PDF)', onclick: function () { fechar(); abrirRelatoriosOperacao(op); } });
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diario' }, [
       UI.el('div', { classe: 'diario-topo' }, [
@@ -710,7 +710,7 @@
       if (s.error) throw s.error;
       var resp = await fetch(s.data.signedUrl);
       if (!resp.ok) throw new Error('Arquivo indisponível.');
-      baixarBlob(await resp.blob(), nomeArquivo(op, r.gerado_em));
+      baixarBlob(await resp.blob(), nomeSalvo(op, r));
     } catch (e) {
       UI.aviso('Não foi possível baixar o relatório: ' + (e.message || e), 'erro', 8000);
     }
@@ -727,8 +727,7 @@
     var infoRes = UI.el('p', { classe: 'muted', id: 'rel-resultado-info' });
     var btnRes = UI.el('button', { classe: 'btn', type: 'button', id: 'rel-resultado-salvar', texto: 'Salvar resultado' });
     var selFotos = UI.el('select', { classe: 'campo', id: 'rel-fotos' }, [
-      UI.el('option', { value: 'limite', texto: 'Até 6 por setor (recomendado)' }),
-      UI.el('option', { value: 'todas', texto: 'Todas as fotos' }),
+      UI.el('option', { value: 'todas', texto: 'Todas as fotos (padrão)' }),
       UI.el('option', { value: 'nenhuma', texto: 'Sem fotos' }),
     ]);
     var chkFundo = UI.el('input', { type: 'checkbox', id: 'rel-fundo', checked: true });
@@ -829,27 +828,10 @@
       }
       btnGerar.disabled = true;
       progresso.hidden = false;
-      function passo(t) { progresso.textContent = t; }
       try {
-        passo('Carregando o gerador de PDF…');
-        var pdfMake = await carregarPdfMake();
-        passo('Buscando os dados da operação…');
-        var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
-        // probabilidades de busca (cenários aprovados, buscas registradas): se falhar, o relatório sai sem a seção
-        try { dados.busca = window.BuscaCenario ? await window.BuscaCenario.dadosRelatorio() : null; } catch (e) { dados.busca = null; }
-        dados.trilhasManuais = await trilhasDesenhadas(op.id);
-        var doc = await prepararDocumento(dados, { fotos: selFotos.value, fundo: chkFundo.checked }, passo);
-        passo('Gerando o PDF…');
-        var r = await gerarBlob(pdfMake, doc);
-        var nome = nomeArquivo(op, dados.gerado_em);
-        baixarBlob(r.blob, nome);
-        passo('Guardando uma cópia no servidor…');
-        var caminho = op.id + '/' + C.uuid() + '.pdf';
-        var up = await C.cliente.storage.from('relatorios').upload(caminho, r.blob, { contentType: 'application/pdf', upsert: false });
-        if (up.error) throw new Error('O PDF foi baixado, mas a cópia não foi guardada no servidor: ' + (up.error.message || up.error));
-        await C.rpc('registrar_relatorio', { p_operacao: op.id, p_caminho: caminho, p_paginas: r.paginas || null, p_bytes: r.blob.size, p_sha256: await sha256(r.blob) });
+        var r = await gerarFinal(op, { fotos: selFotos.value, fundo: chkFundo.checked }, function (t) { progresso.textContent = t; });
         gerou = true;
-        passo('Pronto: ' + (r.paginas ? r.paginas + ' página(s), ' : '') + Math.round(r.blob.size / 1024) + ' KB. O arquivo foi baixado e uma cópia foi guardada.');
+        progresso.textContent = 'Pronto: ' + (r.paginas ? r.paginas + ' página(s), ' : '') + Math.round(r.blob.size / 1024) + ' KB. O arquivo foi baixado e uma cópia foi guardada.';
         UI.aviso('Relatório final gerado.', 'ok');
         carregarSalvos();
       } catch (e) {
@@ -945,8 +927,17 @@
     return cmds;
   }
   async function listarSalvos(op, tipo) {
-    return (await C.consultar(C.cliente.from('relatorios').select('id,caminho,gerado_em,referencia,paginas')
+    return (await C.consultar(C.cliente.from('relatorios').select('id,tipo,caminho,gerado_em,gerado_por_nome,referencia,paginas')
       .eq('operacao_id', op.id).eq('tipo', tipo).order('gerado_em', { ascending: false }))) || [];
+  }
+  // Nome do PDF guardado, com o tipo no nome (Relatorio-diario-…, -passagem-, -comando-, -final-)
+  function nomeSalvo(op, r) {
+    if (r.tipo === 'diario') return nomeArquivoTipo(op, 'Relatorio-diario', r.referencia);
+    var d = new Date(C.paraMs(r.gerado_em) || Date.now());
+    var quando = d.getFullYear() + dd(d.getMonth() + 1) + dd(d.getDate()) + '-' + dd(d.getHours()) + dd(d.getMinutes());
+    if (r.tipo === 'passagem') return nomeArquivoTipo(op, 'Relatorio-passagem', quando);
+    if (r.tipo === 'comando') return nomeArquivoTipo(op, 'Relatorio-comando', quando);
+    return nomeArquivo(op, r.gerado_em);
   }
   async function dadosDoPeriodo(op) {
     var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
@@ -968,19 +959,98 @@
     return gerarDiario(op, dia, { reservar: false, baixar: true, salvar: guardar });
   }
 
-  // Uma linha de relatório: título e data em cima, ações à direita (sem bolinhas nem texto colado no botão)
-  function itemRelatorio(titulo, meta, acoes, selo) {
+  // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
+  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', final: 'Final' };
+  function rotuloDesfecho(chave) {
+    var r = RESULTADOS.filter(function (x) { return x[0] === chave; })[0];
+    return r ? r[1] : chave;
+  }
+  // Uma linha da lista: selo do tipo e título em cima, data embaixo, ações à direita
+  function itemRelatorio(tipo, titulo, meta, acoes, extra) {
     return UI.el('li', { classe: 'rel-item' }, [
       UI.el('div', { classe: 'rel-item-texto' }, [
-        UI.el('strong', { texto: titulo }),
+        UI.el('div', { classe: 'rel-linha-titulo' }, [
+          UI.el('span', { classe: 'selo selo-neutro rel-tipo', texto: TIPO_ROTULO[tipo] }),
+          UI.el('strong', { texto: titulo }),
+          extra || null,
+        ]),
         meta ? UI.el('small', { classe: 'muted', texto: meta }) : null,
-        selo || null,
       ]),
       UI.el('div', { classe: 'rel-item-acoes' }, acoes),
     ]);
   }
   function listaRelatorios(itens) { return UI.el('ul', { classe: 'rel-itens' }, itens); }
   function semRelatorios(texto) { return UI.el('p', { classe: 'muted rel-vazio', texto: texto }); }
+  function quemQuando(x) {
+    return 'Guardado em ' + dataHora(x.gerado_em) + (x.gerado_por_nome ? ' por ' + x.gerado_por_nome : '') + (x.paginas ? ' · ' + x.paginas + ' pág.' : '');
+  }
+
+  // Desfecho da operação: registrado antes do relatório final (aparece na capa e no fim do PDF).
+  // Abre por cima do modal de Relatórios, sem tirá-lo da tela.
+  function abrirDesfecho(op, depois) {
+    var sel = UI.el('select', { classe: 'campo', id: 'des-resultado' }, [UI.el('option', { value: '', texto: '— escolha —' })].concat(RESULTADOS.map(function (r) {
+      return UI.el('option', { value: r[0], texto: r[1] });
+    })));
+    sel.value = op.resultado || '';
+    var txt = UI.el('textarea', { classe: 'campo', id: 'des-texto', rows: '4', maxlength: '4000', placeholder: 'Onde, quando e em que condições; encaminhamentos.' });
+    txt.value = op.resultado_texto || '';
+    var erro = UI.el('p', { classe: 'erro-form', hidden: true });
+    var btnCancelar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar' });
+    var btnOk = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'des-salvar', texto: 'Salvar desfecho' });
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Desfecho da operação' }, [UI.dica(
+        'Registre o desfecho antes de gerar o relatório final: ele sai na capa e no fim do relatório.')]),
+      UI.secao('Desfecho', [
+        UI.campo('Resultado', sel, { para: 'des-resultado' }),
+        UI.campo('Descrição', txt, { para: 'des-texto', opcional: true }),
+        erro,
+      ]),
+    ]), {
+      empilhar: true,
+      tamanho: 'estreito',
+      fecharNoFundo: false,
+      rodape: UI.el('div', { classe: 'modal-rodape' }, [btnCancelar, btnOk]),
+    });
+    btnCancelar.addEventListener('click', function () { fechar(); });
+    btnOk.addEventListener('click', async function () {
+      if (!sel.value) { erro.textContent = 'Escolha o desfecho.'; erro.hidden = false; sel.focus(); return; }
+      btnOk.disabled = true;
+      try {
+        var r = await C.rpc('definir_resultado', { p_operacao: op.id, p_resultado: sel.value, p_texto: txt.value });
+        Object.assign(op, r);
+        UI.aviso('Desfecho registrado.', 'ok');
+        fechar();
+        if (depois) depois();
+      } catch (e) {
+        erro.textContent = e.message || String(e);
+        erro.hidden = false;
+        btnOk.disabled = false;
+      }
+    });
+    setTimeout(function () { sel.focus(); }, 40);
+  }
+
+  // Relatório final: tudo da operação (cadastro, pessoas, setores, diário, desfecho e fotos).
+  // Baixa o PDF e guarda uma cópia no servidor. passo(texto) mostra o andamento. Devolve o resultado.
+  async function gerarFinal(op, opcoes, passo) {
+    passo('Carregando o gerador de PDF…');
+    var pdfMake = await carregarPdfMake();
+    passo('Buscando os dados da operação…');
+    var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+    // probabilidades de busca (cenários aprovados, buscas registradas): se falhar, o relatório sai sem a seção
+    try { dados.busca = window.BuscaCenario ? await window.BuscaCenario.dadosRelatorio() : null; } catch (e) { dados.busca = null; }
+    dados.trilhasManuais = await trilhasDesenhadas(op.id);
+    var doc = await prepararDocumento(dados, { fotos: opcoes.fotos, fundo: opcoes.fundo }, passo);
+    passo('Gerando o PDF…');
+    var r = await gerarBlob(pdfMake, doc);
+    baixarBlob(r.blob, nomeArquivo(op, dados.gerado_em));
+    passo('Guardando uma cópia no servidor…');
+    var caminho = op.id + '/' + C.uuid() + '.pdf';
+    var up = await C.cliente.storage.from('relatorios').upload(caminho, r.blob, { contentType: 'application/pdf', upsert: false });
+    if (up.error) throw new Error('O PDF foi baixado, mas a cópia não foi guardada no servidor: ' + (up.error.message || up.error));
+    await C.rpc('registrar_relatorio', { p_operacao: op.id, p_caminho: caminho, p_paginas: r.paginas || null, p_bytes: r.blob.size, p_sha256: await sha256(r.blob) });
+    return r;
+  }
 
   function abrirRelatoriosOperacao(op) {
     var hoje = diaLocal(Date.now());
@@ -1010,18 +1080,21 @@
 
     async function desenhar() {
       corpo.innerHTML = '';
-      var [diarios, comandos, salvosComando, passagens, salvosPassagem] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
-        listarSalvos(op, 'comando'), listarPassagensAceitas(op), listarSalvos(op, 'passagem')]);
+      var [diarios, comandos, salvosComando, passagens, salvosPassagem, finais] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
+        listarSalvos(op, 'comando'), listarPassagensAceitas(op), listarSalvos(op, 'passagem'), listarSalvos(op, 'final')]);
       var porDia = {}; diarios.forEach(function (x) { porDia[x.referencia] = x; });
       var porRef = {}; salvosComando.forEach(function (x) { porRef[x.referencia] = x; });
       var porPas = {}; salvosPassagem.forEach(function (x) { porPas[x.referencia] = x; });
+      // Excluir: só o administrador (a função no banco confere de novo)
+      var ehAdmin = Boolean(P() && P().admin && P().admin());
+      function botaoBaixar(x) {
+        return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } });
+      }
+      function botaoExcluir(x) {
+        return ehAdmin ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { excluirRelatorio(x, op, desenhar); } }) : null;
+      }
 
-      // Final
-      corpo.appendChild(UI.secao('Relatório final', [
-        UI.el('button', { classe: 'btn rel-cheio', type: 'button', texto: 'Abrir relatório final (PDF)', onclick: function () { fechar(); abrirRelatorio(op); } }),
-      ], { dica: 'Relatório completo da operação, para encerrar.' }));
-
-      // Diário por data
+      // Esquerda: diário por data
       var dataCampo = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-data', value: hoje, min: primeiroDia, max: hoje });
       var botaoDia = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-dia-gerar', texto: 'Gerar do dia' });
       botaoDia.addEventListener('click', function () {
@@ -1038,42 +1111,76 @@
         UI.el('div', { classe: 'rel-linha-dia' }, [UI.campo('Dia', dataCampo, { para: 'rel-dia-data' }), botaoDia]),
         diarios.length
           ? listaRelatorios(diarios.map(function (x) {
-            return itemRelatorio(diaBr(x.referencia) + (x.referencia === hoje ? ' · hoje' : ''), 'PDF guardado', [
-              UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(x, op); } }),
-            ]);
+            return itemRelatorio('diario', diaBr(x.referencia) + (x.referencia === hoje ? ' · hoje' : ''), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
           }))
           : semRelatorios('Nenhum diário guardado ainda.'),
       ], { dica: 'Dias anteriores ficam guardados no servidor. O dia de hoje só é baixado, pois ainda está aberto.' }));
 
-      // Comandos
-      corpo.appendChild(UI.secao('Relatório de comando', [
-        listaRelatorios(comandos.map(function (c) {
-          var quando = dataHora(c.ini) + ' até ' + (c.fim ? dataHora(c.fim) : 'agora') + (c.passadoA ? ' · passado a ' + c.passadoA : '');
-          var guardado = porRef[c.ref];
-          var acao = guardado && c.fim
-            ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Baixar', onclick: function () { baixarSalvo(guardado, op); } })
-            : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
-                ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await desenhar(); });
-              } });
-          var selo = c.fim ? null : UI.el('span', { classe: 'selo selo-alerta', texto: 'em andamento' });
-          return itemRelatorio(c.rotulo + ' · ' + (c.comandante || '—'), quando, [acao], selo);
-        })),
-      ], { dica: 'Cada comando termina na passagem seguinte. Gerado de um comando encerrado, ele fica guardado.' }));
-
-      // Passagens (o documento do briefing entregue)
+      // Direita: passagens de comando (o documento do briefing entregue)
       corpo.appendChild(UI.secao('Relatório de passagem de comando', [
         passagens.length
           ? listaRelatorios(passagens.map(function (p) {
-            var guardado = porPas[p.id];
-            return itemRelatorio((p.de_nome || '—') + ' → ' + p.para_nome, dataHora(p.respondida_em), [
-              UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: guardado ? 'Baixar' : 'Gerar', onclick: function (ev) {
-                if (guardado) { baixarSalvo(guardado, op); return; }
-                ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
-              } }),
-            ]);
+            var x = porPas[p.id];
+            var acoes = x ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Gerar', onclick: function (ev) {
+              ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, p); await desenhar(); });
+            } })];
+            return itemRelatorio('passagem', (p.de_nome || '—') + ' → ' + p.para_nome, x ? quemQuando(x) : dataHora(p.respondida_em), acoes);
           }))
           : semRelatorios('Nenhuma passagem de comando ainda.'),
       ], { dica: 'O documento do briefing entregue na passagem: quem passou, quem recebeu e a situação naquele momento.' }));
+
+      // Comando (faixa do meio): cada comando termina na passagem seguinte
+      corpo.appendChild(UI.secao('Relatório de comando', [
+        listaRelatorios(comandos.map(function (c) {
+          var quando = dataHora(c.ini) + ' até ' + (c.fim ? dataHora(c.fim) : 'agora') + (c.passadoA ? ' · passado a ' + c.passadoA : '');
+          var x = porRef[c.ref];
+          var acoes = x && c.fim ? [botaoBaixar(x), botaoExcluir(x)] : [UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: c.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
+            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await desenhar(); });
+          } })];
+          var andamento = c.fim ? null : UI.el('span', { classe: 'selo selo-alerta', texto: 'em andamento' });
+          return itemRelatorio('comando', c.rotulo + ' · ' + (c.comandante || '—'), quando, acoes, andamento);
+        })),
+      ], { dica: 'Cada comando termina na passagem seguinte. Gerado de um comando encerrado, ele fica guardado.', classe: 'rel-largo' }));
+
+      // Embaixo: relatório final. Um botão, sem formulário: usa o desfecho já registrado e todas as fotos.
+      var progressoFinal = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
+      var erroFinal = UI.el('p', { classe: 'erro-form', hidden: true });
+      var btnFinal = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-final-gerar', texto: 'Gerar relatório final (PDF)', disabled: op.resultado ? null : true, onclick: async function () {
+        btnFinal.disabled = true;
+        erroFinal.hidden = true;
+        progressoFinal.hidden = false;
+        try {
+          await gerarFinal(op, { fotos: 'todas', fundo: true }, function (t) { progressoFinal.textContent = t; });
+          UI.aviso('Relatório final gerado.', 'ok');
+          await desenhar();
+        } catch (e) {
+          progressoFinal.hidden = true;
+          erroFinal.textContent = e.message || String(e);
+          erroFinal.hidden = false;
+          btnFinal.disabled = false;
+        }
+      } });
+      var desfecho = op.resultado
+        ? UI.el('div', { classe: 'rel-desfecho' }, [
+          UI.el('strong', { texto: 'Desfecho: ' + rotuloDesfecho(op.resultado) }),
+          op.resultado_texto ? UI.el('small', { classe: 'muted', texto: op.resultado_texto }) : null,
+          UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Alterar', onclick: function () { abrirDesfecho(op, desenhar); } }),
+        ])
+        : UI.el('div', { classe: 'rel-aviso rel-desfecho-falta' }, [
+          UI.el('span', { texto: 'Registre o desfecho antes de gerar o relatório final.' }),
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Registrar desfecho', onclick: function () { abrirDesfecho(op, desenhar); } }),
+        ]);
+      corpo.appendChild(UI.secao('Relatório final', [
+        desfecho,
+        UI.el('div', { classe: 'rel-final-acoes' }, [btnFinal]),
+        progressoFinal,
+        erroFinal,
+        finais.length
+          ? listaRelatorios(finais.map(function (x) {
+            return itemRelatorio('final', dataHora(x.gerado_em), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
+          }))
+          : semRelatorios('Nenhum relatório final gerado ainda.'),
+      ], { dica: 'Tudo da operação: cadastro, pessoas, setores, diário, desfecho e todas as fotos. Cada relatório gerado fica guardado; só o administrador pode excluir.', classe: 'rel-largo' }));
     }
     desenhar().catch(function (e) { corpo.appendChild(UI.el('p', { classe: 'erro-form', texto: 'Não foi possível carregar: ' + (e.message || e) })); });
   }

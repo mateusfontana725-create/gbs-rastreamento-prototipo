@@ -1106,8 +1106,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
   e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo. Quando as ações precisam ficar fora da
   área que rola (ex.: Relatórios), a opção `rodape` de `abrirModal` coloca o rodapé fixo embaixo da caixa.
-- **Relatórios** (modal da operação): quatro cartões (final, diário, comando e passagem), dois por linha no computador.
-  Cada linha mostra o relatório com a data em cima e a ação à direita; o que estiver guardado aparece com **Baixar**.
+- **Relatórios** (modal da operação): à esquerda o **diário** (por dia), à direita a **passagem de comando**; no meio o **comando**;
+  embaixo o **relatório final**, com um botão só. Cada item tem o selo do tipo (Diário, Passagem, Comando, Final) e o arquivo baixado
+  leva o tipo no nome. O que estiver guardado aparece com **Baixar**; **Excluir** aparece só para o administrador.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.
@@ -1261,7 +1262,9 @@ chave própria).
 - **Capa e cabeçalho**: a **logo do Corpo de Bombeiros Militar do Paraná** aparece no topo da capa e, a partir da segunda página, no cabeçalho (`public/img/logo-cbmpr.png`, carregada no navegador e embutida no PDF) fica à esquerda, com o código da operação e a marca "DOCUMENTO RESTRITO" à direita. A **mesma logo** aparece no topo da capa, acima do título.
 - **Ferramentas → Relatório final (PDF)** (ou **Relatório final (PDF)** no menu **⋮** da linha na lista de operações). Só responsáveis da operação
   (o banco confere em `relatorio_operacao`).
-- Registre o **resultado** (vítima localizada com vida / em óbito / não localizada / outro, com descrição).
+- O **desfecho** (vítima localizada com vida / em óbito / não localizada / outro, com descrição) é registrado antes, no modal
+  **Relatórios** (botão **Registrar desfecho**, ou **Alterar** depois). O relatório final não pede desfecho: usa o que já está
+  registrado, e só habilita o botão quando há um. Ele sempre inclui **todas as fotos** da operação.
 - **Gerar PDF** monta, no navegador: capa com natureza, números e datas, sumário, a ocorrência (o IPO, com cada dado
   uma só vez: tipo não aparece, a natureza diz o tipo), pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
   setor, início, fim, duração, área, deslocamentos e fotos tiradas dentro do setor), pontos e encontros,
@@ -1269,8 +1272,8 @@ chave própria).
   relatos, vítimas, fotos e o local) — **também quando não há setores cadastrados**,
   diário consolidado por dia (sem repetir os registros do IPO) e resultado (sem campos de assinatura). Cabeçalho e rodapé em todas as páginas
   ("DOCUMENTO RESTRITO", página X de Y).
-- O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios` (sem exclusão pelo app); a lista
-  **Relatórios já gerados** permite baixar de novo.
+- O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios`; a lista do modal **Relatórios** permite
+  baixar de novo. A exclusão é só do administrador (`excluir_relatorio`, verificado no banco), registrada no diário.
 - Ao **encerrar** a operação ou **apagar os dados**, se ainda não houver relatório, o painel oferece gerar antes
   (depois da retenção o relatório sai só com cadastro, diário e resultado).
 - **Relatório diário (migração 049)**: o painel aberto numa operação ativa **gera e guarda sozinho** o relatório de cada

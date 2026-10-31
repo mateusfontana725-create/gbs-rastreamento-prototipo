@@ -2114,7 +2114,16 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 /* Modal Relatórios (js/relatorio.js → abrirRelatoriosOperacao): quatro cartões, dois por linha no computador */
 .relatorios-operacao { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .relatorios-operacao > .secao-form { margin: 0; }
-.rel-cheio { width: 100%; }
+.relatorios-operacao > .rel-largo { grid-column: 1 / -1; }
+.rel-linha-titulo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.rel-linha-titulo .rel-tipo { flex: none; }
+/* Desfecho no relatório final: faixa com a borda da cor primária, como o resumo da operação */
+.rel-desfecho { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 10px 12px; border: 1px solid var(--borda); border-left: 4px solid var(--primaria); border-radius: var(--raio); background: var(--superficie-2); }
+.rel-desfecho > strong { font-size: .95rem; }
+.rel-desfecho > small { flex: 1 1 100%; }
+.rel-desfecho-falta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0; }
+.rel-final-acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rel-final-acoes .btn { min-width: 220px; }
 /* Dia escolhido: data e botão alinhados pela base dos controles */
 .rel-linha-dia { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .rel-linha-dia > .campo-bloco { flex: 1 1 180px; min-width: 0; }

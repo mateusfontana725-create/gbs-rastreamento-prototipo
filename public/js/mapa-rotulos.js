@@ -16,9 +16,12 @@
   // Tamanho dos símbolos pelo zoom (1 = tamanho cheio): de longe tudo diminui para o mapa não ficar
   // coberto de ícones, e de muito perto (escala de 100 m para menos, zoom 17 em diante) diminui de novo,
   // porque o mapa já mostra pouco chão e os ícones grandes cobririam o que se quer ver.
+  // Mas há um PISO (0,75 = ~20 px): com o zoom até a escala de 3 m os símbolos estavam em 50% (13 px), pequenos
+  // demais para achar e ler a letra, principalmente quem está com a localização desativada (apagado).
   // Vai na variável CSS --esc-mapa. O tamanho cheio fica por volta da escala de 200 m (zoom 16).
+  var ESCALA_MINIMA_PERTO = 0.75;
   function escalaDoZoom(z) {
-    return z >= 20 ? 0.5 : z >= 19 ? 0.58 : z >= 18 ? 0.68 : z >= 17 ? 0.8 : z >= 16 ? 0.9 : z >= 15 ? 0.76 : z >= 14 ? 0.66 : z >= 13 ? 0.58 : 0.52;
+    return z >= 20 ? ESCALA_MINIMA_PERTO : z >= 19 ? 0.77 : z >= 18 ? 0.8 : z >= 17 ? 0.84 : z >= 16 ? 0.9 : z >= 15 ? 0.76 : z >= 14 ? 0.66 : z >= 13 ? 0.58 : 0.52;
   }
 
   function nivelDoZoom(z) {
@@ -189,7 +192,7 @@
   }
 
   raiz.MapaRotulos = {
-    instalar: instalar, resolver: resolver, nivelDoZoom: nivelDoZoom, escalaDoZoom: escalaDoZoom, ehDestaque: ehDestaque,
+    instalar: instalar, resolver: resolver, nivelDoZoom: nivelDoZoom, escalaDoZoom: escalaDoZoom, ESCALA_MINIMA_PERTO: ESCALA_MINIMA_PERTO, ehDestaque: ehDestaque,
     criarGrupoPessoas: criarGrupoPessoas, fatiasDeCor: fatiasDeCor,
     ZOOM_MEDIO: ZOOM_MEDIO, ZOOM_PERTO: ZOOM_PERTO, ZOOM_SEM_AGRUPAR: ZOOM_SEM_AGRUPAR,
   };

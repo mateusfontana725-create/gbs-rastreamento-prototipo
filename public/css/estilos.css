@@ -327,7 +327,7 @@ body.no-painel { overflow: hidden; }
 }
 .simbolo-responsavel > span { transform: rotate(-45deg); }
 .simbolo-eu { outline: 2px solid #fff; outline-offset: 2px; }
-.antigo .simbolo { opacity: .5; filter: grayscale(.7); border-style: dashed; }
+.antigo .simbolo { opacity: .72; filter: grayscale(.55); border-style: dashed; }
 
 /* marcadores do mapa */
 .mk-wrap { background: none; border: 0; }

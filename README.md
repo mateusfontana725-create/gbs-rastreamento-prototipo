@@ -256,7 +256,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   ou o botão do balão; arrastar o mapa a partir de um símbolo não abre nada. **Na lista lateral um clique abre direto.**
   Os símbolos ficam **translúcidos** (quem pede ajuda, quer sair ou está selecionado fica opaco) e **diminuem ao
   afastar o zoom** (até ~metade do tamanho, agrupamentos inclusive) **e também de muito perto**: do zoom 17 (escala de 100 m)
-  em diante cada nível diminui um pouco (90% no zoom 16, 80% no 17, 68% no 18, 58% no 19 e 50% do 20 em diante); vítima localizada e pedido
+  em diante cada nível diminui um pouco (90% no zoom 16, 84% no 17, 80% no 18, 77% no 19), mas **para em 75% (~20 px) do zoom 20
+  em diante**: antes caía a 50% (13 px) e o símbolo, principalmente o de quem está com a localização desativada, ficava
+  pequeno e apagado demais para achar. Quem está **apagado** (localização desativada ou sem sinal) fica com 72% de opacidade
+  (85% de perto, com um anel claro) e a borda tracejada; vítima localizada e pedido
   de ajuda nunca ficam abaixo de 80%; trilhas finas (2,5 px de perto, ~1 px de longe;
   com alguém selecionado, as outras ficam apagadas), setores e círculos de base/risco com traço e preenchimento
   discretos. **Camadas → Nomes no mapa** volta a mostrar os nomes como abaixo.

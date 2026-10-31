@@ -1451,7 +1451,10 @@ html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; backgroun
 .mapa-adaptativo .mk-poi, .mapa-adaptativo .mk-relato, .mapa-adaptativo .mk-foto,
 .mapa-adaptativo .cluster, .mapa-adaptativo .mk-local { opacity: .75; }
 .mapa-adaptativo .cluster-pessoas { opacity: .85; }
-.mapa-adaptativo .mk.antigo .simbolo { opacity: .45; }
+.mapa-adaptativo .mk.antigo .simbolo { opacity: .72; filter: grayscale(.5); }
+/* de perto o apagado (localização desativada / sem sinal) fica mais firme e ganha um anel claro, para achar no mapa
+   escuro ou no satélite; a borda tracejada continua dizendo que não é a posição atual */
+.mapa-adaptativo.zoom-perto .mk.antigo .simbolo { opacity: .85; box-shadow: 0 0 0 1.5px #000, 0 0 0 3px rgba(226, 232, 240, .55), 0 2px 6px rgba(0, 0, 0, .7); }
 .mapa-adaptativo .leaflet-marker-icon:hover .simbolo, .mapa-adaptativo .leaflet-marker-icon:hover .mk-poi,
 .mapa-adaptativo .leaflet-marker-icon:hover .mk-relato, .mapa-adaptativo .leaflet-marker-icon:hover .mk-foto,
 .mapa-adaptativo .leaflet-marker-icon:hover .cluster, .mapa-adaptativo .leaflet-marker-icon:hover .mk-local,

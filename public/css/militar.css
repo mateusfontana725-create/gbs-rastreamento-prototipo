@@ -2279,6 +2279,58 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
 .esconder-rotulos .cl-vitima-rotulo { display: inline-block; }
 
 /* =====================================================================
+ * Resumo de longe (js/mapa-resumo.js): até o zoom do nível "longe" todos os agrupamentos (pessoas, pontos, relatos,
+ * fotos, vítimas) viram UM selo por região. Os agrupamentos de sempre ficam escondidos por baixo (não são apagados) e
+ * voltam de perto. O resumo desenha numa camada própria ("resumo"), por isso não é escondido por estas regras.
+ * ===================================================================== */
+.mapa-resumo .leaflet-marker-pane .mk-wrap,
+.mapa-resumo .leaflet-marker-pane .cluster-pessoas-wrap,
+.mapa-resumo .leaflet-pontos-pane > * { display: none; }
+.resumo-wrap { background: none; border: 0; }
+.resumo { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; height: 100%; cursor: pointer; isolation: isolate; }
+/* fundo escuro entre o círculo das pessoas e o quadrado dos pontos: nada que esteja embaixo aparece pelo vão */
+.resumo.resumo-duplo::after { content: ""; position: absolute; inset: 2px 3px; border-radius: 22px; background: #0a0d10; z-index: -1; }
+.resumo-pessoas {
+  flex: none; display: grid; padding: 5px; border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 10px rgba(0, 0, 0, .8);
+}
+.resumo-pessoas b {
+  display: grid; place-items: center; border-radius: 50%; background: #0a0d10; color: #fff;
+  font: 800 13px/1 var(--mono); border: 1.5px solid rgba(255, 255, 255, .85);
+}
+.resumo-pontos {
+  flex: none; display: grid; width: 36px; height: 36px; padding: 5px; border-radius: 9px;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 10px rgba(0, 0, 0, .8);
+}
+.resumo-pontos b {
+  display: grid; place-items: center; border-radius: 5px; background: #0a0d10; color: #fff; font: 800 12px/1 var(--mono);
+}
+/* vítima dentro: anel verde pulsante em volta do selo todo */
+.resumo.resumo-vitima::before {
+  content: ""; position: absolute; inset: -5px; border-radius: 24px; pointer-events: none;
+  box-shadow: 0 0 0 3px #10b981, 0 0 0 4.5px #000; animation: resumo-vitima-pulso 1.6s ease-out infinite;
+}
+@keyframes resumo-vitima-pulso {
+  0% { box-shadow: 0 0 0 3px #10b981, 0 0 0 4.5px #000, 0 0 0 4.5px rgba(16, 185, 129, .55); }
+  100% { box-shadow: 0 0 0 3px #10b981, 0 0 0 4.5px #000, 0 0 0 16px rgba(16, 185, 129, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .resumo.resumo-vitima::before { animation: none; } }
+/* etiquetas ao lado, uma embaixo da outra (nunca uma por cima da outra) */
+.resumo-rotulos {
+  position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 3px;
+  pointer-events: none; white-space: nowrap;
+}
+.resumo-rotulos span {
+  padding: 2px 7px; border-radius: 3px; font: 800 .68rem/1.3 var(--fonte-titulo); letter-spacing: .06em;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 6px rgba(0, 0, 0, .5);
+}
+.resumo-rotulo-vitima { background: #10b981; color: #04261a; }
+.resumo-rotulo-ajuda { background: #dc2626; color: #fff; }
+/* o selo é o único símbolo da região: não encolhe tanto quanto os símbolos soltos */
+.mapa-adaptativo .resumo { scale: max(var(--esc-mapa), .8); transition: scale .15s; }
+.mapa-adaptativo .resumo-wrap:hover .resumo { scale: 1; }
+
+/* =====================================================================
  * Painel de comando SCI (js/sci.js, sci.html)
  * ===================================================================== */
 .sci { display: flex; flex-direction: column; gap: 14px; --tv: #22c55e; --ta: #facc15; --tr: #ef4444; --tc: #6b7280; }

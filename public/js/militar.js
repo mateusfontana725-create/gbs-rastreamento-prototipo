@@ -1621,6 +1621,7 @@
       est.mapa.remove();
       est.mapa = null;
     }
+    est.resumo = null;
     est.op = null;
     est.participantes = new Map();
     est.pontosOrfaos = [];
@@ -1869,6 +1870,8 @@
     montarCamadaPessoas();
     // Nomes pelo zoom e sem sobreposição (mapa-rotulos.js)
     est.rotulos = window.MapaRotulos ? window.MapaRotulos.instalar(mapa) : { agendar: function () {} };
+    // De longe, um selo só por região no lugar dos agrupamentos separados (js/mapa-resumo.js)
+    est.resumo = window.MapaResumo ? window.MapaResumo.instalar(mapa, { coletar: coletarParaResumo }) : null;
     mapa.on('zoomend', estilizarTrilhas);
     $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomesMapa);
     atualizarMenu();
@@ -1920,6 +1923,42 @@
         });
       },
     });
+  }
+
+  // O que o resumo de longe (js/mapa-resumo.js) agrupa junto: as pessoas no mapa e tudo que está nos grupos de pontos
+  // (relatos, fotos, pontos de interesse, indicações, importados e a vítima encontrada). Lê o estado de agora.
+  function coletarParaResumo() {
+    var itens = [];
+    if (est.prefsMapa.pessoas) {
+      est.participantes.forEach(function (p) {
+        var mk = p.marcador;
+        if (!mk) return;
+        var ll = mk.getLatLng();
+        var cls = classesMarcador(p);
+        itens.push({
+          id: 'p' + p.id, familia: 'pessoa', lat: ll.lat, lng: ll.lng,
+          cor: mk.options.corAgrupado, nome: p.dados.nome,
+          ajuda: /(^| )ajuda( |$)/.test(cls), saida: /(^| )saida( |$)/.test(cls),
+          chave: cls + '|' + p.dados.nome + '|' + textoRotulo(p),
+          icon: function () { return criarIcone(p); },   // só monta o ícone de quem for desenhado isolado
+          marcador: mk, titulo: mk.options.title, alt: mk.options.alt, zIndexOffset: mk.options.zIndexOffset,
+        });
+      });
+    }
+    [est.camadaPontos, est.camadaPontosFixos].forEach(function (g) {
+      if (!g || !g.getLayers) return;
+      g.getLayers().forEach(function (mk) {
+        if (!mk.getLatLng) return;
+        var ll = mk.getLatLng();
+        itens.push({
+          id: 'k' + L.stamp(mk), familia: 'ponto', lat: ll.lat, lng: ll.lng,
+          tipo: mk.options.tipoPonto || 'poi', critico: Boolean(mk.options.critico), vitima: Boolean(mk.options.vitima),
+          chave: String(L.stamp(mk.options.icon)),
+          icon: mk.options.icon, marcador: mk, titulo: mk.options.title, alt: mk.options.alt, zIndexOffset: mk.options.zIndexOffset,
+        });
+      });
+    });
+    return itens;
   }
 
   // Cada marcador de ponto vai para o agrupamento, exceto os "fixos" (vítima encontrada),

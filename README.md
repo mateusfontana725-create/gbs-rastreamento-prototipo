@@ -1020,6 +1020,15 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     menos, ficam soltas): um círculo com o número de pessoas e um anel com as cores dos
     grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
     nunca entra no agrupamento. Fica **sempre ligado** (não há opção para desligar).
+  - **Resumo de longe** (`public/js/mapa-resumo.js`): pessoas e pontos/relatos/fotos agrupavam cada um por conta própria
+    e, de longe, os círculos de camadas diferentes se empilhavam no mesmo lugar (e as etiquetas de vítima e de quem pede
+    ajuda ficavam uma por cima da outra). Até o **zoom 14** (o nível "longe") tudo é agrupado **junto**, por distância na
+    tela (56 px), e cada região vira **um selo só**: as pessoas (círculo com o anel das cores dos grupos) e os pontos
+    (quadrado com o anel dos tipos) lado a lado, o **+** verde de vítima, o **!** vermelho de alerta (ajuda, pedido de
+    saída, área de risco) e as etiquetas **VÍTIMA(S)** e **PEDE(M) AJUDA** uma embaixo da outra. Passar o mouse lista tudo
+    que o selo resume; tocar aproxima até o zoom 15 ou mais. Quem está sozinho continua igual (mesmo ícone, clique, balão
+    e toque longo). **De perto (zoom 15 em diante) nada muda.** Os agrupamentos de sempre continuam por baixo,
+    só escondidos. O selo se atualiza sozinho (a cada 1,5 s, só enquanto está ativo).
 - **Topo do painel**: as ações mais usadas ficam à vista — **Marcar ponto**, **Foto**, **Setor** (pergunta: desenhar a
   área ou por raio), **Trilha** (desenhar trilha/trajeto) e **Dashboard**. No notebook aparecem só os ícones (o nome
   vem ao passar o mouse); no celular e no tablet em pé, numa faixa logo abaixo do título, dividindo a largura.

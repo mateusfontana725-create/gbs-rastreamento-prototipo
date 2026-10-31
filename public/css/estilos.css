@@ -2124,6 +2124,7 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 .rel-card-extra > .btn { align-self: flex-start; }
 .rel-card-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .rel-card-acoes > .btn { flex: 1 1 130px; min-width: 0; }
+.rel-card-acoes > .btn:disabled { opacity: .4; cursor: not-allowed; }
 /* Vista "lista": o tipo aberto, com voltar */
 .rel-lista-cabeca { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 12px; }
 .rel-lista-titulo { margin: 0; font-size: 1rem; letter-spacing: .02em; }

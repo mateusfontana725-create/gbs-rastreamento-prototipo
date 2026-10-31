@@ -87,9 +87,11 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   bombeiro com mais de 2 minutos aparece apagada e com "há X min"; com mais de 15 minutos, some do
   mapa (nunca é mostrada como atual). Atualiza a cada 15 s. O botão **📍 Onde estou** volta para a
   sua posição.
-- **Três botões grandes**: **TIRAR FOTO**, **ENCONTREI ALGO** (escolhe Possível pista, Objeto,
+- **Três botões numa linha** (abaixo do mapa): **FOTO**, **ENCONTREI ALGO** (escolhe Possível pista, Objeto,
   Vestígio, Obstáculo ou Outra coisa, escreve se quiser e envia — a localização vai junto
-  automaticamente; dá para enviar e já tirar a foto) e **FALAR COM OS BOMBEIROS**.
+  automaticamente; dá para enviar e já tirar a foto) e **MENSAGENS** (falar com os bombeiros).
+- **Tela enxuta**: durante a busca o cabeçalho encolhe e o mapa ocupa o espaço livre. O bloco técnico do
+  envio (fila de pontos) só aparece quando há risco de perder pontos; o resto fica no quadro de estado.
 - **Falar com os bombeiros** abre a conversa numa tela própria (e só quando a pessoa toca): as
   mensagens recebidas aparecem como **"Bombeiros"** (à esquerda) e as enviadas à direita, com o texto
   e a hora; embaixo, o campo para escrever. O botão mostra um número quando chegam mensagens novas.
@@ -2106,14 +2108,14 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 16 | Abrir o painel no celular (em pé e deitado) e no tablet | mapa, lista e ficha ficam utilizáveis, sem rolagem lateral |
 | 17 | No celular do civil, tocar **ENCONTREI ALGO → Possível pista**, escrever e enviar | o painel avisa com som, o botão **Mensagens** mostra 1, o marcador laranja aparece no mapa; ao abrir, o civil vê "Lida por …" |
 | 18 | Responder pela ficha (**Conversa**) | o civil recebe o alerta em tela cheia e confirma |
-| 19 | No civil, **TIRAR FOTO** → conferir → **SALVAR FOTO** | a câmera aparece no mapa no ponto; tocar abre a foto com autor, horários e coordenadas; **Ampliar** mostra em tela cheia |
+| 19 | No civil, **FOTO** → conferir → **SALVAR FOTO** | a câmera aparece no mapa no ponto; tocar abre a foto com autor, horários e coordenadas; **Ampliar** mostra em tela cheia |
 | 20 | Repetir com o celular em modo avião | a foto fica "Na fila"; ao voltar a internet, é enviada sozinha |
 | 21 | **Ferramentas**: trocar camada, ocultar nomes, ocultar a lista | cada opção funciona e o menu fecha; com a lista oculta, o mapa ocupa a tela e **« Participantes** reabre |
 | 23 | **Setor** (topo) **→ Por raio**: tocar no centro, raio 300 m, atribuir a um civil; depois desenhar outro setor por cantos | os dois aparecem com nome e situação; o civil vê "Seu setor" no celular; recarregar a página não os perde |
 | 24 | Marcar um **Ponto de encontro** e **Enviar como destino** ao civil; ele anda em direção ao ponto | o celular mostra distância e direção que diminuem/atualizam; testar com o GPS desligado (aviso "Sem GPS") |
 | 25 | Trocar para **Topográfico** e abrir **Relevo em 3D** numa região com morros | curvas de nível visíveis com trilhas e setores por cima; o 3D mostra os morros e a altitude ao tocar |
 | 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** vermelhoo; outros civis não aparecem |
-| 22b | No civil, tocar **FALAR COM OS BOMBEIROS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
+| 22b | No civil, tocar **MENSAGENS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
 | 22 | Criar uma operação de teste, registrar dados (diário, relatório) e **Excluir operação** (confirmar) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
 | 26 | Celular parado sobre uma mesa por 5 min | a trilha não vira um "novelo"; no diagnóstico (`&diag=1`) aparecem leituras descartadas como "oscilação parado" |
 | 27 | Enviar um destino a um civil com a página dele aberta | o cartão **IR ATÉ** aparece em poucos segundos, sem recarregar; a ficha mostra "✓ recebido no celular" |

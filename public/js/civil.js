@@ -125,6 +125,7 @@
   var TELAS = ['carregando', 'erro', 'inicio', 'rastreio', 'encerrado'];
   function mostrarTela(nome) {
     TELAS.forEach(function (t) { $('tela-' + t).hidden = t !== nome; });
+    document.body.classList.toggle('civil-em-rastreio', nome === 'rastreio');   // cabeçalho compacto: o espaço vai para o mapa
     window.scrollTo(0, 0);
   }
 
@@ -1745,7 +1746,8 @@
     $('nav-passos-caixa').hidden = true;
     $('nav-rota-info').classList.toggle('erro', Boolean(!rota && estado.rotaErro));
     if (!rota) {
-      res.textContent = textoEstado || (estado.rotaErro ? 'Rota por caminhos indisponível: ' + estado.rotaErro + ' Use a direção em linha reta (seta) ou o app de mapas.' : 'Calculando a rota…');
+      res.textContent = textoEstado || (estado.rotaErro ? 'Rota indisponível agora: siga a seta ou o app de mapas.' : 'Calculando a rota…');
+      res.title = estado.rotaErro || '';
       $('nav-proxima').hidden = true;
       return;
     }
@@ -1856,11 +1858,11 @@
     $('nav-norte').style.transform = 'rotate(' + Math.round(bussolaOk ? -estado.rumo : 0) + 'deg) translateY(-34px)';
     $('nav-bussola').classList.toggle('com-bussola', bussolaOk);
     $('nav-dir').textContent = chegou ? 'O destino está a menos de ' + Math.round(Math.max(15, l.prec || 0)) + ' m.'
-      : (prog ? 'pela rota · em linha reta ' + formatarDistancia(dist) + ' para o ' + dir : 'em linha reta · para o ' + dir + ' (' + Math.round(rumoReta) + '°)') +
-        (bussolaOk ? ' · siga a seta' : ' · a seta aponta em relação ao Norte (N)');
+      : (prog ? 'pela rota · ' + formatarDistancia(dist) + ' em linha reta, ' + dir : 'em linha reta · ' + dir + ' (' + Math.round(rumoReta) + '°)') +
+        (bussolaOk ? ' · siga a seta' : ' · seta em relação ao N');
     aviso.textContent = (fraco ? 'Sinal de GPS fraco (' + C.precisao(l.prec) + '): distância e direção aproximadas. ' : '') +
-      (prog ? (rota.fixa ? 'Siga o trajeto desenhado pelos bombeiros, conferindo o terreno.' : 'A rota segue caminhos mapeados; confira o terreno e siga as orientações dos bombeiros.')
-        : 'Linha reta não é caminho: confira o terreno, evite riscos e siga as orientações dos bombeiros.');
+      (prog ? (rota.fixa ? 'Siga o trajeto dos bombeiros, conferindo o terreno.' : 'Rota por caminhos mapeados: confira o terreno.')
+        : 'Linha reta não é caminho: confira o terreno.');
   }
 
   // Bússola: Android (deviceorientationabsolute) ou iPhone (webkitCompassHeading, com permissão).
@@ -2989,6 +2991,8 @@
         fila: function () { return estado.trilha; },
         extra: function () { return { pendentes: estado.bufferPontos.length, naoDuraveis: estado.bufferPontos.length }; },
         ativo: function () { return Boolean(estado.part && !estado.finalizado); },
+        // o participante só vê o bloco técnico quando há risco de perder pontos (o resto está no quadro de estado)
+        mostrar: function (r) { return r.nivel === 'erro'; },
       });
     }
     if (estado.filaUI) estado.filaUI.atualizar();

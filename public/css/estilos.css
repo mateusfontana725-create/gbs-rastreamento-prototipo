@@ -2313,3 +2313,64 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 .modal-app .secao-form .btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; margin-top: 6px; }
 .modal-app .ajuda { margin: 0; }
 .fila-estado .btn-bateria { display: block; width: 100%; margin-top: 6px; white-space: normal; text-transform: none; letter-spacing: 0; }
+
+/* =====================================================================
+ * PÁGINA DO PARTICIPANTE — TELA ENXUTA (revisão de outubro/2026)
+ * Durante a busca: cabeçalho fino, mapa maior, três botões numa linha,
+ * textos curtos. Vale para o navegador e para o aplicativo Android.
+ * ===================================================================== */
+.civil-em-rastreio .civil-topo { padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: 8px; }
+.civil-em-rastreio .civil-topo .marca { gap: 8px; }
+.civil-em-rastreio img.marca-brasao { width: 26px; height: 26px; }
+.civil-em-rastreio .civil-topo .marca h1 { font-size: .85rem; letter-spacing: .06em; }
+.civil-em-rastreio .civil-conteudo { padding-top: 10px; padding-left: 10px; padding-right: 10px; }
+#tela-rastreio .status-civil { padding: 7px 10px; gap: 8px; margin-bottom: 4px; border-width: 1.5px; }
+#tela-rastreio .status-icone { width: 11px; height: 11px; }
+#tela-rastreio .status-textos strong { font-size: .92rem; }
+#tela-rastreio .status-textos span { font-size: .78rem; line-height: 1.25; }
+#tela-rastreio .status-acao { min-height: 36px; padding: 0 10px; font-size: .75rem; }
+#tela-rastreio .quem-sou { margin: 0 2px 6px; font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tela-rastreio .fila-estado { margin-bottom: 6px; font-size: .8rem; }
+#tela-rastreio .mapa-civil-caixa { margin-bottom: 8px; border-width: 1.5px; border-radius: 10px; }
+/* o mapa fica com o espaço que sobra (cabe tudo numa tela de celular comum sem rolar) */
+#tela-rastreio #mapa-civil { height: calc(100vh - 330px); height: calc(100dvh - 330px); min-height: 240px; max-height: 560px; }
+#tela-rastreio .btn-onde-estou { top: 8px; right: 8px; min-height: 36px; padding: 0 10px; font-size: .8rem; }
+#tela-rastreio .legenda-civil { left: 6px; bottom: 18px; gap: 4px 8px; padding: 3px 6px; font-size: .68rem; }
+#tela-rastreio .legenda-civil .simbolo { width: 12px; height: 12px; }
+#tela-rastreio .lg-eu { width: 10px; height: 10px; }
+#tela-rastreio .mapa-offline-estado { margin: -4px 2px 6px; font-size: .72rem; }
+#tela-rastreio .acoes-civil { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#tela-rastreio .acao { min-height: 62px; padding: 6px 4px; gap: 4px; font-size: .74rem; border-width: 1.5px; border-radius: 10px; flex-direction: column; }
+#tela-rastreio .acao-icone { font-size: 1.25rem; }
+#tela-rastreio .acao-falar { grid-column: auto; }
+#tela-rastreio .acao-contador { top: 4px; right: 4px; min-width: 20px; height: 20px; font-size: .72rem; border-radius: 10px; }
+#tela-rastreio .link-galeria { margin: 4px 0 0; padding: 6px; font-size: .8rem; }
+#tela-rastreio .btn-notif { margin-top: 8px; min-height: 40px; font-size: .82rem; }
+#tela-rastreio .rodape-civil { margin-top: 12px; padding-top: 10px; }
+#tela-rastreio .rodape-civil .btn-saida { min-height: 40px; font-size: .8rem; }
+#tela-rastreio .rodape-civil .btn-app { min-height: 40px; font-size: .8rem; margin-bottom: 8px; }
+/* navegação até o destino: mesmo conteúdo, menos altura */
+#tela-rastreio .navegacao { padding: 10px; margin-bottom: 8px; border-width: 1.5px; }
+#tela-rastreio .nav-topo { margin-bottom: 4px; }
+#tela-rastreio .nav-topo strong { font-size: 1.05rem; }
+#tela-rastreio .nav-corpo { gap: 12px; }
+#tela-rastreio .nav-dist { font-size: 1.8rem; }
+#tela-rastreio .nav-dir { font-size: .82rem; }
+#tela-rastreio .nav-coord { font-size: .74rem; }
+#tela-rastreio .nav-modos { margin: 8px 0 4px; }
+#tela-rastreio .nav-modos .btn { min-height: 36px; font-size: .78rem; min-width: 0; }
+#tela-rastreio .nav-rota-info { padding: 6px 8px; margin-bottom: 6px; }
+#tela-rastreio .nav-rota-resumo { font-size: .85rem; }
+#tela-rastreio .nav-aviso { margin: 6px 0; font-size: .78rem; opacity: .9; }
+#tela-rastreio .nav-botoes .btn { min-height: 40px; font-size: .8rem; }
+#tela-rastreio .nav-botoes .btn-gigante { min-height: 48px; font-size: .95rem; }
+@media (max-width: 340px) {
+  #tela-rastreio .acoes-civil { grid-template-columns: repeat(3, 1fr); }
+  #tela-rastreio .acao { min-height: 58px; flex-direction: column; gap: 2px; font-size: .66rem; }
+}
+/* tela inicial: menos altura antes do COMEÇAR */
+#tela-inicio .op-destaque { padding: 12px 14px; margin-bottom: 12px; }
+#tela-inicio .op-destaque .val { font-size: 1.15rem; }
+#tela-inicio .consentimento { font-size: .85rem; }
+/* com destino ativo a navegação vem antes: o mapa encolhe para os botões continuarem à vista */
+#tela-rastreio:has(#navegacao:not([hidden])) #mapa-civil { height: 34vh; height: 34dvh; min-height: 200px; }

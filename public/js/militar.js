@@ -1528,6 +1528,7 @@
   }
 
   function fecharPainel() {
+    if (window.SciModo) window.SciModo.sair();   // trocar de operação ou voltar à lista sai do Modo SCI
     carregandoPainel(false);
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
@@ -10747,6 +10748,20 @@
     atualizarCentral: function () { if (est.op) agendarCentral(); },
     abrirRelato: function (id) { abrirRelato(id); },
     mensagens: function () { return Array.from(est.mensagens.values()); },
+    // Modo SCI (js/sci-modo.js): lê o que o painel já tem carregado e abre as telas do app pelo mesmo caminho
+    vitimasLocalizadas: function () { return Array.from(est.vitimasLoc.values()); },
+    fichas: function () { return Array.from(est.fichas.values()); },
+    alertasAtivos: function () { return Array.from(est.alertas.values()).filter(function (a) { return !a.reconhecido_em; }); },
+    estadoParticipante: function (p) { return estadoDe(p); },
+    membros: function (gid) { var m = est.membros.get(gid); return m ? Array.from(m.values()) : []; },
+    abrirRegistroVitima: function (pre) { abrirRegistroVitima(pre || {}); },
+    abrirFicha: function (id) { if (window.Cadastro && est.op) window.Cadastro.abrirFichaPorId(est.op, id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas }); },
+    cadastroRapido: function () { if (window.Cadastro && est.op) window.Cadastro.abrirRapido(est.op, { aoSalvar: function () { carregarFichas(); } }); },
+    abrirGrupos: function (gid) { if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
+    abrirMissoes: function () { abrirMissoes(); },
+    abrirEquipe: function () { abrirEquipe(); },
+    abrirConvite: function () { abrirConvite(); },
+    abrirDadosOperacao: function () { abrirDadosOperacao(); },
   };
 
   iniciar();

@@ -6,9 +6,10 @@ App de rastreamento GPS de equipes em buscas (Bombeiros). Sem build: HTML/JS/CSS
 - `public/` páginas (`militar.html` painel do responsável, `civil.html` página do participante, `index.html`), `js/` (lógica, sem bundler), `css/` (`estilos.css` base, `militar.css` painel).
 - `api/` endpoints serverless (`rota.js`, `meteo.js`, `poa-ia.js`, `convidar.js`, `responsaveis.js`, `config.js`, `limpeza.js`, `app.js`, `convidar-responsavel.js`, `arquivar.js`).
 - `android/` aplicativo Android do participante (Java, sem Kotlin): WebView da `civil.html` + serviço de GPS em primeiro plano (`FiltroGps` é porta do `gps.js`; ao mudar o `gps.js`, rodar `node android/ferramentas/gerar-casos-filtro.js`). Ponte com a página em `public/js/app-nativo.js` (`window.GBSApp`, só existe dentro do app). APK gerado por `.github/workflows/apk.yml`.
-- `supabase/schema.sql` instalação completa e idempotente; `supabase/migracoes/NNN_*.sql` migrações numeradas (a última é a 056).
+- `supabase/schema.sql` instalação completa e idempotente; `supabase/migracoes/NNN_*.sql` migrações numeradas (a última é a 057).
 - Operação arquivada (migração 055): dados num arquivo gzip no Storage, lidos por `public/js/arquivo-local.js`, que `comunicacao.js` consulta antes do servidor. Tabela nova com `operacao_id` entra no arquivo sozinha; se tiver gatilho de exclusão, ele precisa respeitar `gbs.arquivando_operacao`.
 - Mapa do painel: de longe (zoom ≤ 14) `public/js/mapa-resumo.js` agrupa pessoas e pontos juntos num selo só por região, escondendo por CSS os agrupamentos de sempre (`.mapa-resumo`). Marcador novo no mapa precisa entrar em `coletarParaResumo` (`militar.js`) para aparecer no resumo.
+- Modo SCI (migração 057, tabelas `sci2_*`, só acréscimos): seletor OPERAÇÃO | SCI no título do painel troca a interface; `public/js/sci-modo.js` (tela, usa `window.Painel`) e `public/js/sci-dados.js` (regras sem tela, catálogo de funções igual ao da 057). As tabelas `sci_*` do SCI antigo ficam no banco intactas (outras versões usam); não alterar nem apagar.
 - `testes/` testes unitários e `banco_migracoes.test.mjs` (banco real em PGlite).
 - `README.md` documenta funcionalidades e o roteiro de testes manuais.
 

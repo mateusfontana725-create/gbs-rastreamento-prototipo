@@ -391,56 +391,48 @@ Só objetivo, riscos, comunicações, observações e decisões são digitados a
 **Migrações 035, 036 e 037**: rode no Supabase em ordem (035 → 036 → 037). Cada módulo do painel avisa se a sua migração
 ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cada função estão nos próprios arquivos `.sql`.
 
-### Painel de comando SCI (migrações 045 e 046)
+### Modo SCI: Posto de Comando (migração 057)
 
-**SCI** no topo do painel abre o **painel de comando** do Sistema de Comando em Incidentes, atualizado em tempo real.
-**⋯ Mais → ↗ Outra janela** abre só o painel (`sci.html?op=…`): é o link do **comando remoto** (ex.: Comandante do Batalhão)
-acompanhar pelo celular — pede o login de responsável e se atualiza sozinho. Com a operação encerrada, fica só para consulta.
+A operação abre no **mapa operacional**, como sempre. O seletor **OPERAÇÃO | SCI** no canto do título do painel troca a
+interface inteira para o **Modo SCI** (Sistema de Comando de Incidentes); no Modo SCI o mesmo seletor fica no topo e volta ao
+mapa operacional. É a mesma operação: nada é cadastrado duas vezes.
 
-**Integrado ao que o app já tem (não pede de novo):**
+**Menu (sempre completo):**
 
-- **Vítimas**: as **fichas** do cadastro aparecem em **Procuradas**. O **"Vítima encontrada"** do app — no celular de campo, no
-  mapa ou pelo próprio SCI — põe a vítima em **Localizadas** sozinha (migração 046, gatilho no banco), ligada à ficha (nome, idade,
-  sexo), com a hora e o local; óbito já entra como cinza. Arrastar uma ficha de Procuradas para Localizadas abre o mesmo formulário
-  do app (ponto no mapa, quem encontrou, condição, estado) e, ao registrar, volta ao SCI. No mapa, o marcador da vítima mostra o número
-  e o quadro do SCI e tem **Abrir no SCI**. **+ Sem identificação** é para vítimas ainda sem ficha (ex.: várias ilhadas); depois dá para
-  ligar à ficha. **⚡ Nova ficha** abre o cadastro rápido.
-- **Comandante do Incidente** = quem está **no comando da operação** (Briefing → Passar o comando); só muda pela passagem de comando
-  (ou se o SCI disser outro nome). **Objetivo**, **riscos** e **comunicações** são os do **briefing** (uma fonte só).
-- **Equipes** = os **grupos** do app: membros e quantos com sinal, ★ responsável do grupo, disponibilidade, **deslocamento ativo**
-  (status e setor) e **recursos** (embarcação, viatura, drone, cão…). O SCI acrescenta a **missão** e o **órgão** de cada grupo e as
-  **equipes fora do app** (sem celular rastreado). Atalhos para abrir o grupo e os recursos.
-- **Instalações** apontam para **pontos do mapa** (a base cadastrada vira o PC com um toque); as coordenadas vêm do ponto.
-- **Alertas do comando** incluem os do app: **pedido de ajuda** (sem atendimento é crítico), **retorno atrasado**, **sem comunicação**,
-  **passagem de comando** aguardando aceite, **decisões pendentes** (prazo vencido), indicações do **cão** em análise e **focos térmicos**
-  a verificar — além dos do SCI (segurança primeiro, vítima vermelha, rio subindo, contagem, o que falta).
-- **Linha do tempo única**: os registros do SCI e todo o **diário** do app (deslocamentos, chegadas, setores, pessoas, alertas, vítimas
-  encontradas), com filtro por assunto. Os **marcos** que o app já sabe aparecem para **confirmar** (acionamento do cadastro, primeiro
-  militar no app, primeira vítima encontrada, encerramento). Tudo o que o SCI registra entra no diário e no relatório final.
-- **Mapa do comando** (Visão geral): local, instalações, vítimas encontradas na cor da triagem, setores e pontos de risco.
-- **Órgãos**: mostra também quantos estão **rastreados pelo app** (militares, civis, com sinal), ao lado do efetivo informado ao PC.
-- **Setores** de operação são os do mapa.
+- **Comando** — **Resumo** (boletim do CI, números de vítimas, pessoas e equipes, atualizações em tempo real, riscos e alertas,
+  progresso dos setores, próximos marcos) · **Painel do Comando** (período atual, alertas em ordem *segurança › vítimas › comando*,
+  balanço de pessoas que precisa fechar, setores com as equipes, equipes por status, linha do tempo) · **SCI · organograma**.
+- **Operações** — **Visão geral e períodos** (objetivos do período com estado, designações táticas equipe × setor × tarefa vindas dos
+  deslocamentos de grupos, informações recebidas) · **Mapa operacional e setores** (o mapa do painel dentro do Modo SCI, com
+  **← Voltar**; desenhar setores e trilhas continua no modo Operação) · **Vítimas e ACV** · **Área de Espera**.
+- **Planejamento** — **Recursos e fatores humanos** · **Formulários e relatórios** (SCI 201 montado dos registros, com
+  `[PENDENTE]` no que falta, para copiar; relatórios em PDF; linha do tempo).
+- **Logística** — **Logística e materiais** · **Administração e Finanças** — **Tempo, provedoria e custos**.
 
-**Abas**: **Visão geral** (números — vítimas, procuradas, localizadas, óbitos, equipes em missão, rastreados, órgãos —, alertas,
-comando e situação, mapa, últimos registros) · **Vítimas** (Procuradas → Localizadas → Removidas para a ACV → Transportadas, triagem
-verde/amarelo/vermelho/cinza só depois da ACV, total informado e NÃO CONFIRMADO) · **Comando** (funções SCI, instalações, setores,
-comunicações, organograma, acompanhamento remoto) · **Equipes e órgãos** · **Linha do tempo** · **Recursos** (recursos das equipes do
-app, outros recursos e pedidos, logística, nível do rio) · **Local e danos** (imagens de satélite, coordenadas, links de mapa e rota,
-aeronave, relatório de danos). As abas mostram quantos alertas cada uma tem.
+Cada seção mostra quem responde por ela ou **com o CI** quando ainda não foi ativada. Área de Espera, Recursos, Logística e
+Administração e Finanças nesta etapa mostram o que o app já tem (grupos, disponibilidade, recursos das equipes, bases do mapa,
+duração e efetivo), com atalhos; o detalhamento próprio vem na próxima etapa.
 
-**Registrar por frase ou voz** (🎤 no Chrome do celular): "despacho 7h15", "PC estabelecido", "V-03 na ACV, amarela", "V-01 e V-02
-transportadas ao hospital", "SAMU no local com 5 pessoas", "segurança: Sgt Dinardi", "total de vítimas 14", "rio estável segundo o drone".
-O painel mostra o que entendeu e as **divergências** antes de gravar; informação de terceiros entra como **NÃO CONFIRMADA**.
-**Entender com IA** (opcional, `api/sci-ia.js`, mesma chave do POA/POD) lê frases longas; as ações passam pela mesma validação e nomes de
-vítimas não vão para a IA. **O que falta?** lista as pendências em ordem de prioridade.
+**Estabelecer o SCI** — na primeira vez em que alguém com permissão abre o Modo SCI numa operação: (1) comando inicial — o CI é quem
+está **no comando da operação** (Briefing → passar/assumir o comando), modalidade único/unificado, instituições, Posto de Comando e
+Base (ponto do mapa ou descrição), canais; (2) informações iniciais, que nascem **NÃO CONFIRMADAS** com fonte e hora; (3) setores
+(os do mapa); (4) 1º período operacional com objetivos. **Pular por enquanto** deixa o que faltar como pendência no Resumo.
 
-**Copiar resumo** (WhatsApp, com fichas procuradas e quem está em campo), **Texto para a imprensa** (sem nomes de vítimas),
-**Imprimir / PDF** e **Modo teste** (testar o quadro antes da ocorrência; ao sair, zera vítimas, linha do tempo, marcos e total de teste,
-sem nada no diário).
+**Organograma que cresce** — só o CI e a Seção de Operações existem desde o início; o resto fica **com o CI** até ser ativado
+(função tracejada → ativar → designar nome e, se quiser, a conta de responsável). Desativar uma função tira junto as que dependem
+dela. Os grupos do app aparecem em Operações com o tipo (equipe de intervenção, força-tarefa, recurso único, setor, grupo). Quem tem
+função ligada à própria conta abre o Modo SCI na página dela e vê **★ Sua função** no menu. Cada mudança entra na linha do tempo.
 
-Banco: migração **045** (`sci_estado`, `sci_vitimas`, `sci_eventos`, `sci_itens`, funções `sci_*`, bucket privado `sci`) e **046**
-(vínculo com a vítima encontrada — o gatilho nunca impede o registro —, `sci_contexto` com o que o SCI lê do app, instalação ligada a
-ponto do mapa). Leitura só pelos responsáveis da operação; escrita só pelas funções; encerrada somente leitura.
+**Vítimas e ACV** — quadro em quatro colunas: **plotada (aguardando equipe) → em remoção → check-in na ACV → entregue**. As vítimas
+encontradas no app ("Vítima encontrada") que ainda não estão no quadro aparecem em **Conciliação mapa × quadro** para trazer com
+um toque. Em remoção a vítima fica **bloqueada para a equipe** (não se designa outra; **Liberar bloqueio** devolve para plotada);
+a entrega pede o destino; **+ Chegou na ACV sem plotagem** entra direto na ACV com o próximo número. As fichas ainda sem localização
+ficam em **Ainda procuradas**. Cada passo vai para o diário da operação.
+
+Encerrada ou arquivada: o Modo SCI abre **só para leitura**. Banco: migração **057** (`sci2_estado`, `sci2_informacoes`,
+`sci2_periodos`, `sci2_vitimas` e funções `sci2_*`) — **só acrescenta**: não altera nenhuma tabela, função ou gatilho existente
+(o SCI antigo, tabelas `sci_*`, fica intacto no banco para as outras versões). Leitura só pelos responsáveis da operação; escrita só
+pelas funções; entra no arquivamento (055) sozinha. Regras sem tela em `public/js/sci-dados.js`; tela em `public/js/sci-modo.js`.
 
 ### Verificação: relatos, binômio, drone e água (migrações 042 e 043)
 
@@ -1001,7 +993,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   tipografia **Barlow** (estilo DIN, de sinalização; Barlow no texto, Barlow Condensed nos títulos) e **IBM Plex Mono** nos
   números — arquivos locais em `public/vendor/fontes`, licença OFL, sem CDN de fontes —, cantos retos, sombras discretas,
   vermelho só para o crítico e âmbar para o que está selecionado/ligado. Em **Personalizar tela → Letra** dá para trocar
-  por **Técnica** (IBM Plex, a anterior) ou **Do aparelho** (a letra do sistema). Vale também no SCI e no dashboard em
+  por **Técnica** (IBM Plex, a anterior) ou **Do aparelho** (a letra do sistema). Vale também no Modo SCI e no dashboard em
   janela própria. A página do participante não muda.
 - A barra superior tem só **Mensagens** e **Ferramentas** (☰).
 - **Brasão** do Corpo de Bombeiros Militar do Paraná no cabeçalho do painel (login, operações e responsáveis), no lugar da antiga marca "GBS" (`public/img/brasao-cbmpr.png`). A página do participante não muda.
@@ -1398,7 +1390,7 @@ dado de participante sai do banco nesses painéis.
     cobertura, quem passou e **Ver setor no mapa**. Tocar numa pessoa mostra a pessoa no mapa e abre a ficha.
     **Pedidos de ajuda, pistas, vestígios, objetos, obstáculos e ordens mostram a lista deles ali mesmo** (não abrem a área
     de mensagens); no painel, tocar num relato abre o detalhe dele. Retornos atrasados abrem os alertas; o diário, o diário.
-    Uma vítima abre os dados dela (situação, hora, tempo, distância do ULV e situação no SCI).
+    Uma vítima abre os dados dela (situação, hora, tempo e distância do ULV).
 - **Operação → Dashboard da operação** (janela larga; no celular, uma coluna):
   - seis números: duração, efetivo (e quantos em campo agora), km percorridos, esforço em pessoa·hora,
     setores (com a % da área coberta) e vítimas localizadas (**"2 de 3"** quando há mais de uma);
@@ -1406,7 +1398,7 @@ dado de participante sai do banco nesses painéis.
     vítima** foi localizada marcada;
   - **vítimas** (migração 048): **várias por ocorrência**, cada uma com os próprios dados — V-01, V-02… (o nome aparece só
     no painel, com login), situação (procurando / com vida / em óbito, com a hora), distância do ULV, tempo após o início,
-    idade, perfil e a fase e a triagem no SCI. Cada ficha conta a localização ligada a ela; uma localização registrada sem
+    idade e perfil. Cada ficha conta a localização ligada a ela; uma localização registrada sem
     ficha vira uma vítima própria ("Vítima sem ficha"). Com uma só vítima, o cartão continua como antes;
   - **esforço por grupo** (pessoas, km e horas com GPS) e **cobertura dos setores** (% da área por onde passou
     alguma trilha, em quadrados de ~30 m, e a última passagem; os menos cobertos primeiro);
@@ -1529,7 +1521,6 @@ rastreamento-sar/
 ├── public/                     ← site publicado pelo Vercel
 │   ├── militar.html            painel do responsável
 │   ├── civil.html              página do participante
-│   ├── sci.html                painel de comando SCI em janela própria (comando remoto, segundo monitor, impressão)
 │   ├── sw.js                   service worker: notificações no Android, página e mapa guardados para abrir sem internet
 │   ├── versao.json             versão publicada (páginas abertas há muito tempo avisam que há versão nova)
 │   ├── css/estilos.css         estilos (alto contraste, botões grandes, responsivo)
@@ -1550,9 +1541,8 @@ rastreamento-sar/
 │       ├── ajuda-pedidos.js    pedidos de ajuda: estados, tempo sem atendimento, escalonamento e histórico
 │       ├── recursos-equipe.js  disponibilidade, capacidades e recursos das equipes
 │       ├── briefing.js         briefing da operação e passagem de comando com aceite
-│       ├── sci-core.js         regras do SCI sem tela: totais, alertas, resumo, imprensa, leitura das frases (também no servidor)
-│       ├── sci.js              painel de comando SCI (blocos, quadro de vítimas, linha do tempo, formulários, tempo real)
-│       ├── sci-janela.js       abre o SCI em sci.html (com login quando não há sessão)
+│       ├── sci-dados.js        regras do Modo SCI sem tela: organograma, período, balanço, equipes, vítimas, alertas, SCI 201
+│       ├── sci-modo.js         Modo SCI: seletor OPERAÇÃO | SCI, menu por seções, páginas, mapa embutido, Estabelecer o SCI
 │       ├── convites.js         convite por e-mail: cadastro, envio, situação e link
 │       ├── cores.js            cor livre (tom, intensidade, claridade, minhas cores) e conversões
 │       ├── relatos-revisao.js  revisão dos relatos (estado, justificativa, versões, hora do fato)
@@ -1568,7 +1558,6 @@ rastreamento-sar/
 │   ├── limpeza.js              limpeza diária dos dados vencidos (usa a chave SECRETA, só no servidor)
 │   ├── responsaveis.js         cria login e redefine senha de responsáveis (só administradores; chave SECRETA)
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
-│   ├── sci-ia.js               assistente opcional do Posto de Comando: frase → ações para conferir (mesma chave do POA/POD)
 │   ├── convidar.js             envio do convite de participante por e-mail (chave RESEND_API_KEY só no servidor)
 │   ├── convidar-responsavel.js convite de responsável: cria o login com senha provisória e inclui na operação (053)
 │   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
@@ -1802,7 +1791,7 @@ rastreamento-sar/
    | `EMAIL_REMETENTE` | (com a chave acima; também usado pelo convite de responsável) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
    | `SITE_URL` | (opcional) endereço público do site, ex.: `https://busca.seudominio.com.br`. Sem ela, o link do e-mail usa o endereço da requisição |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
-   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada por `/api/poa-ia` (botão "Sugerir com IA" do POA/POD) e por `/api/sci-ia` (botão "Entender com IA" do SCI). Sem ela, os botões avisam e o preenchimento manual (e a leitura de frases do próprio SCI) segue normal |
+   | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada por `/api/poa-ia` (botão "Sugerir com IA" do POA/POD). Sem ela, o botão avisa e o preenchimento manual segue normal |
    | `GEMINI_API_KEY` | (opcional) chave do Google Gemini (<https://aistudio.google.com> → Get API key), alternativa à da Anthropic para o botão "Sugerir com IA". Modelo padrão `gemini-3.8-flash` |
    | `POA_IA_PROVEDOR` | (opcional) `anthropic` ou `gemini`. Sem ela, usa o provedor que tiver chave (Anthropic primeiro) |
    | `POA_IA_MODELO` | (opcional) troca o modelo do provedor escolhido. Padrões: `claude-haiku-5-5` (Anthropic, o mais barato) e `gemini-3.8-flash` |
@@ -2167,12 +2156,11 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40l | **Novo grupo**: tocar em **＋**, escolher uma cor pelo tom/claridade, **Guardar em "Minhas cores"**, criar outro grupo e reutilizá-la; repetir no **Setor** | a cor escolhida aparece no marcador, na trilha e na lista; "Minhas cores" aparece nos dois formulários |
 | 40m | Aproximar o mapa de uma equipe de 3 pessoas a ~15 m uma da outra, do zoom 16 até o 20 | até o zoom 18 ficam num círculo com o número; a partir do 19 se separam; os ícones diminuem do 17 em diante e a vítima localizada continua grande |
 | 40n | **Convidar → ✉ Convidar por e-mail** com nome e e-mail reais; abrir o e-mail no celular e o link | o e-mail chega com o botão; a página abre com o nome preenchido; ao começar, o convite passa a **Entrou**; sem `RESEND_API_KEY`, aparecem **Abrir no meu e-mail** e **Copiar link** |
-| 40n2 | Com uma ficha de vítima cadastrada, abrir **SCI → Vítimas**; no celular de campo, **Encontrei a vítima** | a ficha aparece em Procuradas e passa sozinha para Localizadas (com o nome) em poucos segundos; o marcador no mapa tem **Abrir no SCI** |
-| 40n3 | Com um grupo em deslocamento e um pedido de ajuda aberto, abrir o SCI | Visão geral: equipe em missão, alerta crítico do pedido de ajuda; aba Equipes: grupo com ★, deslocamento e recursos; linha do tempo com o diário |
-| 40o | **SCI → Modo teste**, registrar 2 vítimas e "despacho 7h15", **Sair do modo teste (zerar)** | quadro vazio, total [PENDENTE], linha do tempo vazia; o diário não tem os registros de teste |
-| 40p | No SCI: "duas vítimas localizadas na água", arrastar V-01 para a ACV, tocar e triar amarela; "V-02 na ACV, vermelha"; "segurança: Sgt Dinardi" | quadrados nos quadros certos, cor só depois da ACV, alerta crítico da V-02 vermelha e o de segurança some ao designar |
-| 40q | Abrir **↗ Outra janela** no celular de outro responsável, sem estar logado | pede o login; depois mostra o painel e se atualiza sozinho quando o PC registra algo |
-| 40r | Falar no 🎤 "SAMU no local com 5 pessoas" e conferir | órgão SAMU no local com 5 pessoas e hora de chegada; faixa de órgãos atualizada; entra na linha do tempo e no diário |
+| 40n2 | No painel, tocar em **SCI** (canto do título) numa operação nova | abre **Estabelecer o SCI**; concluir os 4 passos leva ao Resumo com o comando, a informação NÃO CONFIRMADA e o 1º período; **Operação** volta ao mapa como estava |
+| 40n3 | No celular de campo, **Encontrei a vítima**; no Modo SCI → **Vítimas e ACV** | a vítima aparece em **Conciliação mapa × quadro**; **Trazer para o quadro** → V-01 plotada; iniciar remoção com uma equipe, check-in na ACV, entrega com destino; cada passo no diário |
+| 40o | Modo SCI → **SCI · organograma**: ativar Logística, designar a Seção de Planejamento com a conta de outro responsável | Logística sai de "com o CI" no menu; o outro responsável, ao abrir o Modo SCI, cai em Recursos e vê **★ Sua função** |
+| 40p | Modo SCI → **Mapa operacional e setores**, depois **← Voltar** e **Operação** | o mapa aparece dentro do Modo SCI com o menu; volta para a página anterior; no modo Operação o mapa está no lugar e do tamanho certo |
+| 40q | Abrir o Modo SCI numa operação encerrada, com outro responsável | tudo visível, sem botões de alterar; sem o assistente "Estabelecer o SCI" |
 | 40r2 | Abrir uma operação no celular do responsável; depois **Ferramentas → Registrar minha trilha** → **Iniciar registro**; andar 2 min; tocar de novo → **Interromper** | ao abrir, o responsável não aparece no mapa; só depois de confirmar ele aparece e a trilha é gravada; ao interromper, o envio para e o item volta a "desligado" |
 | 40r3 | No celular do civil, tocar **COMEÇAR** | aparece "Começar a enviar sua localização?"; **Agora não** não envia nada; **Começar** entra no rastreamento |
 | 40r4 | **Trilha → • Ponto a ponto**, tocar 4 pontos, arrastar o mapa, **Desfazer ponto**, **✔ Concluir** | os pontos aparecem ligados por retas; arrastar só move o mapa; a trilha é salva como planejada ("Trilha N · hora") sem abrir janelas |
@@ -2208,6 +2196,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 
 ### Testes já realizados no desenvolvimento
 
+- **Modo SCI novo (migração 057)**: banco — 1105 verificações (permissões, estabelecer idempotente, comando, organograma que cresce
+  com pai obrigatório e desativação em cascata, informações confirmadas/descartadas com motivo, períodos sem sobreposição de número,
+  vítimas plotada → remoção (equipe obrigatória e bloqueada) → ACV → entregue (destino obrigatório), encerrada só leitura,
+  arquivamento e exclusão; e que a 057 só cria objetos `sci2_`, não altera tabelas existentes e, rodada de novo, não muda nenhuma
+  função fora do `sci2_`); unitários — regras do Modo SCI (`sci-dados.js`, catálogo igual ao do banco); navegador (1280, 1024 e
+  390 px) — seletor no título sem mudar a linha de botões, Estabelecer o SCI, todas as páginas, mapa embutido e de volta, ações
+  gravando pelas funções certas e operação encerrada só leitura.
 - **Aplicativo Android (migração 051)**: banco — 972 verificações (código de uso único só do dono, resumo no banco, vencido e
   já usado recusados, participação passa para o aplicativo e o navegador perde o acesso, segredo do aparelho com resumo, envio
   e sinal sem sessão, reenvio sem duplicar, segredo errado ou revogado recusado, troca de aparelho, participante liberado);

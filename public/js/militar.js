@@ -384,7 +384,6 @@
     aplicarLadoAcoes();
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
-    $('menu-sci').addEventListener('click', function () { fecharMenu(false); abrirSci(); });
     $('menu-binomio').addEventListener('click', function () { fecharMenu(false); if (window.Binomio) window.Binomio.abrir(); });
     $('menu-drone-agua').addEventListener('click', function () { fecharMenu(false); if (window.ObservacoesCampo) window.ObservacoesCampo.abrir(); });
     $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
@@ -4685,22 +4684,9 @@
           window.Cadastro.abrirFichaPorId(op, f.id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas });
         } }) : null,
         m.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }) : null,
-        reg && window.SCI ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitloc-sci', texto: 'Abrir no SCI', onclick: function () {
-          fechar(); try { localStorage.setItem('gbs-sci-aba', 'vitimas'); } catch (e) { /* abre na última aba */ } abrirSci();
-        } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
     ])));
-    // no quadro do SCI: número, quadro (ACV, transportada) e triagem
-    if (reg && !est.semSci) {
-      C.consultar(C.cliente.from('sci_vitimas').select('numero,fase,triagem,destino').eq('localizacao_id', reg.id).maybeSingle()).then(function (sv) {
-        var alvo = document.querySelector('.visor-vitima-loc .vit-loc-selos');
-        if (!sv || !alvo) return;
-        var fases = { localizada: 'localizada, aguardando remoção', removida: 'na ACV', transportada: 'transportada' + (sv.destino ? ' — ' + sv.destino : '') };
-        var tri = { verde: 'verde', amarelo: 'amarela', vermelho: 'vermelha', cinza: 'cinza (óbito)' };
-        alvo.appendChild(UI.el('span', { classe: 'selo selo-neutro', texto: 'SCI: V-' + (sv.numero < 10 ? '0' : '') + sv.numero + ' · ' + fases[sv.fase] + (sv.triagem ? ' · triagem ' + tri[sv.triagem] : '') }));
-      }).catch(function (e) { if (ehTabelaAusente(e)) est.semSci = true; });
-    }
   }
 
   function abrirRelato(id) {
@@ -10054,7 +10040,7 @@
         if (noEncerramento) { pre.aoRegistrar(r, e.condicao, dados); return; }
         UI.aviso('Vítima encontrada registrada. Os responsáveis receberam o alerta.', 'ok', 7000);
         sincronizar();
-        if (pre.depois) { pre.depois(); return; }   // veio do SCI: volta para ele (a vítima já está no quadro)
+        if (pre.depois) { pre.depois(); return; }   // aberto de outra tela (ex.: Modo SCI): volta para ela
         if (args.p_lat != null && est.mapa) est.mapa.setView([args.p_lat, args.p_lng], Math.max(est.mapa.getZoom(), 16));
       } catch (e2) {
         btn.disabled = false;
@@ -10121,26 +10107,6 @@
     est.alertas.forEach(function (a) { if (a.tipo === 'vitima_localizada' && a.chave === 'vitima:' + reg.id) achado = a; });
     var p = achado && achado.participante_id ? est.participantes.get(achado.participante_id) : null;
     return p && p.id !== reg.participante_id ? p : null;
-  }
-
-  // Painel de comando SCI (js/sci.js) numa janela grande; "Outra janela" abre sci.html para o comando remoto
-  function abrirSci() {
-    if (!est.op || !window.SCI) return;
-    var caixa = UI.el('div', { classe: 'sci-no-painel' });
-    var ctl = null;
-    var fechar = UI.abrirModal(UI.el('div', null, [UI.el('h2', { id: 'modal-titulo', texto: 'Comando SCI' }), caixa]), { tamanho: 'cheio', aoFechar: function () { if (ctl) ctl.parar(); } });
-    ctl = window.SCI.montar(caixa, {
-      op: est.op, podeAlterar: podeAlterar,
-      setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },
-      irPara: function (lat, lng) { fechar(); if (est.mapa) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 16)); },
-      // o mesmo "Vítima encontrada" do app (ponto no mapa, quem encontrou, alerta, diário); ao terminar, volta ao SCI
-      registrarVitima: function (pre) { fechar(); abrirRegistroVitima(Object.assign({}, pre, { depois: abrirSci })); },
-      abrirFicha: function (id) { if (window.Cadastro) window.Cadastro.abrirFichaPorId(est.op, id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas }); },
-      cadastroRapido: function () { if (window.Cadastro) window.Cadastro.abrirRapido(est.op, { empilhar: true, aoSalvar: function () { carregarFichas(); } }); },
-      abrirBriefing: window.Briefing ? function () { fechar(); window.Briefing.abrir(); } : null,
-      abrirGrupos: function (gid) { fechar(); if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
-      abrirRecursos: window.RecursosEquipe ? function () { fechar(); window.RecursosEquipe.abrir(); } : null,
-    });
   }
 
   function abrirCadastroRapido() {

@@ -6,9 +6,10 @@ App de rastreamento GPS de equipes em buscas (Bombeiros). Sem build: HTML/JS/CSS
 - `public/` páginas (`militar.html` painel do responsável, `civil.html` página do participante, `sci.html` painel de comando SCI, `index.html`), `js/` (lógica, sem bundler), `css/` (`estilos.css` base, `militar.css` painel).
 - `api/` endpoints serverless (`rota.js`, `meteo.js`, `poa-ia.js`, `sci-ia.js`, `convidar.js`, `responsaveis.js`, `config.js`, `limpeza.js`, `app.js`, `convidar-responsavel.js`, `arquivar.js`).
 - `android/` aplicativo Android do participante (Java, sem Kotlin): WebView da `civil.html` + serviço de GPS em primeiro plano (`FiltroGps` é porta do `gps.js`; ao mudar o `gps.js`, rodar `node android/ferramentas/gerar-casos-filtro.js`). Ponte com a página em `public/js/app-nativo.js` (`window.GBSApp`, só existe dentro do app). APK gerado por `.github/workflows/apk.yml`.
-- `supabase/schema.sql` instalação completa e idempotente; `supabase/migracoes/NNN_*.sql` migrações numeradas (a última é a 056).
+- `supabase/schema.sql` instalação completa e idempotente; `supabase/migracoes/NNN_*.sql` migrações numeradas (a última é a 057).
 - Operação arquivada (migração 055): dados num arquivo gzip no Storage, lidos por `public/js/arquivo-local.js`, que `comunicacao.js` consulta antes do servidor. Tabela nova com `operacao_id` entra no arquivo sozinha; se tiver gatilho de exclusão, ele precisa respeitar `gbs.arquivando_operacao`.
 - Mapa do painel: de longe (zoom ≤ 14) `public/js/mapa-resumo.js` agrupa pessoas e pontos juntos num selo só por região, escondendo por CSS os agrupamentos de sempre (`.mapa-resumo`). Marcador novo no mapa precisa entrar em `coletarParaResumo` (`militar.js`) para aparecer no resumo.
+- Comando SCI (`public/js/sci.js`): organograma que cresce com a ocorrência (`public/js/sci-org.js`, migração 057, catálogo igual ao `sci_estrutura_funcao` do banco). Página nova do Comando entra em `SciOrg.PAGINAS`/`GRUPOS` e no mapa de páginas do `render` do `sci.js`.
 - `testes/` testes unitários e `banco_migracoes.test.mjs` (banco real em PGlite).
 - `README.md` documenta funcionalidades e o roteiro de testes manuais.
 

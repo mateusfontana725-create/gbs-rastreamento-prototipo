@@ -391,7 +391,7 @@ Só objetivo, riscos, comunicações, observações e decisões são digitados a
 **Migrações 035, 036 e 037**: rode no Supabase em ordem (035 → 036 → 037). Cada módulo do painel avisa se a sua migração
 ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cada função estão nos próprios arquivos `.sql`.
 
-### Painel de comando SCI (migrações 045 e 046)
+### Painel de comando SCI (migrações 045, 046 e 057)
 
 **SCI** no topo do painel abre o **painel de comando** do Sistema de Comando em Incidentes, atualizado em tempo real.
 **⋯ Mais → ↗ Outra janela** abre só o painel (`sci.html?op=…`): é o link do **comando remoto** (ex.: Comandante do Batalhão)
@@ -421,12 +421,45 @@ acompanhar pelo celular — pede o login de responsável e se atualiza sozinho. 
 - **Órgãos**: mostra também quantos estão **rastreados pelo app** (militares, civis, com sinal), ao lado do efetivo informado ao PC.
 - **Setores** de operação são os do mapa.
 
-**Abas**: **Visão geral** (números — vítimas, procuradas, localizadas, óbitos, equipes em missão, rastreados, órgãos —, alertas,
-comando e situação, mapa, últimos registros) · **Vítimas** (Procuradas → Localizadas → Removidas para a ACV → Transportadas, triagem
-verde/amarelo/vermelho/cinza só depois da ACV, total informado e NÃO CONFIRMADO) · **Comando** (funções SCI, instalações, setores,
-comunicações, organograma, acompanhamento remoto) · **Equipes e órgãos** · **Linha do tempo** · **Recursos** (recursos das equipes do
-app, outros recursos e pedidos, logística, nível do rio) · **Local e danos** (imagens de satélite, coordenadas, links de mapa e rota,
-aeronave, relatório de danos). As abas mostram quantos alertas cada uma tem.
+#### O Comando cresce com a ocorrência (migração 057)
+
+A mesma tela serve para a ocorrência pequena e para a grande. A operação começa só com o **Comandante do Incidente (CI)**, que
+responde também por **Operações**; cada função do SCI é **ativada quando precisa** e o que não está ativado **fica com o CI**.
+
+- **Organograma SCI** (menu → Comando): CI → **staff do comando** (Oficial de Segurança, de Ligação, de Informação Pública) → **seções**
+  (Operações, Planejamento, Logística, Administração e Finanças) → **unidades** (Área de Espera e ACV em Operações; Recursos, Situação,
+  Documentação, Desmobilização, Meio Ambiente e Especialistas em Planejamento; Setor de Serviços — Comunicações, Médica, Alimentação — e
+  Setor de Apoio — Suprimentos, Instalações, Suporte Terrestre — em Logística; Tempo, Provedoria e Custos em Adm./Finanças). Função
+  tracejada = não ativada: um toque ativa. **Designar** grava o posto e o nome e, se quiser, a **conta de um responsável da operação**.
+  Desativar uma seção leva as unidades dela (voltam ao CI). Unidade só aparece com a seção (ou o setor) ativa. Cada ativação,
+  designação e desativação vai para a linha do tempo do SCI (e para o diário) como decisão do Comando.
+- **Ponto de partida** (só na primeira vez): **Pequena** (só o CI), **Média** (CI, Segurança, Área de Espera, ACV, Planejamento com
+  recursos e situação, Logística com suprimentos) ou **Grande** (staff e as quatro seções com as unidades principais). É um atalho:
+  só ativa o que falta, nunca desativa, e depois tudo se ajusta função por função.
+- **Menu do Comando** por seção do SCI: **Comando** (Resumo, Organograma, Linha do tempo) · **Staff** (Segurança) · **Operações** (Mapa
+  operacional ↗ volta ao mapa do painel, Vítimas e ACV, Equipes e órgãos, Área de Espera, Local e danos) · **Planejamento** (Recursos,
+  Formulários e relatórios ↗) · **Logística** (Logística e materiais) · **Adm./Finanças** (Tempo, aquisições e custos). Cada grupo mostra
+  quem responde (o chefe da seção ou "com o CI"). As páginas de funções **não ativadas** ficam em **Com o CI**, sempre à mão:
+  operação pequena também tem material, área de espera e custos. No celular o menu vira uma faixa que rola de lado.
+- **Minha função**: quem tem a conta ligada a uma função vê **★ Sua função** no topo do menu e o Comando abre na página dela
+  (ex.: o Oficial de Segurança abre em Segurança). Não restringe: todos os responsáveis da operação continuam vendo tudo.
+- **Segurança**: Oficial, riscos (os do briefing), alertas críticos agora e os registros de segurança (+ Registro de segurança).
+- **Área de Espera**: encarregado e local (instalação no mapa), equipes prontas para designar (grupos do app disponíveis e sem
+  deslocamento, e equipes de fora do app em check-in), recursos no local, o que está a caminho; aviso de **reserva abaixo do mínimo**
+  (nenhuma equipe pronta para substituição ou intervenção rápida). **Designar** grava a missão no SCI.
+- **Logística e materiais**: PC, ACV, água, alimentação, combustível e energia; pedidos de recursos em aberto; **relação de materiais**
+  (total, em uso, disponível, onde está, situação; avisa o que está sem saldo); instalações, setores e comunicações.
+- **Tempo, aquisições e custos**: homem-hora calculado do app (cada pessoa da entrada até a saída liberada, a remoção ou o
+  encerramento; militares, civis e responsáveis), horas das viaturas e equipamentos desde a chegada, **aquisições e contratos
+  emergenciais** (item, fornecedor, valor, situação) com o total, e **Exportar planilha (CSV)**.
+- As funções antigas (resumo, imprensa, relatórios, IA do SCI, "segurança: Sgt Dinardi") continuam funcionando: `sci_estado.funcoes`
+  acompanha o organograma e o organograma acompanha `funcoes` (gatilho no banco).
+
+**Páginas antigas** continuam: **Resumo** (números — vítimas, procuradas, localizadas, óbitos, equipes em missão, rastreados, órgãos —,
+alertas, comando e situação, mapa, últimos registros) · **Vítimas e ACV** (Procuradas → Localizadas → Removidas para a ACV → Transportadas,
+triagem verde/amarelo/vermelho/cinza só depois da ACV, total informado e NÃO CONFIRMADO) · **Equipes e órgãos** · **Linha do tempo** ·
+**Recursos** (recursos das equipes do app, outros recursos e pedidos, nível do rio) · **Local e danos** (imagens de satélite,
+coordenadas, links de mapa e rota, aeronave, relatório de danos). O menu mostra quantos alertas cada página tem.
 
 **Registrar por frase ou voz** (🎤 no Chrome do celular): "despacho 7h15", "PC estabelecido", "V-03 na ACV, amarela", "V-01 e V-02
 transportadas ao hospital", "SAMU no local com 5 pessoas", "segurança: Sgt Dinardi", "total de vítimas 14", "rio estável segundo o drone".
@@ -2204,6 +2237,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 42g | No aplicativo registrando, **fechar o aplicativo** (tirar da lista de recentes) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
 | 42h | Com o aplicativo registrando, puxar a barra de notificações e a tela bloqueada | o aviso fixo verde "Busca …" mostra "Enviando sua localização aos bombeiros", o tempo de busca correndo e os pontos enviados; no Android 14, arrastar o aviso para fora: ele volta |
 | 42i | No Chrome do Android, tocar em **Baixar aplicativo**, esperar alguns minutos com o download pausado e continuar | o arquivo baixa de `/api/app?baixar=1` como `gbs-busca.apk` e instala (sem erro de link expirado) |
+| 43a | Operação nova → **SCI** → menu **Organograma SCI** → **Pequena** | só o CI e Operações ("com o CI"); o menu mostra Comando, Operações e Planejamento; Segurança, Área de Espera, Logística e Adm./Finanças ficam em **Com o CI**, e abrir uma delas avisa que está com o CI |
+| 43b | No organograma, tocar **+ Oficial de Segurança**, depois **Designar**, escolher a conta de outro responsável e salvar; esse responsável abre o SCI | a função aparece com o nome e ★ a conta; o menu dele mostra **★ Sua função** e o Comando abre em **Segurança**; a linha do tempo mostra "Ativada: Oficial de Segurança" e a designação |
+| 43c | **+ Ativar Logística** → **+ Setor de Apoio** → **+ Unidade de Suprimentos**; depois **×** na Logística | o menu ganha o grupo Logística com o chefe; ao desativar, pergunta e leva o Setor de Apoio e a Unidade de Suprimentos (voltam ao CI) |
+| 43d | **Logística e materiais → + Material** "Coletes", total 5, em uso 7; corrigir para 3 | recusa (em uso maior que o total); salvo, a tabela mostra 2 disponíveis |
+| 43e | Ativar **Área de Espera**; deixar um grupo do app "Disponível" sem deslocamento; tocar **Designar** | a equipe aparece em "Equipes prontas para designar"; designada, sai da lista; sem nenhuma pronta aparece o aviso de reserva abaixo do mínimo |
+| 43f | **Tempo, aquisições e custos** com participantes há algumas horas; **+ Nova aquisição** com valor; **Exportar planilha (CSV)** | homem-hora por militares, civis e responsáveis; total das aquisições sem as canceladas; o CSV abre no Excel com acentos |
+| 43g | No celular, abrir o SCI e tocar em várias páginas | o menu é uma faixa que rola de lado e deixa a página atual à vista; o organograma vira uma coluna |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

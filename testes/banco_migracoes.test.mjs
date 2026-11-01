@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–056) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–057) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_estrutura']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2535,5 +2535,76 @@ console.log('Mensagens no aplicativo com a tela apagada (migração 056)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: op56.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–056 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('SCI que cresce com a ocorrência: organograma, materiais e aquisições (migração 057)');
+{
+  const J = (o) => JSON.stringify(o);
+  const op57 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 057', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const salvar = (uid, d) => rpc(uid, 'sci_salvar_estrutura', { p_operacao: op57.id, p_dados: J(d) });
+  const eventos = async () => (await db.query(`select texto from public.sci_eventos where operacao_id = $1 order by registrado_em, texto`, [op57.id])).rows.map((r) => r.texto);
+  const est = async () => (await db.query('select estrutura, funcoes from public.sci_estado where operacao_id = $1', [op57.id])).rows[0];
+
+  chk(/sem_permissao/.test(await erroDe(salvar(resp2, { ponto: 'pequena' }))), 'responsável de fora da operação não mexe na estrutura');
+  let r = await salvar(resp1, { ponto: 'pequena' });
+  chk(r.estrutura.inicio && J(r.estrutura.ativas) === '{}' && r.estrutura.ponto === 'pequena', 'ponto de partida "pequena": só o CI (com Operações); estrutura marcada como configurada', r.estrutura);
+  chk(r.funcoes.operacoes.acumula_ci === true && r.funcoes.seguranca.acumula_ci === true && r.funcoes.logistica.acumula_ci === true, 'funcoes acompanha: o que não está ativado fica acumulado pelo CI', r.funcoes);
+
+  chk(/funcao_sci_sem_pai/.test(await erroDe(salvar(resp1, { mudancas: [{ id: 'log.sup', ativa: true }] }))), 'unidade sem a seção (e o setor) ativos: recusada');
+  chk(/funcao_sci_invalida/.test(await erroDe(salvar(resp1, { mudancas: [{ id: 'chefe.geral', ativa: true }] }))), 'função fora do catálogo: recusada');
+  chk(/dados_invalidos/.test(await erroDe(salvar(resp1, { mudancas: [{ id: 'ops', ativa: false }] }))), 'Operações não desativa');
+  chk(/dados_invalidos/.test(await erroDe(salvar(resp1, { ponto: 'gigante' }))), 'ponto de partida desconhecido: recusado');
+  chk(/funcao_sci_invalida/.test(await erroDe(salvar(resp1, { mudancas: [{ id: 'adm', nome: 'Ten X' }] }))), 'designar em função não ativada: recusado');
+
+  r = await salvar(resp1, { mudancas: [{ id: 'seg', ativa: true, nome: '  Sgt   Lima ' }, { id: 'log', ativa: true }, { id: 'log.apoio', ativa: true }, { id: 'log.sup', ativa: true, nome: 'Cb Dias' }, { id: 'ops.espera', ativa: true }] });
+  chk(['seg', 'log', 'log.apoio', 'log.sup', 'ops.espera'].every((k) => r.estrutura.ativas[k] && r.estrutura.ativas[k].desde), 'ativa staff, seção, setor e unidade em ordem (cada uma com o horário)', r.estrutura.ativas);
+  chk(r.estrutura.ativas.seg.nome === 'Sgt Lima' && r.funcoes.seguranca.nome === 'Sgt Lima' && r.funcoes.seguranca.acumula_ci === false, 'nome limpo e funcoes.seguranca passa a ter o oficial');
+  chk(r.funcoes.logistica.acumula_ci === false && r.funcoes.logistica.nome === '', 'Logística ativada sem chefe: não é mais do CI ([PENDENTE])');
+  let ev = await eventos();
+  chk(ev.includes('Ativada: Oficial de Segurança') && ev.includes('Oficial — Oficial de Segurança: designado Sgt Lima') && ev.includes('Ativada: Unidade de Suprimentos'), 'cada ativação e designação vai para a linha do tempo do SCI', ev);
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and detalhe like 'Ativada: %'`, [op57.id])).rows[0].n >= 5, 'e para o diário da operação');
+
+  const dono = (await db.query('select responsavel_id from public.operacoes where id = $1', [op57.id])).rows[0].responsavel_id;
+  chk(/responsavel_fora_da_operacao/.test(await erroDe(salvar(resp1, { mudancas: [{ id: 'seg', user_id: resp2 }] }))), 'ligar a função a conta de quem não é responsável da operação: recusado');
+  chk(/dados_invalidos/.test(await erroDe(salvar(resp1, { mudancas: [{ id: 'seg', user_id: 'nao-e-uuid' }] }))), 'conta malformada: recusada');
+  r = await salvar(resp1, { mudancas: [{ id: 'seg', user_id: dono }] });
+  chk(r.estrutura.ativas.seg.user_id === dono, 'função ligada à conta de um responsável da operação ("minha função")');
+  r = await salvar(resp1, { mudancas: [{ id: 'seg', user_id: null }] });
+  chk(!('user_id' in r.estrutura.ativas.seg) && r.estrutura.ativas.seg.nome === 'Sgt Lima', 'desligar a conta mantém o nome');
+
+  r = await salvar(resp1, { mudancas: [{ id: 'log', ativa: false }] });
+  chk(!r.estrutura.ativas.log && !r.estrutura.ativas['log.apoio'] && !r.estrutura.ativas['log.sup'] && r.estrutura.ativas.seg, 'desativar a Logística leva o Setor de Apoio e a Unidade de Suprimentos; o resto fica');
+  chk(r.funcoes.logistica.acumula_ci === true, 'Logística volta ao CI em funcoes');
+  ev = await eventos();
+  chk(ev.includes('Desativada: Logística (e suas unidades) — volta ao CI'), 'desativação registrada, com as unidades', ev);
+
+  r = await salvar(resp1, { mudancas: [{ id: 'ops', nome: 'Ten Prado' }] });
+  chk(r.estrutura.ativas.ops.nome === 'Ten Prado' && r.funcoes.operacoes.nome === 'Ten Prado' && r.funcoes.operacoes.acumula_ci === false, 'Chefe de Operações designado (Operações deixa de estar com o CI)');
+
+  r = await salvar(resp1, { ponto: 'media' });
+  chk(['plan', 'plan.rec', 'log', 'log.sup', 'ops.acv'].every((k) => r.estrutura.ativas[k]) && r.estrutura.ativas.seg.nome === 'Sgt Lima', 'ponto "média" depois: só ativa o que falta, sem perder nomes');
+  chk((await eventos()).some((t) => /^Estrutura do SCI: ponto de partida Média — ativadas: /.test(t)), 'ponto de partida registrado com o que foi ativado');
+
+  // o jeito antigo (Funções SCI / IA do SCI) mexe em funcoes: a estrutura acompanha
+  await rpc(resp1, 'sci_salvar_estado', { p_operacao: op57.id, p_dados: J({ funcoes: { informacao_publica: { nome: 'Cap Sá' }, planejamento: { acumula_ci: true } } }) });
+  let s = await est();
+  chk(s.estrutura.ativas.inf && s.estrutura.ativas.inf.nome === 'Cap Sá', 'funcoes pela forma antiga: Informação Pública aparece ativa no organograma', s.estrutura.ativas);
+  chk(!s.estrutura.ativas.plan && !s.estrutura.ativas['plan.rec'] && !s.estrutura.ativas['plan.sit'], 'Planejamento "acumulado pelo CI" pela forma antiga: sai do organograma com as unidades');
+
+  // materiais (Logística) e aquisições (Adm. e Finanças)
+  const item = (tipo, d, id) => rpc(resp1, 'sci_salvar_item', { p_operacao: op57.id, p_id: id || null, p_tipo: tipo, p_dados: J(d) });
+  const mat = await item('material', { nome: 'Pontaletes 4x4', categoria: 'Escoramento', total: 40, em_uso: 25, local: 'BoO', situacao: 'atencao', lixo: 'x' });
+  chk(mat.tipo === 'material' && mat.dados.total === 40 && mat.dados.em_uso === 25 && mat.dados.situacao === 'atencao' && !('lixo' in mat.dados), 'material: total, em uso, onde está e situação (campo desconhecido fica de fora)', mat.dados);
+  chk(/material_em_uso_maior/.test(await erroDe(item('material', { nome: 'Cordas', total: 5, em_uso: 6 }))), 'em uso maior que o total: recusado');
+  chk(/dados_invalidos/.test(await erroDe(item('material', { nome: 'Cordas', situacao: 'sobrando' }))), 'situação fora da lista: recusada');
+  const aq = await item('aquisicao', { item: 'Madeira para escoramento', fornecedor: 'Madeireira X', valor: 1234.567, status: 'em_cotacao' });
+  chk(aq.dados.valor === 1234.57 && aq.dados.status === 'em_cotacao', 'aquisição com valor em reais (2 casas)', aq.dados);
+  chk(/dados_invalidos/.test(await erroDe(item('aquisicao', { item: 'X', valor: -5 }))), 'valor negativo: recusado');
+  chk(/dados_invalidos/.test(await erroDe(item('aquisicao', { fornecedor: 'Sem item' }))), 'aquisição sem item: recusada');
+  chk((await item('aquisicao', { item: 'Madeira para escoramento', status: 'confirmado', valor: 1300 }, aq.id)).dados.status === 'confirmado', 'aquisição atualizada');
+
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op57.id });
+  chk(/operacao_encerrada/.test(await erroDe(salvar(resp1, { mudancas: [{ id: 'adm', ativa: true }] }))), 'operação encerrada: estrutura só para consulta');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: op57.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–057 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

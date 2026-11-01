@@ -10140,6 +10140,9 @@
       abrirBriefing: window.Briefing ? function () { fechar(); window.Briefing.abrir(); } : null,
       abrirGrupos: function (gid) { fechar(); if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
       abrirRecursos: window.RecursosEquipe ? function () { fechar(); window.RecursosEquipe.abrir(); } : null,
+      // menu do Comando: "Mapa operacional" volta ao mapa do painel; "Formulários e relatórios" abre os relatórios por cima
+      irMapa: function () { fechar(); },
+      abrirRelatorios: window.Relatorio ? function () { window.Relatorio.abrirRelatoriosOperacao(est.op); } : null,
     });
   }
 

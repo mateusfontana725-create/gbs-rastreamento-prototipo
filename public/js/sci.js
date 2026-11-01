@@ -6,31 +6,22 @@
  *   alertas, as decisões pendentes e o diário (linha do tempo única). Acrescenta o que é próprio do comando:
  *   quadro de vítimas com triagem (ACV → transporte), funções SCI, instalações, órgãos, recursos e pedidos,
  *   marcos, informações NÃO CONFIRMADAS, relatório de danos, nível do rio.
- *   O Comando cresce com a ocorrência (migração 057, regras em sci-org.js): menu por seções do SCI (Comando, Staff,
- *   Operações, Planejamento, Logística, Adm./Finanças) que acompanha o organograma. O que não está ativado fica com o CI,
- *   em "Com o CI" no menu, sempre à mão. Páginas: Resumo · Organograma · Linha do tempo · Segurança · Vítimas e ACV ·
- *   Equipes e órgãos · Área de Espera · Local e danos · Recursos · Logística e materiais · Tempo, aquisições e custos.
+ *   Abas: Visão geral · Vítimas · Comando · Equipes e órgãos · Linha do tempo · Recursos · Local e danos.
  *   SCI.montar(elemento, ctx) — ctx: { op, podeAlterar(), janela?, irPara(lat, lng)?, registrarVitima(pre)?, abrirFicha(id)?,
- *   abrirBriefing()?, abrirGrupos()?, abrirRecursos()?, irMapa()?, abrirRelatorios()? } (as funções existem no painel; na janela
- *   própria, o SCI se vira sozinho e o menu não mostra o que depende do painel).
+ *   abrirBriefing()?, abrirGrupos()?, abrirRecursos()? } (as funções existem no painel; na janela própria, o SCI se vira sozinho).
  * ===================================================================== */
 (function () {
   'use strict';
-  var C = window.Comunicacao, UI = window.UI, S = window.SciCore, O = window.SciOrg;
-  if (!C || !UI || !S || !O) return;
+  var C = window.Comunicacao, UI = window.UI, S = window.SciCore;
+  if (!C || !UI || !S) return;
   var el = UI.el;
   var P = S.PENDENTE;
   var BUCKET = 'sci';
   var CORES_TRIAGEM = { verde: '#22c55e', amarelo: '#facc15', vermelho: '#ef4444', cinza: '#6b7280' };
   var CORES_EQUIPE = { em_operacao: '#f97316', designada: '#60a5fa', em_deslocamento: '#facc15', disponivel: '#22c55e', desmobilizada: '#6b7280' };
-  // páginas do Comando (sci-org.js); as de "ação" (mapa, relatórios) abrem fora do Comando
-  var PAGINAS_COMANDO = Object.keys(O.PAGINAS).filter(function (p) { return !O.PAGINAS[p].acao; });
+  var ABAS = [['geral', 'Visão geral'], ['vitimas', 'Vítimas'], ['comando', 'Comando'], ['equipes', 'Equipes e órgãos'], ['linha', 'Linha do tempo'],
+    ['recursos', 'Recursos'], ['local', 'Local e danos']];
   var CHAVE_ABA = 'gbs-sci-aba';
-  // alertas do sci-core apontam para blocos antigos: cada um abre a página onde se resolve
-  var PAGINA_DO_BLOCO = { comando: 'org' };
-  function paginaDoBloco(b) { var p = PAGINA_DO_BLOCO[b] || b; return PAGINAS_COMANDO.indexOf(p) !== -1 ? p : 'geral'; }
-  var SITUACAO_MATERIAL = { ok: 'OK', atencao: 'Atenção', em_falta: 'Em falta' };
-  var STATUS_AQUISICAO = { em_cotacao: 'Em cotação', confirmado: 'Confirmado', cedido: 'Cedido (sem custo)', entregue: 'Entregue', cancelado: 'Cancelado' };
   var TABELAS_APP = ['vitimas', 'vitima_localizacoes', 'grupos', 'grupo_membros', 'grupo_recursos', 'missoes', 'alertas', 'pedidos_ajuda', 'diario',
     'briefing_operacao', 'decisoes_pendentes', 'passagens_comando', 'setores', 'pontos_interesse', 'binomio_eventos', 'observacoes_campo'];
   var ROT_DIARIO = { operacao: 'Operação', setor: 'Setor', deslocamento: 'Deslocamento', chegada: 'Chegada', encontro: 'Encontro', alerta: 'Alerta',
@@ -45,14 +36,12 @@
   function hc(v) { return v ? S.horaCurta(v) : P; }
   function pend(v, extra) { return S.vazio(v) ? el('span', { classe: 'sci-pend', texto: P }) : el('span', { texto: String(v) + (extra || '') }); }
   function botao(texto, fn, classe, attrs) { return el('button', Object.assign({ classe: 'btn btn-pequeno ' + (classe || ''), type: 'button', texto: texto, onclick: fn }, attrs || {})); }
-  function lerAba() { try { var a = localStorage.getItem(CHAVE_ABA); a = paginaDoBloco(a || 'geral'); return a; } catch (e) { return 'geral'; } }
-  function reais(v) { return v == null ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function horas(ms) { return (Math.max(0, ms) / 3600000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' h'; }
+  function lerAba() { try { var a = localStorage.getItem(CHAVE_ABA); return ABAS.some(function (x) { return x[0] === a; }) ? a : 'geral'; } catch (e) { return 'geral'; } }
 
   function montar(raiz, ctx) {
     var est = { estado: { funcoes: {}, marcos: {}, logistica: {} }, vitimas: [], eventos: [], itens: [], cx: null, cxAusente: false, carregou: false, ausente: false, erro: null,
       canal: null, timer: null, relogio: null, arrastando: false, pendenteRender: false, filtro: '', urls: {}, ativo: true, aba: lerAba(),
-      mapa: null, mapaNo: null, mapaCamada: null, mapaEnquadrado: false, usuario: null, participantes: null, responsaveis: null, abriuMinha: false };
+      mapa: null, mapaNo: null, mapaCamada: null, mapaEnquadrado: false };
     var opId = ctx.op.id;
     function op() { return ctx.op; }
     function pode() { return Boolean(ctx.podeAlterar && ctx.podeAlterar()) && op().status === 'ativa'; }
@@ -65,13 +54,6 @@
       return e;
     }
     function dados() { return { op: op(), estado: estadoComCi(), vitimas: est.vitimas, eventos: est.eventos, itens: est.itens, ctx: cx() }; }
-    function estrutura() { return O.normalizar(est.estado.estrutura); }
-    // quem está usando: a função ligada à conta dele ("minha função") abre primeiro
-    C.cliente.auth.getSession().then(function (r) {
-      var s = r && r.data && r.data.session;
-      est.usuario = s && s.user ? s.user.id : null;
-      if (est.carregou) render();
-    }).catch(function () { /* sem a minha função */ });
     function itens(tipo) { return S.porTipo(est.itens, tipo).sort(function (a, b) { return (a.ordem || 0) - (b.ordem || 0); }); }
     function ficha(id) { return (cx().fichas || []).filter(function (f) { return f.id === id; })[0] || null; }
     function localizacao(id) { return (cx().localizacoes || []).filter(function (l) { return l.id === id; })[0] || null; }
@@ -168,36 +150,17 @@
       raiz.appendChild(cabecalho());
       if (est.cxAusente) raiz.appendChild(el('p', { classe: 'nota', texto: 'Para o SCI usar as fichas, equipes, comando e diário do app, rode a migração 046_sci_integrado.sql no Supabase.' }));
       if (pode()) raiz.appendChild(registroRapido(textoRapido));
-      // primeira vez nesta tela com uma função designada para esta conta: abre na página dela
-      if (!est.abriuMinha && est.usuario) {
-        est.abriuMinha = true;
-        var minhas = O.minhasFuncoes(estrutura(), est.usuario);
-        if (minhas.length && !lerAbaSalva()) est.aba = minhas[0].pagina;
-      }
-      if (PAGINAS_COMANDO.indexOf(est.aba) === -1) est.aba = 'geral';
-      var corpo = { geral: abaGeral, org: function () { return [secaoOrganograma(), secaoAtivacoes(), O.ativa(estrutura(), 'log') ? null : secaoInstalacoes()]; },
-        linha: function () { return [secaoLinha()]; }, seguranca: function () { return [secaoSeguranca()]; },
-        vitimas: function () { return [secaoVitimas()]; }, equipes: function () { return [secaoEquipes(), secaoOrgaos()]; }, espera: function () { return [secaoEspera()]; },
-        local: function () { return [secaoLocal(), secaoDanos()]; }, recursos: function () { return [secaoRecursos(), secaoRio()]; },
-        logistica: function () { return [secaoLogistica(), secaoMateriais(), secaoInstalacoes()]; }, admfin: function () { return [secaoTempo(), secaoAquisicoes()]; } }[est.aba] || abaGeral;
-      var pagina = el('div', { classe: 'sci-pagina', 'data-pagina': est.aba }, [avisoComCi()]);
-      corpo().forEach(function (n) { if (n) pagina.appendChild(n); });
-      var menu = menuComando();
-      raiz.appendChild(el('div', { classe: 'sci-layout' }, [menu, pagina]));
-      // celular: o menu é uma faixa que rola de lado; deixa a página atual à vista (sem mexer na rolagem da tela)
-      var atual = menu.querySelector('.sci-menu-item.ativa');
-      if (atual && menu.scrollWidth > menu.clientWidth) menu.scrollLeft = Math.max(0, atual.offsetLeft - menu.offsetLeft - 48);
+      var corpo = { geral: abaGeral, vitimas: function () { return [secaoVitimas()]; }, comando: function () { return [secaoComando(), secaoEstrutura()]; },
+        equipes: function () { return [secaoEquipes(), secaoOrgaos()]; }, linha: function () { return [secaoLinha()]; },
+        recursos: function () { return [secaoRecursos(), secaoRio()]; }, local: function () { return [secaoLocal(), secaoDanos()]; } }[est.aba] || abaGeral;
+      corpo().forEach(function (n) { if (n) raiz.appendChild(n); });
       if (est.aba === 'geral') atualizarMapa();
       abertos.forEach(function (k) { var d = raiz.querySelector('details[data-chave="' + k + '"]'); if (d) d.open = true; });
       if (rol) rol.scrollTop = rolagem;
       if (foco) { var f = document.getElementById(foco); if (f && f.focus) f.focus(); }
     }
-    function lerAbaSalva() { try { return localStorage.getItem(CHAVE_ABA); } catch (e) { return null; } }
     function irAba(a, alvo) {
-      if (a === 'mapa') { if (ctx.irMapa) ctx.irMapa(); return; }
-      if (a === 'relatorios') { if (ctx.abrirRelatorios) ctx.abrirRelatorios(); return; }
-      est.aba = paginaDoBloco(a);
-      a = est.aba;
+      est.aba = a;
       try { localStorage.setItem(CHAVE_ABA, a); } catch (e) { /* só nesta tela */ }
       render();
       var x = alvo && raiz.querySelector('#sci-' + alvo);
@@ -243,51 +206,17 @@
         ]),
         el('div', { classe: 'acoes-linha sci-topo-acoes' }, [acoes[0], el('details', { classe: 'sci-mais', 'data-chave': 'mais' }, [el('summary', { classe: 'btn btn-pequeno', texto: '⋯ Mais' }),
           el('div', { classe: 'sci-mais-lista' }, acoes.slice(1).filter(Boolean))])]),
+        el('nav', { classe: 'sci-abas', role: 'tablist', 'aria-label': 'Abas do painel de comando' }, ABAS.map(function (a) {
+          var n = contadorAba(a[0]);
+          return el('button', { classe: 'sci-aba' + (est.aba === a[0] ? ' ativa' : ''), type: 'button', role: 'tab', 'aria-selected': String(est.aba === a[0]), 'data-aba': a[0],
+            onclick: function () { irAba(a[0]); } }, [a[1], n ? el('span', { classe: 'sci-aba-n' + (n.critico ? ' critico' : ''), texto: String(n.n) }) : null]);
+        })),
       ]);
-    }
-
-    /* ---------- Menu do Comando: acompanha o organograma (sci-org.js) ---------- */
-    function itemMenu(it) {
-      var n = it.acao ? null : contadorAba(it.pagina);
-      return el('button', { type: 'button', classe: 'sci-menu-item' + (est.aba === it.pagina ? ' ativa' : '') + (it.acao ? ' sci-menu-acao' : ''), 'data-pagina': it.pagina,
-        'aria-current': est.aba === it.pagina ? 'page' : null, onclick: function () { irAba(it.pagina); } },
-        [el('span', { texto: it.rotulo + (it.acao ? ' ↗' : '') }), n ? el('span', { classe: 'sci-aba-n' + (n.critico ? ' critico' : ''), texto: String(n.n) }) : null]);
-    }
-    function semAcaoIndisponivel(it) { return !(it.pagina === 'relatorios' && !ctx.abrirRelatorios); }
-    function menuComando() {
-      var m = O.menu(estrutura(), { usuario: est.usuario, semMapa: !ctx.irMapa });
-      var filhos = [];
-      if (m.minhas.length) {
-        filhos.push(el('div', { classe: 'sci-menu-grupo sci-menu-minha' }, [el('div', { classe: 'sci-menu-titulo', texto: '★ Sua função' })].concat(m.minhas.map(function (f) {
-          return el('button', { type: 'button', classe: 'sci-menu-item' + (est.aba === f.pagina ? ' ativa' : ''), onclick: function () { irAba(f.pagina); } }, [el('span', { texto: f.nome })]);
-        }))));
-      }
-      m.grupos.forEach(function (g) {
-        var r = g.responsavel;
-        filhos.push(el('div', { classe: 'sci-menu-grupo', 'data-grupo': g.id }, [
-          el('div', { classe: 'sci-menu-titulo' }, [g.titulo, r ? el('small', { classe: r.comCi ? 'sci-menu-ci' : r.texto === P ? 'sci-pend' : '', texto: r.texto }) : null]),
-        ].concat(g.itens.filter(semAcaoIndisponivel).map(itemMenu))));
-      });
-      if (m.comCi.length) {
-        filhos.push(el('details', { classe: 'sci-menu-grupo sci-menu-outras', 'data-chave': 'menu-com-ci', open: m.comCi.some(function (i) { return i.pagina === est.aba; }) ? true : null }, [
-          el('summary', { classe: 'sci-menu-titulo' }, ['Com o CI', el('small', { texto: m.comCi.length + ' não ativada' + (m.comCi.length > 1 ? 's' : '') })]),
-        ].concat(m.comCi.map(itemMenu))));
-      }
-      return el('nav', { classe: 'sci-menu', 'aria-label': 'Seções do Comando' }, filhos);
-    }
-    // página de uma função que não está ativada: lembra que está com o CI e oferece ativar
-    function avisoComCi() {
-      var pg = O.PAGINAS[est.aba];
-      if (!pg || !pg.funcao || O.ativa(estrutura(), pg.funcao)) return null;
-      var f = O.funcao(pg.funcao);
-      return el('p', { classe: 'nota sci-com-ci' }, [el('strong', { texto: f.nome + ' está com o Comandante do Incidente. ' }),
-        'Dá para usar esta página assim mesmo; ative a função quando alguém assumir.',
-        pode() && O.podeAtivar(estrutura(), f.id) ? botao('Ativar ' + f.nome, function () { ativarFuncao(f.id); }, 'btn-escuro') : null]);
     }
 
     // números nas abas: o que pede atenção em cada uma
     function contadorAba(a) {
-      var al = S.alertas(dados(), Date.now()).filter(function (x) { return paginaDoBloco(x.bloco) === a && x.nivel !== 'pendencia'; });
+      var al = S.alertas(dados(), Date.now()).filter(function (x) { return x.bloco === a && x.nivel !== 'pendencia'; });
       if (a === 'geral') { var c = S.alertas(dados(), Date.now()).filter(function (x) { return x.nivel === 'critico'; }).length; return c ? { n: c, critico: true } : null; }
       if (a === 'vitimas') { var t = S.totais(est.vitimas, est.estado, cx().fichas); return t.localizadas || t.procuradas.length ? { n: t.localizadas, critico: al.some(function (x) { return x.nivel === 'critico'; }) } : null; }
       return al.length ? { n: al.length, critico: al.some(function (x) { return x.nivel === 'critico'; }) } : null;
@@ -463,7 +392,7 @@
         return el('li', { classe: 'sci-alerta sci-alerta-' + a.nivel }, [el('span', { classe: 'sci-alerta-nivel', texto: a.nivel === 'critico' ? 'CRÍTICO' : a.nivel === 'alerta' ? 'ALERTA' : 'FALTA' }),
           el('button', { classe: 'sci-alerta-texto', type: 'button', texto: a.texto, title: 'Abrir onde se resolve', onclick: function (ev) {
             if (ev.currentTarget.closest('.sci-falta')) UI.fecharModal();   // veio da janela "O que falta": fecha só ela
-            irAba(paginaDoBloco(a.bloco));
+            irAba(a.bloco === 'linha' ? 'linha' : a.bloco);
           } })]);
       }));
     }
@@ -870,8 +799,14 @@
     }
 
     /* ---------- 3. Quem responde por quê ---------- */
-    // Instalações (PC, Área de Espera, ACV…), setores do mapa e comunicações: com a Logística quando ativada, senão no organograma (com o CI)
-    function secaoInstalacoes() {
+    function secaoComando() {
+      var e = estadoComCi();
+      var funcoes = el('div', { classe: 'sci-funcoes' }, S.FUNCOES.map(function (f) {
+        var nome = S.nomeFuncao(e, f[0]);
+        var doComando = f[0] === 'ci' && e.funcoes.ci && e.funcoes.ci.doComando;
+        return el('button', { type: 'button', classe: 'sci-funcao' + (f[0] === 'ci' ? ' sci-funcao-ci' : ''), disabled: pode() ? null : true, onclick: editarFuncoes },
+          [el('small', { texto: f[1] }), pend(nome), doComando ? el('small', { classe: 'muted', texto: 'comando da operação' }) : null]);
+      }));
       var inst = el('div', { classe: 'sci-instalacoes' }, itens('instalacao').map(function (i) {
         var d = i.dados, desat = d.estado === 'desativada';
         return el('button', { type: 'button', classe: 'sci-instalacao' + (desat ? ' sci-desativada' : ''), onclick: function () { formItem('instalacao', i); } }, [
@@ -886,12 +821,14 @@
       var canais = itens('canal'), b = cx().briefing || {};
       var bases = (cx().pontos || []).filter(function (p) { return p.categoria === 'BASE'; });
       var semPc = !itens('instalacao').some(function (i) { return i.dados.tipo === 'pc'; });
-      return secao('comando', 'Instalações, setores e comunicações', [
+      return secao('comando', 'Quem responde por quê', [
+        pode() ? botao('Editar funções SCI', editarFuncoes, 'btn-escuro', { id: 'sci-funcoes-editar' }) : null,
         ctx.abrirBriefing ? botao('Passar o comando', function () { ctx.abrirBriefing(); }, '', { title: 'Briefing e passagem de comando: o CI muda quando o outro responsável aceita' }) : null,
         pode() ? botao('+ Instalação', function () { formItem('instalacao', null); }) : null,
       ], [
         pode() && semPc && bases.length ? el('p', { classe: 'nota' }, ['A base "' + bases[0].titulo + '" está no mapa. ',
           botao('Usar como Posto de Comando', function () { rpc('sci_salvar_item', { p_operacao: opId, p_id: null, p_tipo: 'instalacao', p_dados: { tipo: 'pc', nome: 'Posto de Comando', ponto_id: bases[0].id, estado: 'ativa', responsavel: (estadoComCi().funcoes.ci || {}).nome || undefined } }, 'Posto de Comando ligado à base do mapa.'); }, 'btn-escuro', { id: 'sci-usar-base' })]) : null,
+        el('h4', { classe: 'sci-sub', texto: 'Funções SCI' }), funcoes,
         el('h4', { classe: 'sci-sub', texto: 'Instalações ativadas' }), itens('instalacao').length ? inst : el('p', { classe: 'muted', texto: 'Nenhuma instalação registrada (PC, Área de Espera, ACV, ZPA, Abrigo, GGI).' }),
         el('h4', { classe: 'sci-sub', texto: 'Setores de operação' }),
         setores.length ? el('ul', { classe: 'sci-lista-simples' }, setores.map(function (s) {
@@ -901,325 +838,42 @@
         b.comunicacoes ? el('p', { classe: 'sci-pre' }, [el('small', { classe: 'muted', texto: 'Do briefing: ' }), b.comunicacoes]) : null,
         canais.length ? tabela(['Canal', 'Função', 'Usuários'], canais.map(function (c) { return { item: c, celulas: [c.dados.nome, c.dados.funcao || P, c.dados.usuarios || P] }; }), 'canal')
           : b.comunicacoes ? null : el('p', { classe: 'muted', texto: 'Nenhum canal registrado.' }),
-      ], 'Instalações apontam para pontos do mapa. Com a Logística desativada, quem responde por elas é o CI.');
+      ], 'Comandante do Incidente = comando da operação (passagem de comando). Função vazia aparece como [PENDENTE]. Instalações apontam para pontos do mapa.');
     }
-    function editarCi() {
+    function editarFuncoes() {
       if (!pode()) return;
-      var e = est.estado, atual = (e.funcoes && e.funcoes.ci) || {};
-      var nome = el('input', { classe: 'campo', id: 'sci-f-ci', maxlength: '80', placeholder: cx().comando && cx().comando.nome ? cx().comando.nome + ' (comando da operação)' : P });
-      nome.value = atual.nome || '';
+      var e = est.estado, campos = {};
+      var linhas = S.FUNCOES.map(function (f) {
+        var atual = (e.funcoes && e.funcoes[f[0]]) || {};
+        var nome = el('input', { classe: 'campo', id: 'sci-f-' + f[0], maxlength: '80', placeholder: f[0] === 'ci' && cx().comando && cx().comando.nome ? cx().comando.nome + ' (comando da operação)' : P });
+        nome.value = atual.nome || '';
+        var acu = f[0] === 'ci' ? null : el('input', { type: 'checkbox', id: 'sci-f-acu-' + f[0], checked: atual.acumula_ci ? true : null });
+        if (acu) acu.addEventListener('change', function () { nome.disabled = acu.checked; });
+        nome.disabled = Boolean(acu && acu.checked);
+        campos[f[0]] = { nome: nome, acu: acu, atual: atual };
+        return UI.campo(f[1], el('div', { classe: 'idade-linha' }, [nome, acu ? el('label', { classe: 'check-curto', for: 'sci-f-acu-' + f[0] }, [acu, ' acumula (CI)']) : null]), { para: 'sci-f-' + f[0] });
+      });
       var acomp = el('input', { classe: 'campo', id: 'sci-acomp', maxlength: '300', placeholder: 'Ex.: Cap Prado – Central de Operações (quartel), em contato com o CI' });
       acomp.value = e.acompanhamento || '';
       var form = el('form', { novalidate: true }, [
-        el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Comandante do Incidente', UI.dica('Em branco: o CI é quem está no comando da operação (Briefing → Passar o comando). As outras funções ficam no organograma.')]),
-        UI.campo('Posto e nome do CI', nome, { para: 'sci-f-ci', largo: true }),
-        UI.campo('Acompanhamento remoto', acomp, { para: 'sci-acomp', opcional: true, largo: true }),
+        el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, ['Funções SCI', UI.dica('Posto e nome de quem responde. "Acumula (CI)": a função fica com o Comandante do Incidente.')]),
+        UI.grade(linhas), UI.campo('Acompanhamento remoto', acomp, { para: 'sci-acomp', opcional: true, largo: true }),
         UI.rodape([botao('Cancelar', function () { fechar(); }), el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'sci-f-salvar', texto: 'Salvar' })]),
       ]);
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        var dd = {}, n = nome.value.replace(/\s+/g, ' ').trim();
-        if (n !== (atual.nome || '')) dd.funcoes = { ci: { nome: n } };
+        var mud = {};
+        Object.keys(campos).forEach(function (k) {
+          var c = campos[k], n = c.nome.value.replace(/\s+/g, ' ').trim(), a = Boolean(c.acu && c.acu.checked);
+          if (n !== (c.atual.nome || '') || a !== Boolean(c.atual.acumula_ci)) mud[k] = { nome: n, acumula_ci: a };
+        });
+        fechar();
+        var dd = {};
+        if (Object.keys(mud).length) dd.funcoes = mud;
         if (acomp.value.trim() !== (e.acompanhamento || '')) dd.acompanhamento = acomp.value;
-        fechar();
-        if (Object.keys(dd).length) rpc('sci_salvar_estado', { p_operacao: opId, p_dados: dd }, 'Comandante do Incidente salvo.');
+        if (Object.keys(dd).length) rpc('sci_salvar_estado', { p_operacao: opId, p_dados: dd }, 'Funções salvas.');
       });
-      var fechar = UI.abrirModal(form, { empilhar: true, tamanho: 'estreito' });
-    }
-
-    /* ---------- Organograma: o SCI que cresce (migração 057, sci-org.js) ---------- */
-    function salvarEstrutura(d, ok) { return rpc('sci_salvar_estrutura', { p_operacao: opId, p_dados: d }, ok); }
-    function ativarFuncao(id) { var f = O.funcao(id); return salvarEstrutura({ mudancas: [{ id: id, ativa: true }] }, f.nome + ' ativada. Designe quem responde.'); }
-    async function desativarFuncao(id) {
-      var f = O.funcao(id), lista = O.desativacao(estrutura(), id);
-      if (!lista.length) return;
-      var junto = lista.slice(1).map(function (x) { return O.funcao(x).nome; });
-      var r = await UI.confirmar({ titulo: 'Desativar ' + f.nome + '?', texto: (junto.length ? 'Também saem: ' + junto.join(', ') + '. ' : '') + 'As funções voltam ao Comandante do Incidente. O histórico fica na linha do tempo.',
-        ok: 'Desativar', perigo: true, empilhar: true });
-      if (r) salvarEstrutura({ mudancas: [{ id: id, ativa: false }] }, f.nome + ' desativada (volta ao CI).');
-    }
-    async function responsaveis() {
-      if (est.responsaveis) return est.responsaveis;
-      try { est.responsaveis = (await C.rpc('listar_responsaveis', { p_operacao: opId })) || []; } catch (e) { est.responsaveis = []; }
-      return est.responsaveis;
-    }
-    // Designar: posto e nome de quem responde e, se quiser, a conta (a função abre primeiro para essa pessoa)
-    async function designarFuncao(id) {
-      if (!pode()) return;
-      var f = O.funcao(id), a = estrutura().ativas[id] || {};
-      var lista = await responsaveis();
-      var nome = el('input', { classe: 'campo', id: 'sci-d-nome', maxlength: '80', placeholder: 'Posto e nome' });
-      nome.value = a.nome || '';
-      var conta = el('select', { classe: 'campo', id: 'sci-d-conta' }, [el('option', { value: '', texto: '— sem conta no app —' })].concat(lista.map(function (r) {
-        return el('option', { value: r.user_id, selected: a.user_id === r.user_id ? true : null, texto: r.nome + (r.email ? ' (' + r.email + ')' : '') });
-      })));
-      // escolher a conta preenche o nome, se ainda estiver vazio
-      conta.addEventListener('change', function () { var r = lista.filter(function (x) { return x.user_id === conta.value; })[0]; if (r && !nome.value.trim()) nome.value = r.nome; });
-      var form = el('form', { novalidate: true }, [
-        el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [f.tipo === 'secao' ? 'Seção de ' + f.nome : f.nome, UI.dica(f.titulo + ': ' + f.desc + '. Com a conta ligada, o Comando abre nesta função para essa pessoa.')]),
-        UI.campo(f.titulo, nome, { para: 'sci-d-nome', largo: true }),
-        UI.campo('Conta de responsável (opcional)', conta, { para: 'sci-d-conta', largo: true, ajuda: lista.length ? null : 'Só aparecem os responsáveis da operação (Ferramentas → Equipe de responsáveis).' }),
-        UI.rodape([
-          f.fixa ? null : botao('Desativar', function () { fechar(); desativarFuncao(id); }, 'btn-perigo'),
-          botao('Cancelar', function () { fechar(); }),
-          el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'sci-d-salvar', texto: 'Salvar' }),
-        ]),
-      ]);
-      form.addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        var m = { id: id }, n = nome.value.replace(/\s+/g, ' ').trim();
-        if (n !== (a.nome || '')) m.nome = n;
-        if ((conta.value || null) !== (a.user_id || null)) m.user_id = conta.value || null;
-        fechar();
-        if (Object.keys(m).length > 1) salvarEstrutura({ mudancas: [m] }, f.nome + ': ' + (n || P) + '.');
-      });
-      var fechar = UI.abrirModal(form, { empilhar: true, tamanho: 'estreito' });
-      setTimeout(function () { nome.focus(); }, 30);
-    }
-    function nomeConta(uid) { var r = (est.responsaveis || []).filter(function (x) { return x.user_id === uid; })[0]; return r ? r.nome : 'conta ligada'; }
-    // cartão de uma função ativa (staff, seção ou unidade)
-    function cartaoFuncao(id, extra) {
-      var e = estrutura(), f = O.funcao(id), a = e.ativas[id] || {}, n = O.nome(e, id);
-      var texto = n ? el('strong', { texto: n }) : f.fixa ? el('strong', { classe: 'sci-fn-ci', texto: 'com o CI' }) : el('strong', { classe: 'sci-pend', texto: P });
-      return el('div', { classe: 'sci-fn sci-fn-' + f.tipo, 'data-funcao': id }, [
-        el('div', { classe: 'sci-fn-cab' }, [
-          el('div', { classe: 'sci-fn-nome' }, [el('small', { texto: f.tipo === 'secao' ? 'Seção de ' + f.nome : f.nome }), el('span', { classe: 'sci-fn-titulo', texto: f.titulo })]),
-          pode() ? botao(n ? 'Trocar' : 'Designar', function () { designarFuncao(id); }, n ? '' : 'btn-escuro') : null,
-          pode() && !f.fixa ? el('button', { type: 'button', classe: 'sci-fn-x', title: 'Desativar ' + f.nome + ' (volta ao CI)', 'aria-label': 'Desativar ' + f.nome, texto: '×', onclick: function () { desativarFuncao(id); } }) : null,
-        ]),
-        texto,
-        el('small', { classe: 'muted' }, [a.user_id ? '★ ' + (a.user_id === est.usuario ? 'você' : nomeConta(a.user_id)) + ' · ' : '', a.desde ? 'desde ' + S.horaCurta(a.desde) : f.fixa ? 'desde a abertura' : '']),
-      ].concat(extra || []));
-    }
-    function botaoAtivar(id, rotulo) {
-      var f = O.funcao(id);
-      if (!pode() || !O.podeAtivar(estrutura(), id)) return null;
-      return el('button', { type: 'button', classe: 'sci-fn-ativar sci-fn-ativar-' + f.tipo, 'data-ativar': id, title: f.desc, onclick: function () { ativarFuncao(id); } },
-        [el('span', { texto: '+ ' + (rotulo || f.nome) }), el('small', { classe: 'muted', texto: f.desc })]);
-    }
-    function unidadesDe(pai) {
-      var e = estrutura();
-      return O.CATALOGO.filter(function (u) { return u.pai === pai; }).map(function (u) {
-        if (!O.ativa(e, u.id)) return botaoAtivar(u.id);
-        var sub = O.CATALOGO.filter(function (x) { return x.pai === u.id; });
-        return cartaoFuncao(u.id, sub.length ? [el('div', { classe: 'sci-fn-filhos' }, unidadesDe(u.id))] : null);
-      });
-    }
-    function secaoOrganograma() {
-      var e = estrutura(), ci = estadoComCi().funcoes.ci || {};
-      var acumuladas = O.acumuladasPeloCi(e);
-      // nomes das contas ligadas às funções (uma vez por abertura)
-      if (est.responsaveis == null && Object.keys(e.ativas).some(function (k) { return e.ativas[k].user_id; })) responsaveis().then(function () { render(); });
-      var inicio = !O.configurada(e) && pode() ? el('div', { classe: 'sci-ponto-partida' }, [
-        el('strong', { texto: 'Como esta operação começa?' }),
-        el('p', { classe: 'muted', texto: 'É só um ponto de partida: depois cada função é ativada ou desativada conforme a ocorrência cresce ou diminui.' }),
-        el('div', { classe: 'sci-pontos' }, O.PONTOS_DE_PARTIDA.map(function (p) {
-          return el('button', { type: 'button', classe: 'sci-ponto', 'data-ponto': p.id, onclick: function () { salvarEstrutura({ ponto: p.id }, 'Estrutura: ' + p.rotulo.toLowerCase() + '.'); } },
-            [el('b', { texto: p.rotulo }), el('small', { texto: p.desc })]);
-        })),
-      ]) : null;
-      var staff = O.CATALOGO.filter(function (f) { return f.tipo === 'staff'; }).map(function (f) { return O.ativa(e, f.id) ? cartaoFuncao(f.id) : botaoAtivar(f.id); }).filter(Boolean);
-      var secoes = O.CATALOGO.filter(function (f) { return f.tipo === 'secao'; }).map(function (f) {
-        if (!O.ativa(e, f.id)) return el('div', { classe: 'sci-org-col sci-org-col-off' }, [botaoAtivar(f.id, 'Ativar ' + f.nome) || el('div', { classe: 'sci-fn sci-fn-off' }, [el('small', { texto: 'Seção de ' + f.nome }), el('strong', { classe: 'sci-fn-ci', texto: 'com o CI' })])]);
-        var extra = [];
-        if (f.id === 'ops') {
-          var eq = cx().equipes || [];
-          extra.push(el('button', { type: 'button', classe: 'sci-fn-equipes', onclick: function () { irAba('equipes'); } },
-            [el('small', { texto: 'Equipes em campo (grupos do app)' }), el('span', { texto: eq.length ? eq.map(function (g) { return g.nome; }).join(', ') : 'nenhum grupo ainda' })]));
-        }
-        return el('div', { classe: 'sci-org-col' }, [cartaoFuncao(f.id), el('div', { classe: 'sci-fn-filhos' }, unidadesDe(f.id).concat(extra))]);
-      });
-      return secao('org', 'Organograma SCI', [
-        ctx.abrirBriefing ? botao('Passar o comando', function () { ctx.abrirBriefing(); }, '', { title: 'Briefing e passagem de comando: o CI muda quando o outro responsável aceita' }) : null,
-      ], [
-        inicio,
-        el('div', { classe: 'sci-org2' }, [
-          el('div', { classe: 'sci-fn sci-fn-ci-box' }, [
-            el('div', { classe: 'sci-fn-cab' }, [el('div', { classe: 'sci-fn-nome' }, [el('small', { texto: 'Comandante do Incidente' })]), pode() ? botao('Editar', editarCi) : null]),
-            pend(ci.nome),
-            ci.doComando ? el('small', { classe: 'muted', texto: 'comando da operação' + (cx().comando && cx().comando.desde ? ' desde ' + S.horaCurta(cx().comando.desde) : '') }) : null,
-            acumuladas.length ? el('small', { classe: 'sci-org-acumula' }, ['Com o CI: ', acumuladas.join(', ')]) : el('small', { classe: 'muted', texto: 'Todas as funções do staff e das seções estão ativadas.' }),
-          ]),
-          staff.length ? el('div', { classe: 'sci-org-staff2' }, [el('small', { classe: 'sci-org-rot', texto: 'Staff do comando' })].concat(staff)) : null,
-          el('div', { classe: 'sci-org-secoes2' }, secoes),
-        ]),
-      ], 'A estrutura cresce com a ocorrência: toque numa função tracejada para ativá-la. O que não está ativado fica com o Comandante do Incidente. Cada mudança vai para a linha do tempo.');
-    }
-    function secaoAtivacoes() {
-      var lista = est.eventos.filter(function (x) { return !x.anulado_em && /^(estrutura|funcao):/.test(x.ref || ''); }).slice(0, 12);
-      if (!lista.length) return null;
-      return secao('ativacoes', 'Ativações e designações', [], [el('ul', { classe: 'sci-eventos' }, lista.map(function (x) {
-        return el('li', { classe: 'sci-evento sci-cat-decisao' }, [el('span', { classe: 'sci-ev-hora num', texto: S.horaCurta(x.ocorrido_em) }), el('span', { classe: 'sci-ev-cat', texto: S.CATEGORIAS.decisao }), el('div', { classe: 'sci-ev-texto' }, [el('span', { texto: x.texto })]),
-          el('span', { classe: 'sci-ev-fonte muted', texto: x.registrado_por_nome })]);
-      }))], 'Cada mudança entra na linha do tempo como decisão do Comando (SCI 203/207).');
-    }
-
-    /* ---------- Staff: Segurança ---------- */
-    function secaoSeguranca() {
-      var e = estadoComCi(), b = cx().briefing || {};
-      var crit = S.alertas(dados(), Date.now()).filter(function (a) { return a.nivel === 'critico'; });
-      var regs = est.eventos.filter(function (x) { return x.categoria === 'seguranca' && !x.anulado_em; }).slice(0, 20);
-      var riscos = b.riscos || e.riscos;
-      return secao('seguranca', 'Segurança', [
-        pode() ? botao('+ Registro de segurança', function () { novoEvento('seguranca'); }, 'btn-escuro', { id: 'sci-seg-registro' }) : null,
-        pode() ? botao('Editar riscos', editarSituacao) : null,
-      ], [
-        el('dl', { classe: 'kv-grade' }, [
-          el('div', { classe: 'kv' }, [el('dt', { texto: 'Oficial de Segurança' }), el('dd', null, [pend(S.nomeFuncao(e, 'seguranca'))])]),
-          el('div', { classe: 'kv' }, [el('dt', { texto: 'Riscos conhecidos' }), el('dd', { classe: S.vazio(riscos) ? 'kv-vazio' : null }, [S.vazio(riscos) ? P : riscos, b.riscos ? el('small', { classe: 'muted kv-sub', texto: 'do briefing' }) : null])]),
-        ]),
-        el('h4', { classe: 'sci-sub', texto: 'Alertas críticos agora' }),
-        crit.length ? listaAlertas(crit) : el('p', { classe: 'muted', texto: 'Nenhum alerta crítico com o que está registrado.' }),
-        el('h4', { classe: 'sci-sub', texto: 'Registros de segurança' }),
-        regs.length ? el('ul', { classe: 'sci-eventos' }, regs.map(function (x) { return itemLinha({ fonte: 'sci', em: x.ocorrido_em, ev: x }); }))
-          : el('p', { classe: 'muted', texto: 'Nenhum registro de segurança (leituras de gás, condições inseguras, paralisações…).' }),
-      ], 'Ordem de prioridade: segurança da equipe › vítimas › meio ambiente › patrimônio. Pedidos de ajuda, retorno atrasado e rio subindo aparecem aqui.');
-    }
-
-    /* ---------- Operações: Área de Espera ---------- */
-    var EM_TRABALHO = ['designada', 'em_deslocamento', 'em_operacao'];
-    function secaoEspera() {
-      var e = estrutura(), grupos = cx().equipes || [];
-      var inst = itens('instalacao').filter(function (i) { return i.dados.tipo === 'area_espera' && i.dados.estado !== 'desativada'; })[0];
-      var livres = grupos.filter(function (g) {
-        var comp = complementoSci(g.id), m = g.missao;
-        return g.disponibilidade === 'disponivel' && !(m && S.MISSAO_ATIVA.indexOf(m.status) !== -1) && !(comp && EM_TRABALHO.indexOf(comp.dados.status) !== -1);
-      });
-      var externas = itens('equipe').filter(function (i) { return i.dados.status === 'disponivel' && !(i.dados.grupo_id && grupos.some(function (g) { return g.id === i.dados.grupo_id; })); });
-      var recursos = itens('recurso').filter(function (r) { return r.dados.status === 'no_local'; });
-      var caminho = itens('recurso').filter(function (r) { return r.dados.status === 'a_caminho' || r.dados.status === 'solicitado'; })
-        .concat(itens('orgao').filter(function (o) { return o.dados.situacao === 'a_caminho' || o.dados.situacao === 'acionado'; }));
-      var pessoas = livres.reduce(function (s, g) { return s + (g.membros || 0); }, 0) + externas.reduce(function (s, i) { return s + (i.dados.efetivo || 0); }, 0);
-      var nEquipes = livres.length + externas.length;
-      function k(n, rot) { return el('div', { classe: 'sci-k' }, [el('b', { texto: String(n) }), rot]); }
-      function linha(nome, sub, acao) { return el('li', { classe: 'sci-espera-item' }, [el('div', null, [el('strong', { texto: nome }), sub ? el('small', { classe: 'muted', texto: sub }) : null]), acao]); }
-      var agora = new Date().toISOString();
-      return secao('espera', 'Área de Espera', [
-        pode() ? botao('+ Check-in de equipe', function () { formItem('equipe', null, { status: 'disponivel' }); }, 'btn-escuro', { title: 'Equipe que chegou e aguarda designação (ex.: outro órgão, sem o app)' }) : null,
-        pode() ? botao('+ Check-in de recurso', function () { formItem('recurso', null, { status: 'no_local', chegada_em: agora }); }) : null,
-        pode() || inst ? botao(inst ? 'Local da Área de Espera' : '+ Marcar o local', function () { formItem('instalacao', inst || null, inst ? null : { tipo: 'area_espera', nome: 'Área de Espera', estado: 'ativa', responsavel: O.nome(e, 'ops.espera') || undefined }); }) : null,
-      ], [
-        el('p', { classe: 'muted' }, ['Encarregado: ', pend(O.nome(e, 'ops.espera') || (inst && inst.dados.responsavel)), ' · Local: ', inst ? (inst.dados.local || inst.dados.nome) : pend('')]),
-        el('div', { classe: 'sci-totais' }, [k(nEquipes, 'equipes disponíveis'), k(pessoas, 'pessoas na espera'), k(recursos.length, 'recursos no local'), k(caminho.length, 'a caminho')]),
-        nEquipes === 0 && (grupos.length || itens('equipe').length) ? el('p', { classe: 'nota sci-reserva' }, [
-          el('strong', { texto: 'Reserva abaixo do mínimo: ' }), 'nenhuma equipe disponível para substituição ou intervenção rápida (RIT). ',
-          pode() ? botao('+ Pedir recurso', function () { formItem('recurso', null, { status: 'solicitado', solicitado_em: agora }); }) : null]) : null,
-        el('h4', { classe: 'sci-sub', texto: 'Equipes prontas para designar' }),
-        nEquipes ? el('ul', { classe: 'sci-espera' }, livres.map(function (g) {
-          var comp = complementoSci(g.id);
-          return linha(g.nome, g.membros + ' no grupo' + (g.responsavel ? ' · ★ ' + g.responsavel : '') + (g.capacidades ? ' · ' + g.capacidades : ''),
-            pode() ? botao('Designar', function () { formItem('equipe', comp, Object.assign({}, comp ? comp.dados : { nome: g.nome, grupo_id: g.id, efetivo: g.membros, chefe: g.responsavel || undefined }, { status: 'designada' })); }, 'btn-escuro') : null);
-        }).concat(externas.map(function (i) {
-          return linha(i.dados.nome, [i.dados.orgao, i.dados.efetivo != null ? i.dados.efetivo + ' pessoas' : null, 'fora do app'].filter(Boolean).join(' · '),
-            pode() ? botao('Designar', function () { formItem('equipe', i, Object.assign({}, i.dados, { status: 'designada' })); }, 'btn-escuro') : null);
-        }))) : el('p', { classe: 'muted', texto: 'Nenhuma equipe disponível. Equipes do app com disponibilidade "Disponível" e sem deslocamento aparecem aqui.' }),
-        el('h4', { classe: 'sci-sub', texto: 'Recursos no local' }),
-        recursos.length ? el('ul', { classe: 'sci-espera' }, recursos.map(function (r) {
-          var d = r.dados;
-          return linha(d.nome, [S.TIPO_RECURSO[d.tipo], d.orgao, d.qtd != null ? d.qtd + ' un.' : null, d.chegada_em ? 'chegou ' + S.horaCurta(d.chegada_em) : null].filter(Boolean).join(' · '),
-            pode() ? botao('Designar', function () { formItem('recurso', r, Object.assign({}, d, { status: 'em_uso' })); }) : null);
-        })) : el('p', { classe: 'muted', texto: 'Nenhum recurso aguardando (viaturas, embarcações, equipamentos com status "No local").' }),
-        caminho.length ? el('h4', { classe: 'sci-sub', texto: 'A caminho ou pedidos' }) : null,
-        caminho.length ? el('ul', { classe: 'sci-espera' }, caminho.map(function (x) {
-          var d = x.dados;
-          return linha(d.nome, x.tipo === 'orgao' ? S.SITUACAO_ORGAO[d.situacao] + (d.pessoas != null ? ' · ' + d.pessoas + ' pessoas' : '') : S.STATUS_RECURSO[d.status] + (d.solicitado_em ? ' · pedido ' + S.horaCurta(d.solicitado_em) : ''),
-            botao('Abrir', function () { formItem(x.tipo, x); }));
-        })) : null,
-      ], 'O que o Comando tem à disposição agora, pronto para ser designado. Reserva mínima sugerida: 1 equipe de resgate pronta para substituição ou intervenção rápida (RIT).');
-    }
-
-    /* ---------- Logística: suprimentos, materiais, instalações e comunicações ---------- */
-    function secaoLogistica() {
-      var e = est.estado, pc = S.instalacao(est.itens, 'pc'), acv = S.instalacao(est.itens, 'acv');
-      var pedidos = itens('recurso').filter(function (r) { return r.dados.status === 'solicitado' || r.dados.status === 'a_caminho'; });
-      return secao('logistica', 'Suprimentos e pedidos', [pode() ? botao('+ Pedido de recurso', function () { formItem('recurso', null, { status: 'solicitado', solicitado_em: new Date().toISOString() }); }, 'btn-escuro') : null], [
-        el('p', { classe: 'muted' }, ['Chefe da Logística: ', pend(O.ativa(estrutura(), 'log') ? O.nome(estrutura(), 'log') : 'com o CI')]),
-        el('dl', { classe: 'kv-grade' }, [
-          el('div', { classe: 'kv' }, [el('dt', { texto: 'PC' }), el('dd', { texto: pc ? (pc.dados.local || pc.dados.nome) + (pc.dados.lat != null ? ' – ' + S.dms(pc.dados.lat, pc.dados.lng) : '') : P })]),
-          el('div', { classe: 'kv' }, [el('dt', { texto: 'ACV' }), el('dd', { texto: acv ? (acv.dados.local || acv.dados.nome) : P })]),
-        ].concat(S.LOGISTICA.map(function (l) {
-          return el('div', { classe: 'kv' }, [el('dt', { texto: l[1] }), el('dd', null, [pend(e.logistica[l[0]]), pode() ? botao('editar', function () { editarLogistica(l); }, 'btn-link') : null])]);
-        }))),
-        el('h4', { classe: 'sci-sub', texto: 'Pedidos de recursos em aberto' }),
-        pedidos.length ? tabela(['Recurso', 'Qtd', 'Status', 'Pedido', 'Órgão'], pedidos.map(function (r) {
-          var d = r.dados;
-          return { item: r, celulas: [d.nome, d.qtd == null ? '—' : String(d.qtd), S.STATUS_RECURSO[d.status] || P, d.solicitado_em ? S.horaCurta(d.solicitado_em) : '—', d.orgao || '—'] };
-        }), 'recurso') : el('p', { classe: 'muted', texto: 'Nenhum pedido em aberto.' }),
-      ], 'Água, alimentação, combustível e energia: a situação de cada um fica registrada aqui. Pedidos de recursos aparecem também em Recursos.');
-    }
-    function secaoMateriais() {
-      var mats = itens('material');
-      var falta = mats.filter(function (m) { return m.dados.situacao === 'em_falta' || (m.dados.total != null && m.dados.em_uso != null && m.dados.total - m.dados.em_uso <= 0); });
-      return secao('materiais', 'Relação de materiais', [pode() ? botao('+ Material', function () { formItem('material', null, { situacao: 'ok' }); }, 'btn-escuro', { id: 'sci-material-novo' }) : null], [
-        falta.length ? el('p', { classe: 'nota' }, [el('strong', { texto: 'Sem saldo ou em falta: ' }), falta.map(function (m) { return m.dados.nome; }).join(', ')]) : null,
-        mats.length ? tabela(['Item', 'Categoria', 'Total', 'Em uso', 'Disponível', 'Onde está', 'Situação'], mats.map(function (m) {
-          var d = m.dados, livre = d.total != null && d.em_uso != null ? d.total - d.em_uso : null;
-          return { item: m, celulas: [d.nome, d.categoria || '—', d.total == null ? '—' : String(d.total), d.em_uso == null ? '—' : String(d.em_uso), livre == null ? '—' : String(livre), d.local || '—', SITUACAO_MATERIAL[d.situacao] || P] };
-        }), 'material') : el('p', { classe: 'muted', texto: 'Nenhum material registrado. Ex.: cordas, coletes, pontaletes, geradores, combustível.' }),
-      ], 'Total, em uso e disponível de cada item, e onde está. Operação pequena também usa: é a mesma lista, com o CI.');
-    }
-
-    /* ---------- Administração e Finanças: tempo, aquisições e custos ---------- */
-    async function carregarParticipantes() {
-      try {
-        est.participantes = (await C.consultar(C.cliente.from('participantes').select('id,nome,tipo,criado_em,removido,removido_em,liberado_em').eq('operacao_id', opId))) || [];
-      } catch (e) { est.participantes = []; }
-      render();
-    }
-    function tempoPessoal() {
-      var o = op(), fimOp = o.status !== 'ativa' && o.encerrada_em ? Date.parse(o.encerrada_em) : Date.now();
-      var porTipo = { militar: { n: 0, ms: 0 }, civil: { n: 0, ms: 0 }, responsavel: { n: 0, ms: 0 } };
-      (est.participantes || []).forEach(function (p) {
-        var ini = Date.parse(p.criado_em), fim = p.liberado_em ? Date.parse(p.liberado_em) : p.removido && p.removido_em ? Date.parse(p.removido_em) : fimOp;
-        var t = porTipo[p.tipo] || porTipo.civil;
-        t.n++; t.ms += Math.max(0, Math.min(fim, fimOp) - ini);
-      });
-      return porTipo;
-    }
-    function secaoTempo() {
-      if (est.participantes == null) { carregarParticipantes(); return secao('tempo', 'Tempo do pessoal e dos equipamentos', [], [el('p', { classe: 'muted', texto: 'Carregando…' })]); }
-      var o = op(), t = tempoPessoal(), ini = Date.parse(est.estado.marcos.acionamento || o.acionado_em || o.criada_em);
-      var fim = o.status !== 'ativa' && o.encerrada_em ? Date.parse(o.encerrada_em) : Date.now();
-      var totalMs = t.militar.ms + t.civil.ms + t.responsavel.ms, totalN = t.militar.n + t.civil.n + t.responsavel.n;
-      var equip = itens('recurso').filter(function (r) { return r.dados.chegada_em; });
-      function k(n, rot) { return el('div', { classe: 'sci-k' }, [el('b', { texto: n }), rot]); }
-      return secao('tempo', 'Tempo do pessoal e dos equipamentos', [botao('Exportar planilha (CSV)', exportarCustos, '', { id: 'sci-exportar-custos' })], [
-        el('p', { classe: 'muted' }, ['Chefe de Adm./Finanças: ', pend(O.ativa(estrutura(), 'adm') ? O.nome(estrutura(), 'adm') : 'com o CI')]),
-        el('div', { classe: 'sci-totais' }, [k(String(totalN), 'pessoas empregadas'), k(horas(totalMs), 'homem-hora acumulado'), k(String(equip.length), 'viaturas / equipamentos com horas'), k(S.duracao(fim - ini), 'duração da ocorrência')]),
-        el('div', { classe: 'sci-tabela-rolagem' }, [el('table', { classe: 'sci-tabela' }, [
-          el('thead', null, [el('tr', null, ['Pessoal', 'Pessoas', 'Homem-hora'].map(function (c) { return el('th', { texto: c }); }))]),
-          el('tbody', null, [['Militares', t.militar], ['Civis', t.civil], ['Responsáveis (painel)', t.responsavel]].map(function (l) {
-            return el('tr', null, [l[0], String(l[1].n), horas(l[1].ms)].map(function (c) { return el('td', { texto: c }); }));
-          })),
-        ])]),
-        equip.length ? el('h4', { classe: 'sci-sub', texto: 'Viaturas e equipamentos (desde a chegada)' }) : null,
-        equip.length ? tabela(['Recurso', 'Tipo', 'Órgão', 'Chegada', 'Horas', 'Status'], equip.map(function (r) {
-          var d = r.dados;
-          return { item: r, celulas: [d.nome, S.TIPO_RECURSO[d.tipo] || '—', d.orgao || '—', S.horaCurta(d.chegada_em), horas(fim - Date.parse(d.chegada_em)), S.STATUS_RECURSO[d.status] || P] };
-        }), 'recurso') : null,
-      ], 'Calculado do app: cada pessoa conta da entrada na operação até a saída liberada, a remoção ou o encerramento. Equipamentos contam da chegada registrada em Recursos.');
-    }
-    function secaoAquisicoes() {
-      var aq = itens('aquisicao');
-      var total = aq.filter(function (a) { return a.dados.status !== 'cancelado' && a.dados.valor != null; }).reduce(function (s, a) { return s + Number(a.dados.valor); }, 0);
-      return secao('aquisicoes', 'Aquisições e contratos emergenciais', [pode() ? botao('+ Nova aquisição', function () { formItem('aquisicao', null, { status: 'em_cotacao', pedido_em: new Date().toISOString() }); }, 'btn-escuro', { id: 'sci-aquisicao-nova' }) : null], [
-        aq.length ? tabela(['Item', 'Fornecedor', 'Valor', 'Situação', 'Nº', 'Pedido'], aq.map(function (a) {
-          var d = a.dados;
-          return { item: a, celulas: [d.item, d.fornecedor || '—', reais(d.valor), STATUS_AQUISICAO[d.status] || P, d.numero || '—', d.pedido_em ? S.horaCurta(d.pedido_em) : '—'] };
-        }), 'aquisicao') : el('p', { classe: 'muted', texto: 'Nenhuma aquisição registrada (compras, aluguéis, materiais cedidos por terceiros).' }),
-        el('p', { classe: 'sci-total-custos' }, [el('span', { texto: 'Total estimado até agora (sem as canceladas): ' }), el('strong', { texto: reais(total) })]),
-      ], 'Compras, aluguéis e cessões da ocorrência, com valor e situação. Material cedido sem custo entra como "Cedido".');
-    }
-    function exportarCustos() {
-      var t = est.participantes ? tempoPessoal() : null, linhas = [['Seção', 'Item', 'Quantidade', 'Horas / valor (R$)', 'Situação']];
-      if (t) [['Militares', t.militar], ['Civis', t.civil], ['Responsáveis', t.responsavel]].forEach(function (l) { linhas.push(['Tempo', l[0], l[1].n, (l[1].ms / 3600000).toFixed(1), '']); });
-      itens('recurso').filter(function (r) { return r.dados.chegada_em; }).forEach(function (r) { linhas.push(['Equipamento', r.dados.nome, r.dados.qtd == null ? '' : r.dados.qtd, ((Date.now() - Date.parse(r.dados.chegada_em)) / 3600000).toFixed(1), S.STATUS_RECURSO[r.dados.status] || '']); });
-      itens('aquisicao').forEach(function (a) { linhas.push(['Aquisição', a.dados.item + (a.dados.fornecedor ? ' — ' + a.dados.fornecedor : ''), 1, a.dados.valor == null ? '' : Number(a.dados.valor).toFixed(2), STATUS_AQUISICAO[a.dados.status] || '']); });
-      var csv = '﻿' + linhas.map(function (l) { return l.map(function (c) { c = String(c == null ? '' : c); return /[";\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(';'); }).join('\r\n');
-      var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-      var a = el('a', { href: url, download: 'custos-' + (op().codigo || 'operacao').replace(/[^\w-]+/g, '_') + '.csv' });
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      var fechar = UI.abrirModal(form, { empilhar: true });
     }
 
     /* ---------- Itens genéricos: formulário e tabela ---------- */
@@ -1234,14 +888,8 @@
         ['local', 'Local / designação', 'txt'], ['solicitado_em', 'Solicitado em', 'hora'], ['chegada_em', 'Chegada', 'hora'], ['nota', 'Observação', 'area']],
       canal: [['nome', 'Canal', 'txt'], ['funcao', 'Função', 'txt'], ['usuarios', 'Usuários', 'txt']],
       leitura_rio: [['em', 'Hora da leitura', 'hora'], ['ponto', 'Ponto', 'txt'], ['nivel', 'Nível', 'txt'], ['vazao', 'Vazão / vertedouro', 'txt'], ['tendencia', 'Tendência', 'sel', S.TENDENCIA], ['fonte', 'Fonte', 'txt']],
-      material: [['nome', 'Item', 'txt'], ['categoria', 'Categoria', 'txt'], ['total', 'Total', 'int'], ['em_uso', 'Em uso', 'int'], ['local', 'Onde está', 'txt'],
-        ['situacao', 'Situação', 'sel', SITUACAO_MATERIAL], ['nota', 'Observação', 'area']],
-      aquisicao: [['item', 'Item ou serviço', 'txt'], ['fornecedor', 'Fornecedor / quem cede', 'txt'], ['valor', 'Valor (R$)', 'num'], ['status', 'Situação', 'sel', STATUS_AQUISICAO],
-        ['numero', 'Nº do processo / nota', 'txt'], ['solicitante', 'Quem pediu', 'txt'], ['pedido_em', 'Pedido em', 'hora'], ['nota', 'Observação', 'area']],
     };
-    var TITULOS = { instalacao: 'Instalação', equipe: 'Equipe e missão', orgao: 'Órgão envolvido', recurso: 'Recurso / pedido', canal: 'Canal de comunicação', leitura_rio: 'Leitura do nível do rio',
-      material: 'Material', aquisicao: 'Aquisição / contrato' };
-    var OBRIGATORIO = { leitura_rio: ['em', 'Informe a hora da leitura.'], aquisicao: ['item', 'Informe o item ou serviço.'] };
+    var TITULOS = { instalacao: 'Instalação', equipe: 'Equipe e missão', orgao: 'Órgão envolvido', recurso: 'Recurso / pedido', canal: 'Canal de comunicação', leitura_rio: 'Leitura do nível do rio' };
     function formItem(tipo, item, base) {
       var ro = !pode(), d = base ? Object.assign({}, base) : item ? item.dados : (tipo === 'leitura_rio' ? { em: new Date().toISOString(), tendencia: 'a_confirmar' } : tipo === 'instalacao' ? { estado: 'ativa' } : {});
       var ctrls = {};
@@ -1264,7 +912,7 @@
       });
       var erro = el('p', { classe: 'erro-form', hidden: true });
       var form = el('form', { novalidate: true, classe: 'sci-form-item' }, [
-        el('h2', { id: 'modal-titulo', texto: (item ? '' : 'Novo registro: ') + TITULOS[tipo] }),
+        el('h2', { id: 'modal-titulo', texto: (item ? '' : 'Nova: ') + TITULOS[tipo] }),
         UI.grade(campos), erro,
         UI.rodape(ro ? [botao('Fechar', function () { fechar(); }, 'btn-escuro')] : [
           item ? botao('Excluir', async function () { if (await UI.confirmar({ titulo: 'Excluir?', texto: 'O histórico na linha do tempo continua.', ok: 'Excluir', perigo: true, empilhar: true })) { fechar(); rpc('sci_excluir_item', { p_id: item.id }, 'Excluído.'); } }, 'btn-perigo') : null,
@@ -1284,9 +932,7 @@
         });
         if (tipo === 'instalacao' && !dd.nome && dd.tipo) dd.nome = S.INSTALACOES[dd.tipo];
         if (tipo === 'instalacao' && dd.estado === 'desativada' && !dd.desativada_em) dd.desativada_em = new Date().toISOString();
-        var obrig = OBRIGATORIO[tipo] || ['nome', 'Informe o nome.'];
-        if (!dd[obrig[0]]) { erro.textContent = obrig[1]; erro.hidden = false; return; }
-        if (tipo === 'material' && dd.total != null && dd.em_uso != null && dd.em_uso > dd.total) { erro.textContent = 'Em uso não pode passar do total.'; erro.hidden = false; return; }
+        if (!dd[tipo === 'leitura_rio' ? 'em' : 'nome']) { erro.textContent = tipo === 'leitura_rio' ? 'Informe a hora da leitura.' : 'Informe o nome.'; erro.hidden = false; return; }
         var r = await rpc('sci_salvar_item', { p_operacao: opId, p_id: item ? item.id : null, p_tipo: tipo, p_dados: dd }, 'Salvo.');
         if (r) fechar();
       });
@@ -1386,9 +1032,9 @@
       ]), { tamanho: 'estreito', empilhar: true });
       h.closest('form').addEventListener('submit', function (ev) { ev.preventDefault(); fechar(); rpc('sci_marcar', { p_operacao: opId, p_marco: m[0], p_em: iso(h.value) }, m[1] + ' registrado.'); });
     }
-    function formEvento(x, aoSalvar, categoriaPadrao) {
+    function formEvento(x, aoSalvar) {
       var h = el('input', { classe: 'campo', id: 'sci-e-hora', type: 'datetime-local', value: dataLocal(x ? x.ocorrido_em : Date.now()) });
-      var cat = el('select', { classe: 'campo', id: 'sci-e-cat' }, Object.keys(S.CATEGORIAS).map(function (k) { return el('option', { value: k, selected: (x ? x.categoria : categoriaPadrao || 'decisao') === k ? true : null, texto: S.CATEGORIAS[k] }); }));
+      var cat = el('select', { classe: 'campo', id: 'sci-e-cat' }, Object.keys(S.CATEGORIAS).map(function (k) { return el('option', { value: k, selected: (x ? x.categoria : 'decisao') === k ? true : null, texto: S.CATEGORIAS[k] }); }));
       var t = el('textarea', { classe: 'campo', id: 'sci-e-texto', rows: '3', maxlength: '1000' }); t.value = x ? x.texto : '';
       var nc = el('input', { type: 'checkbox', id: 'sci-e-nc' });
       var motivo = el('input', { classe: 'campo', id: 'sci-e-motivo', maxlength: '300', placeholder: 'Ex.: eram 11 ilhados, não 9' });
@@ -1402,7 +1048,7 @@
       form.addEventListener('submit', function (ev) { ev.preventDefault(); if (!t.value.trim()) { t.focus(); return; } fechar(); aoSalvar({ em: iso(h.value), categoria: cat.value, texto: t.value, nao_confirmada: nc.checked, motivo: motivo.value }); });
       var fechar = UI.abrirModal(form, { empilhar: true });
     }
-    function novoEvento(categoria) { formEvento(null, function (d) { rpc('sci_registrar_evento', { p_operacao: opId, p_dados: d }, 'Registrado.'); }, categoria); }
+    function novoEvento() { formEvento(null, function (d) { rpc('sci_registrar_evento', { p_operacao: opId, p_dados: d }, 'Registrado.'); }); }
     function corrigirEvento(x) { formEvento(x, function (d) { rpc('sci_corrigir_evento', { p_id: x.id, p_dados: d }, 'Correção registrada (o texto anterior fica guardado).'); }); }
 
     /* ---------- Equipes: grupos do app + o que o SCI acrescenta (missão, órgão) + equipes de fora do app ---------- */
@@ -1529,12 +1175,43 @@
       var fechar = UI.abrirModal(form, { tamanho: 'largo', empilhar: true });
     }
 
+    /* ---------- 9. Estrutura SCI (organograma) ---------- */
+    function secaoEstrutura() {
+      var e = estadoComCi();
+      function caixa(rot, chave) { return el('div', { classe: 'sci-org-caixa' + (chave === 'ci' ? ' sci-org-ci' : '') }, [el('small', { texto: rot }), pend(S.nomeFuncao(e, chave))]); }
+      var equipes = (cx().equipes || []).map(function (g) { var c = complementoSci(g.id); return { dados: { nome: g.nome, chefe: g.responsavel, funcao: c && (c.dados.funcao || c.dados.missao) } }; })
+        .concat(itens('equipe').filter(function (i) { return i.dados.status !== 'desmobilizada' && !(i.dados.grupo_id && (cx().equipes || []).some(function (g) { return g.id === i.dados.grupo_id; })); }));
+      var orgaos = itens('orgao').map(function (i) { return i.dados.nome; });
+      return secao('estrutura', 'Estrutura SCI', [pode() ? botao('Editar organograma', editarFuncoes) : null], [
+        e.acompanhamento ? el('p', { classe: 'nota', texto: 'Acompanhamento remoto: ' + e.acompanhamento }) : null,
+        el('div', { classe: 'sci-org' }, [
+          caixa('Comandante do Incidente', 'ci'),
+          el('div', { classe: 'sci-org-staff' }, [caixa('Oficial de Segurança', 'seguranca'), caixa('Oficial de Ligação', 'ligacao'), caixa('Informação Pública', 'informacao_publica')]),
+          orgaos.length ? el('p', { classe: 'muted sci-org-ligacao', texto: 'Órgãos em ligação: ' + orgaos.join(', ') }) : null,
+          el('div', { classe: 'sci-org-secoes' }, [
+            el('div', null, [caixa('Seção de Operações', 'operacoes'), el('ul', { classe: 'sci-org-equipes' }, equipes.map(function (i) {
+              return el('li', null, [el('small', { texto: i.dados.funcao || i.dados.missao || 'Equipe' }), el('span', { texto: i.dados.nome + (i.dados.chefe ? ' · ' + i.dados.chefe : '') })]);
+            }))]),
+            caixa('Seção de Planejamento', 'planejamento'), caixa('Seção de Logística', 'logistica'), caixa('Adm./Finanças', 'adm_financas'),
+          ]),
+        ]),
+      ]);
+    }
+
     /* ---------- 10. Recursos e logística ---------- */
     function secaoRecursos() {
+      var e = est.estado, pc = S.instalacao(est.itens, 'pc'), acv = S.instalacao(est.itens, 'acv');
+      var log = el('dl', { classe: 'kv-grade' }, [
+        el('div', { classe: 'kv' }, [el('dt', { texto: 'PC' }), el('dd', { texto: pc ? (pc.dados.local || pc.dados.nome) + (pc.dados.lat != null ? ' – ' + S.dms(pc.dados.lat, pc.dados.lng) : '') : P })]),
+        el('div', { classe: 'kv' }, [el('dt', { texto: 'ACV' }), el('dd', { texto: acv ? (acv.dados.local || acv.dados.nome) : P })]),
+      ].concat(S.LOGISTICA.map(function (l) {
+        return el('div', { classe: 'kv' }, [el('dt', { texto: l[1] }), el('dd', null, [pend(e.logistica[l[0]]), pode() ? botao('editar', function () { editarLogistica(l); }, 'btn-link') : null])]);
+      })));
       var rec = itens('recurso');
       var recApp = [];
       (cx().equipes || []).forEach(function (g) { (g.recursos || []).forEach(function (r) { recApp.push({ g: g, r: r }); }); });
-      return secao('recursos', 'Recursos e pedidos', [pode() ? botao('+ Recurso / pedido', function () { formItem('recurso', null); }, 'btn-escuro') : null], [
+      return secao('recursos', 'Recursos e logística', [pode() ? botao('+ Recurso / pedido', function () { formItem('recurso', null); }, 'btn-escuro') : null], [
+        el('h4', { classe: 'sci-sub', texto: 'Logística' }), log,
         el('div', { classe: 'sci-sub-linha' }, [el('h4', { classe: 'sci-sub', texto: 'Recursos das equipes (cadastro do app)' }), ctx.abrirRecursos ? botao('Editar no app', function () { ctx.abrirRecursos(); }) : null]),
         recApp.length ? el('div', { classe: 'sci-tabela-rolagem' }, [el('table', { classe: 'sci-tabela' }, [
           el('thead', null, [el('tr', null, ['Recurso', 'Identificação', 'Qtd', 'Situação', 'Equipe'].map(function (c) { return el('th', { texto: c }); }))]),

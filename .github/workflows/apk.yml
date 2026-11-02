@@ -1,0 +1,111 @@
+name: Aplicativo Android (APK)
+
+# Gera o APK do participante (android/) e publica num Release do repositório, de onde o botão
+# "Baixar aplicativo" da página do participante baixa (/api/app?baixar=1):
+#   main   → Release "app-android"        (produção)
+#   testes → Release "app-android-testes" (para testar antes de subir para a main; não troca o APK de produção)
+# Uma execução antiga (ex.: "Re-run" de um build velho) nunca substitui um APK mais novo no Release.
+on:
+  push:
+    branches: [main, testes]
+    paths:
+      - 'android/**'
+      - 'public/js/gps.js'
+      - '.github/workflows/apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Filtro do GPS do aplicativo igual ao da página
+        run: node testes/app_nativo.test.js
+
+      - name: Chave de assinatura
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_SENHA }}
+          ANDROID_CHAVE_ALIAS: ${{ secrets.ANDROID_CHAVE_ALIAS }}
+          ANDROID_CHAVE_SENHA: ${{ secrets.ANDROID_CHAVE_SENHA }}
+        run: |
+          faltam=""
+          for v in KEYSTORE_BASE64 ANDROID_KEYSTORE_SENHA ANDROID_CHAVE_ALIAS ANDROID_CHAVE_SENHA; do
+            [ -n "${!v}" ] || faltam="$faltam ${v/KEYSTORE_BASE64/ANDROID_KEYSTORE_BASE64}"
+          done
+          if [ -z "$faltam" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/gbs-busca.jks"
+            echo "ANDROID_KEYSTORE_ARQUIVO=$RUNNER_TEMP/gbs-busca.jks" >> "$GITHUB_ENV"
+            echo "ASSINADO=true" >> "$GITHUB_ENV"
+          else
+            echo "ASSINADO=false" >> "$GITHUB_ENV"
+            echo "::warning::Assinatura oficial incompleta (falta:$faltam). O APK sai assinado com uma chave de teste, diferente a cada build: para atualizar o aplicativo nos celulares sem desinstalar, cadastre os 4 secrets (README, Aplicativo Android)."
+          fi
+
+      - name: Testes, verificação e APK
+        working-directory: android
+        env:
+          # o APK de testes pode abrir outro endereço (variável GBS_ORIGEM_TESTES, ex.: o deploy da branch testes)
+          GBS_ORIGEM: ${{ github.ref_name == 'main' && vars.GBS_ORIGEM || (vars.GBS_ORIGEM_TESTES || vars.GBS_ORIGEM) }}
+          VERSAO_CODIGO: ${{ github.run_number }}
+          ANDROID_KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_SENHA }}
+          ANDROID_CHAVE_ALIAS: ${{ secrets.ANDROID_CHAVE_ALIAS }}
+          ANDROID_CHAVE_SENHA: ${{ secrets.ANDROID_CHAVE_SENHA }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain testReleaseUnitTest lintRelease assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/gbs-busca.apk"
+          cd "$GITHUB_WORKSPACE"
+          sha256sum gbs-busca.apk | tee gbs-busca.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gbs-busca-apk
+          path: |
+            gbs-busca.apk
+            gbs-busca.apk.sha256
+
+      - name: Publicar no Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then TAG=app-android; TITULO="Aplicativo Android (GBS Busca)";
+          else TAG=app-android-testes; TITULO="Aplicativo Android (GBS Busca) — testes"; fi
+          NUM=${{ github.run_number }}
+          VERSAO="1.0.$NUM"
+          NOTAS="GBS Busca $VERSAO (branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA::7}). SHA-256: $(cut -d' ' -f1 gbs-busca.apk.sha256)."
+          if [ "$ASSINADO" != "true" ]; then NOTAS="$NOTAS Assinado com chave de teste: para instalar uma versão nova, desinstale a anterior."; fi
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TITULO" --notes "$NOTAS" --prerelease --target "$GITHUB_SHA"
+          else
+            # o Android não instala versão menor por cima de maior: um build velho não substitui o que está publicado
+            ATUAL=$(gh release view "$TAG" --json body -q .body | grep -oE 'GBS Busca 1\.0\.[0-9]+' | head -1 | grep -oE '[0-9]+$' || true)
+            if [ -n "$ATUAL" ] && [ "$NUM" -lt "$ATUAL" ]; then
+              echo "::warning::O Release $TAG já tem a versão 1.0.$ATUAL; esta execução (1.0.$NUM) é mais antiga e não foi publicada."
+              exit 0
+            fi
+            gh release edit "$TAG" --notes "$NOTAS"
+          fi
+          gh release upload "$TAG" gbs-busca.apk gbs-busca.apk.sha256 --clobber
+          # confere que o arquivo publicado é o deste build
+          gh release download "$TAG" -p gbs-busca.apk -O publicado.apk --clobber
+          [ "$(sha256sum publicado.apk | cut -d' ' -f1)" = "$(cut -d' ' -f1 gbs-busca.apk.sha256)" ] || { echo "::error::O APK publicado não confere com o gerado."; exit 1; }
+          echo "Publicado: https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/gbs-busca.apk ($VERSAO)"

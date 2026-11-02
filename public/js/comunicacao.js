@@ -23,6 +23,35 @@
       },
       realtime: { params: { eventsPerSecond: 30 } },
     });
+    if (window.Proxy) cliente.from = consultaComArquivo(cliente.from.bind(cliente));
+  }
+
+  /* ---------- Operação arquivada (migração 055, js/arquivo-local.js) -----
+   * cliente.from() devolve um "gravador" da cadeia de chamadas. Ao executar (then), se a consulta é de uma
+   * operação arquivada já carregada, a resposta vem do arquivo; senão a MESMA cadeia é repetida no supabase-js,
+   * exatamente como antes (operações ativas não mudam em nada). */
+  function consultaComArquivo(fromOriginal) {
+    return function (tabela) {
+      var passos = [];
+      var gravador = new Proxy({}, {
+        get: function (alvo, nome) {
+          if (nome === 'then' || nome === 'catch' || nome === 'finally') {
+            return function () { var p = executar(); return p[nome].apply(p, arguments); };
+          }
+          if (typeof nome !== 'string') return undefined;
+          return function () { passos.push([nome, Array.prototype.slice.call(arguments)]); return gravador; };
+        },
+      });
+      function executar() {
+        var arq = window.ArquivoLocal;
+        var local = arq ? arq.consulta(tabela, passos) : null;
+        if (local) return Promise.resolve(local);
+        var q = fromOriginal(tabela);
+        for (var i = 0; i < passos.length; i++) q = q[passos[i][0]].apply(q, passos[i][1]);
+        return Promise.resolve(q);
+      }
+      return gravador;
+    };
   }
 
   /* ---------- Erros ---------------------------------------------------- */
@@ -43,6 +72,13 @@
     apagar_dados_desativado: 'Os dados da operação ficam guardados. Para apagar, exclua a operação.',
     lote_invalido: 'Dados inválidos enviados ao servidor.',
     operacao_ativa: 'Encerre a operação antes de apagar os dados.',
+    operacao_arquivada: 'Esta operação está arquivada: os dados vêm do arquivo da operação, só para consulta.',
+    operacao_ja_arquivada: 'Esta operação já foi arquivada.',
+    arquivo_divergente: 'O arquivo da operação não conferiu com o banco. Nada foi apagado; tente arquivar de novo.',
+    arquivamento_sem_arquivo: 'O arquivo da operação não chegou ao Storage. Nada foi apagado.',
+    arquivo_incompleto: 'O arquivamento não terminou. Nada foi apagado.',
+    arquivo_apagaria_arquivos: 'O arquivamento foi interrompido para não apagar fotos ou relatórios. Nada foi apagado.',
+    sem_responsavel_ativo: 'A operação não tem responsável ativo para ler os dados do arquivamento.',
     muitas_mensagens: 'Muitas mensagens enviadas no último minuto. Aguarde um pouco.',
     cpf_invalido: 'CPF inválido. Confira os 11 números.',
     telefone_invalido: 'Celular inválido. Informe o DDD e o número.',
@@ -103,6 +139,10 @@
     link_publico_invalido: 'Este link do dashboard não funciona mais: foi trocado ou desligado. Peça o link novo a quem enviou.',
     tipo_ponto_inexistente: 'Este tipo de ponto não existe mais ou foi desativado.',
     tipo_ponto_existente: 'Já existe um tipo de ponto com este nome.',
+    vinculo_app_recusado: 'O código para abrir no aplicativo venceu ou já foi usado. Volte à página da busca no navegador e toque em "Abrir no aplicativo" de novo.',
+    sessao_app_ocupada: 'Este aplicativo já está registrado em outra participação desta operação. Apague os dados do aplicativo nas configurações do Android e tente de novo.',
+    vinculos_app_limite: 'Muitos códigos pedidos para o aplicativo. Espere alguns minutos e tente de novo.',
+    aparelho_app_invalido: 'O aplicativo deste celular foi desconectado da busca (a participação passou para outro aparelho).',
     operacao_com_registros: 'O servidor ainda recusa excluir operação com atividade: falta executar a migração 041 no Supabase.',
     foto_invalida: 'Dados da foto inválidos. Tire a foto de novo.',
     foto_nao_encontrada: 'A foto ainda não chegou ao servidor.',
@@ -227,6 +267,12 @@
 
   async function rpc(nome, args, ms) {
     if (!cliente) throw criarErro({ message: 'Aplicativo não configurado.' });
+    // operação arquivada: relatório, SCI e briefing completos vêm do arquivo (o servidor recusa)
+    if (window.ArquivoLocal) {
+      var guardado;
+      try { guardado = window.ArquivoLocal.rpc(nome, args); } catch (e) { throw criarErro({ message: e.codigo || e.message }); }
+      if (guardado !== undefined) return guardado;
+    }
     var r;
     try {
       r = await comTempoLimite(cliente.rpc(nome, args || {}), ms || 15000);

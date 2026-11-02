@@ -7,6 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="gbs-versao" content="2026-10-13.1">
   <title>Rastreamento GBS — Participante</title>
+  <link rel="icon" type="image/png" sizes="256x256" href="img/brasao-cbmpr.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="css/estilos.css">
 </head>
@@ -14,10 +15,9 @@
   <div class="pagina-civil">
     <header class="civil-topo">
       <div class="marca">
-        <div class="marca-icone" aria-hidden="true">GBS</div>
+        <img class="marca-brasao" src="img/brasao-cbmpr.png" alt="Corpo de Bombeiros Militar do Paraná" width="40" height="40">
         <div>
           <h1>Bombeiros · Busca</h1>
-          <small>Corpo de Bombeiros Militar</small>
         </div>
       </div>
     </header>
@@ -83,13 +83,17 @@
           </div>
           <div class="consentimento">
             <strong>Os bombeiros vão ver onde você está durante a busca.</strong>
-            Ao tocar em COMEÇAR, o celular pede para usar a localização: toque em <b>Permitir</b>.
-            Sua localização, CPF e celular ficam só com os bombeiros desta operação e são apagados no final.
+            Toque em <b>Permitir</b> quando o celular pedir. Seus dados ficam só com os bombeiros desta operação.
           </div>
 
           <button class="btn btn-primario btn-gigante" type="submit" id="btn-iniciar">COMEÇAR</button>
           <p class="erro-form" id="ini-erro" role="alert" hidden></p>
         </form>
+
+        <!-- Aplicativo Android (aparece só no Android, fora do aplicativo) -->
+        <section class="cartao secao app-oferta" id="ini-app" hidden>
+          <button class="btn btn-escuro" type="button" id="btn-app-inicio">📱 Baixar aplicativo Android</button>
+        </section>
       </section>
 
       <!-- Rastreamento: tela simples, com o essencial -->
@@ -157,33 +161,32 @@
             <span><i class="lg-eu"></i> Você</span>
             <span><i class="simbolo simbolo-militar"><span>M</span></i> Bombeiro</span>
             <span><i class="simbolo simbolo-responsavel"><span>R</span></i> Responsável</span>
-            <span class="lg-grupo" hidden id="lg-grupo"><i class="lg-grupo-cor"></i> Seu grupo (mesma cor)</span>
+            <span class="lg-grupo" hidden id="lg-grupo"><i class="lg-grupo-cor"></i> Seu grupo</span>
             <span class="lg-destino" hidden id="lg-destino"><i>🧭</i> Destino</span>
             <span class="lg-rota" hidden id="lg-rota"><i class="lg-linha-rota"></i> Rota</span>
           </div>
         </div>
-        <p class="mapa-civil-nota" id="mapa-nota" hidden></p>
         <p class="mapa-offline-estado" id="mapa-offline" role="status" hidden></p>
 
         <!-- Ações principais -->
         <div class="acoes-civil">
           <label class="acao acao-foto">
             <span class="acao-icone" aria-hidden="true">📷</span>
-            <span class="acao-texto">TIRAR FOTO</span>
+            <span class="acao-texto">FOTO</span>
             <input class="sr-only" type="file" accept="image/*" capture="environment" id="foto-camera">
           </label>
           <button class="acao acao-encontrei" type="button" id="btn-encontrei">
             <span class="acao-icone" aria-hidden="true">🔍</span>
             <span class="acao-texto">ENCONTREI ALGO</span>
           </button>
-          <button class="acao acao-falar" type="button" id="btn-falar" aria-controls="painel-conversa" aria-expanded="false">
+          <button class="acao acao-falar" type="button" id="btn-falar" aria-controls="painel-conversa" aria-expanded="false" aria-label="Falar com os bombeiros">
             <span class="acao-icone" aria-hidden="true">💬</span>
-            <span class="acao-texto">FALAR COM OS BOMBEIROS</span>
+            <span class="acao-texto">MENSAGENS</span>
             <span class="contador acao-contador" id="falar-contador" hidden>0</span>
           </button>
         </div>
         <label class="link-galeria">
-          ou enviar uma foto da galeria
+          enviar foto da galeria
           <input class="sr-only" type="file" accept="image/*" id="foto-galeria">
         </label>
 
@@ -201,6 +204,7 @@
             <strong>Pedido para sair enviado às <span id="saida-hora"></span>.</strong>
             Aguarde os bombeiros liberarem. Até lá, deixe esta tela aberta.
           </div>
+          <button class="btn btn-app" type="button" id="btn-app" hidden>📱 Baixar aplicativo</button>
           <button class="btn btn-saida" type="button" id="btn-saida">Quero sair da busca</button>
           <button class="btn btn-pequeno btn-link" type="button" id="btn-diag" hidden>Diagnóstico do GPS</button>
         </div>
@@ -266,6 +270,7 @@
   <script src="js/rotas.js"></script>
   <script src="js/coords.js"></script>
   <script src="js/mapa-offline.js"></script>
+  <script src="js/app-nativo.js"></script>
   <script src="js/civil.js"></script>
 </body>
 </html>

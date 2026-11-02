@@ -8,10 +8,12 @@
   "functions": {
     "api/poa-ia.js": { "maxDuration": 60 },
     "api/sci-ia.js": { "maxDuration": 30 },
-    "api/meteo.js": { "maxDuration": 30 }
+    "api/meteo.js": { "maxDuration": 30 },
+    "api/arquivar.js": { "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/limpeza", "schedule": "0 7 * * *" }
+    { "path": "/api/limpeza", "schedule": "0 7 * * *" },
+    { "path": "/api/arquivar", "schedule": "30 7 * * *" }
   ],
   "headers": [
     {

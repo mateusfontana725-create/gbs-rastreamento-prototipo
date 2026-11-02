@@ -59,8 +59,8 @@
     return a;
   }
 
-  // Pilha de modais: normalmente só um aberto; opcoes.empilhar abre por cima
-  // (ex.: escolher um ponto no mapa sem perder o formulário que está embaixo).
+  // Pilha de modais: um modal aberto de dentro de outro fica POR CIMA dele. Ao fechar o de cima, volta o de baixo
+  // exatamente como estava (não fecha todos). opcoes.substituir: fecha os abertos antes (troca de tela inteira).
   var pilha = [];
 
   // Abre um modal genérico. "conteudo" é um nó DOM. Devolve função para fechar.
@@ -68,23 +68,27 @@
   // (.form-rodape) sempre à vista. O título (#modal-titulo) é levado para o cabeçalho, mesmo
   // quando o conteúdo é redesenhado. No celular o modal vira uma folha que sobe de baixo.
   // opcoes.tamanho: 'estreito' | 'largo' | 'cheio' (padrão: médio).
+  // opcoes.rodape: nó fixo embaixo do modal, fora da área que rola (ações sempre à vista).
+  // opcoes.travado: não fecha com × nem com Esc nem clicando fora (ex.: trocar a senha provisória no primeiro acesso).
   function abrirModal(conteudo, opcoes) {
     opcoes = opcoes || {};
-    if (!opcoes.empilhar) fecharTodos();
+    if (opcoes.substituir) fecharTodos();
     var anterior = document.activeElement;
     var btnX = el('button', { classe: 'modal-x', type: 'button', 'aria-label': 'Fechar', title: 'Fechar', texto: '×' });
     var cabeca = el('div', { classe: 'modal-cabeca' }, [btnX]);
     var corpo = el('div', { classe: 'modal-corpo' }, [conteudo]);
-    var caixa = el('div', { classe: 'modal form-padrao' + (opcoes.tamanho ? ' modal-' + opcoes.tamanho : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [cabeca, corpo]);
+    var caixa = el('div', { classe: 'modal form-padrao' + (opcoes.tamanho ? ' modal-' + opcoes.tamanho : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-titulo' }, [cabeca, corpo].concat(opcoes.rodape ? [opcoes.rodape] : []));
     var fundo = el('div', { classe: 'modal-fundo' }, [caixa]);
     fundo.addEventListener('click', function (ev) {
-      if (ev.target === fundo && opcoes.fecharNoFundo !== false) fechar(null);
+      if (ev.target === fundo && opcoes.fecharNoFundo !== false && !opcoes.travado) fechar(null);
     });
     // × faz o mesmo que o "Fechar"/"Cancelar" do rodapé (quando há), senão só fecha
     btnX.addEventListener('click', function () {
+      if (opcoes.travado) return;
       var b = botaoDeSaida();
       if (b) b.click(); else fechar(null);
     });
+    if (opcoes.travado) btnX.hidden = true;
     function botaoDeSaida() {
       var f = corpo.querySelector('button.so-x');
       if (f) return f;
@@ -113,7 +117,7 @@
     if (obs) obs.observe(corpo, { childList: true, subtree: true });
     function tecla(ev) {
       // Esc fecha só o modal de cima
-      if (ev.key === 'Escape' && pilha.length && pilha[pilha.length - 1].fechar === fechar) { ev.preventDefault(); fechar(null); }
+      if (ev.key === 'Escape' && !opcoes.travado && pilha.length && pilha[pilha.length - 1].fechar === fechar) { ev.preventDefault(); fechar(null); }
     }
     document.addEventListener('keydown', tecla);
     document.body.appendChild(fundo);
@@ -280,6 +284,7 @@
   var FONTES = { minimo: 'Mínimo', menor: 'Menor', normal: 'Normal', maior: 'Maior', grande: 'Grande' };
   var LETRAS = { industrial: 'Industrial', tecnica: 'Técnica', sistema: 'Do aparelho' };
   var POSICOES_GRUPOS = { topright: 'Canto superior direito', topleft: 'Canto superior esquerdo', bottomright: 'Canto inferior direito', bottomleft: 'Canto inferior esquerdo' };
+  var LADOS_ACOES = { topo: 'No topo', direita: 'Lateral direita' };
   function listaTexto(v) { return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : []; }
   function lerAparencia() {
     var v;
@@ -290,6 +295,8 @@
       letra: LETRAS[v.letra] ? v.letra : 'industrial',
       topo: Array.isArray(v.topo) ? listaTexto(v.topo) : null,   // null = o padrão da página
       gruposPos: POSICOES_GRUPOS[v.gruposPos] ? v.gruposPos : 'topright',
+      acoesLado: LADOS_ACOES[v.acoesLado] ? v.acoesLado : 'topo',
+      topoOculto: v.topoOculto === true,
       // versão anterior (escolhas por botão): convertida em "topo" na primeira leitura
       ocultos: listaTexto(v.ocultos), noMenu: listaTexto(v.noMenu), ordem: listaTexto(v.ordem),
     };
@@ -297,7 +304,7 @@
   var ouvintes = [];
   function gravarAparencia(v) {
     try {
-      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, letra: v.letra, topo: v.topo, gruposPos: v.gruposPos }));
+      localStorage.setItem(CHAVE_APARENCIA, JSON.stringify({ fonte: v.fonte, letra: v.letra, topo: v.topo, gruposPos: v.gruposPos, acoesLado: v.acoesLado, topoOculto: v.topoOculto }));
     } catch (e) { /* sem armazenamento: vale só até recarregar */ memoria = v; }
     aplicarAparencia(v);
   }
@@ -307,6 +314,8 @@
     v = v || atual();
     document.documentElement.setAttribute('data-fonte', v.fonte);
     document.documentElement.setAttribute('data-letra', v.letra || 'industrial');
+    document.documentElement.classList.toggle('topo-oculto', Boolean(v.topoOculto));
+    document.documentElement.classList.toggle('acoes-lado-direita', v.acoesLado === 'direita');
     ouvintes.forEach(function (f) { try { f(v); } catch (e) { /* um ouvinte com erro não para os outros */ } });
   }
   function mudar(fn) { var v = atual(); fn(v); gravarAparencia(v); }
@@ -328,7 +337,14 @@
     definirTopo: function (ids) { mudar(function (v) { v.topo = listaTexto(ids); }); },
     definirPosicaoGrupos: function (pos) { mudar(function (v) { v.gruposPos = POSICOES_GRUPOS[pos] ? pos : 'topright'; }); },
     posicaoGrupos: function () { return atual().gruposPos; },
-    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', letra: 'industrial', topo: null, gruposPos: 'topright' }); },
+    // Botões de ação: no topo ou numa coluna à direita do mapa (só em tela de tablet ou maior)
+    ladosAcoes: LADOS_ACOES,
+    acoesLado: function () { return atual().acoesLado; },
+    definirAcoesLado: function (l) { mudar(function (v) { v.acoesLado = LADOS_ACOES[l] ? l : 'topo'; }); },
+    // Cabeçalho recolhido: ganha altura para o mapa (um botão ▼ no topo traz de volta)
+    topoOculto: function () { return atual().topoOculto; },
+    definirTopoOculto: function (b) { mudar(function (v) { v.topoOculto = b === true; }); },
+    restaurar: function () { memoria = null; gravarAparencia({ fonte: 'normal', letra: 'industrial', topo: null, gruposPos: 'topright', acoesLado: 'topo', topoOculto: false }); },
     aoMudar: function (f) { ouvintes.push(f); },
     aplicar: function () { aplicarAparencia(); },
   };

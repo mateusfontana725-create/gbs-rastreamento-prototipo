@@ -25,7 +25,7 @@ Realtime, Storage privado para as fotos) e **Vercel** (hospedagem e três funç�
    → fila local (localStorage)  ──RPC enviar_posicoes──►  posicoes   ──Realtime──►  mapa + trilhas
    ← alerta em tela cheia      ◄──Realtime / consulta──  mensagens  ◄──RPC enviar_mensagem──  comandos
    → confirmar_mensagem        ──────────────────────►  mensagens   ──Realtime──►  "confirmada"
-   → sinal_vida (a cada 15 s)  ──────────────────────►  participantes ─Realtime──►  conectado / instável
+   → sinal_vida (a cada 10 s)  ──────────────────────►  participantes ─Realtime──►  conectado / instável
    → participante_enviar_mensagem ───────────────────►  mensagens   ──Realtime──►  central + aviso
    → foto (Storage privado) + registrar_foto ────────►  fotos       ──Realtime──►  câmera no mapa
 ```
@@ -43,9 +43,9 @@ Realtime, Storage privado para as fotos) e **Vercel** (hospedagem e três funç�
 
 | Indicador | Significado |
 |---|---|
-| ● verde **Conectado** | contato do celular nos últimos 45 s |
-| ● amarelo **Sinal instável** | último contato entre 45 s e 2 min |
-| ● vermelho **Sem atualização** | sem contato há mais de 2 min (a última posição continua no mapa, marcada como antiga) |
+| ● verde **Conectado** | contato do celular nos últimos 35 s |
+| ● amarelo **Sinal instável** | último contato entre 35 s e 75 s |
+| ● vermelho **Sem atualização** | sem contato há mais de 75 s (a última posição continua no mapa, marcada como antiga) |
 | Selo âmbar **Pediu para sair** | o participante solicitou o encerramento; o rastreamento continua até o responsável decidir |
 | **Saída liberada às …** | o responsável liberou; o celular parou de enviar |
 | Marcador tracejado e desbotado | posição com mais de 2 min: **não é a localização atual** |
@@ -87,9 +87,11 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   bombeiro com mais de 2 minutos aparece apagada e com "há X min"; com mais de 15 minutos, some do
   mapa (nunca é mostrada como atual). Atualiza a cada 15 s. O botão **📍 Onde estou** volta para a
   sua posição.
-- **Três botões grandes**: **TIRAR FOTO**, **ENCONTREI ALGO** (escolhe Possível pista, Objeto,
+- **Três botões numa linha** (abaixo do mapa): **FOTO**, **ENCONTREI ALGO** (escolhe Possível pista, Objeto,
   Vestígio, Obstáculo ou Outra coisa, escreve se quiser e envia — a localização vai junto
-  automaticamente; dá para enviar e já tirar a foto) e **FALAR COM OS BOMBEIROS**.
+  automaticamente; dá para enviar e já tirar a foto) e **MENSAGENS** (falar com os bombeiros).
+- **Tela enxuta**: durante a busca o cabeçalho encolhe e o mapa ocupa o espaço livre. O bloco técnico do
+  envio (fila de pontos) só aparece quando há risco de perder pontos; o resto fica no quadro de estado.
 - **Falar com os bombeiros** abre a conversa numa tela própria (e só quando a pessoa toca): as
   mensagens recebidas aparecem como **"Bombeiros"** (à esquerda) e as enviadas à direita, com o texto
   e a hora; embaixo, o campo para escrever. O botão mostra um número quando chegam mensagens novas.
@@ -254,7 +256,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   ou o botão do balão; arrastar o mapa a partir de um símbolo não abre nada. **Na lista lateral um clique abre direto.**
   Os símbolos ficam **translúcidos** (quem pede ajuda, quer sair ou está selecionado fica opaco) e **diminuem ao
   afastar o zoom** (até ~metade do tamanho, agrupamentos inclusive) **e também de muito perto**: do zoom 17 (escala de 100 m)
-  em diante cada nível diminui um pouco (90% no zoom 16, 80% no 17, 68% no 18, 58% no 19 e 50% do 20 em diante); vítima localizada e pedido
+  em diante cada nível diminui um pouco (90% no zoom 16, 84% no 17, 80% no 18, 77% no 19), mas **para em 75% (~20 px) do zoom 20
+  em diante**: antes caía a 50% (13 px) e o símbolo, principalmente o de quem está com a localização desativada, ficava
+  pequeno e apagado demais para achar. Quem está **apagado** (localização desativada ou sem sinal) fica com 72% de opacidade
+  (85% de perto, com um anel claro) e a borda tracejada; vítima localizada e pedido
   de ajuda nunca ficam abaixo de 80%; trilhas finas (2,5 px de perto, ~1 px de longe;
   com alguém selecionado, as outras ficam apagadas), setores e círculos de base/risco com traço e preenchimento
   discretos. **Camadas → Nomes no mapa** volta a mostrar os nomes como abaixo.
@@ -473,7 +478,7 @@ e os estados finais (confirmado, descartado, inconclusivo, contestado) **exigem 
 ### Convidar por WhatsApp ou e-mail, por categoria (migrações 044 e 047)
 
 **Convidar** tem as abas **● Link para CIVIS**, **■ Link para BOMBEIROS**, **☎ WhatsApp** e **✉ E-mail**. Nas duas últimas, o
-responsável escolhe a **categoria** do convidado — **Civil**, **Bombeiro** ou **Responsável** — e o link enviado corresponde a ela:
+responsável escolhe a **categoria** do convidado — **Civil** ou **Bombeiro** (no WhatsApp e no e-mail) e **Responsável** (só por e-mail, abaixo) — e o link enviado corresponde a ela:
 civil recebe o link dos civis, bombeiro o link dos bombeiros (pode escolher militar) e responsável o endereço do **painel da operação**
 (entra com a própria conta; precisa estar na Equipe de responsáveis).
 
@@ -482,6 +487,20 @@ civil recebe o link dos civis, bombeiro o link dos bombeiros (pode escolher mili
 - **E-mail**: como abaixo, agora com a categoria. O mesmo celular + categoria (ou o mesmo e-mail) na mesma operação reaproveita o convite.
 - Banco: `criar_convite` (categoria, canal, e-mail ou telefone), erros `telefone_convite_invalido` e `nome_convite_invalido`.
 
+
+**Convidar como responsável** (aba ✉ E-mail, categoria **Responsável**, migração 053, `api/convidar-responsavel.js`): o e-mail é
+obrigatório, porque é o login. O servidor cria o acesso e inclui a pessoa na operação:
+- **E-mail sem conta**: cria o login (o próprio e-mail) com uma **senha provisória** gerada no servidor, cadastra como responsável
+  **comum** (nunca administrador) e envia o e-mail com o **login e a senha provisória**. No primeiro acesso o painel pede uma senha
+  nova e não deixa seguir até ela ser criada. A senha **não volta ao navegador**; só vai no e-mail.
+- **E-mail de responsável que já tem conta**: só inclui na operação e envia o link (sem senha).
+- **E-mail de outro tipo de conta, ou responsável desativado**: recusa (409) e não muda nada.
+- Se o e-mail não sair, a conta criada é apagada e a inclusão desfeita: não sobra login com senha que ninguém recebeu.
+- Quem convida precisa ser responsável da operação (a regra é conferida no banco com o login de quem convida).
+  **Atenção:** diferente do cadastro pelo administrador e do pedido de acesso, esse caminho cria um responsável **sem a aprovação
+  de um administrador** (como já acontece ao incluir um responsável cadastrado). Quem convida passa a ter esse poder.
+- A lista **Convidados** não tem **Reenviar** para responsável (reenviar sem a senha confundiria); o envio fica registrado.
+- Trocar a senha (no primeiro acesso ou em **Minha conta**) tira a marca de senha provisória.
 
 **Convidar → ✉ Convidar por e-mail**: o responsável digita o **nome** e o **e-mail** do participante e toca **Enviar convite**. O
 participante recebe um e-mail com o botão **Abrir e começar** (o link do `civil.html` da operação). Ao abrir no celular, o
@@ -1006,6 +1025,15 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     menos, ficam soltas): um círculo com o número de pessoas e um anel com as cores dos
     grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
     nunca entra no agrupamento. Fica **sempre ligado** (não há opção para desligar).
+  - **Resumo de longe** (`public/js/mapa-resumo.js`): pessoas e pontos/relatos/fotos agrupavam cada um por conta própria
+    e, de longe, os círculos de camadas diferentes se empilhavam no mesmo lugar (e as etiquetas de vítima e de quem pede
+    ajuda ficavam uma por cima da outra). Até o **zoom 14** (o nível "longe") tudo é agrupado **junto**, por distância na
+    tela (56 px), e cada região vira **um selo só**: as pessoas (círculo com o anel das cores dos grupos) e os pontos
+    (quadrado com o anel dos tipos) lado a lado, o **+** verde de vítima, o **!** vermelho de alerta (ajuda, pedido de
+    saída, área de risco) e as etiquetas **VÍTIMA(S)** e **PEDE(M) AJUDA** uma embaixo da outra. Passar o mouse lista tudo
+    que o selo resume; tocar aproxima até o zoom 15 ou mais. Quem está sozinho continua igual (mesmo ícone, clique, balão
+    e toque longo). **De perto (zoom 15 em diante) nada muda.** Os agrupamentos de sempre continuam por baixo,
+    só escondidos. O selo se atualiza sozinho (a cada 1,5 s, só enquanto está ativo).
 - **Topo do painel**: as ações mais usadas ficam à vista — **Marcar ponto**, **Foto**, **Setor** (pergunta: desenhar a
   área ou por raio), **Trilha** (desenhar trilha/trajeto) e **Dashboard**. No notebook aparecem só os ícones (o nome
   vem ao passar o mouse); no celular e no tablet em pé, numa faixa logo abaixo do título, dividindo a largura.
@@ -1101,10 +1129,24 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 - **Barra de desenho** (marcar ponto, setor, trilha, medir, vítima…), sempre no mesmo formato e numa linha: a instrução,
   **↶** (desfazer), **⋯** (as ações secundárias: limpar, mover mapa, mais opções…), a ação principal (**Concluir**) e **×**
   (cancelar). Uma ação extra só (ex.: "Usar minha posição") fica à vista.
+- **Modais empilhados** (todos): um modal aberto de dentro de outro fica **por cima** dele; ao fechar o de cima, volta
+  exatamente o de baixo (×, Cancelar, Voltar e Esc fecham só o de cima). Só `UI.abrirModal(…, { substituir: true })` fecha os
+  abertos antes. Botões **Voltar/Cancelar** fecham só o modal atual (o de baixo já está aberto).
 - **Modais e formulários** (padrão único, `UI.abrirModal` em `js/interface.js`): cabeçalho fixo com o título, o **i**
   (explicação, em vez de parágrafos de texto) e o **×**; corpo que rola; rodapé com as ações sempre à vista. Campos
   agrupados em cartões (`UI.secao`), lado a lado no computador; no celular o modal vira uma folha que sobe de baixo
-  e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo.
+  e ocupa quase a tela toda. Campos opcionais trazem "opcional" no rótulo. Quando as ações precisam ficar fora da
+  área que rola (ex.: Relatórios), a opção `rodape` de `abrirModal` coloca o rodapé fixo embaixo da caixa.
+- **Relatórios** (modal da operação): a tela mostra só os **tipos**, um cartão cada (Diário, Passagem, Comando, Final e
+  **Imprensa**), com **Gerar** e **Ver lista (n)**. Ver lista abre só a lista daquele tipo, com **← Tipos** para voltar. Passagem
+  e Comando geram o mais recente (as outras estão na lista); o Final usa o desfecho registrado e todas as fotos (sem desfecho,
+  não pede desfecho: sai o que estiver registrado, ou "Não apurado". **Ver lista** abre a lista por cima da tela (**Fechar** volta
+  para ela) e fica desabilitado quando o tipo não tem nenhum relatório. Cada item tem o selo do tipo e o arquivo baixado leva o
+  tipo no nome. **Excluir** aparece só para o administrador.
+- **Relatório para imprensa** (migração 054): versão de divulgação, com dados reduzidos: números gerais (pessoas de campo,
+  setores, pessoas procuradas), desfecho geral e a linha do tempo só dos marcos automáticos da operação e dos setores. Sem nomes,
+  documentos, telefones, fotos, trilhas, posições e observações; sem o autor no rodapé e nos metadados do PDF. O teste
+  `testes/relatorio_imprensa.test.js` confere que nada disso aparece.
 - **Celular deitado**: mapa e lista lado a lado; a faixa de alerta crítico ocupa uma linha só.
 - No celular a **faixa de alerta crítico** é compacta (texto à esquerda, **Ver no mapa** e **Ciente** à
   direita) e as abas que não cabem quebram linha em vez de sair da tela.
@@ -1240,6 +1282,37 @@ chave própria).
 - Continuam: **Relatório final (PDF)** e o resultado da operação e **Excluir operação** (para quem pode).
   Os dados não são apagados ao encerrar (migração 027).
 
+### Arquivamento de operações encerradas (migração 055)
+
+Para o histórico não estourar o banco do plano do Supabase, uma operação **encerrada** pode ser **arquivada**: todas as
+linhas dela saem do banco para **um arquivo JSON compactado (gzip) no Storage** (bucket privado `arquivos`,
+`<operação>/<uuid>.json.gz`). A operação continua na lista e abre só para consulta, como antes.
+
+- **Quando:** sozinho, todo dia (`/api/arquivar`, Vercel Cron às 7h30 UTC), para as encerradas há **`ARQUIVAR_APOS_DIAS`**
+  dias (padrão **7**; `0` arquiva no dia seguinte ao encerramento). Ou na hora: lista de operações → **⋮ → Arquivar agora
+  (liberar espaço)** (quem criou a operação ou administrador da equipe dela).
+- **O que sai do banco:** participantes, posições, trilhas, mensagens, fotos (as linhas; os arquivos ficam), setores,
+  pontos, grupos, missões, diário, SCI, buscas, pedidos de ajuda e demais registros. As tabelas vêm do catálogo do banco
+  (toda tabela com `operacao_id` e as ligadas só ao participante): uma tabela nova entra no arquivo sozinha.
+- **O que fica no banco:** a operação (com `arquivada_em`), a equipe de responsáveis, os relatórios, as vítimas e as
+  localizações de vítima (pequenas e usadas nas estatísticas gerais), e `operacao_arquivos` (caminho, SHA-256,
+  contagem de cada tabela, resumo da lista e os números prontos dos dashboards).
+- **Fotos, imagens do SCI, fichas e relatórios** continuam no Storage, nas mesmas pastas, e continuam abrindo.
+- **Sem perda de dados:** o servidor (1) conta as linhas de cada tabela, (2) exporta em páginas e confere a quantidade,
+  (3) compacta e envia, (4) **baixa de volta** e confere SHA-256, tamanho, formato e contagens, e só então (5) o banco
+  **reconta tudo** (tem de bater com o arquivo) e apaga, numa transação só, conferindo no fim que nada sobrou e que
+  nenhum arquivo do Storage foi para a fila de exclusão. Qualquer divergência desfaz tudo e remove o arquivo enviado.
+- **Consulta:** ao abrir o painel ou o SCI de uma operação arquivada, o arquivo é baixado uma vez, conferido e lido na
+  memória (`js/arquivo-local.js`). Mapa, trilhas, participantes, mensagens, diário, relatórios (diário, comando,
+  passagem, final e imprensa) e SCI funcionam como na operação encerrada. A pílula diz **Arquivada · só leitura**.
+- **Dashboards:** o da operação (janela própria e link público) usa os números guardados no arquivamento; o geral da
+  tela inicial continua igual (lê as vítimas, que ficam no banco). A lista e o mapa mostram o selo **Arquivada**.
+- **Excluir** uma operação arquivada apaga também o arquivo e as fotos (pela pasta da operação no Storage).
+- **Espaço:** o PostgreSQL reaproveita o espaço liberado para os dados novos (o banco para de crescer). Para o tamanho
+  mostrado no painel do Supabase cair de vez, rode `VACUUM FULL` nas tabelas grandes (ex.: `posicoes`) num horário sem
+  operação ativa (ele trava a tabela enquanto roda).
+- Variáveis: `ARQUIVAR_APOS_DIAS` (opcional), e as já usadas `SUPABASE_SECRET_KEY` e `CRON_SECRET`.
+
 ### Diário da operação
 
 - **Ferramentas → Diário da operação** (ou **Diário da operação** no menu **⋮** da linha na lista de operações): registro cronológico agrupado
@@ -1258,7 +1331,9 @@ chave própria).
 - **Capa e cabeçalho**: a **logo do Corpo de Bombeiros Militar do Paraná** aparece no topo da capa e, a partir da segunda página, no cabeçalho (`public/img/logo-cbmpr.png`, carregada no navegador e embutida no PDF) fica à esquerda, com o código da operação e a marca "DOCUMENTO RESTRITO" à direita. A **mesma logo** aparece no topo da capa, acima do título.
 - **Ferramentas → Relatório final (PDF)** (ou **Relatório final (PDF)** no menu **⋮** da linha na lista de operações). Só responsáveis da operação
   (o banco confere em `relatorio_operacao`).
-- Registre o **resultado** (vítima localizada com vida / em óbito / não localizada / outro, com descrição).
+- O **desfecho** (vítima localizada com vida / em óbito / não localizada / outro, com descrição) é registrado antes, no modal
+  **Relatórios** (botão **Registrar desfecho**, ou **Alterar** depois). O relatório final não pede desfecho: usa o que já está
+  registrado, e só habilita o botão quando há um. Ele sempre inclui **todas as fotos** da operação.
 - **Gerar PDF** monta, no navegador: capa com natureza, números e datas, sumário, a ocorrência (o IPO, com cada dado
   uma só vez: tipo não aparece, a natureza diz o tipo), pessoas e grupos (CPF e celular parcialmente ocultos), setores varridos (mapa geral, mapa de cada
   setor, início, fim, duração, área, deslocamentos e fotos tiradas dentro do setor), pontos e encontros,
@@ -1266,8 +1341,8 @@ chave própria).
   relatos, vítimas, fotos e o local) — **também quando não há setores cadastrados**,
   diário consolidado por dia (sem repetir os registros do IPO) e resultado (sem campos de assinatura). Cabeçalho e rodapé em todas as páginas
   ("DOCUMENTO RESTRITO", página X de Y).
-- O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios` (sem exclusão pelo app); a lista
-  **Relatórios já gerados** permite baixar de novo.
+- O PDF é baixado e **uma cópia fica guardada** no bucket privado `relatorios`; a lista do modal **Relatórios** permite
+  baixar de novo. A exclusão é só do administrador (`excluir_relatorio`, verificado no banco), registrada no diário.
 - Ao **encerrar** a operação ou **apagar os dados**, se ainda não houver relatório, o painel oferece gerar antes
   (depois da retenção o relatório sai só com cadastro, diário e resultado).
 - **Relatório diário (migração 049)**: o painel aberto numa operação ativa **gera e guarda sozinho** o relatório de cada
@@ -1468,6 +1543,7 @@ rastreamento-sar/
 │       ├── arquivos.js         exportar e importar GPX, KML/KMZ, GeoJSON e CSV
 │       ├── ferramentas.js      ferramentas de mapa do painel (medir, ir para coordenada, estatísticas…)
 │       ├── trilha-local.js     fila offline dos pontos (IndexedDB) e envio com confirmação por ponto
+│       ├── app-nativo.js       ligação com o aplicativo Android (ponte GBSNativo) e links "Abrir no aplicativo"
 │       ├── cadastro.js         cadastro da operação, escolha de ponto no mapa e fichas das vítimas
 │       ├── relatorio.js        diário da operação, resultado, mapas em canvas e geração do relatório final
 │       ├── relatorio-pdf.js    monta o documento do relatório final (pdfmake), sem rede nem tela
@@ -1494,6 +1570,7 @@ rastreamento-sar/
 │   ├── meteo.js                meteorologia: radar, previsão e alertas (só responsáveis; chaves só no servidor)
 │   ├── sci-ia.js               assistente opcional do Posto de Comando: frase → ações para conferir (mesma chave do POA/POD)
 │   ├── convidar.js             envio do convite de participante por e-mail (chave RESEND_API_KEY só no servidor)
+│   ├── convidar-responsavel.js convite de responsável: cria o login com senha provisória e inclui na operação (053)
 │   ├── poa-ia.js               sugestão opcional de POA/POD por IA (chave ANTHROPIC_API_KEY só no servidor)
 │   └── rota.js                 rota por caminhos (openrouteservice; chave ORS_API_KEY só no servidor)
 ├── supabase/
@@ -1529,6 +1606,11 @@ rastreamento-sar/
 │   ├── coords.test.js          teste das conversões de coordenadas (UTM, MGRS, GMS, rumo, sol)
 │   ├── trilha_local.test.js    teste da fila offline (pendentes, confirmação, reenvio sem duplicar)
 │   └── banco_migracoes.test.mjs  schema e migrações num PostgreSQL real (PGlite): RLS e fluxos (npm run test:banco)
+├── android/                    aplicativo Android do participante (GBS Busca): WebView da página + serviço de GPS
+│   ├── app/src/main/java/br/gbs/busca/   MainActivity (página e ponte), RastreioService, FiltroGps, FilaPontos, Sincronizador
+│   ├── app/src/test/           testes do filtro (casos do gps.js), da fila e do envio
+│   └── ferramentas/gerar-casos-filtro.js  casos do teste do filtro gerados a partir do public/js/gps.js
+├── .github/workflows/apk.yml   gera o APK e publica no Release "app-android" (main) ou "app-android-testes" (testes)
 ├── vercel.json                 diretório publicado, agendamento da limpeza e cabeçalhos de segurança
 ├── .env.example                nomes das variáveis de ambiente
 └── package.json
@@ -1713,9 +1795,11 @@ rastreamento-sar/
    | `SUPABASE_PUBLISHABLE_KEY` | chave publishable (ou anon) |
    | `SUPABASE_SECRET_KEY` | chave secret (ou service_role) — usada na limpeza diária e no cadastro de responsáveis |
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
+   | `ARQUIVAR_APOS_DIAS` | (opcional) dias depois do encerramento para arquivar a operação sozinha (`/api/arquivar`, migração 055). Padrão 7; `0` arquiva no dia seguinte ao encerramento |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
-   | `EMAIL_REMETENTE` | (com a chave acima) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
+   | `APP_ANDROID_URL` | (opcional) endereço do APK do aplicativo Android. Padrão: o Release `app-android` deste repositório. `desligado` esconde o botão "Baixar aplicativo" |
+   | `EMAIL_REMETENTE` | (com a chave acima; também usado pelo convite de responsável) remetente do convite, com domínio verificado no provedor. Ex.: `Rastreamento GBS <convite@seudominio.com.br>` |
    | `SITE_URL` | (opcional) endereço público do site, ex.: `https://busca.seudominio.com.br`. Sem ela, o link do e-mail usa o endereço da requisição |
    | `ORS_URL` | (opcional) endereço de um openrouteservice próprio; padrão `https://api.openrouteservice.org` |
    | `ANTHROPIC_API_KEY` | (opcional) chave da API de IA, usada por `/api/poa-ia` (botão "Sugerir com IA" do POA/POD) e por `/api/sci-ia` (botão "Entender com IA" do SCI). Sem ela, os botões avisam e o preenchimento manual (e a leitura de frases do próprio SCI) segue normal |
@@ -1810,6 +1894,7 @@ fichas e registros continuam guardados para consulta e análise, e o painel abre
 | Situação | O que acontece com os dados |
 |---|---|
 | Encerrar a operação | ficam guardados (painel só leitura) |
+| Arquivar (migração 055) | saem do banco para um arquivo compactado no Storage; a operação continua na lista e abre só para consulta |
 | Limpeza diária | não apaga dados de operação |
 | Excluir operação | apaga tudo **e a própria operação** (some da lista), na hora — ver seção 1. É o único jeito de apagar |
 
@@ -1872,7 +1957,7 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 1. **Tela apagada / outro aplicativo aberto — não é possível com uma página web.** Quando a página
    sai da tela, o Chrome do Android (e o Safari do iPhone) **param de entregar o GPS** para ela, e
    não existe permissão que um site possa pedir para mudar isso. Por isso o rastreamento contínuo
-   em segundo plano **exige um aplicativo instalado** (ver a proposta abaixo). Na versão web:
+   em segundo plano **exige um aplicativo instalado**: o **aplicativo Android** (ver abaixo). Na versão web:
    - a página pede para **manter a tela ligada** (Screen Wake Lock API, suportada no Chrome para Android);
    - ao voltar para a página, a posição é retomada, a fila é enviada e o participante vê um aviso
      informando por quanto tempo a página ficou pausada;
@@ -1909,22 +1994,114 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 8. **Lida por**: indica que algum responsável abriu a central ou a conversa; não garante que a
    pessoa leu com atenção.
 
-### Solução para segundo plano: aplicativo Android (rastreamento com a tela apagada)
+### Aplicativo Android do participante (rastreamento com a tela apagada, migração 051)
 
-Para o rastreamento continuar com a tela apagada ou com outro aplicativo aberto, o caminho é um
-aplicativo Android instalado no celular do participante, **reaproveitando todo este backend**
-(mesmas tabelas, funções, regras de segurança e o mesmo painel; o participante entra pelo mesmo
-link/QR Code e informa nome, CPF e celular):
+A página do participante tem o botão **📱 Baixar aplicativo** (só aparece no Android, fora do aplicativo). O aplicativo
+**GBS Busca** (pasta `android/`) é a própria página do participante, aberta numa WebView presa ao servidor da operação,
+com o GPS lido e enviado por um serviço do Android. Funciona com a tela apagada, com o aplicativo minimizado ou fechado
+da lista de recentes, e sem internet.
 
-- **Foreground Service** do tipo `location` com notificação permanente ("Rastreamento GBS ativo"),
-  que o Android não encerra em segundo plano;
-- **FusedLocationProviderClient** (Google Play Services), com intervalo de 5–10 s e prioridade de alta precisão;
-- fila local em **Room/SQLite** e envio com **WorkManager** quando houver rede (mesma RPC `enviar_posicoes`, com o mesmo identificador por ponto para não duplicar);
-- **Firebase Cloud Messaging** (prioridade alta) para entregar os comandos mesmo com o app fechado,
-  disparado por um gatilho no banco ao inserir em `mensagens`;
-- permissões `ACCESS_FINE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE_LOCATION` e
-  `POST_NOTIFICATIONS`, além de orientação para retirar o app da otimização de bateria.
-  Para publicar na Play Store, o uso de localização em segundo plano passa por declaração e revisão do Google. Para uso interno, o app também pode ser distribuído direto (APK ou gerenciamento de dispositivos).
+**Como o participante instala e entra sem novo cadastro**
+
+1. Na página da busca (Chrome no Android), **📱 Baixar aplicativo** abre o passo a passo: **Baixar** → **Instalar** →
+   **Abrir nesta busca**. O navegador não instala o APK sozinho (o Android não deixa): o Chrome baixa o arquivo, a pessoa
+   toca em **Abrir** e permite **Instalar apps desconhecidos** para o Chrome uma única vez.
+2. Quem já está participando leva o cadastro por um **código de uso único** (válido por 30 min, só o resumo SHA-256 fica no
+   banco): **Abrir no aplicativo** usa um link `intent:` que só abre o pacote `br.gbs.busca` (sem o aplicativo, baixa o APK).
+   O aplicativo resgata o código com a sessão dele (`app_vinculo_resgatar`): a participação passa para o aplicativo, com a
+   mesma trilha, as mesmas mensagens e o mesmo cadastro. A página do navegador para de enviar e mostra **"O registro passou
+   para o aplicativo"** (evita a trilha em dobro). Antes de pedir o código, a página envia o que tinha na fila.
+3. O botão **Baixar** também deixa o link na área de transferência: na primeira abertura, o aplicativo o lê (e apaga) e já
+   abre na busca, mesmo que a pessoa não volte ao navegador. Quem ainda não tinha entrado abre o aplicativo só com a
+   operação e preenche o cadastro nele. Também dá para colar o link da operação na tela inicial do aplicativo.
+
+**Arquitetura**
+
+- **Página**: o aplicativo carrega `https://servidor/civil.html#t=…&app=1`. Atualizações do site chegam sem reinstalar; o
+  service worker guarda a página e o mapa para abrir sem internet. A página fala com o aplicativo pelo objeto `GBSNativo`
+  (`js/app-nativo.js`), criado com `addWebMessageListener` **só para a origem do servidor**; links para outros sites abrem
+  fora do aplicativo. Fora do aplicativo `window.GBSApp.disponivel` é falso e a página funciona exatamente como antes.
+- **Serviço de GPS** (`RastreioService`, serviço em primeiro plano do tipo `location`, com aviso fixo): uma leitura por
+  segundo (serviço de localização do Google; sem ele, o GPS do Android) → **o mesmo filtro da página** (`FiltroGps`, porta
+  do `gps.js`, conferida leitura a leitura pelo teste `FiltroGpsTest` com casos gerados do próprio `gps.js`) → **fila no
+  aparelho** (`FilaPontos`: cada ponto gravado e sincronizado com o disco antes de seguir; remoção por troca atômica do
+  arquivo; nada é descartado por falta de internet) → **envio com confirmação por ponto** (`Sincronizador`). O GPS e a fila
+  rodam numa linha de execução e o envio em outra (a rede lenta nunca atrasa a gravação). Volta a enviar sozinho quando a
+  conexão volta; sem sinal, tenta de novo em 2, 4, 8, 16 e 30 s. Sinal de vida a cada 15 s, também com a tela apagada (o painel vê o
+  participante ativo mesmo parado). Horário dos pontos convertido para o do servidor quando o relógio do celular erra mais de 30 s.
+- **Credencial do aparelho**: o serviço envia sem a sessão do navegador, com um **segredo do aparelho** (`app_dispositivo_registrar`,
+  64 caracteres, mostrado uma vez; o banco guarda só o resumo). `app_enviar_posicoes` e `app_sinal_vida` conferem o segredo e
+  fazem exatamente o que `enviar_posicoes_lote` e `sinal_vida` fazem (operação encerrada, participante removido ou liberado,
+  horário dos pontos, sem duplicar). Registrar de novo ou passar a participação para outro aparelho revoga o segredo anterior.
+  Fim da participação: o serviço para, apaga a fila e o segredo, e a página mostra a tela de fim.
+- **Dados no celular**: só na memória interna do aplicativo, **fora de backup e da transferência entre aparelhos**; HTTPS
+  obrigatório. A página não guarda o segredo.
+- **Mapa sem internet**: ao entrar, o aplicativo guarda o mapa da **região da operação** (setores e pontos, raio de até
+  15 km, dentro do limite do OpenStreetMap), além da área em volta da posição que a página já guarda.
+- **Mensagens com o aplicativo fechado ou a tela apagada** (migração 056): a cada sinal de vida (15 s) o serviço pergunta
+  ao servidor (`app_mensagens_pendentes`, com o segredo do aparelho) se há mensagem dos bombeiros ainda não confirmada e
+  mostra a notificação como num aplicativo de conversa: **som, vibração, aparece por cima dos outros aplicativos e na tela
+  bloqueada**, juntando as mensagens numa conversa "Bombeiros" (tocar abre o aplicativo). Cada mensagem avisa uma vez só
+  (o id fica guardado no aparelho); com a página na frente, a própria página mostra o alerta. A mensagem buscada fica como
+  **entregue** no painel. Não usa Firebase: o aviso depende do serviço do aplicativo estar ligado (é o mesmo que envia a
+  localização durante toda a busca).
+- **Aviso fixo de monitoramento** (como o de navegação de um aplicativo de mapas): colorido (verde enviando, laranja com
+  problema), com o tempo de busca correndo, quantos pontos já foram enviados, visível na tela bloqueada e com a tela apagada.
+  No Android 14, se for arrastado para fora, volta sozinho enquanto o registro continua.
+- **Bateria**: a página oferece **Liberar a bateria (recomendado)**, que tira o aplicativo da economia de bateria do Android
+  (alguns fabricantes encerram serviços de fundo mesmo assim; o aviso fixo e a liberação reduzem isso).
+- Permissões: localização precisa (durante o uso basta, pois o registro começa com o aplicativo aberto e segue pelo serviço
+  em primeiro plano), avisos (Android 13+), serviço de localização, internet. **Não** pede localização "o tempo todo" nem câmera
+  (a foto usa o aplicativo de câmera do celular).
+
+**Gerar e publicar o APK** (`.github/workflows/apk.yml`)
+
+- A cada mudança em `android/` ou pelo botão **Run workflow** em Actions, o GitHub roda os testes do aplicativo, a
+  verificação do Android (lint) e gera o APK (`gbs-busca.apk` e o SHA-256):
+  - branch **main** → Release **app-android** (produção);
+  - branch **testes** → Release **app-android-testes** (não troca o APK de produção).
+  Um build mais antigo (ex.: **Re-run** de uma execução velha) nunca substitui um APK mais novo no Release (o Android
+  não instala versão menor por cima de maior); depois de publicar, o workflow baixa o arquivo de volta e confere o SHA-256.
+- **Download**: o botão da página usa `/api/app?baixar=1`, que **entrega o APK pelo próprio site** (tipo
+  `application/vnd.android.package-archive`, nome `gbs-busca.apk`). Antes redirecionava para o GitHub, que manda o
+  navegador para um link assinado que vale poucos minutos: no Android o download às vezes começava depois e chegava
+  "expirado" (o arquivo vinha corrompido e não instalava). Se o servidor não conseguir buscar o arquivo, volta a
+  redirecionar. No deploy da branch testes (Vercel), entrega o APK de testes (sem ele, o de produção).
+  `APP_ANDROID_URL` (Vercel) troca o endereço; `APP_ANDROID_URL=desligado` esconde o botão.
+- **Assinatura (faça uma vez)**: sem ela, cada build sai com uma chave de teste diferente e o celular só atualiza
+  desinstalando a versão anterior. Gere a chave e guarde-a em lugar seguro (perdeu a chave, os celulares precisam
+  desinstalar para receber versões novas):
+
+  ```bash
+  keytool -genkeypair -v -keystore gbs-busca.jks -alias gbs-busca -keyalg RSA -keysize 4096 -validity 10000
+  ```
+
+  ```bash
+  base64 -w0 gbs-busca.jks
+  ```
+
+  Em **Settings → Secrets and variables → Actions → Secrets**, cadastre `ANDROID_KEYSTORE_BASE64` (o texto do segundo
+  comando), `ANDROID_KEYSTORE_SENHA`, `ANDROID_CHAVE_ALIAS` (`gbs-busca`) e `ANDROID_CHAVE_SENHA`.
+- **Servidor fixo (recomendado)**: em **Variables**, `GBS_ORIGEM` = endereço do site (ex.: `https://rastreamento-sar.vercel.app`).
+  Opcional: `GBS_ORIGEM_TESTES` = endereço do deploy da branch testes, para o APK de testes abrir as páginas de testes.
+  Com ele, o aplicativo só abre esse servidor. Sem ele, o aplicativo aceita o servidor do primeiro link de abertura
+  (sempre https) e pede confirmação antes de trocar de busca enquanto registra.
+- **Compilar no computador** (Android Studio ou Android SDK + JDK 17), na pasta `android/`:
+
+  ```bash
+  ./gradlew testReleaseUnitTest lintRelease assembleRelease
+  ```
+
+- Depois de mudar o filtro da página (`public/js/gps.js`), gere de novo os casos do teste do aplicativo (o `npm test` acusa):
+
+  ```bash
+  node android/ferramentas/gerar-casos-filtro.js
+  ```
+
+Limitações: o Android só instala o APK com o toque da pessoa (não há instalação automática pelo navegador); o serviço precisa
+ser iniciado com o aplicativo aberto (o Android não deixa começar a localização em segundo plano sem a permissão "o tempo todo");
+se o sistema encerrar o aplicativo, o registro volta ao abri-lo, e os pontos que estavam na fila continuam guardados.
+Não é distribuído pela Play Store.
 
 ---
 
@@ -1952,14 +2129,14 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 16 | Abrir o painel no celular (em pé e deitado) e no tablet | mapa, lista e ficha ficam utilizáveis, sem rolagem lateral |
 | 17 | No celular do civil, tocar **ENCONTREI ALGO → Possível pista**, escrever e enviar | o painel avisa com som, o botão **Mensagens** mostra 1, o marcador laranja aparece no mapa; ao abrir, o civil vê "Lida por …" |
 | 18 | Responder pela ficha (**Conversa**) | o civil recebe o alerta em tela cheia e confirma |
-| 19 | No civil, **TIRAR FOTO** → conferir → **SALVAR FOTO** | a câmera aparece no mapa no ponto; tocar abre a foto com autor, horários e coordenadas; **Ampliar** mostra em tela cheia |
+| 19 | No civil, **FOTO** → conferir → **SALVAR FOTO** | a câmera aparece no mapa no ponto; tocar abre a foto com autor, horários e coordenadas; **Ampliar** mostra em tela cheia |
 | 20 | Repetir com o celular em modo avião | a foto fica "Na fila"; ao voltar a internet, é enviada sozinha |
 | 21 | **Ferramentas**: trocar camada, ocultar nomes, ocultar a lista | cada opção funciona e o menu fecha; com a lista oculta, o mapa ocupa a tela e **« Participantes** reabre |
 | 23 | **Setor** (topo) **→ Por raio**: tocar no centro, raio 300 m, atribuir a um civil; depois desenhar outro setor por cantos | os dois aparecem com nome e situação; o civil vê "Seu setor" no celular; recarregar a página não os perde |
 | 24 | Marcar um **Ponto de encontro** e **Enviar como destino** ao civil; ele anda em direção ao ponto | o celular mostra distância e direção que diminuem/atualizam; testar com o GPS desligado (aviso "Sem GPS") |
 | 25 | Trocar para **Topográfico** e abrir **Relevo em 3D** numa região com morros | curvas de nível visíveis com trilhas e setores por cima; o 3D mostra os morros e a altitude ao tocar |
 | 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** vermelhoo; outros civis não aparecem |
-| 22b | No civil, tocar **FALAR COM OS BOMBEIROS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
+| 22b | No civil, tocar **MENSAGENS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
 | 22 | Criar uma operação de teste, registrar dados (diário, relatório) e **Excluir operação** (confirmar) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
 | 26 | Celular parado sobre uma mesa por 5 min | a trilha não vira um "novelo"; no diagnóstico (`&diag=1`) aparecem leituras descartadas como "oscilação parado" |
 | 27 | Enviar um destino a um civil com a página dele aberta | o cartão **IR ATÉ** aparece em poucos segundos, sem recarregar; a ficha mostra "✓ recebido no celular" |
@@ -2018,9 +2195,27 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40s | **Convidar → ☎ WhatsApp**, categoria **Bombeiro**, nome e celular de alguém que não está nos contatos → **Enviar pelo WhatsApp** | o WhatsApp abre a conversa com o número, com a mensagem e o link dos bombeiros; quem abre pode escolher militar; repetir com **Responsável** manda o endereço do painel |
 | 40t | **Marcar ponto → ＋ Novo tipo** "Pouso de helicóptero", ícone 🚁, cor roxa → **Criar tipo** → **Marcar ponto**; depois **Editar tipos** e trocar a cor | o ponto aparece com 🚁 roxo; outro responsável vê o tipo na lista; ao trocar a cor, o ponto já marcado muda junto |
 | 40u | Operação **sem setores**, com trilhas e pontos → **Relatório final (PDF)** | a seção de setores mostra "Mapa geral da operação" com trilhas, pontos (com os ícones dos tipos), relatos e fotos |
+| 42a | No Chrome do Android, já na busca: **📱 Baixar aplicativo → Baixar o aplicativo**, instalar e tocar em **Abrir no aplicativo** | o aplicativo abre direto na busca, sem cadastro; o painel continua mostrando a mesma pessoa e a mesma trilha; a página do navegador mostra "O registro passou para o aplicativo" |
+| 42b | No aplicativo, apagar a tela e andar 10 min; depois deixar o celular na mesa 5 min | a trilha aparece no painel durante a caminhada, sem pausas; parado, um ponto a cada intervalo da operação; a barra de notificações mostra "Enviando sua localização aos bombeiros" |
+| 42c | Modo avião por 15 min andando com a tela apagada; depois religar | a notificação passa a "Sem internet: N ponto(s) guardado(s)"; ao religar, todos chegam ao painel, na ordem, sem duplicar |
+| 42d | No modo avião, abrir o aplicativo | a página abre (guardada) e o mapa mostra a região da operação |
+| 42e | Liberar a saída do participante no painel | o aplicativo para de registrar, o aviso fixo some e a tela mostra "Saída liberada" |
+| 42f | Abrir **📱 Baixar aplicativo** de novo em outro celular e abrir no aplicativo de lá | o primeiro aplicativo para ("Participação encerrada neste celular"); o segundo continua a mesma trilha |
+| 42g | No aplicativo registrando, **fechar o aplicativo** (tirar da lista de recentes) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
+| 42h | Com o aplicativo registrando, puxar a barra de notificações e a tela bloqueada | o aviso fixo verde "Busca …" mostra "Enviando sua localização aos bombeiros", o tempo de busca correndo e os pontos enviados; no Android 14, arrastar o aviso para fora: ele volta |
+| 42i | No Chrome do Android, tocar em **Baixar aplicativo**, esperar alguns minutos com o download pausado e continuar | o arquivo baixa de `/api/app?baixar=1` como `gbs-busca.apk` e instala (sem erro de link expirado) |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Aplicativo Android (migração 051)**: banco — 972 verificações (código de uso único só do dono, resumo no banco, vencido e
+  já usado recusados, participação passa para o aplicativo e o navegador perde o acesso, segredo do aparelho com resumo, envio
+  e sinal sem sessão, reenvio sem duplicar, segredo errado ou revogado recusado, troca de aparelho, participante liberado);
+  aplicativo (JUnit) — filtro igual ao `gps.js` em 3.100 leituras, fila que sobrevive a queda no meio da gravação, envio em
+  lotes só com confirmação, sem internet nada sai, recusados, fim da participação, função ausente, relógio do celular errado;
+  verificação do Android (lint) e APK de release com R8; navegador (390 e 1280 px) — botão e passo a passo no Android,
+  código no link `intent:`, página para quando o aplicativo assume, aplicativo entra sem cadastro, segredo só no aplicativo,
+  página não envia pontos, estado do registro, mapa da operação guardado, reabertura sem novo aparelho, fim pelo serviço.
 
 - **Relatório diário e da passagem de comando (migração 049)**: banco — 926 verificações (reserva do dia, um diário por dia, reserva de outro responsável e expiração, passagem só da própria operação, diário da operação, relatórios antigos como "final"); unitários da montagem dos dois PDFs; navegador — diários dos dias terminados gerados e guardados sem baixar, sem repetir, relatório de hoje só baixado, relatório da passagem.
 - **Dashboard em outra janela e por link público; várias vítimas (migração 048)**: banco — 912 verificações (estudo com cada vítima e a própria localização, dados da janela iguais aos do painel, link público sem nomes nem textos, troca e desligamento do link, nada gravável sem login, estudo geral por vítima); navegador — painel, janela própria, link público e link inválido, atualização automática e lista de vestígios.

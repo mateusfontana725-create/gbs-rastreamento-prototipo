@@ -18,6 +18,10 @@
     try {
       var op = await C.consultar(C.cliente.from('operacoes').select('*').eq('id', opId).maybeSingle());
       if (!op) { avisar('Operação não encontrada ou sem permissão de acesso (só os responsáveis da operação e os administradores veem o SCI).'); return; }
+      // operação arquivada (migração 055): os dados do SCI vêm do arquivo da operação
+      if (op.arquivada_em && window.ArquivoLocal) {
+        try { await window.ArquivoLocal.carregar(op); } catch (e) { avisar('Não foi possível abrir o arquivo desta operação: ' + (e.message || e)); return; }
+      }
       var setores = [];
       var lerSetores = async function () {
         try { setores = (await C.consultar(C.cliente.from('setores').select('id,nome,status,equipe,cor').eq('operacao_id', opId).order('nome'))) || []; } catch (e) { /* sem setores */ }

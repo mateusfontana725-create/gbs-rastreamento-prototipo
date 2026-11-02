@@ -409,10 +409,6 @@
       acoes.push(el('button', { classe: 'btn btn-escuro', type: 'button', id: 'pas-aceitar', texto: 'Aceitar o comando', onclick: async function () {
         if (await rpc('passagem_responder', { p_passagem: pas.id, p_aceitar: true, p_nota: '' }, 'Você está no comando.')) {
           fechar(true);
-          // relatório da passagem: gerado e guardado sozinho no aceite (migração 049)
-          if (window.Relatorio && window.Relatorio.gerarPassagem) {
-            window.Relatorio.gerarPassagem(P.op(), Object.assign({}, pas, { estado: 'aceita', respondida_em: new Date().toISOString() }), { baixar: false });
-          }
         }
       } }));
     }

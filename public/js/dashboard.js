@@ -119,13 +119,12 @@
     var fechar = null;
     var caixa = el('div', { classe: 'dash-det' }, [
       el('div', { classe: 'dash-det-topo' }, [
-        el('h2', { id: 'modal-titulo', texto: o.titulo }),
+        el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: o.titulo }, [o.nota && window.UI ? UI.dica(o.nota) : null]),
         el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
       o.subtitulo ? el('p', { classe: 'muted dash-det-sub', texto: o.subtitulo }) : null,
       o.medidas ? medidas(o.medidas) : null,
       o.lista ? listaDetalhe(o.lista, o.vazio) : null,
-      o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
       o.acoes && o.acoes.length ? el('div', { classe: 'dash-det-acoes' }, o.acoes.map(function (a) {
         return el('button', { classe: 'btn' + (a.principal ? ' btn-primario' : ''), type: 'button', texto: a.texto, onclick: a.fn });
       })) : null,
@@ -206,16 +205,21 @@
     ]), aoClicar, 'Ver detalhes: ' + rotulo);
   }
 
+  // Explicações (pergunta e nota) ficam no "i" ao lado do título, não em texto na tela.
+  function textoDaExplicacao(o) {
+    var texto = [o.pergunta, o.nota].filter(Boolean).join(' ');
+    return texto && window.UI ? UI.dica(texto) : null;
+  }
+
   // Cartão com estrutura fixa: título, n (tamanho da amostra), pergunta, corpo e nota.
   // span: colunas da grade (12 = largura toda).
   function cartao(o) {
     var amostra = o.n == null ? el('span', { classe: 'dash-n dash-n-baixo', texto: 'n < 5' })
       : el('span', { classe: 'dash-n', texto: 'n = ' + o.n });
     return clicavel(el('section', { classe: 'dash-card dash-s' + (o.span || 12) }, [
-      el('header', { classe: 'dash-card-topo' }, [el('h3', { classe: 'titulo-com-dica' }, [o.titulo, o.pergunta && window.UI ? UI.dica(o.pergunta) : null]), o.n === undefined ? null : amostra,
+      el('header', { classe: 'dash-card-topo' }, [el('h3', { classe: 'titulo-com-dica' }, [o.titulo, textoDaExplicacao(o)]), o.n === undefined ? null : amostra,
         o.aoClicar ? el('span', { classe: 'dash-card-dica', texto: o.dica || 'Detalhes ›' }) : null]),
       el('div', { classe: 'dash-card-corpo' }, o.corpo),
-      o.nota ? el('p', { classe: 'dash-card-nota', texto: o.nota }) : null,
     ]), o.aoClicar, 'Ver detalhes: ' + o.titulo);
   }
 
@@ -383,33 +387,6 @@
     return el('dl', { classe: 'dash-medidas' }, nodos);
   }
 
-  /* ------------------------------ leitura em texto ------------------------------ */
-  function frases(d) {
-    var ops = d.operacoes, dist = d.distancia_km, loc = d.localizacoes;
-    if (ops.total === 0) return ['Ainda não há operações no seu acesso.'];
-    var out = [];
-    out.push('Você tem ' + ops.total + ' operaç' + (ops.total === 1 ? 'ão' : 'ões') + ': ' + ops.abertas + ' abert' + (ops.abertas === 1 ? 'a' : 'as') +
-      ' e ' + ops.encerradas + ' encerrada' + (ops.encerradas === 1 ? '' : 's') + '.');
-    var pico = ultimos12(ops.por_mes).reduce(function (m, x) { return x.n > m.n ? x : m; }, { mes: null, n: 0 });
-    if (pico.n > 0) out.push('O mês com mais operações nos últimos 12 meses foi ' + rotuloMes(pico.mes) + ', com ' + pico.n + '.');
-    if (dist.mediana != null) {
-      out.push('Em ' + dist.casos + ' casos com vítima localizada, a distância mediana entre o último local visto (ULV) e o local da localização é de ' +
-        km(dist.mediana) + '. Metade dos casos fica entre ' + km(dist.p25) + ' e ' + km(dist.p75) + '.');
-    }
-    if (loc.minutos_ate_mediana != null) out.push('A localização acontece, em mediana, ' + minutos(loc.minutos_ate_mediana) + ' depois do início das operações.');
-    var perfis = d.perfis.filter(function (p) { return p.fichas != null; }).sort(function (a, b) { return b.fichas - a.fichas; });
-    if (perfis.length) out.push('O perfil mais frequente entre as vítimas é "' + nomePerfil(perfis[0].perfil) + '", com ' + perfis[0].fichas + ' ficha' + (perfis[0].fichas === 1 ? '' : 's') + '.');
-    var cond = loc.por_condicao || {};
-    if (cond.viva != null || cond.obito != null) {
-      out.push('Entre as vítimas localizadas: ' + (cond.viva != null ? cond.viva + ' com vida' : 'um número oculto com vida') +
-        ' e ' + (cond.obito != null ? cond.obito + ' em óbito' : 'um número oculto em óbito') + '.');
-    }
-    return out;
-  }
-
-  /* ------------------------------ qualidade dos dados (denominadores) ------------------------------ */
-  // Diz sobre o que os números foram calculados. Ausente aparece como ausente (nunca zero);
-  // não localizados ficam fora das medianas (censurados), não entram como "distância zero".
   function cartaoQualidade(q) {
     if (!q) {
       return cartao({ span: 12, titulo: 'Qualidade dos dados', pergunta: 'Sobre quantos casos cada número foi calculado.',
@@ -463,13 +440,8 @@
     var totalCond = typeof vitLocalizadas === 'number' ? vitLocalizadas : condicoes.reduce(function (t, i) { return t + (i.valor || 0); }, 0);
 
     var topo = el('header', { classe: 'dash-topo' }, [
-      el('div', null, [
-        el('h2', { texto: 'Dashboard' }),
-        el('p', { classe: 'muted', texto: 'Todas as operações a que você tem acesso. Os números não identificam vítimas; o mapa mostra o local de cada operação.' }),
-      ]),
+      el('h2', { texto: 'Dashboard' }),
       el('div', { classe: 'dash-acoes' }, [
-        el('span', { classe: 'dash-atualizado muted', texto: 'Atualizado em ' + dataHora(d.gerado_em) }),
-        seloAutomatico(ATUALIZAR_GERAL_MS),
         janelaPropria() ? null : el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dash-nova-janela', texto: '↗ Abrir em outra janela',
           title: 'Abre só o dashboard numa janela própria (ou outro monitor)',
           onclick: function () { abrirJanelaDashboard(''); } }),
@@ -494,11 +466,6 @@
         function () { detalheLocalizadas(d); }),
     ]);
 
-    var leitura = el('section', { classe: 'dash-leitura' }, [
-      el('h3', { texto: 'Leitura rápida' }),
-      el('ul', null, frases(d).map(function (f) { return el('li', { texto: f }); })),
-      temOculto(d) ? el('p', { classe: 'dash-nota-oculto muted', texto: 'Números com menos de ' + d.k_minimo + ' casos aparecem como "oculto", para que ninguém seja identificado.' }) : null,
-    ]);
 
     // Por mês: duas colunas (aquática e terrestre), contadas da lista de operações do usuário.
     // Sem a lista (falha ao carregar), volta à coluna única do total.
@@ -602,7 +569,7 @@
             ['Operações com vítima localizada', valorOu(p.operacoes_com_localizacao)],
             ['Distância mediana até a localização', valorOu(p.mediana_km, km)],
           ],
-          nota: 'Uma ficha pode ter mais de um perfil. Números com menos de ' + d.k_minimo + ' casos ficam ocultos.',
+          nota: 'Uma ficha pode ter mais de um perfil.',
         });
       })],
       nota: 'Fichas podem ter perfil em branco. A distância mediana por perfil só aparece com 5 ou mais casos. Toque num perfil para detalhes.',
@@ -624,7 +591,7 @@
     });
 
     return [
-      topo, kpis, secaoMapaParana(), leitura,
+      topo, kpis, secaoMapaParana(),
       el('div', { classe: 'dash-grade' }, [grafMeses, grafTipos, grafDist, resumoDist, grafPerfis, grafCond, cartaoQualidade(d.qualidade)]),
     ];
   }
@@ -1342,8 +1309,14 @@
       var cri = (l || []).filter(function (r) { return r.criador; })[0] || (l || [])[0];
       resp.textContent = cri ? cri.nome + ((l || []).length > 1 ? ' (+' + (l.length - 1) + ')' : '') : 'não informado';
     }).catch(function () { resp.textContent = 'indisponível'; });
-    C.cliente.from('participantes').select('id', { count: 'exact', head: true }).eq('operacao_id', o.id).neq('tipo', 'responsavel').eq('removido', false)
-      .then(function (r) { part.textContent = r.error ? 'indisponível' : String(r.count == null ? '—' : r.count); }, function () { part.textContent = 'indisponível'; });
+    if (o.arquivada_em) {
+      // operação arquivada (migração 055): a contagem foi guardada no arquivamento
+      C.cliente.from('operacao_arquivos').select('resumo').eq('operacao_id', o.id).maybeSingle()
+        .then(function (r) { var n = r && r.data && r.data.resumo ? r.data.resumo.participantes : null; part.textContent = r.error || n == null ? 'indisponível' : String(n); }, function () { part.textContent = 'indisponível'; });
+    } else {
+      C.cliente.from('participantes').select('id', { count: 'exact', head: true }).eq('operacao_id', o.id).neq('tipo', 'responsavel').eq('removido', false)
+        .then(function (r) { part.textContent = r.error ? 'indisponível' : String(r.count == null ? '—' : r.count); }, function () { part.textContent = 'indisponível'; });
+    }
     return no;
   }
 
@@ -1386,10 +1359,17 @@
     m.sujo = false;
     var ops;
     try {
-      ops = await C.consultarTudo(function () {
-        return C.cliente.from('operacoes').select('id,codigo,tipo,tipo_outro,status,acionado_em,criada_em,encerrada_em,dados_apagados_em,local_lat,local_lng,local_endereco,descricao,ipo')
-          .order('criada_em', { ascending: false });
-      });
+      var colunasMapa = 'id,codigo,tipo,tipo_outro,status,acionado_em,criada_em,encerrada_em,dados_apagados_em,local_lat,local_lng,local_endereco,descricao,ipo';
+      try {
+        ops = await C.consultarTudo(function () {
+          return C.cliente.from('operacoes').select(colunasMapa + ',arquivada_em').order('criada_em', { ascending: false });
+        });
+      } catch (e) {
+        // banco sem a migração 055 (sem arquivada_em): as mesmas colunas de antes
+        ops = await C.consultarTudo(function () {
+          return C.cliente.from('operacoes').select(colunasMapa).order('criada_em', { ascending: false });
+        });
+      }
     } catch (e) {
       if (mapaDash !== m) return;
       m.aviso.hidden = false;

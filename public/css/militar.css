@@ -710,7 +710,7 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 
 /* ---- painel de estatísticas (tela inicial e da operação) ---- */
 .dash { display: grid; gap: 18px; font-variant-numeric: tabular-nums; }
-.dash-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dash-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dash-topo h2 { margin: 0; font-size: 1.3rem; }
 .dash-topo p { margin: 3px 0 0; font-size: .84rem; }
 .dash-acoes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -729,10 +729,6 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 .dash-kpi-detalhe { font-size: .74rem; color: var(--texto-3); }
 
 /* leitura em texto */
-.dash-leitura { padding: 16px 18px; border-radius: 14px; border: 1px solid var(--borda); background: var(--superficie); }
-.dash-leitura h3 { margin: 0 0 10px; font-size: .92rem; }
-.dash-leitura ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; color: var(--texto-2); font-size: .88rem; line-height: 1.5; }
-.dash-leitura li { padding-left: 12px; border-left: 2px solid var(--acento); }
 .dash-nota-oculto { margin: 10px 0 0; font-size: .76rem; }
 
 /* grade de cartões: 12 colunas, cartões da mesma linha com a mesma altura */
@@ -1125,6 +1121,12 @@ body { font-size: 0.9375rem; }
   .painel-topo .pilula-conexao span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 
+.bussola-mapa {
+  width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; pointer-events: none;
+  background: var(--superficie); color: var(--texto-2); border: 1px solid var(--borda-forte); box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+.bussola-mapa svg { width: 42px; height: 42px; display: block; }
+
 /* Faixa de alerta crítico: uma linha; tocar no texto abre o alerta inteiro */
 .faixa-alerta { padding: 5px 10px; gap: 8px; flex-wrap: nowrap; border-bottom-width: 2px; }
 .faixa-alerta-textos { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1 1 auto; cursor: pointer; }
@@ -1449,7 +1451,10 @@ html[data-tema="claro"] .selo.selo-trilha-percorrida { color: #0f172a; backgroun
 .mapa-adaptativo .mk-poi, .mapa-adaptativo .mk-relato, .mapa-adaptativo .mk-foto,
 .mapa-adaptativo .cluster, .mapa-adaptativo .mk-local { opacity: .75; }
 .mapa-adaptativo .cluster-pessoas { opacity: .85; }
-.mapa-adaptativo .mk.antigo .simbolo { opacity: .45; }
+.mapa-adaptativo .mk.antigo .simbolo { opacity: .72; filter: grayscale(.5); }
+/* de perto o apagado (localização desativada / sem sinal) fica mais firme e ganha um anel claro, para achar no mapa
+   escuro ou no satélite; a borda tracejada continua dizendo que não é a posição atual */
+.mapa-adaptativo.zoom-perto .mk.antigo .simbolo { opacity: .85; box-shadow: 0 0 0 1.5px #000, 0 0 0 3px rgba(226, 232, 240, .55), 0 2px 6px rgba(0, 0, 0, .7); }
 .mapa-adaptativo .leaflet-marker-icon:hover .simbolo, .mapa-adaptativo .leaflet-marker-icon:hover .mk-poi,
 .mapa-adaptativo .leaflet-marker-icon:hover .mk-relato, .mapa-adaptativo .leaflet-marker-icon:hover .mk-foto,
 .mapa-adaptativo .leaflet-marker-icon:hover .cluster, .mapa-adaptativo .leaflet-marker-icon:hover .mk-local,
@@ -1597,16 +1602,22 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .btn-acao-topo .ico-acao { font-size: 1rem; line-height: 1; }
 .btn-acao-topo .ico-camera { flex: none; }
 .acoes-topo[hidden], .btn-acao-topo[hidden] { display: none !important; }
+/* Tablet e notebook (861–1280 px): a linha de ações desce para uma faixa cheia, com o nome sempre visível embaixo do ícone */
 @media (min-width: 861px) and (max-width: 1280px) {
-  .btn-acao-topo .rotulo-acao { display: none; }   /* notebook: só o ícone (o nome aparece ao passar o mouse) */
-  .btn-acao-topo { padding: 0 9px; }
+  .acoes-topo { order: 10; width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: stretch; }
+  .acoes-topo .btn-acao-topo { flex-direction: column; justify-content: center; gap: 3px; padding: 5px 2px; min-height: 50px; height: auto; min-width: 0; font-size: .72rem; line-height: 1.1; white-space: normal; text-align: center; letter-spacing: .02em; }
+  .btn-acao-topo .ico-acao { font-size: 1.05rem; }
 }
 @media (max-width: 860px) {
   .painel-topo { grid-template-areas: "voltar titulo pilula acoes" "rapidas rapidas rapidas rapidas"; }
-  .acoes-topo { grid-area: rapidas; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
+  .acoes-topo { grid-area: rapidas; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; width: 100%; min-width: 0; }
   .acoes-topo { align-items: stretch; }
   .acoes-topo .btn-acao-topo { flex-direction: column; justify-content: center; gap: 2px; padding: 4px 2px; min-height: 44px; height: auto; min-width: 0; font-size: .6rem; line-height: 1.05; white-space: normal; text-align: center; letter-spacing: .04em; }
   .btn-acao-topo .ico-acao { font-size: .95rem; }
+}
+/* Celular em pé: duas linhas de cinco botões (todos à vista, alinhados) */
+@media (max-width: 860px) and (orientation: portrait) {
+  .acoes-topo { grid-auto-flow: row; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 @media (orientation: landscape) and (max-height: 540px) {
   .acoes-topo { display: flex; }
@@ -2118,19 +2129,23 @@ body.personalizando .acoes-topo .btn-acao-topo[hidden] { display: inline-flex !i
 body.pers-arrastando, body.pers-arrastando * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 
 .pers-painel {
-  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2400; width: min(1100px, calc(100vw - 24px));
-  display: grid; gap: 10px; padding: 12px 14px; max-height: 50vh; max-height: 50dvh; overflow: auto;
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2400; width: min(980px, calc(100vw - 24px));
+  display: block; padding: 0 0 12px; max-height: 64vh; max-height: 64dvh; overflow: auto; overscroll-behavior: contain;
   background: var(--superficie); border: 1px solid var(--borda-forte); border-top: 3px solid var(--acento); border-radius: var(--raio);
   box-shadow: 0 18px 48px rgba(0, 0, 0, .6);
 }
 .pers-painel.pers-alvo { border-color: var(--perigo); box-shadow: 0 0 0 3px rgba(239, 68, 68, .35), 0 18px 48px rgba(0, 0, 0, .6); }
-.pers-cabeca { display: flex; align-items: center; gap: 8px; }
+.pers-cabeca { display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 2; padding: 12px 14px; margin-bottom: 12px;
+  background: var(--superficie); border-bottom: 1px solid var(--borda); }
+.pers-corpo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; padding: 0 14px; }
 .pers-cabeca strong { flex: 1 1 auto; font-family: var(--fonte-titulo); text-transform: uppercase; letter-spacing: .06em; font-size: .95rem; flex-wrap: wrap; }
 .pers-cabeca .dica-texto { flex-basis: 100%; text-transform: none; font-family: var(--fonte); letter-spacing: 0; font-weight: 400; }
-.pers-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: start; }
-.pers-bloco { display: grid; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
-.pers-rotulo { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--texto-3); }
-.pers-bandeja { display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px; }
+.pers-bloco { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.pers-bloco-bandeja { grid-column: 1 / -1; order: -1; }
+.pers-corpo > .pers-bloco:first-child { grid-column: span 2; }
+.pers-fonte .seg-opcao { padding: 0 8px; font-size: .8rem; }
+.pers-rotulo { font-size: .76rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+.pers-bandeja { display: flex; flex-wrap: wrap; gap: 6px; min-height: 52px; padding: 8px; border: 1px dashed var(--borda-forte); border-radius: var(--raio); background: var(--fundo); }
 .pers-chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px 0 10px; cursor: grab; touch-action: none;
   border: 1px solid var(--borda-forte); border-radius: 999px; background: var(--superficie); color: var(--texto); font-size: .8rem; font-weight: 600;
@@ -2157,9 +2172,10 @@ body.personalizando .controle-grupos[hidden] > * { display: none; }
 .pers-alvo-canto.pers-canto-bottomright { bottom: 10px; right: 10px; }
 @media (max-width: 760px) {
   .pers-painel { left: 0; right: 0; bottom: 0; transform: none; width: 100%; border-radius: 14px 14px 0 0; border-left: 0; border-right: 0; border-bottom: 0;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-height: 56vh; max-height: 56dvh; }
-  .pers-linha { grid-template-columns: minmax(0, 1fr) auto; }
-  .pers-bloco-bandeja { grid-column: 1 / -1; }
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-height: 60vh; max-height: 60dvh; }
+  .pers-corpo { grid-template-columns: 1fr 1fr; padding: 0 10px; }
+  .pers-corpo > .pers-bloco:nth-child(-n+2) { grid-column: 1 / -1; }
+  .pers-letra .seg-opcao { padding: 0 6px; font-size: .75rem; }
   .pers-fonte .seg-opcao { padding: 0 6px; font-size: .72rem; }
 }
 /* Cadastro da operação: seções em cartão, como as linhas do POA/POD */
@@ -2210,10 +2226,6 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
 @media (max-width: 600px) {
   .modal .briefing-modal .form-rodape .btn { flex: 1 1 calc(50% - 32px); white-space: normal; line-height: 1.1; }
   .modal .briefing-modal .form-rodape #briefing-atualizar { flex: 0 0 48px; margin-right: 0; }
-}
-/* Convidar: o nome aparece também no notebook (é o único botão de ação com texto curto e pouco óbvio sem ele) */
-@media (min-width: 861px) and (max-width: 1280px) {
-  #btn-convite .rotulo-acao { display: inline; }
 }
 
 /* Meteorologia: legendas por camada e fontes com horário */
@@ -2268,6 +2280,58 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
 }
 .mapa-adaptativo .cluster.cluster-vitima { opacity: 1; scale: max(var(--esc-mapa), .85); }
 .esconder-rotulos .cl-vitima-rotulo { display: inline-block; }
+
+/* =====================================================================
+ * Resumo de longe (js/mapa-resumo.js): até o zoom do nível "longe" todos os agrupamentos (pessoas, pontos, relatos,
+ * fotos, vítimas) viram UM selo por região. Os agrupamentos de sempre ficam escondidos por baixo (não são apagados) e
+ * voltam de perto. O resumo desenha numa camada própria ("resumo"), por isso não é escondido por estas regras.
+ * ===================================================================== */
+.mapa-resumo .leaflet-marker-pane .mk-wrap,
+.mapa-resumo .leaflet-marker-pane .cluster-pessoas-wrap,
+.mapa-resumo .leaflet-pontos-pane > * { display: none; }
+.rm-wrap { background: none; border: 0; }
+.resumo-mapa { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; height: 100%; cursor: pointer; isolation: isolate; }
+/* fundo escuro entre o círculo das pessoas e o quadrado dos pontos: nada que esteja embaixo aparece pelo vão */
+.resumo-mapa.rm-duplo::after { content: ""; position: absolute; inset: 2px 3px; border-radius: 22px; background: #0a0d10; z-index: -1; }
+.rm-pessoas {
+  flex: none; display: grid; padding: 5px; border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 10px rgba(0, 0, 0, .8);
+}
+.rm-pessoas b {
+  display: grid; place-items: center; border-radius: 50%; background: #0a0d10; color: #fff;
+  font: 800 13px/1 var(--mono); border: 1.5px solid rgba(255, 255, 255, .85);
+}
+.rm-pontos {
+  flex: none; display: grid; width: 36px; height: 36px; padding: 5px; border-radius: 9px;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 10px rgba(0, 0, 0, .8);
+}
+.rm-pontos b {
+  display: grid; place-items: center; border-radius: 5px; background: #0a0d10; color: #fff; font: 800 12px/1 var(--mono);
+}
+/* vítima dentro: anel verde pulsante em volta do selo todo */
+.resumo-mapa.rm-vitima::before {
+  content: ""; position: absolute; inset: -5px; border-radius: 24px; pointer-events: none;
+  box-shadow: 0 0 0 3px #10b981, 0 0 0 4.5px #000; animation: rm-vitima-pulso 1.6s ease-out infinite;
+}
+@keyframes rm-vitima-pulso {
+  0% { box-shadow: 0 0 0 3px #10b981, 0 0 0 4.5px #000, 0 0 0 4.5px rgba(16, 185, 129, .55); }
+  100% { box-shadow: 0 0 0 3px #10b981, 0 0 0 4.5px #000, 0 0 0 16px rgba(16, 185, 129, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .resumo-mapa.rm-vitima::before { animation: none; } }
+/* etiquetas ao lado, uma embaixo da outra (nunca uma por cima da outra) */
+.rm-rotulos {
+  position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 3px;
+  pointer-events: none; white-space: nowrap;
+}
+.rm-rotulos span {
+  padding: 2px 7px; border-radius: 3px; font: 800 .68rem/1.3 var(--fonte-titulo); letter-spacing: .06em;
+  box-shadow: 0 0 0 1.5px #000, 0 2px 6px rgba(0, 0, 0, .5);
+}
+.rm-rotulo-vitima { background: #10b981; color: #04261a; }
+.rm-rotulo-ajuda { background: #dc2626; color: #fff; }
+/* o selo é o único símbolo da região: não encolhe tanto quanto os símbolos soltos */
+.mapa-adaptativo .resumo-mapa { scale: max(var(--esc-mapa), .8); transition: scale .15s; }
+.mapa-adaptativo .rm-wrap:hover .resumo-mapa { scale: 1; }
 
 /* =====================================================================
  * Painel de comando SCI (js/sci.js, sci.html)
@@ -2483,3 +2547,83 @@ body.janela-sci { background: var(--fundo); }
 .meteo-area-grade { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .meteo-area-grade .meteo-chip[aria-checked="true"] { background: var(--acento); border-color: var(--acento); color: #0a0d10; }
 .meteo-barra-sat { background: linear-gradient(to right, rgba(235, 235, 235, .6) 0%, #22d3ee 25%, #22c55e 45%, #facc15 65%, #ef4444 85%, #7f1d1d 100%); }
+
+/* Etiqueta de recolher/mostrar o cabeçalho: pendurada no centro da borda de baixo (cor de destaque, sempre visível) */
+.painel-topo { position: relative; }
+.etiqueta-topo {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 1200; top: 100%;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 14px;
+  border: 0; border-radius: 0 0 10px 10px; background: var(--acento); color: #111827;
+  font-weight: 800; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .35); cursor: pointer;
+}
+.etiqueta-topo:hover { filter: brightness(1.08); }
+.etiqueta-topo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.btn-recolher-topo { min-height: 26px; }
+html.topo-oculto .painel-topo { display: none; }
+.btn-mostrar-topo { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 1200; display: none; }
+html.topo-oculto .btn-mostrar-topo { display: inline-flex; }
+
+/* SCI: o painel de comando tem destaque próprio na barra de ações */
+#menu-sci { background: #7c3aed; border-color: #a78bfa; color: #ffffff; font-weight: 800; box-shadow: 0 0 0 2px rgba(167, 139, 250, .35); }
+#menu-sci:hover { background: #6d28d9; }
+#menu-sci .ico-acao { font-size: 1.1rem; }
+
+/* Alinhamento: ícone numa caixa de altura fixa, para que o rótulo fique na mesma linha em todos os botões */
+/* Cada ícone ocupa 20 px de altura (com a borda), para os rótulos ficarem na mesma linha */
+.acoes-topo .btn-acao-topo .ico-acao { display: inline-flex; align-items: center; justify-content: center; height: 20px; line-height: 20px; }
+.acoes-topo .btn-acao-topo .ico-camera { height: 17px; margin: 1.5px 0; }
+.acoes-topo .btn-acao-topo .ico-msg { height: 16px; margin: 2px 0; }
+
+/* Botões de ação numa coluna à direita do mapa (tablet e computador) */
+@media (min-width: 861px) {
+  .acoes-topo.acoes-lateral-col {
+    position: absolute; top: 10px; right: calc(var(--larg-lateral, 320px) + 10px); z-index: 900;
+    display: flex; flex-direction: column; gap: 6px; width: 104px; max-height: calc(100% - 20px); overflow-y: auto;
+    flex: none; order: 0;
+  }
+  body.lateral-oculta .acoes-topo.acoes-lateral-col { right: 10px; }
+  .acoes-lateral-col .btn-acao-topo {
+    width: 100%; min-height: 54px; height: auto; padding: 5px 4px; flex-direction: column; justify-content: center; gap: 3px;
+    font-size: .7rem; line-height: 1.1; white-space: normal; text-align: center;
+  }
+  .acoes-lateral-col .btn-acao-topo .rotulo-acao { display: inline; }
+  html.acoes-lado-direita .camadas-mapa,
+  html.acoes-lado-direita #mapa .leaflet-top.leaflet-right { margin-right: 116px; }
+}
+
+/* =====================================================================
+ * CELULAR (revisão de outubro/2026): menos poluição no painel
+ * - topo: uma faixa só de botões compactos que rola de lado (antes eram
+ *   duas linhas de cinco, ~100 px a menos de mapa);
+ * - controles do mapa só com ícone; filtros numa linha; faixa de
+ *   operação encerrada com uma linha; etiqueta de esconder o cabeçalho
+ *   pequena, no canto.
+ * ===================================================================== */
+@media (max-width: 860px) and (orientation: portrait) {
+  .acoes-topo {
+    display: flex; grid-auto-flow: unset; grid-template-columns: none; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity; padding-right: 18px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  }
+  .acoes-topo .btn-acao-topo { flex: 0 0 auto; min-width: 58px; max-width: 76px; min-height: 42px; padding: 3px 4px; font-size: .56rem; scroll-snap-align: start; }
+  .acoes-topo .btn-acao-topo .ico-acao { font-size: .9rem; height: 16px; line-height: 16px; }
+  .acoes-topo .btn-acao-topo .ico-camera { height: 14px; margin: 1px 0; }
+  .acoes-topo .btn-acao-topo .ico-msg { height: 13px; margin: 1.5px 0; }
+  body.personalizando .acoes-topo { -webkit-mask-image: none; mask-image: none; flex-wrap: wrap; }
+}
+@media (max-width: 600px) {
+  .rotulo-ctl { display: none; }
+  .btn-meteo-mapa { padding: 0 9px; letter-spacing: 0; font-size: 1rem; }
+  .legenda-det:not([open]) > summary { padding-left: 9px; padding-right: 9px; font-size: 1rem; letter-spacing: 0; }
+  .legenda-det[open] > summary .rotulo-ctl { display: inline; }
+  /* etiqueta "Esconder cabeçalho": só a seta, no canto direito (não cobre a faixa nem o centro do mapa) */
+  .btn-recolher-topo { left: auto; right: 8px; transform: none; padding: 0 10px; font-size: 0; gap: 0; }
+  .btn-recolher-topo span { font-size: .72rem; }
+  .faixa-encerrada { padding: 6px 48px 6px 10px; font-size: .8rem; }
+  .faixa-detalhe { display: none; }
+  /* filtros da central (Todas / Relatos / Mensagens) numa linha só */
+  #painel-msgs .filtros { flex-wrap: nowrap; }
+  #painel-msgs .filtros .btn { flex: 1 1 0; min-width: 0; }
+  .central-abas .btn { padding-left: 6px; padding-right: 6px; }
+}

@@ -14,9 +14,24 @@
   var UI = window.UI;
   function $(id) { return document.getElementById(id); }
 
+  // Botões de ação: no topo (padrão) ou numa coluna à direita do mapa, só com tela de tablet ou maior.
+  function aplicarLadoAcoes() {
+    var acoes = $('acoes-topo'), cabeca = document.querySelector('.painel-topo'), corpo = $('painel-corpo');
+    if (!acoes || !cabeca || !corpo) return;
+    var lateral = UI.aparencia.acoesLado() === 'direita' && window.matchMedia('(min-width: 861px)').matches;
+    if (lateral) {
+      if (acoes.parentNode !== corpo) corpo.appendChild(acoes);
+    } else if (acoes.parentNode !== cabeca) {
+      cabeca.insertBefore(acoes, cabeca.querySelector('.painel-acoes'));
+    }
+    acoes.classList.toggle('acoes-lateral-col', lateral);
+  }
+
   var LIM = {
-    conectadoMs: 45000,          // contato nos últimos 45 s = conectado
-    instavelMs: 120000,          // 45 s a 2 min = sinal instável; acima = sem atualização
+    // O sinal de vida chega a cada 10 s (página) ou 15 s (aplicativo, mesmo com a tela apagada):
+    // dois sinais perdidos já mostram "instável"; pouco mais de um minuto sem nada = "sem atualização".
+    conectadoMs: 35000,          // contato nos últimos 35 s = conectado
+    instavelMs: 75000,           // 35 s a 75 s = sinal instável; acima = sem atualização
     posicaoAntigaMs: 120000,     // posição com mais de 2 min = "antiga"
     precisaoTrilhaM: 150,        // pontos com precisão pior são só "posição aproximada" (fora da linha da trilha)
     pollingOkMs: 20000,          // conferência periódica com tempo real funcionando
@@ -48,7 +63,7 @@
   var COMANDOS_RESPONSAVEL = ['ATENCAO', 'CONFIRME', 'PERSONALIZADA'];
 
   // "Minha posição": o filtro das leituras está em gps.js (o mesmo da página do participante).
-  var CFG_GPS = { sinalVidaMs: 15000, envioRapidoMs: 1000, envioPeMs: 1500, reiniciarMs: 90000 };
+  var CFG_GPS = { sinalVidaMs: 10000, envioRapidoMs: 1000, envioPeMs: 1500, reiniciarMs: 90000 };
 
   var CHAVE_AJUDA_VISTA = 'sar-militar-ajuda-vista';
   var CHAVE_LATERAL = 'gbs-painel-lateral-oculta';
@@ -274,7 +289,7 @@
       b.addEventListener('click', function () { setVista(b.getAttribute('data-vista')); });
     });
     $('menu-diario').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirDiario(est.op); });
-    $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatorio(est.op); });
+    $('menu-relatorio').addEventListener('click', function () { fecharMenu(false); if (window.Relatorio && est.op) window.Relatorio.abrirRelatoriosOperacao(est.op); });
     $('menu-grupos').addEventListener('click', abrirGrupos);
     $('menu-missoes').addEventListener('click', abrirMissoes);
     $('opt-local').addEventListener('click', function () { definirPrefMapa('local', !est.prefsMapa.local); });
@@ -362,6 +377,11 @@
     $('menu-aparencia').addEventListener('click', function () { fecharMenu(false); if (window.Personalizar) window.Personalizar.iniciar(); });
     $('menu-cenario').addEventListener('click', function () { fecharMenu(false); if (window.BuscaCenario) window.BuscaCenario.abrir(); });
     $('btn-regua').addEventListener('click', alternarRegua);
+    $('btn-recolher-topo').addEventListener('click', function () { UI.aparencia.definirTopoOculto(true); });
+    $('btn-mostrar-topo').addEventListener('click', function () { UI.aparencia.definirTopoOculto(false); });
+    UI.aparencia.aoMudar(aplicarLadoAcoes);
+    window.matchMedia('(min-width: 861px)').addEventListener('change', aplicarLadoAcoes);
+    aplicarLadoAcoes();
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('menu-sci').addEventListener('click', function () { fecharMenu(false); abrirSci(); });
@@ -545,6 +565,43 @@
     $('btn-responsaveis').hidden = !resp.admin;
     C.sincronizarRelogio();
     rotear();
+    // Senha provisória (convite de responsável): o painel só segue depois que a pessoa cria a própria senha
+    if (usuario.user_metadata && usuario.user_metadata.senha_provisoria === true) trocarSenhaProvisoria();
+  }
+
+  // Primeiro acesso com senha provisória: pede uma senha nova. A janela não fecha sem ela (sem ×, sem Esc).
+  function trocarSenhaProvisoria() {
+    var s1 = UI.el('input', { classe: 'campo', type: 'password', id: 'prov-senha1', autocomplete: 'new-password', minlength: '8', maxlength: '72', autofocus: true });
+    var s2 = UI.el('input', { classe: 'campo', type: 'password', id: 'prov-senha2', autocomplete: 'new-password', minlength: '8', maxlength: '72' });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'prov-salvar', texto: 'Salvar nova senha' });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Crie a sua senha' }, [UI.dica('Você entrou com uma senha provisória, enviada por e-mail. Crie agora uma senha só sua para continuar.')]),
+      UI.secao('Nova senha', [
+        UI.campo('Nova senha', s1, { para: 'prov-senha1', ajuda: 'Pelo menos 8 caracteres, misturando letras e números.' }),
+        UI.campo('Repita a senha', s2, { para: 'prov-senha2' }),
+        erro,
+      ]),
+      UI.rodape([btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      if (s1.value.length < 8) { erro.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; erro.hidden = false; return; }
+      if (s1.value !== s2.value) { erro.textContent = 'As duas senhas não são iguais.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        var r = await C.cliente.auth.updateUser({ password: s1.value, data: { senha_provisoria: false } });
+        if (r.error) throw C.criarErro(r.error);
+        fechar();
+        UI.aviso('Senha criada. Bem-vindo ao painel.', 'ok');
+      } catch (e) {
+        erro.textContent = /weak|password/i.test(String(e.original && e.original.message)) ? 'Senha fraca. Use pelo menos 8 caracteres, misturando letras e números.' : e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { travado: true, fecharNoFundo: false });
   }
 
   // Mensagem de quem entrou mas ainda não tem acesso: pedido pendente, recusado ou desativado.
@@ -869,18 +926,21 @@
     ops.forEach(function (op) {
       var selo = op.status === 'ativa'
         ? UI.el('span', { classe: 'selo selo-ok', texto: 'Ativa' })
-        : UI.el('span', { classe: 'selo selo-neutro', texto: 'Encerrada' });
+        : op.arquivada_em
+          ? UI.el('span', { classe: 'selo selo-neutro', title: 'Encerrada e arquivada em ' + C.hora(op.arquivada_em) + ': consulta pelo arquivo da operação', texto: 'Arquivada' })
+          : UI.el('span', { classe: 'selo selo-neutro', texto: 'Encerrada' });
       // Encerrada também abre (só visualização), inclusive depois da retenção (cadastro, diário e relatórios)
       var semPainel = false;
       var funcoes = [];
       funcoes.push({ texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver painel (só leitura)', acao: function () { abrirOperacao(op); } });
       if (window.Relatorio) {
         funcoes.push({ texto: 'Diário da operação', acao: function () { window.Relatorio.abrirDiario(op); } });
-        funcoes.push({ texto: 'Relatório final (PDF)', acao: function () { window.Relatorio.abrirRelatorio(op); } });
+        funcoes.push({ texto: 'Relatórios (diário, comando e final)', acao: function () { window.Relatorio.abrirRelatoriosOperacao(op); } });
       }
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
       if (incompleta) funcoes.push({ texto: 'Completar cadastro', acao: function () { window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } }); } });
+      if (podeArquivar(op)) funcoes.push({ texto: 'Arquivar agora (liberar espaço)', acao: function () { arquivarOperacao(op); } });
       if (podeExcluir(op)) funcoes.push({ texto: 'Excluir operação', perigo: true, acao: function () { excluirOperacao(op); } });
       var acoes = UI.el('div', { classe: 'op-acoes' }, funcoes.length ? [menuLinha(funcoes)] : []);
       var deEquipe = est.usuario && op.responsavel_id !== est.usuario.id
@@ -1271,6 +1331,37 @@
   /* ------------------------------------------------------------------ */
   // Mostrado só a quem pode excluir: quem criou a operação ou um administrador.
   // A regra que vale é a do banco (função excluir_operacao); isto só esconde o botão.
+  // Arquivar (migração 055): operação encerrada, ainda não arquivada; quem criou ou administrador (o servidor confere)
+  function podeArquivar(op) {
+    if (!op || op.status === 'ativa' || op.arquivada_em || !('arquivada_em' in op)) return false;
+    return Boolean(est.usuario && (op.responsavel_id === est.usuario.id || (est.responsavel && est.responsavel.admin)));
+  }
+
+  async function arquivarOperacao(op) {
+    var ok = await UI.confirmar({
+      titulo: 'Arquivar a operação ' + op.codigo + '?',
+      texto: 'Os dados da operação (participantes, posições, trilhas, mensagens, setores, pontos, diário e registros) saem do banco '
+        + 'para um arquivo compactado no Storage, para liberar espaço. A operação continua na lista e abre só para consulta, '
+        + 'com mapa, relatórios e dashboard. Fotos e relatórios continuam onde estão. O arquivo é conferido antes de apagar '
+        + 'qualquer coisa; se algo não bater, nada é apagado. Não dá para desfazer pelo app.',
+      ok: 'Arquivar agora',
+    });
+    if (!ok) return;
+    UI.aviso('Arquivando ' + op.codigo + '… pode levar até um minuto.', 'ok', 5000);
+    try {
+      var s = await C.cliente.auth.getSession();
+      var token = s && s.data && s.data.session ? s.data.session.access_token : null;
+      if (!token) throw C.criarErro({ message: 'nao_autenticado' });
+      var r = await fetch('/api/arquivar', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ operacao_id: op.id }) });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok || !j.ok) throw C.criarErro({ message: (j.erro || 'falha') + (j.detalhe ? ' (' + j.detalhe + ')' : '') });
+      UI.aviso('Operação ' + op.codigo + ' arquivada: ' + (j.linhas || 0) + ' registro(s) num arquivo de ' + Math.max(1, Math.round((j.bytes || 0) / 1024)) + ' KB.', 'ok', 8000);
+    } catch (e) {
+      UI.aviso('Não foi possível arquivar: ' + (e.message || e), 'erro', 10000);
+    }
+    mostrarOperacoes();
+  }
+
   function podeExcluir(op) {
     return Boolean(op && est.usuario && est.responsavel && (op.responsavel_id === est.usuario.id || est.responsavel.admin));
   }
@@ -1382,6 +1473,17 @@
       location.hash = '';
       return;
     }
+    // Operação arquivada (migração 055): os dados estão no arquivo do Storage; baixa e confere antes de montar o painel
+    if (op.arquivada_em && window.ArquivoLocal) {
+      try {
+        await window.ArquivoLocal.carregar(op, { usuarioNome: est.responsavel && est.responsavel.nome });
+      } catch (e) {
+        carregandoPainel(false);
+        UI.aviso('Não foi possível abrir o arquivo desta operação: ' + (e.message || e), 'erro', 10000);
+        location.hash = '';
+        return;
+      }
+    }
     est.op = op;
     avaliarGaveta();
     aplicarLateral(false);
@@ -1399,7 +1501,7 @@
     });
     // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
     Promise.all(cargasModulos).then(function () { if (est.op && est.op.id === op.id) carregandoPainel(false); });
-    est.timerStatus = setInterval(atualizarEstados, 5000);
+    est.timerStatus = setInterval(vigiarEstados, 2000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
     iniciarPolling();
@@ -1418,8 +1520,6 @@
       }, CFG_GPS.sinalVidaMs);
       // Estava registrando neste aparelho (a página recarregou)? Pergunta antes de retomar.
       oferecerRetomarMinhaTrilha();
-      // relatório diário: gerado e guardado sozinho para os dias que já terminaram (migração 049)
-      if (window.Relatorio && window.Relatorio.iniciarDiarios) window.Relatorio.iniciarDiarios();
     }
     atualizarEstadoGps();
     if (est.abrirConvite) {
@@ -1430,7 +1530,6 @@
 
   function fecharPainel() {
     carregandoPainel(false);
-    if (window.Relatorio && window.Relatorio.pararDiarios) window.Relatorio.pararDiarios();
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
     est.timerMeuSinal = null;
@@ -1524,6 +1623,7 @@
       est.mapa.remove();
       est.mapa = null;
     }
+    est.resumo = null;
     est.op = null;
     est.participantes = new Map();
     est.pontosOrfaos = [];
@@ -1586,7 +1686,7 @@
     var op = est.op;
     $('op-codigo').textContent = op.codigo;
     var tipoOp = window.Cadastro.textoTipo(op);
-    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa' : 'Operação encerrada · só leitura');
+    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa' : op.arquivada_em ? 'Operação arquivada · só leitura' : 'Operação encerrada · só leitura');
     $('menu-dados-estado').textContent = 'tipo' in op && window.Cadastro.incompleto(op) ? 'cadastro incompleto' : '';
     $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
@@ -1597,9 +1697,9 @@
     $('menu-vitima').hidden = op.status !== 'ativa';
     $('menu-vitima-rapida').hidden = op.status !== 'ativa';
     $('menu-minha-trilha').hidden = op.status !== 'ativa';
+    $('menu-diag-gps').hidden = op.status !== 'ativa';   // diagnóstico do GPS deste aparelho: só serve com a operação em andamento
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
-    $('menu-destino').hidden = op.status !== 'ativa';
     ['menu-setor', 'menu-trilha', 'menu-ponto'].forEach(function (id) { $(id).hidden = op.status !== 'ativa' || Boolean(op.dados_apagados_em); });
     // encerrada: painel só para consulta (botões de alteração somem; o servidor também recusa)
     $('tela-painel').classList.toggle('op-somente-leitura', op.status !== 'ativa');
@@ -1607,8 +1707,9 @@
     var faixa = $('faixa-encerrada');
     faixa.hidden = op.status === 'ativa';
     if (op.status !== 'ativa') {
-      $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> ' + C.esc('Operação encerrada em ' + C.hora(op.encerrada_em) + '. ' +
-        (op.dados_apagados_em ? 'Os dados pessoais foram apagados (regra antiga de retenção); o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados continuam guardados para consulta e análise.'));
+      // no celular só a primeira frase aparece (.faixa-detalhe some): a faixa fica com uma linha
+      $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> ' + C.esc((op.arquivada_em ? 'Arquivada' : 'Encerrada') + ' em ' + C.hora(op.encerrada_em) + '.') +
+        ' <span class="faixa-detalhe">' + C.esc(op.dados_apagados_em ? 'Os dados pessoais foram apagados (regra antiga de retenção); o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados continuam guardados para consulta e análise.') + '</span>';
     }
     atualizarTitulo();
   }
@@ -1672,7 +1773,7 @@
       options: { position: 'bottomleft' },
       onAdd: function () {
         var div = L.DomUtil.create('div', 'legenda');
-        div.innerHTML = '<details class="legenda-det"><summary>▤ Legenda</summary><div class="legenda-corpo"></div></details>';
+        div.innerHTML = '<details class="legenda-det"><summary aria-label="Legenda">▤ <span class="rotulo-ctl">Legenda</span></summary><div class="legenda-corpo"></div></details>';
         est.legendaCorpo = div.querySelector('.legenda-corpo');
         L.DomEvent.disableClickPropagation(div);
         L.DomEvent.disableScrollPropagation(div);
@@ -1687,13 +1788,36 @@
       onAdd: function () {
         var div = L.DomUtil.create('div', 'controle-meteo');
         var ligada = window.MeteoPainel && window.MeteoPainel.estado ? Boolean(window.MeteoPainel.estado().ligada) : false;
-        div.innerHTML = '<button class="btn-meteo-mapa" type="button" id="opt-meteo" aria-pressed="' + ligada + '" title="Radar, previsão e alertas do tempo na área">☂ Meteorologia</button>';
+        div.innerHTML = '<button class="btn-meteo-mapa" type="button" id="opt-meteo" aria-pressed="' + ligada + '" title="Radar, previsão e alertas do tempo na área" aria-label="Meteorologia">☂ <span class="rotulo-ctl">Meteorologia</span></button>';
         L.DomEvent.disableClickPropagation(div);
         div.firstChild.addEventListener('click', function () { if (window.MeteoPainel && window.MeteoPainel.alternar) window.MeteoPainel.alternar(); });
         return div;
       },
     });
     new BotaoMeteo().addTo(mapa);   // adicionado depois: fica acima da legenda
+
+    // Bússola pequena no canto: o mapa é sempre norte para cima, então a rosa mostra onde fica o norte e o sul.
+    var Bussola = L.Control.extend({
+      options: { position: 'bottomright' },
+      onAdd: function () {
+        var div = L.DomUtil.create('div', 'bussola-mapa');
+        div.title = 'Norte: o mapa sempre fica com o norte para cima';
+        div.setAttribute('role', 'img');
+        div.setAttribute('aria-label', 'Bússola: norte para cima');
+        div.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true">' +
+          '<circle cx="24" cy="24" r="22.5" fill="none" stroke="currentColor" stroke-opacity=".3"/>' +
+          '<path d="M24 13 L28.5 25 L24 23 L19.5 25 Z" fill="#ef4444"/>' +
+          '<path d="M24 35 L28.5 23 L24 25 L19.5 23 Z" fill="currentColor" fill-opacity=".45"/>' +
+          '<text x="24" y="10.5" text-anchor="middle" font-size="7.5" font-weight="700" fill="#ef4444">N</text>' +
+          '<text x="24" y="46" text-anchor="middle" font-size="6.5" font-weight="600" fill="currentColor" fill-opacity=".7">S</text>' +
+          '<text x="42.5" y="26.5" text-anchor="middle" font-size="6.5" font-weight="600" fill="currentColor" fill-opacity=".7">L</text>' +
+          '<text x="5.5" y="26.5" text-anchor="middle" font-size="6.5" font-weight="600" fill="currentColor" fill-opacity=".7">O</text>' +
+          '</svg>';
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+      },
+    });
+    new Bussola().addTo(mapa);
 
     // Grupos: cada grupo com o ícone de olho (mostrar só o grupo / restaurar tudo).
     var Grupos = L.Control.extend({
@@ -1749,6 +1873,8 @@
     montarCamadaPessoas();
     // Nomes pelo zoom e sem sobreposição (mapa-rotulos.js)
     est.rotulos = window.MapaRotulos ? window.MapaRotulos.instalar(mapa) : { agendar: function () {} };
+    // De longe, um selo só por região no lugar dos agrupamentos separados (js/mapa-resumo.js)
+    est.resumo = window.MapaResumo ? window.MapaResumo.instalar(mapa, { coletar: coletarParaResumo }) : null;
     mapa.on('zoomend', estilizarTrilhas);
     $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomesMapa);
     atualizarMenu();
@@ -1800,6 +1926,42 @@
         });
       },
     });
+  }
+
+  // O que o resumo de longe (js/mapa-resumo.js) agrupa junto: as pessoas no mapa e tudo que está nos grupos de pontos
+  // (relatos, fotos, pontos de interesse, indicações, importados e a vítima encontrada). Lê o estado de agora.
+  function coletarParaResumo() {
+    var itens = [];
+    if (est.prefsMapa.pessoas) {
+      est.participantes.forEach(function (p) {
+        var mk = p.marcador;
+        if (!mk) return;
+        var ll = mk.getLatLng();
+        var cls = classesMarcador(p);
+        itens.push({
+          id: 'p' + p.id, familia: 'pessoa', lat: ll.lat, lng: ll.lng,
+          cor: mk.options.corAgrupado, nome: p.dados.nome,
+          ajuda: /(^| )ajuda( |$)/.test(cls), saida: /(^| )saida( |$)/.test(cls),
+          chave: cls + '|' + p.dados.nome + '|' + textoRotulo(p),
+          icon: function () { return criarIcone(p); },   // só monta o ícone de quem for desenhado isolado
+          marcador: mk, titulo: mk.options.title, alt: mk.options.alt, zIndexOffset: mk.options.zIndexOffset,
+        });
+      });
+    }
+    [est.camadaPontos, est.camadaPontosFixos].forEach(function (g) {
+      if (!g || !g.getLayers) return;
+      g.getLayers().forEach(function (mk) {
+        if (!mk.getLatLng) return;
+        var ll = mk.getLatLng();
+        itens.push({
+          id: 'k' + L.stamp(mk), familia: 'ponto', lat: ll.lat, lng: ll.lng,
+          tipo: mk.options.tipoPonto || 'poi', critico: Boolean(mk.options.critico), vitima: Boolean(mk.options.vitima),
+          chave: String(L.stamp(mk.options.icon)),
+          icon: mk.options.icon, marcador: mk, titulo: mk.options.title, alt: mk.options.alt, zIndexOffset: mk.options.zIndexOffset,
+        });
+      });
+    });
+    return itens;
   }
 
   // Cada marcador de ponto vai para o agrupamento, exceto os "fixos" (vítima encontrada),
@@ -2497,7 +2659,7 @@
     if (!pil) return;
     var cls, txt;
     if (est.op && est.op.status !== 'ativa') {
-      cls = 'parado'; txt = 'Encerrada · só leitura';
+      cls = 'parado'; txt = est.op.arquivada_em ? 'Arquivada · só leitura' : 'Encerrada · só leitura';
     } else if (navigator.onLine === false || (est.syncFalhou && est.tempoReal !== 'ok')) {
       cls = 'sem_atualizacao'; txt = 'Sem conexão — reconectando';
     } else if (est.tempoReal === 'ok') {
@@ -3486,6 +3648,18 @@
   }
 
   // Executado a cada 5 s: atualiza "há X s", estados e cores de conexão.
+  // A cada 2 s confere se alguém mudou de estado (conectado / instável / sem atualização): se mudou, o painel
+  // atualiza na hora; senão só a cada 6 s (os "há X s" da lista), como antes.
+  function vigiarEstados() {
+    est.tickEstados = (est.tickEstados || 0) + 1;
+    var mudou = false;
+    est.participantes.forEach(function (p) {
+      var cod = estadoDe(p).cod;
+      if (p.codEstadoVisto !== cod) { p.codEstadoVisto = cod; mudou = true; }
+    });
+    if (mudou || est.tickEstados % 3 === 0) atualizarEstados();
+  }
+
   function atualizarEstados() {
     est.participantes.forEach(atualizarAparenciaMarcador);
     renderizarLista();
@@ -3672,9 +3846,8 @@
     if (pendente) {
       caixaSaida.innerHTML = '';
       caixaSaida.appendChild(UI.el('div', { classe: 'nota nota-saida' }, [
-        UI.el('strong', { texto: 'PEDIU PARA ENCERRAR às ' + C.hora(d.saida_solicitada_em, false) + '.' }),
+        UI.el('strong', { texto: 'PEDIU PARA ENCERRAR às ' + C.hora(d.saida_solicitada_em, false) + '.' }, [UI.dica('O rastreamento continua até você decidir.')]),
         d.saida_motivo ? UI.el('div', { texto: 'Motivo: ' + d.saida_motivo }) : null,
-        UI.el('div', { classe: 'muted', texto: 'O rastreamento continua até você decidir.' }),
         podeAlterar() ? UI.el('div', { classe: 'acoes-linha' }, [
           UI.el('button', { classe: 'btn btn-ok btn-pequeno', type: 'button', texto: 'Liberar saída', onclick: function () { liberarSaida(p.id); } }),
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Pedir para continuar', onclick: function () { recusarSaida(p.id); } }),
@@ -3701,7 +3874,8 @@
         pd.estado === 'recebido' ? 'Ninguém assumiu há ' + AP.duracao(C.agora() - C.paraMs(pd.recebido_em)) + '. ' : (pd.assumido_por_nome ? 'Responsável: ' + pd.assumido_por_nome + '. ' : ''),
         pd.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { est.mapa.setView([pd.lat, pd.lng], Math.max(est.mapa.getZoom(), 17)); } }) : null,
         ' ',
-        UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: pd.estado === 'recebido' ? 'Assumir / tratar' : 'Abrir atendimento', onclick: function () { AP.abrir(pd.id); } }),
+        UI.el('button', { classe: 'btn btn-pequeno' + (podeAlterar() ? ' btn-escuro' : ''), type: 'button',
+          texto: !podeAlterar() ? 'Ver atendimento' : pd.estado === 'recebido' ? 'Assumir / tratar' : 'Abrir atendimento', onclick: function () { AP.abrir(pd.id); } }),
       ]));
     } else if (ajuda) {
       caixaAjuda.innerHTML = '';
@@ -3713,7 +3887,7 @@
         ajuda.direcao === 'entrada' && ajuda.lat != null
           ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verRelatoNoMapa(ajuda); } }) : null,
         ' ',
-        UI.el('button', {
+        !podeAlterar() ? null : UI.el('button', {
           classe: 'btn btn-pequeno', type: 'button', texto: 'Marcar como atendido',
           onclick: function () {
             est.ajudaVista.add(ajuda.id);
@@ -4560,7 +4734,7 @@
       compactarAcoes(UI.rodape([
         revisavel && podeAlterar() ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'relato-revisar', texto: 'Revisar', onclick: function () { fechar(); RR.abrir(m, { aoSalvar: function () { abrirRelato(m.id); } }); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
-        p ? UI.el('button', { classe: 'btn' + (revisavel && podeAlterar() ? '' : ' btn-escuro'), type: 'button', texto: 'Abrir conversa', onclick: function () { fechar(); abrirConversa(m.participante_id); } }) : null,
+        p ? UI.el('button', { classe: 'btn' + (revisavel && podeAlterar() ? '' : ' btn-escuro'), type: 'button', texto: 'Abrir conversa', onclick: function () { abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
@@ -4747,9 +4921,12 @@
       ]);
       var acoes = UI.el('div', { classe: 'feed-acoes' }, [
         m.lat != null ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { verRelatoNoMapa(m); } }) : null,
-        p ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Responder', onclick: function () { abrirConversa(m.participante_id); } }) : null,
+        // só leitura (encerrada/arquivada) ou participante fora da operação: a conversa abre só para consulta
+        p ? (podeAlterar() && !p.dados.removido
+          ? UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Responder', onclick: function () { abrirConversa(m.participante_id); } })
+          : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver conversa', onclick: function () { abrirConversa(m.participante_id); } })) : null,
         m.categoria === 'VITIMA' || (relato && window.RelatosRevisao && window.RelatosRevisao.ehRelato(m) && window.RelatosRevisao.disponivel())
-          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: m.categoria === 'VITIMA' ? 'Detalhes' : 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
+          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: m.categoria === 'VITIMA' || !podeAlterar() ? 'Detalhes' : 'Detalhes e revisão', onclick: function () { abrirRelato(m.id); } }) : null,
       ]);
       ul.appendChild(UI.el('li', { classe: 'feed-item' + (relato ? ' relato' : '') + (est.destaqueNovas.has(m.id) || !jaLida(m) ? ' nova' : ''), 'data-id': m.id }, [
         topo,
@@ -5919,7 +6096,7 @@
       secaoDetalhe('Busca', UI.el('div', { classe: 'detalhe-busca' }, [caixaCob, window.BuscaCenario ? window.BuscaCenario.blocoSetor(d) : null])),
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verSetorNoMapa(d); } }),
-        podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormSetor(d); } }) : null,
+        podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { abrirFormSetor(d); } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', id: 'setor-ajustar', texto: 'Ajustar limites', onclick: function () { fechar(); ajustarLimites(d.id); } }) : null,
         podeEditar && est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', texto: '🧭 Enviar o centro como destino', onclick: function () {
           var c = centroSetor(d);
@@ -6369,8 +6546,8 @@
       foto ? secaoDetalhe('Foto', UI.el('div', { classe: 'ponto-foto' }, [miniatura(foto, [foto.id])])) : null,
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verPontoNoMapa(d); } }),
-        ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { fechar(); abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormPontoInt(d); } }) : null,
+        ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { abrirFormPontoInt(d); } }) : null,
         ativa ? UI.el('button', { classe: 'btn', type: 'button', texto: foto ? 'Trocar foto' : 'Anexar foto', onclick: function () { fechar(); anexarFotoPonto(d); } }) : null,
         window.Ferramentas ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-aneis', texto: window.Ferramentas.temAneis(d.id) ? '◎ Tirar anéis de distância' : '◎ Anéis de distância',
           onclick: function () { fechar(); window.Ferramentas.alternarAneis({ id: d.id, lat: d.lat, lng: d.lng, nome: d.titulo }); } }) : null,
@@ -6826,7 +7003,7 @@
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', id: 'rota-ate-enviar', texto: 'Mandar alguém até ela',
           title: 'Envia a posição atual da pessoa como destino para outra pessoa ou grupo',
-          onclick: function () { fechar(); abrirEnviarDestino({ nome: 'Apoio a ' + nomeCurto(p), lat: pos.lat, lng: pos.lng }); } }) : null,
+          onclick: function () { abrirEnviarDestino({ nome: 'Apoio a ' + nomeCurto(p), lat: pos.lat, lng: pos.lng }); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'rota-ate-tracar', texto: 'Traçar rota' }),
       ]),
     ]);
@@ -7704,8 +7881,8 @@
       rodapeDetalhe([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verTrilhaNoMapa(d); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-ocultar', texto: oculta ? 'Mostrar no mapa' : 'Ocultar no mapa', onclick: function () { fechar(); alternarTrilhaOculta(d.id); } }),
-        editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { fechar(); abrirFormTrilha(d, 'percorrida'); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar', texto: 'Editar dados', onclick: function () { fechar(); abrirFormTrilha(d); } }) : null,
+        editavel && d.estado === 'planejada' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'trilha-marcar-percorrida', texto: 'Informar como percorrida', onclick: function () { abrirFormTrilha(d, 'percorrida'); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar', texto: 'Editar dados', onclick: function () { abrirFormTrilha(d); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'trilha-editar-tracado', texto: 'Editar traçado', onclick: function () { fechar(); iniciarDesenhoTrilha(d.id); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'trilha-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirTrilhaManual(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
@@ -8694,7 +8871,8 @@
       if (s1.value !== s2.value) { erro.textContent = 'As duas senhas não são iguais.'; erro.hidden = false; return; }
       btn.disabled = true;
       try {
-        var r = await C.cliente.auth.updateUser({ password: s1.value });
+        // trocar a senha tira o aviso de senha provisória (se houver)
+        var r = await C.cliente.auth.updateUser({ password: s1.value, data: { senha_provisoria: false } });
         if (r.error) throw C.criarErro(r.error);
         fechar();
         UI.aviso('Senha alterada.', 'ok');
@@ -9456,14 +9634,14 @@
           compactarAcoes(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando no mapa' : '👁 Mostrar no mapa',
               onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { fechar(); abrirMembrosGrupo(g.id); } }),
-            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { fechar(); abrirLinkGrupo(g.id); } }) : null,
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { abrirMembrosGrupo(g.id); } }),
+            est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { abrirLinkGrupo(g.id); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: async function () {
               if (window.RecursosEquipe && !(await window.RecursosEquipe.confirmarEnvio(g))) return;
               fechar(); escolherDestino([], g.id);
             } }) : null,
             window.RecursosEquipe ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Recursos', onclick: function () { window.RecursosEquipe.abrir(g.id); } }) : null,
-            editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { fechar(); abrirFormGrupo(g); } }) : null,
+            editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: function () { abrirFormGrupo(g); } }) : null,
             editavel ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Excluir', onclick: function () { fechar(); excluirGrupo(g); } }) : null,
           ])),
         ]);
@@ -9475,7 +9653,7 @@
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Grupos' }, [UI.dica('Cada pessoa vê no celular só os grupos de que faz parte. Os links de grupo ficam só com os responsáveis da operação.')]),
       corpo,
       UI.rodape([
-        editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { fechar(); abrirFormGrupo(null); } }) : null,
+        editavel && !est.semGrupos ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'grupo-novo', texto: '＋ Novo grupo', onclick: function () { abrirFormGrupo(null); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
@@ -9499,7 +9677,7 @@
       UI.campo('Ícone', icone, { largo: true, opcional: true, dica: 'Aparece junto da cor do grupo nas listas e no mapa (ex.: 🐕 canil, 🚤 embarcação, 🚁 aéreo).' }),
       UI.el('label', { classe: 'linha-opcao' }, [mil, ' Militar pelo link do grupo', UI.dica('Sem esta opção, quem entra pelo link do grupo aparece como civil (celular obrigatório; CPF opcional). O papel de responsável do grupo só é dado aqui no painel.')]),
       erro,
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); abrirGrupos(); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -9585,7 +9763,7 @@
         UI.dica('O responsável (★) pode receber o destino pelo grupo e avisar que a busca no setor terminou.')]),
       corpo,
       UI.rodape([
-        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { tamanho: 'largo', aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
@@ -9637,7 +9815,7 @@
           } catch (e) { UI.aviso(e.message, 'erro'); }
           abrirLinkGrupo(gid);
         } }),
-        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); abrirGrupos(); } }),
+        UI.el('button', { classe: 'btn', type: 'button', texto: '◀ Grupos', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]));

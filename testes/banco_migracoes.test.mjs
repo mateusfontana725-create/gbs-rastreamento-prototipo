@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–033) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–056) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2225,5 +2225,315 @@ console.log('Ícones de grupos e das categorias fixas de ponto (migração 050)'
   await rpc(resp1, 'excluir_operacao', { p_operacao: opI.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–050 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Aplicativo Android: passagem do navegador para o app e aparelho com segredo (migração 051)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opA = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 051', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const nav = await usuario(null, true), app = await usuario(null, true), app2 = await usuario(null, true), outro = await usuario(null, true);
+  const p = await rpc(nav, 'ingressar', { p_token: opA.token_civil, p_nome: 'Duda', p_tipo: 'civil', p_cpf: '52998224725', p_telefone: '21998765432' });
+  const q = await rpc(outro, 'ingressar', { p_token: opA.token_civil, p_nome: 'Edu', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765433' });
+  const pid = p.participante_id;
+  await rpc(nav, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: J([pt(5101, -22.9, -43.2)]) });
+
+  chk(/participante_invalido/.test(await erroDe(rpc(outro, 'app_vinculo_criar', { p_participante: pid }))), 'código: só o dono da participação pede');
+  const v1 = await rpc(nav, 'app_vinculo_criar', { p_participante: pid });
+  chk(/^[0-9a-f]{32}$/.test(v1.codigo) && new Date(v1.expira_em) > new Date(), 'código de 32 caracteres com validade', v1);
+  const guardado = (await db.query(`select codigo_hash from public.app_vinculos where participante_id = $1`, [pid])).rows;
+  chk(guardado.length === 1 && guardado[0].codigo_hash !== v1.codigo && guardado[0].codigo_hash.length === 64, 'o banco guarda só o resumo do código');
+  chk(/permission denied/.test(await erroDe(como(nav, `select * from public.app_vinculos`))), 'ninguém lê a tabela de códigos direto');
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app, 'app_vinculo_resgatar', { p_codigo: 'f'.repeat(32) }))), 'código inexistente: recusado');
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app, 'app_vinculo_resgatar', { p_codigo: 'x' }))), 'código malformado: recusado');
+  chk(/sessao_app_ocupada/.test(await erroDe(rpc(outro, 'app_vinculo_resgatar', { p_codigo: v1.codigo }))), 'sessão que já participa da operação não resgata (sem misturar dois participantes)');
+
+  const r = await rpc(app, 'app_vinculo_resgatar', { p_codigo: v1.codigo.toUpperCase() });
+  chk(r.participante_id === pid && r.nome === 'Duda' && r.telefone === '21998765432' && r.operacao === 'OP 051', 'app resgata: mesma participação, com nome e celular', r);
+  chk((await db.query(`select user_id from public.participantes where id = $1`, [pid])).rows[0].user_id === app, 'a participação passa para a sessão do aplicativo');
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app2, 'app_vinculo_resgatar', { p_codigo: v1.codigo }))), 'código já usado: recusado (uso único)');
+  const svNav = await rpc(nav, 'sinal_vida', { p_participante: pid, p_rastreando: true, p_gps: 'ok' });
+  chk(svNav.status === 'inexistente', 'o navegador perde o acesso (sinal_vida responde inexistente)', svNav);
+  chk(/participante_invalido/.test(await erroDe(rpc(nav, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: J([pt(5102, -22.9, -43.2)]) }))), 'o navegador não envia mais pontos');
+  const re = await rpc(app, 'ingressar', { p_token: opA.token_civil, p_nome: 'Duda', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765432' });
+  chk(re.participante_id === pid, 'no app, ingressar volta para a mesma participação (sem cadastro novo)');
+  chk((await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [pid])).rows[0].n === 1, 'a trilha já enviada continua da mesma participação');
+
+  chk(/participante_invalido/.test(await erroDe(rpc(nav, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'X' }))), 'aparelho: só o dono registra');
+  const d1 = await rpc(app, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Moto G' });
+  chk(d1.dispositivo_id && /^[0-9a-f]{64}$/.test(d1.segredo), 'aparelho registrado com segredo de 64 caracteres');
+  chk((await db.query(`select segredo_hash from public.app_dispositivos where id = $1`, [d1.dispositivo_id])).rows[0].segredo_hash !== d1.segredo, 'o banco guarda só o resumo do segredo');
+  const envia = (d, s, ids, role) => como(null, `select public.app_enviar_posicoes($1, $2, $3::jsonb, 'ok') r`, [d, s, J(ids.map((i) => pt(i, -22.9 + i * 1e-6, -43.2)))], role || 'anon').then((x) => x.rows[0].r);
+  const e1 = await envia(d1.dispositivo_id, d1.segredo, [5110, 5111]);
+  chk(e1.confirmados.length === 2 && e1.inseridos === 2 && e1.status === 'ativa', 'serviço do app envia sem sessão (só a chave pública) e recebe a confirmação por ponto', e1);
+  const e2 = await envia(d1.dispositivo_id, d1.segredo, [5111]);
+  chk(e2.confirmados.length === 1 && e2.inseridos === 0, 'reenvio pelo app não duplica');
+  chk((await db.query(`select ultimo_contato_em is not null and rastreando as ok from public.participantes where id = $1`, [pid])).rows[0].ok, 'envio pelo app atualiza o último contato do participante');
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d1.dispositivo_id, 'a'.repeat(64), [5112]))), 'segredo errado: recusado');
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d1.dispositivo_id, 'curto', [5112]))), 'segredo malformado: recusado');
+  const sv = (await como(null, `select public.app_sinal_vida($1, $2, 'fraco') r`, [d1.dispositivo_id, d1.segredo], 'anon')).rows[0].r;
+  chk(sv.status === 'ativa' && sv.gps_intervalo_s === 15, 'sinal de vida pelo app', sv);
+  chk((await db.query(`select gps_estado from public.participantes where id = $1`, [pid])).rows[0].gps_estado === 'fraco', 'sinal pelo app grava o estado do GPS');
+  chk(/permission denied/.test(await erroDe(como(null, `select public.app_dono_do_dispositivo($1, $2)`, [d1.dispositivo_id, d1.segredo], 'anon'))), 'função interna não é chamável de fora');
+  chk((await como(null, `select auth.uid() u`, [], 'anon')).rows[0].u === null, 'a identidade usada pelo serviço não sobra para a próxima chamada');
+
+  const d2 = await rpc(app, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Moto G (reinstalado)' });
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d1.dispositivo_id, d1.segredo, [5113]))), 'registrar de novo revoga o aparelho anterior');
+  chk((await envia(d2.dispositivo_id, d2.segredo, [5113])).inseridos === 1, 'o aparelho novo envia');
+
+  const v2 = await rpc(app, 'app_vinculo_criar', { p_participante: pid });
+  await rpc(app2, 'app_vinculo_resgatar', { p_codigo: v2.codigo });
+  chk(/aparelho_app_invalido/.test(await erroDe(envia(d2.dispositivo_id, d2.segredo, [5114]))), 'passar a participação para outro aparelho revoga o segredo do anterior');
+  const d3 = await rpc(app2, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Outro' });
+
+  const v3 = await rpc(app2, 'app_vinculo_criar', { p_participante: pid });
+  await db.query(`update public.app_vinculos set expira_em = now() - interval '1 minute' where codigo_hash = public.app_resumo($1)`, [v3.codigo]);
+  chk(/vinculo_app_recusado/.test(await erroDe(rpc(app, 'app_vinculo_resgatar', { p_codigo: v3.codigo }))), 'código vencido (30 min): recusado');
+
+  await rpc(resp1, 'liberar_participante', { p_participante: pid }).catch(async () => {
+    await db.query(`update public.participantes set liberado_em = now() where id = $1`, [pid]);
+  });
+  chk(/participante_liberado/.test(await erroDe(envia(d3.dispositivo_id, d3.segredo, [5115]))), 'participante liberado: o app recebe o código e para');
+  chk(/participante_liberado/.test(await erroDe(rpc(app2, 'app_vinculo_criar', { p_participante: pid }))), 'participante liberado não gera código');
+  const svQ = await rpc(outro, 'sinal_vida', { p_participante: q.participante_id, p_rastreando: true, p_gps: 'ok' });
+  chk(svQ.status === 'ativa', 'os outros participantes não são afetados');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opA.id }).catch(() => null);
+}
+
+console.log('Relatório do comando (migração 052)');
+{
+  const J = (o) => JSON.stringify(o);
+  const opC = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 052', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await db.query(`insert into public.responsaveis (user_id, nome) values ($1, 'Sgt Três') on conflict do nothing`, [resp3]);
+  await db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2), ($1, $3)`, [opC.id, resp2, resp3]);
+  const pc1 = await rpc(resp1, 'passagem_iniciar', { p_operacao: opC.id, p_para: resp2, p_nota: '' });
+  await rpc(resp2, 'passagem_responder', { p_passagem: pc1.id, p_aceitar: true, p_nota: '' });
+  const pc2 = await rpc(resp2, 'passagem_iniciar', { p_operacao: opC.id, p_para: resp3, p_nota: '' });
+  await rpc(resp3, 'passagem_responder', { p_passagem: pc2.id, p_aceitar: true, p_nota: '' });
+  const pc3 = await rpc(resp3, 'passagem_iniciar', { p_operacao: opC.id, p_para: resp1, p_nota: '' });
+  const u52 = (n) => '5a5a5a5a-0000-4000-8000-' + String(n).padStart(12, '0');
+  const caminho = (n) => opC.id + '/' + u52(n) + '.pdf';
+  for (const n of [1, 2, 3, 4, 5, 6]) await como(resp1, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [caminho(n)]);
+  const cmd0 = await rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(1), p_paginas: 4, p_bytes: 900, p_sha256: null, p_tipo: 'comando', p_referencia: 'inicio' });
+  chk(cmd0.tipo === 'comando' && cmd0.referencia === 'inicio', 'comando desde o início da operação: registrado');
+  const repete = await rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(2), p_paginas: 4, p_bytes: 900, p_sha256: null, p_tipo: 'comando', p_referencia: 'inicio' });
+  chk(repete.id === cmd0.id, 'o mesmo comando repetido devolve o que já foi guardado (não duplica)');
+  const cmd1 = await rpc(resp2, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(3), p_paginas: 5, p_bytes: 900, p_sha256: null, p_tipo: 'comando', p_referencia: pc1.id });
+  chk(cmd1.tipo === 'comando' && cmd1.referencia === pc1.id, 'comando iniciado por uma passagem aceita: registrado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(4), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'comando', p_referencia: pc3.id }))), 'passagem ainda pendente não inicia um comando');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(5), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'comando', p_referencia: 'ontem' }))), 'referência de comando inválida: recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: opC.id, p_caminho: caminho(6), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'comando', p_referencia: u52(99) }))), 'passagem de outra ou inexistente: recusada');
+  chk(/permission denied|row-level|relatorios_tipo_ok|check/.test(await erroDe(como(resp1, `insert into public.relatorios (operacao_id, caminho, paginas, bytes, sha256, gerado_por, gerado_por_nome, tipo, referencia) values ($1, $2, 1, 1, null, $3, 'Sgt Um', 'comando', 'x')`, [opC.id, caminho(7), resp1]))), 'o banco também recusa comando com referência inválida');
+  const lista = (await como(resp1, `select tipo, referencia from public.relatorios where operacao_id = $1 and tipo = 'comando' order by referencia`, [opC.id])).rows;
+  chk(lista.length === 2, 'dois comandos guardados para a operação', lista);
+  chk((await como(resp2, `select count(*)::int n from public.relatorios where operacao_id = $1`, [opC.id])).rows[0].n === 2, 'responsável da operação lê os relatórios de comando');
+  chk((await como(await usuario('r6@cbm', false), `select count(*)::int n from public.relatorios where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'responsável de fora da operação não lê');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opC.id }).catch(() => null);
+}
+
+console.log('Convite de responsável com acesso (migração 053)');
+{
+  const J = (o) => JSON.stringify(o);
+  const op53 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 053', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const d = await rpc(resp1, 'responsavel_convite_checar', { p_operacao: op53.id });
+  chk(d.codigo === 'OP 053' && d.quem === resp1 && d.convidado_por === 'Sgt Um', 'checar: quem convida (responsável da operação) recebe o código e o próprio nome');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'responsavel_convite_checar', { p_operacao: op53.id }))), 'checar: responsável de fora da operação é recusado');
+  const sit = (await como(null, 'select public.servidor_situacao_email($1) d', ['r1@cbm'], 'service_role')).rows[0].d;
+  chk(sit && sit.responsavel === true && sit.ativo === true, 'situação do e-mail: responsável ativo (só o servidor consulta)', sit);
+  const nenhum = (await como(null, 'select public.servidor_situacao_email($1) d', ['ninguem@cbm'], 'service_role')).rows[0].d;
+  chk(nenhum === null, 'situação do e-mail: sem login devolve vazio', nenhum);
+  chk(/permission denied/.test(await erroDe(como(resp1, 'select public.servidor_situacao_email($1)', ['r1@cbm']))), 'responsável comum não consulta a situação de e-mails');
+  chk(/permission denied/.test(await erroDe(como(resp1, 'select public.servidor_vincular_responsavel($1, $2, $3)', [op53.id, resp3, resp1]))), 'responsável comum não inclui ninguém pela função do servidor');
+  const v1 = (await como(null, 'select public.servidor_vincular_responsavel($1, $2, $3) v', [op53.id, resp3, resp1], 'service_role')).rows[0].v;
+  chk(v1 === true, 'servidor inclui um responsável ativo na operação', v1);
+  const v2 = (await como(null, 'select public.servidor_vincular_responsavel($1, $2, $3) v', [op53.id, resp3, resp1], 'service_role')).rows[0].v;
+  chk(v2 === false, 'incluir de novo quem já está na operação não duplica (devolve false)', v2);
+  chk(/responsavel_nao_encontrado/.test(await erroDe(como(null, 'select public.servidor_vincular_responsavel($1, $2, $3)', [op53.id, anA, resp1], 'service_role'))), 'não inclui quem não é responsável (login de participante)');
+  const quem = (await como(resp3, 'select count(*)::int n from public.operacao_responsaveis where operacao_id = $1 and user_id = $2', [op53.id, resp3])).rows[0].n;
+  chk(quem === 1, 'o responsável incluído passa a constar na equipe da operação');
+  const diarioInc = (await como(resp1, `select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'responsavel_adicionado'`, [op53.id])).rows[0].n;
+  chk(diarioInc >= 1, 'a inclusão fica registrada no diário');
+  await como(null, 'select public.servidor_desvincular_responsavel($1, $2)', [op53.id, resp3], 'service_role');
+  const depois = (await como(resp1, 'select count(*)::int n from public.operacao_responsaveis where operacao_id = $1 and user_id = $2', [op53.id, resp3])).rows[0].n;
+  chk(depois === 0, 'desfazer a inclusão (e-mail que não saiu) tira a pessoa da operação');
+  const op53b = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 053B', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op53b.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'responsavel_convite_checar', { p_operacao: op53b.id }))), 'operação encerrada: não se convida mais ninguém');
+}
+
+console.log('Relatório para imprensa (migração 054)');
+{
+  const J = (o) => JSON.stringify(o);
+  const op54 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 054', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const u54 = (n) => '54545454-0000-4000-8000-' + String(n).padStart(12, '0');
+  const cam54 = (n) => op54.id + '/' + u54(n) + '.pdf';
+  for (const n of [1, 2, 3]) await como(resp1, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [cam54(n)]);
+  const im1 = await rpc(resp1, 'registrar_documento', { p_operacao: op54.id, p_caminho: cam54(1), p_paginas: 2, p_bytes: 500, p_sha256: null, p_tipo: 'imprensa', p_referencia: null });
+  chk(im1.tipo === 'imprensa' && im1.referencia === null, 'relatório para imprensa: registrado sem referência');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: op54.id, p_caminho: cam54(2), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'imprensa', p_referencia: 'hoje' }))), 'relatório para imprensa com referência: recusado');
+  const im2 = await rpc(resp1, 'registrar_documento', { p_operacao: op54.id, p_caminho: cam54(2), p_paginas: 2, p_bytes: 500, p_sha256: null, p_tipo: 'imprensa', p_referencia: null });
+  chk(im2.id !== im1.id, 'cada geração para imprensa é um documento próprio (não reaproveita o anterior)');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: op54.id, p_caminho: cam54(3), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'outro', p_referencia: null }))), 'tipo desconhecido continua recusado');
+  const lista = (await como(resp1, `select count(*)::int n from public.relatorios where operacao_id = $1 and tipo = 'imprensa'`, [op54.id])).rows[0].n;
+  chk(lista === 2, 'os dois relatórios para imprensa ficam guardados', lista);
+  const diarioImp = (await como(resp1, `select count(*)::int n from public.diario where operacao_id = $1 and titulo = 'Relatório para imprensa gerado'`, [op54.id])).rows[0].n;
+  chk(diarioImp === 2, 'cada geração entra no diário com o título próprio', diarioImp);
+  await rpc(resp1, 'excluir_operacao', { p_operacao: op54.id }).catch(() => null);
+}
+
+console.log('Arquivamento de operações encerradas (migração 055)');
+{
+  const J = (o) => JSON.stringify(o);
+  const svc = (sql, params) => como(null, sql, params, 'service_role');
+  const u55 = (n) => '55555555-0000-4000-8000-' + String(n).padStart(12, '0');
+  // operação que será arquivada, com dados em várias tabelas, e outra ativa que não pode ser tocada
+  const opA = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 055', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre', local_lat: -22.9, local_lng: -43.2 }) });
+  const opB = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 055 ATIVA', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2)`, [opA.id, resp2]);
+  const [a1, a2, b1] = [await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+  const p1 = await rpc(a1, 'ingressar', { p_token: opA.token_militar, p_nome: 'Cb Arquivo', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const p2 = await rpc(a2, 'ingressar', { p_token: opA.token_civil, p_nome: 'Civil Arquivo', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const pb = await rpc(b1, 'ingressar', { p_token: opB.token_civil, p_nome: 'Civil Ativa', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const t0 = Date.now() - 600e3;
+  const ptA = (n, lat, lng, t) => ({ id: u55(n), lat, lng, prec: 8, t });
+  await rpc(a1, 'enviar_posicoes_lote', { p_participante: p1.participante_id, p_gps: 'ok', p_pontos: J([1, 2, 3, 4, 5].map((i) => ptA(i, -22.9 + i * 1e-4, -43.2, t0 + i * 15e3))) });
+  await rpc(a2, 'enviar_posicoes_lote', { p_participante: p2.participante_id, p_gps: 'ok', p_pontos: J([6, 7, 8].map((i) => ptA(i, -22.91, -43.2 + i * 1e-4, t0 + i * 15e3))) });
+  await rpc(b1, 'enviar_posicoes_lote', { p_participante: pb.participante_id, p_gps: 'ok', p_pontos: J([9, 10].map((i) => ptA(i, -22.8, -43.1, t0 + i * 15e3))) });
+  await rpc(a2, 'participante_enviar_mensagem', { p_participante: p2.participante_id, p_categoria: 'PISTA', p_texto: 'Pegadas na trilha', p_lat: -22.91, p_lng: -43.2 });
+  await rpc(a1, 'participante_registrar_vitima', { p_participante: p1.participante_id, p_condicao: 'viva', p_lat: -22.905, p_lng: -43.205, p_precisao: 8, p_posicao_em: new Date().toISOString(), p_client_id: u55(20) });
+  const vit = await rpc(resp1, 'salvar_vitima', { p_operacao: opA.id, p_id: null, p_dados: J({ nome: 'Maria', idade: 70 }) });
+  await rpc(resp1, 'salvar_setor', { p_operacao: opA.id, p_id: null, p_dados: J({ nome: 'S-A', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 300 }) });
+  await rpc(resp1, 'salvar_ponto', { p_operacao: opA.id, p_id: null, p_dados: J({ categoria: 'BASE', titulo: 'Base A', lat: -22.9, lng: -43.2 }) });
+  await rpc(resp1, 'salvar_trilha_manual', { p_operacao: opA.id, p_id: null, p_dados: J({ client_id: u55(30), nome: 'Trilha A', estado: 'planejada', pontos: [[-22.9, -43.2], [-22.901, -43.201]] }) });
+  const cFoto = u55(40);
+  const caminhoFoto = opA.id + '/' + p2.participante_id + '/' + cFoto + '.jpg';
+  await como(a2, `insert into storage.objects (bucket_id, name) values ('fotos', $1)`, [caminhoFoto]);
+  await rpc(a2, 'registrar_foto', { p_participante: p2.participante_id, p_client_id: cFoto, p_origem: 'gps', p_lat: -22.9, p_lng: -43.2, p_precisao: 6,
+    p_posicao_em: new Date().toISOString(), p_capturada_em: new Date().toISOString(), p_legenda: 'rastro', p_bytes: 1000, p_largura: 800, p_altura: 600 });
+  const contarOp = async (tb, id) => (await db.query(`select count(*)::int n from public.${tb} where operacao_id = $1`, [id])).rows[0].n;
+  const antesB = { participantes: await contarOp('participantes', opB.id), posicoes: await contarOp('posicoes', opB.id) };
+  chk(await contarOp('posicoes', opA.id) === 8 && await contarOp('fotos', opA.id) === 1 && await contarOp('vitima_localizacoes', opA.id) === 1, 'pré-condição: operação com posições, foto e localização de vítima');
+
+  chk(/operacao_ativa/.test(await erroDe(rpc(resp1, 'arquivo_pode_arquivar', { p_operacao: opA.id }))), 'operação ativa: não arquiva');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opA.id });
+  const estudoAntes = J(await rpc(resp1, 'estudo_geral', {}));
+  const dashAntes = await rpc(resp1, 'dashboard_operacao_dados', { p_operacao: opA.id });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'arquivo_pode_arquivar', { p_operacao: opA.id }))), 'responsável da equipe (sem ser criador nem administrador) não pede o arquivamento');
+  chk((await rpc(resp1, 'arquivo_pode_arquivar', { p_operacao: opA.id })).ok === true, 'quem criou pode pedir o arquivamento da operação encerrada');
+  chk(/permission denied/.test(await erroDe(como(resp1, 'select public.servidor_arquivo_preparar($1)', [opA.id]))), 'responsável não chama as funções do servidor');
+  const cand0 = (await svc('select public.servidor_arquivo_candidatas(0, 50) id')).rows.map((r) => r.id);
+  const cand7 = (await svc('select public.servidor_arquivo_candidatas(7, 50) id')).rows.map((r) => r.id);
+  chk(cand0.includes(opA.id) && !cand0.includes(opB.id) && !cand7.includes(opA.id), 'candidatas: só encerradas, e só depois do prazo em dias');
+
+  // 1. preparar
+  const prep = (await svc('select public.servidor_arquivo_preparar($1) d', [opA.id])).rows[0].d;
+  const totais = Object.fromEntries(prep.tabelas.map((t) => [t.tabela, Number(t.total)]));
+  chk(totais.posicoes === 8 && totais.participantes === 2 && totais.fotos === 1 && totais.app_vinculos === 0, 'preparar: contagem de cada tabela (inclusive as ligadas só ao participante)', totais);
+  chk(prep.leituras.relatorio_operacao && prep.leituras.relatorio_operacao.operacao.codigo === 'OP 055', 'preparar: relatório completo lido pela mesma função do painel');
+  chk(prep.storage.some((o) => o.bucket === 'fotos' && o.caminho === caminhoFoto), 'preparar: lista os arquivos do Storage da operação');
+  // 2. exportar em páginas pequenas (testa a paginação)
+  const exportado = {};
+  for (const t of prep.tabelas) {
+    exportado[t.tabela] = [];
+    for (let i = 0; ; i += 3) {
+      const pag = (await svc('select public.servidor_arquivo_tabela($1, $2, $3, 3) d', [opA.id, t.tabela, i])).rows[0].d;
+      exportado[t.tabela].push(...pag);
+      if (pag.length < 3) break;
+    }
+  }
+  const contagens = Object.fromEntries(Object.entries(exportado).map(([k, v]) => [k, v.length]));
+  chk(Object.keys(contagens).every((k) => contagens[k] === totais[k]), 'exportação em páginas: mesma quantidade de linhas que o preparar', contagens);
+  chk(new Set(exportado.posicoes.map((x) => x.id)).size === 8, 'exportação em páginas: nenhuma posição repetida nem perdida');
+  chk(/dados_invalidos/.test(await erroDe(svc('select public.servidor_arquivo_tabela($1, $2, 0, 10)', [opA.id, 'responsaveis']))), 'só exporta tabelas do arquivo');
+  // 3. arquivo no Storage (o servidor envia e confere antes)
+  const caminhoArq = opA.id + '/' + u55(50) + '.json.gz';
+  chk(/arquivamento_sem_arquivo/.test(await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'a'.repeat(64), J(contagens)]))), 'confirmar sem o arquivo no Storage: recusado');
+  // upload do servidor (no Supabase a chave secreta grava no Storage; aqui, o superusuário faz esse papel)
+  await db.query(`insert into storage.objects (bucket_id, name) values ('arquivos', $1)`, [caminhoArq]);
+  const errado = Object.assign({}, contagens, { posicoes: 7 });
+  const div = await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'a'.repeat(64), J(errado)]));
+  chk(/arquivo_divergente/.test(div), 'contagem do arquivo diferente da do banco: recusado', div);
+  chk(await contarOp('posicoes', opA.id) === 8 && !(await db.query('select arquivada_em from public.operacoes where id = $1', [opA.id])).rows[0].arquivada_em, 'recusado: nada foi apagado e a operação não ficou arquivada');
+  const semTabela = Object.assign({}, contagens); delete semTabela.fotos;
+  chk(/arquivo_divergente/.test(await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'a'.repeat(64), J(semTabela)]))), 'arquivo sem uma das tabelas: recusado');
+  // 4. confirmar de verdade
+  const pendAntes = (await db.query('select count(*)::int n from public.arquivos_pendentes where operacao_id = $1', [opA.id])).rows[0].n;
+  const conf = (await svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4) d', [opA.id, caminhoArq, 'b'.repeat(64), J(contagens)])).rows[0].d;
+  chk(conf.apagadas.posicoes === 8 && conf.apagadas.participantes === 2, 'confirmar: apaga as linhas da operação', conf.apagadas);
+  const sobrou = [];
+  for (const t of prep.tabelas.filter((x) => x.apagar && !['app_vinculos', 'permanencia_cursor'].includes(x.tabela))) if (await contarOp(t.tabela, opA.id)) sobrou.push(t.tabela);
+  chk(sobrou.length === 0, 'nenhuma linha da operação sobrou nas tabelas do arquivo', sobrou);
+  const vl = (await db.query('select participante_id, mensagem_id, condicao from public.vitima_localizacoes where operacao_id = $1', [opA.id])).rows;
+  chk(vl.length === 1 && vl[0].participante_id === null && vl[0].mensagem_id === null && vl[0].condicao === 'viva', 'localização de vítima fica no banco (sem o vínculo com participante e mensagem)');
+  chk(await contarOp('vitimas', opA.id) === 1, 'ficha de vítima fica no banco');
+  chk((await db.query('select count(*)::int n from public.arquivos_pendentes where operacao_id = $1', [opA.id])).rows[0].n === pendAntes, 'nenhum arquivo do Storage foi para a fila de exclusão');
+  chk((await db.query(`select count(*)::int n from storage.objects where bucket_id = 'fotos' and name = $1`, [caminhoFoto])).rows[0].n === 1, 'a foto continua no Storage');
+  const regArq = (await db.query('select * from public.operacao_arquivos where operacao_id = $1', [opA.id])).rows[0];
+  chk(regArq && regArq.resumo.participantes === 2 && regArq.resumo.posicoes === 8 && regArq.instantaneos.dashboard, 'registro do arquivo com resumo da lista e números do dashboard', regArq && regArq.resumo);
+  chk(antesB.participantes === await contarOp('participantes', opB.id) && antesB.posicoes === await contarOp('posicoes', opB.id), 'operação ativa não foi tocada');
+  // 5. depois do arquivamento
+  const dashDepois = await rpc(resp1, 'dashboard_operacao_dados', { p_operacao: opA.id });
+  const difs = (a, b, pre = '') => { const out = []; const ka = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    for (const k of ka) { const x = a ? a[k] : undefined, y = b ? b[k] : undefined;
+      if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x)) out.push(...difs(x, y, pre + k + '.'));
+      else if (J(x) !== J(y)) out.push(pre + k + ': ' + J(x).slice(0, 80) + ' → ' + J(y).slice(0, 80)); } return out; };
+  // mesmo conteúdo, sem depender da ordem das chaves (o banco guarda em jsonb) e sem o horário da consulta
+  const canon = (v) => Array.isArray(v) ? v.map(canon) : (v && typeof v === 'object') ? Object.keys(v).filter((k) => k !== 'gerado_em').sort().reduce((o, k) => (o[k] = canon(v[k]), o), {}) : v;
+  chk(J(canon(dashDepois)) === J(canon(dashAntes)), 'dashboard da operação: os mesmos números de antes do arquivamento', difs(canon(dashAntes), canon(dashDepois)));
+  const estudoDepois = await rpc(resp1, 'estudo_geral', {});
+  chk(J(canon(estudoDepois)) === J(canon(JSON.parse(estudoAntes))), 'dashboard geral (estudo_geral): igual ao de antes do arquivamento', difs(canon(JSON.parse(estudoAntes)), canon(estudoDepois)));
+  chk((await rpc(resp1, 'estudo_operacao', { p_operacao: opA.id })) !== null, 'estudos da operação: vêm do que foi guardado');
+  chk(/operacao_arquivada/.test(await erroDe(rpc(resp1, 'relatorio_operacao', { p_operacao: opA.id }))), 'relatório completo pelo servidor: recusado (o painel lê do arquivo)');
+  chk((await como(resp2, `select count(*)::int n from storage.objects where bucket_id = 'arquivos'`)).rows[0].n === 1, 'responsável da equipe lê o arquivo no Storage');
+  chk((await como(await usuario('r55@cbm', false), `select count(*)::int n from storage.objects where bucket_id = 'arquivos'`)).rows[0].n === 0, 'quem não é da operação não lê o arquivo');
+  chk((await como(resp2, 'select count(*)::int n from public.operacao_arquivos where operacao_id = $1', [opA.id])).rows[0].n === 1, 'responsável da equipe lê o registro do arquivo');
+  const relA = opA.id + '/' + u55(60) + '.pdf';
+  await como(resp1, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [relA]);
+  const doc = await rpc(resp1, 'registrar_documento', { p_operacao: opA.id, p_caminho: relA, p_paginas: 2, p_bytes: 900, p_sha256: null, p_tipo: 'imprensa', p_referencia: null });
+  chk(doc.tipo === 'imprensa' && await contarOp('diario', opA.id) === 0, 'relatório novo de operação arquivada: guardado, sem recriar o diário no banco');
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_ponto', { p_operacao: opA.id, p_id: null, p_dados: J({ categoria: 'BASE', titulo: 'X', lat: -22.9, lng: -43.2 }) }))), 'operação arquivada continua só leitura');
+  chk(/operacao_ja_arquivada/.test(await erroDe(svc('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4)', [opA.id, caminhoArq, 'b'.repeat(64), J(contagens)]))), 'arquivar de novo: recusado');
+  // 6. excluir operação arquivada: os arquivos do Storage saem pela pasta da operação
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opA.id });
+  const fila = (await db.query('select bucket, caminho from public.arquivos_pendentes where operacao_id = $1 order by bucket', [opA.id])).rows;
+  chk(fila.some((x) => x.bucket === 'arquivos' && x.caminho === caminhoArq) && fila.some((x) => x.bucket === 'fotos' && x.caminho === caminhoFoto), 'excluir operação arquivada: o arquivo e a foto entram na fila de exclusão', fila);
+  chk((await db.query('select count(*)::int n from public.operacao_arquivos where operacao_id = $1', [opA.id])).rows[0].n === 0, 'excluir operação arquivada: o registro do arquivo sai junto');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: opB.id }).catch(() => null);
+}
+
+console.log('Mensagens no aplicativo com a tela apagada (migração 056)');
+{
+  const J = (o) => JSON.stringify(o);
+  const op56 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 056', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const app = await usuario(null, true), vizinho = await usuario(null, true);
+  const p = await rpc(app, 'ingressar', { p_token: op56.token_civil, p_nome: 'Fabi', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765440' });
+  const q = await rpc(vizinho, 'ingressar', { p_token: op56.token_civil, p_nome: 'Gil', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765441' });
+  const d = await rpc(app, 'app_dispositivo_registrar', { p_participante: p.participante_id, p_modelo: 'Moto G' });
+  const pend = (dd, s) => como(null, 'select public.app_mensagens_pendentes($1, $2) r', [dd, s], 'anon').then((x) => x.rows[0].r);
+  chk(J(await pend(d.dispositivo_id, d.segredo)) === '[]', 'sem mensagens: lista vazia');
+  const m1 = await rpc(resp1, 'enviar_mensagem', { p_participante: p.participante_id, p_tipo: 'RETORNE', p_texto: '' });
+  const m2 = await rpc(resp1, 'enviar_mensagem', { p_participante: p.participante_id, p_tipo: 'PERSONALIZADA', p_texto: 'Volte pela trilha norte' });
+  await rpc(resp1, 'enviar_mensagem', { p_participante: q.participante_id, p_tipo: 'PARE', p_texto: '' });
+  await rpc(app, 'participante_enviar_mensagem', { p_participante: p.participante_id, p_categoria: 'MENSAGEM', p_texto: 'Estou no rio' });
+  const l1 = await pend(d.dispositivo_id, d.segredo);
+  chk(l1.length === 2 && l1[0].id === m1.id && l1[1].id === m2.id && l1[1].texto === 'Volte pela trilha norte' && l1[0].tipo === 'RETORNE',
+    'o app recebe as mensagens dos bombeiros para este participante, em ordem (sem as de outros nem as que ele mesmo enviou)', l1);
+  chk(l1.every((m) => m.remetente_nome && m.criada_em), 'cada mensagem vem com quem enviou e o horário');
+  const ent = (await db.query('select count(*)::int n from public.mensagens where id = any($1) and entregue_em is not null', [[m1.id, m2.id]])).rows[0].n;
+  chk(ent === 2, 'as mensagens buscadas pelo app ficam como entregues (o painel mostra "entregue")');
+  const outra = (await db.query('select entregue_em from public.mensagens where participante_id = $1', [q.participante_id])).rows[0];
+  chk(outra.entregue_em === null, 'a mensagem de outro participante não é marcada');
+  await rpc(app, 'confirmar_mensagem', { p_mensagem: m1.id, p_resposta: 'CIENTE' });
+  const l2 = await pend(d.dispositivo_id, d.segredo);
+  chk(l2.length === 1 && l2[0].id === m2.id, 'confirmada no aparelho: sai da lista', l2);
+  await db.query(`update public.mensagens set criada_em = now() - interval '13 hours' where id = $1`, [m2.id]);
+  chk((await pend(d.dispositivo_id, d.segredo)).length === 0, 'mensagem com mais de 12 h não é mais avisada');
+  chk(/aparelho_app_invalido/.test(await erroDe(pend(d.dispositivo_id, 'a'.repeat(64)))), 'segredo errado: recusado');
+  chk(/aparelho_app_invalido/.test(await erroDe(pend(d.dispositivo_id, 'curto'))), 'segredo malformado: recusado');
+  chk((await como(null, 'select auth.uid() u', [], 'anon')).rows[0].u === null, 'a identidade usada pelo serviço não sobra para a próxima chamada');
+  const m3 = await rpc(resp1, 'enviar_mensagem', { p_participante: p.participante_id, p_tipo: 'ATENCAO', p_texto: '' });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op56.id }).catch(async () => { await db.query(`update public.operacoes set status = 'encerrada', encerrada_em = now() where id = $1`, [op56.id]); });
+  const l3 = await pend(d.dispositivo_id, d.segredo);
+  chk(Array.isArray(l3) && l3.some((m) => m.id === m3.id), 'operação encerrada: a lista ainda responde (sem erro)', l3);
+  await rpc(resp1, 'excluir_operacao', { p_operacao: op56.id }).catch(() => null);
+}
+
+console.log('\nMigrações 007–056 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -453,7 +453,7 @@
       ]),
       UI.el('p', { classe: 'meta-area dados-op-meta', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
       UI.rodape([
-        editavel ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { fechar(); editarDados(op, opcoes); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { editarDados(op, opcoes); } }) : null,
       ]),
     ]), { tamanho: 'largo' });
   }
@@ -645,7 +645,7 @@
       caixaFoto,
       dl,
       UI.rodape([
-        editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { fechar(); editarFicha(op, v, opcoes); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { editarFicha(op, v, opcoes); } }) : null,
         editavel ? rotFoto : null,
         editavel ? inFoto : null,
         editavel && v.foto_caminho ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Tirar foto', onclick: function () { fechar(); removerFoto(op, v, opcoes); } }) : null,
@@ -757,7 +757,7 @@
     ].concat(campos.elementos, [
       blocoFalta,
       erro,
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); if (!nova) abrirFicha(op, v, opcoes); } }), btn]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]));
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();

@@ -514,7 +514,7 @@
           UI.el('small', { classe: 'muted', texto: resumo }),
           (P.compactarAcoes || function (x) { return x; })(UI.el('div', { classe: 'acoes-linha' }, [
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); enquadrar(imp); } }),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { fechar(); editarImportado(imp); } }),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { editarImportado(imp); } }),
             ativa && d.pontos.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Pontos → pontos de interesse', onclick: function () { fechar(); converterPontos(imp); } }) : null,
             ativa && d.areas.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Área → setor', onclick: function () {
               fechar(); var a = d.areas[0]; P.criarSetor(a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }), a.nome); } }) : null,

@@ -122,7 +122,8 @@
   }
 
   /*
-   * Desenha um bloco "Detalhes do envio" dentro de `container`. opcoes: { fila: () => Fila|null, extra: () => {pendentes, naoDuraveis}, ativo: () => bool }.
+   * Desenha um bloco "Detalhes do envio" dentro de `container`. opcoes: { fila: () => Fila|null, extra: () => {pendentes, naoDuraveis}, ativo: () => bool,
+   *   mostrar?: (resumo) => bool (esconde o bloco quando devolve false) }.
    * Devolve { atualizar }. Atualiza sozinho a cada 3 s enquanto o bloco está visível.
    */
   function montar(container, opcoes) {
@@ -147,6 +148,7 @@
       container.hidden = !fila || !ativo;
       if (!fila || !ativo) return;
       var r = formatar(fila.diagnostico(), Date.now(), opcoes.extra ? opcoes.extra() : null);
+      if (opcoes.mostrar && !opcoes.mostrar(r)) { container.hidden = true; return; }
       container.setAttribute('data-nivel', r.nivel);
       resumo.textContent = r.titulo;
       alerta.hidden = !r.alerta;
@@ -160,7 +162,7 @@
       if (!r.eventos.length) eventos.appendChild(el('li', { classe: 'muted', texto: 'Nenhuma falha registrada.' }));
       r.eventos.forEach(function (t) { eventos.appendChild(el('li', { texto: t })); });
     }
-    var timer = setInterval(function () { if (!container.hidden) atualizar(); }, 3000);
+    var timer = setInterval(function () { if (!container.hidden || opcoes.mostrar) atualizar(); }, 3000);
     atualizar();
     return { atualizar: atualizar, parar: function () { clearInterval(timer); } };
   }

@@ -14,7 +14,9 @@ chk(M.ZOOM_SEM_AGRUPAR === 19, 'pessoas ainda se agrupam nas escalas de 200 m (z
 console.log('Tamanho dos ícones pelo zoom');
 chk(M.escalaDoZoom(16) === 0.9 && M.escalaDoZoom(16) > M.escalaDoZoom(14) && M.escalaDoZoom(14) > M.escalaDoZoom(12), 'de longe diminui até o zoom 12');
 chk(M.escalaDoZoom(17) < M.escalaDoZoom(16) && M.escalaDoZoom(18) < M.escalaDoZoom(17) && M.escalaDoZoom(19) < M.escalaDoZoom(18) && M.escalaDoZoom(20) < M.escalaDoZoom(19), 'da escala de 100 m (zoom 17) para menos os ícones diminuem a cada nível');
-chk(M.escalaDoZoom(22) === 0.5 && [10, 13, 16, 17, 18, 19, 20, 22].every((z) => M.escalaDoZoom(z) >= 0.5 && M.escalaDoZoom(z) <= 1), 'nunca menor que a metade');
+chk([20, 21, 22].every((z) => M.escalaDoZoom(z) === M.ESCALA_MINIMA_PERTO) && M.ESCALA_MINIMA_PERTO >= 0.75, 'de muito perto (zoom 20 em diante) para de diminuir: piso de 0,75 (~20 px)');
+chk([17, 18, 19, 20, 21, 22].every((z) => M.escalaDoZoom(z) >= 0.75), 'de perto nenhum ícone fica menor que 20 px (26 px x 0,75)');
+chk([10, 13, 16, 17, 18, 19, 20, 22].every((z) => M.escalaDoZoom(z) >= 0.5 && M.escalaDoZoom(z) <= 1), 'nunca menor que a metade (de longe) nem maior que o tamanho cheio');
 
 console.log('Quem pede atenção fica sempre à vista');
 ['mk ajuda', 'mk antigo saida', 'mk selecionado', 'mk eu resp-grupo'].forEach((c) => chk(M.ehDestaque(c), '"' + c + '" é destaque'));

@@ -23,6 +23,8 @@
   // rápido, e "salto" só quando a velocidade é incoerente com o movimento recente.
   var PADRAO = {
     precisaoBoaM: 20,           // até aqui a leitura é "boa"
+    precisaoVelocidadeM: 20,    // a velocidade do GPS só indica movimento com precisão até aqui
+    fatorVelocidadeConfirmada: 0.4, // com velocidade do GPS confirmando, basta 0,4 × precisão de afastamento (mín. 3 m)
     precisaoTrilhaM: 150,       // pior que isso: só posição aproximada (não entra na linha da trilha)
     intervaloRuimMs: 30000,     // posição aproximada: no máximo 1 a cada 30 s
     distanciaMinimaM: 3,        // deslocamento mínimo considerado
@@ -114,6 +116,7 @@
     this.foraDoLimiar = 0;
     this.velRecente = 0;         // m/s: velocidade recente (GPS ou deslocamento líquido dos últimos pontos)
     this.recentes = [];          // últimas 3 leituras válidas (decisão parado/andando)
+    this.janela = [];            // últimas 10 leituras válidas (posição de quem está parado)
     this.ancoraMed = null;
     this.aceitos = [];           // últimos 4 pontos aceitos (velocidade líquida e retidão)
   };
@@ -213,6 +216,8 @@
     if (vel != null) this.velRecente = 0.5 * this.velRecente + 0.5 * vel;
     this.recentes.push(leitura);
     if (this.recentes.length > 3) this.recentes.shift();
+    this.janela.push(leitura);
+    if (this.janela.length > 10) this.janela.shift();
     var ruim = prec != null && prec > cfg.precisaoTrilhaM;
 
     if (!a) {
@@ -278,7 +283,11 @@
     var med = mediana(this.recentes);
     var ref = this.ancoraMed || a;   // mediana no momento do último ponto (menos sensível à oscilação)
     var dMed = distancia(ref.lat, ref.lng, med.lat, med.lng);
-    var porVelocidade = vel != null && vel >= cfg.velocidadeMinimaMs && d >= cfg.distanciaMinimaM;
+    // A velocidade do GPS só conta com precisão boa: com leituras ruins, ela oscila sozinha
+    // (ruído de Doppler) e transformava cada tremida do parado em "movimento".
+    var confirmaVelocidade = Math.max(cfg.distanciaMinimaM, Math.min(cfg.limiteOscilacaoM, cfg.fatorVelocidadeConfirmada * maiorPrec));
+    var porVelocidade = vel != null && vel >= cfg.velocidadeMinimaMs && d >= cfg.distanciaMinimaM &&
+      maiorPrec <= cfg.precisaoVelocidadeM && dMed >= confirmaVelocidade;
     // GPS informa que está parado (velocidade ~0): só um afastamento claro conta.
     var gpsParado = vel != null && vel < 0.3 && d < 1.5 * Math.max(maiorPrec, limiar);
     // o afastamento precisa manter a mesma direção (a oscilação muda de direção a cada leitura)
@@ -293,7 +302,12 @@
       (dMed >= Math.max(maiorPrec, 2 * limiar) || this.foraDoLimiar >= cfg.confirmacoesMovimento));
     if (dt < cfg.intervaloMinimoMs) return this.descartar(leitura, 'intervalo_curto', extra);
     if (movendo) return this.aceitar([leitura], 'movimento', extra);
-    if (dt >= cfg.intervaloParadoMs) return this.aceitar([leitura], 'parado_periodico', extra);
+    if (dt >= cfg.intervaloParadoMs) {
+      // parado: a confirmação grava o centro das últimas leituras, não uma leitura solta
+      // (uma leitura sozinha tem o ruído do GPS: é ele que faz a trilha "tremer" no lugar)
+      var c = this.janela.length >= 5 ? this.centroParado(leitura) : leitura;
+      return this.aceitar([c], 'parado_periodico', extra);
+    }
     return this.descartar(leitura, 'oscilacao_parado', extra);
   };
 
@@ -331,6 +345,14 @@
     }
     leituras.forEach(function (l, i) { self.registrar(l, true, motivo, i === leituras.length - 1 ? extra : null); });
     return this.resultado(ultima, pontos, motivo);
+  };
+
+  // Posição estimada de quem está parado: mediana das leituras da janela (com a própria leitura).
+  Filtro.prototype.centroParado = function (leitura) {
+    var j = this.janela;
+    var precs = j.map(function (l) { return l.prec == null ? 0 : l.prec; }).sort(function (a, b) { return a - b; });
+    return { lat: med1(j.map(function (l) { return l.lat; })), lng: med1(j.map(function (l) { return l.lng; })),
+      prec: precs[Math.floor(precs.length / 2)], t: leitura.t, vel: leitura.vel, recebidaEm: leitura.recebidaEm };
   };
 
   Filtro.prototype.descartar = function (leitura, motivo, extra) {

@@ -20,6 +20,8 @@ public final class FiltroGps {
     public double distanciaMinimaM = 3;
     public double fatorOscilacao = 0.6;
     public double limiteOscilacaoM = 25;
+    public double precisaoVelocidadeM = 20;
+    public double fatorVelocidadeConfirmada = 0.4;
     public int confirmacoesMovimento = 3;
     public double velocidadeMinimaMs = 0.7;
     public long intervaloMinimoMs = 2000;
@@ -82,6 +84,7 @@ public final class FiltroGps {
   private int foraDoLimiar;
   private double velRecente;
   private final List<Leitura> recentes = new ArrayList<>();
+  private final List<Leitura> janela = new ArrayList<>();
   private LatLng ancoraMed;
   private final List<Leitura> aceitos = new ArrayList<>();
   private double[] vetorAnterior;
@@ -97,6 +100,7 @@ public final class FiltroGps {
     foraDoLimiar = 0;
     velRecente = 0;
     recentes.clear();
+    janela.clear();
     ancoraMed = null;
     aceitos.clear();
   }
@@ -181,6 +185,8 @@ public final class FiltroGps {
     if (vel != null) velRecente = 0.5 * velRecente + 0.5 * vel;
     recentes.add(leitura);
     if (recentes.size() > 3) recentes.remove(0);
+    janela.add(leitura);
+    if (janela.size() > 10) janela.remove(0);
     boolean ruim = prec != null && prec > cfg.precisaoTrilhaM;
 
     if (a == null) {
@@ -236,7 +242,10 @@ public final class FiltroGps {
     LatLng med = mediana(recentes);
     LatLng ref = ancoraMed != null ? ancoraMed : new LatLng(a.lat, a.lng);
     double dMed = distancia(ref.lat, ref.lng, med.lat, med.lng);
-    boolean porVelocidade = vel != null && vel >= cfg.velocidadeMinimaMs && d >= cfg.distanciaMinimaM;
+    // A velocidade do GPS só conta com precisão boa: com leituras ruins, ela oscila sozinha (ruído de Doppler).
+    boolean porVelocidade = vel != null && vel >= cfg.velocidadeMinimaMs && d >= cfg.distanciaMinimaM
+        && maiorPrec <= cfg.precisaoVelocidadeM
+        && dMed >= Math.max(cfg.distanciaMinimaM, Math.min(cfg.limiteOscilacaoM, cfg.fatorVelocidadeConfirmada * maiorPrec));
     boolean gpsParado = vel != null && vel < 0.3 && d < 1.5 * Math.max(maiorPrec, limiar);
     double kLng = Math.cos(ref.lat * Math.PI / 180);
     double[] vet = { (med.lat - ref.lat) * 111320, (med.lng - ref.lng) * 111320 * kLng };
@@ -249,8 +258,22 @@ public final class FiltroGps {
         && (dMed >= Math.max(maiorPrec, 2 * limiar) || foraDoLimiar >= cfg.confirmacoesMovimento));
     if (dt < cfg.intervaloMinimoMs) return descartar(leitura, "intervalo_curto");
     if (movendo) return aceitar(Collections.singletonList(leitura), "movimento", false);
-    if (dt >= cfg.intervaloParadoMs) return aceitar(Collections.singletonList(leitura), "parado_periodico", false);
+    if (dt >= cfg.intervaloParadoMs) {
+      // parado: a confirmação grava o centro das últimas leituras, não uma leitura solta
+      Leitura c = janela.size() >= 5 ? centroParado(leitura) : leitura;
+      return aceitar(Collections.singletonList(c), "parado_periodico", false);
+    }
     return descartar(leitura, "oscilacao_parado");
+  }
+
+  // Posição estimada de quem está parado: mediana das leituras da janela (como no gps.js, centroParado).
+  private Leitura centroParado(Leitura leitura) {
+    double[] lats = new double[janela.size()], lngs = new double[janela.size()], precs = new double[janela.size()];
+    for (int i = 0; i < janela.size(); i++) {
+      Leitura l = janela.get(i);
+      lats[i] = l.lat; lngs[i] = l.lng; precs[i] = p(l.prec);
+    }
+    return new Leitura(med1(lats), med1(lngs), med1(precs), leitura.t, leitura.vel, leitura.recebidaEm);
   }
 
   private Resultado invalida() {

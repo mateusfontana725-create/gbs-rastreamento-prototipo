@@ -62,7 +62,9 @@ dv = deriva(8);
 r = rodar(120, (i) => { const e = dv(); return [i * 1.2 + e[0], e[1], 30]; });
 chk(r.pts.length >= 6 && maiorIntervalo(r.pts) <= 35, 'andando com precisão ruim (30 m, mata), sem velocidade do GPS: ainda registra (≤ 35 s entre pontos)', [r.pts.length, maiorIntervalo(r.pts)]);
 r = rodar(120, (i) => [i * 1.2 + ruido(8), ruido(8), 30, 1.2]);
-chk(r.pts.length >= 40, 'mesma situação com velocidade do GPS: ponto a cada ~2 s', r.pts.length);
+chk(r.pts.length >= 8 && maiorIntervalo(r.pts) <= 35, 'mesma situação com velocidade do GPS, precisão 30 m: a velocidade sozinha não basta (ruído de Doppler); ponto quando afasta ~12 m (≤ 35 s)', [r.pts.length, maiorIntervalo(r.pts)]);
+r = rodar(120, (i) => [i * 1.2 + ruido(3), ruido(3), 8, 1.2]);
+chk(r.pts.length >= 30, 'andando com precisão boa (8 m) e velocidade do GPS: ponto a cada ~4 s ou menos', r.pts.length);
 r = rodar(300, (i) => [i * 0.3, 0, 5]);
 chk(r.pts.length >= 20, 'passos lentos (0,3 m/s): deslocamento pequeno registrado', r.pts.length);
 

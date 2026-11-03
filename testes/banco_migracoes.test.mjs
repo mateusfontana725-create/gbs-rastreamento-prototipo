@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2740,5 +2740,34 @@ console.log('\nCenário da operação (estimativa geral, sem vítima) — migra�
   chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and categoria = 'operacao' and tipo = 'cenario_pos_busca'`, [opG.id])).rows[0].n === 1, 'a atualização da estimativa entra no diário');
 }
 
-console.log('\nMigrações 007–059 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 060: arquivar operação com POA aprovado ----------
+console.log('\nArquivamento de operação com cenário aprovado — migração 060');
+{
+  const svc060 = (sql, params) => como(null, sql, params, 'service_role');
+  const opC = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ARQ CENARIO', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const setorC = await rpc(resp1, 'salvar_setor', { p_operacao: opC.id, p_id: null, p_dados: JSON.stringify({ nome: 'Norte', forma: 'circulo', centro_lat: -25.4, centro_lng: -49.2, raio_m: 200 }) });
+  const vitC = await rpc(resp1, 'salvar_vitima', { p_operacao: opC.id, p_id: null, p_dados: JSON.stringify({ nome: 'Ana' }) });
+  const rascC = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vitC.id, p_dados: JSON.stringify({ justificativa: 'Trilha do norte, última vez vista ali', setores: [{ setor_id: setorC.id, poa: 0.5 }] }) });
+  const apC = await rpc(resp1, 'cenario_aprovar', { p_cenario: rascC.cenario.id });
+  chk(apC.cenario.estado === 'aprovada', 'operação com POA aprovado (o caso que não arquivava)');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`delete from public.busca_cenarios where id = $1`, [apC.cenario.id]))), 'fora do arquivamento, cenário aprovado continua sem poder ser apagado');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opC.id });
+  const prepC = (await svc060('select public.servidor_arquivo_preparar($1) d', [opC.id])).rows[0].d;
+  const totC = Object.fromEntries(prepC.tabelas.map((t) => [t.tabela, Number(t.total)]));
+  chk(totC.busca_cenarios === 1 && totC.busca_cenario_setores === 1, 'o arquivo leva o cenário e os setores', totC);
+  const caminhoC = opC.id + '/22222222-2222-4222-8222-222222222222.json.gz';
+  await db.query(`insert into storage.objects (bucket_id, name) values ('arquivos', $1)`, [caminhoC]);
+  const exportadoC = {};
+  for (const t of prepC.tabelas) {
+    exportadoC[t.tabela] = (await svc060('select public.servidor_arquivo_tabela($1, $2, 0, 5000) d', [opC.id, t.tabela])).rows[0].d;
+  }
+  const contC = Object.fromEntries(Object.entries(exportadoC).map(([k, v]) => [k, v.length]));
+  const dC = (await svc060('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4) d', [opC.id, caminhoC, 'c'.repeat(64), JSON.stringify(contC)]).catch((e) => ({ erro: e.message }))).rows?.[0]?.d;
+  chk(dC && !dC.erro, 'arquivar a operação com POA aprovado: confirmado', dC || (await erroDe(svc060('select 1'))));
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'depois do arquivamento, os cenários saem do banco (uma linha de operação, como antes)');
+  chk((await db.query(`select count(*)::int n from public.busca_cenario_setores where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'os setores do cenário também saem');
+  chk((await db.query(`select count(*)::int n from public.vitimas where operacao_id = $1`, [opC.id])).rows[0].n === 1, 'vítimas ficam no banco (como antes)');
+}
+
+console.log('\nMigrações 007–060 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

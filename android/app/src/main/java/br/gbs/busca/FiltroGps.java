@@ -9,7 +9,7 @@ import java.util.Map;
 
 /**
  * Filtro das leituras do GPS: a mesma regra de public/js/gps.js (Filtro.processar), linha a linha.
- * Nenhuma posição é inventada: o filtro só decide quais leituras reais entram na trilha.
+ * Andando, cada ponto é uma leitura real; parado, o ponto é o centro (mediana) das leituras reais no lugar.
  * A igualdade com o JS é conferida pelo teste FiltroGpsTest (casos gerados a partir do gps.js).
  */
 public final class FiltroGps {
@@ -18,11 +18,20 @@ public final class FiltroGps {
     public double precisaoTrilhaM = 150;
     public long intervaloRuimMs = 30000;
     public double distanciaMinimaM = 3;
-    public double fatorOscilacao = 0.6;
+    public double fatorOscilacao = 1;
     public double limiteOscilacaoM = 25;
     public double precisaoVelocidadeM = 20;
-    public double fatorVelocidadeConfirmada = 0.4;
     public int confirmacoesMovimento = 3;
+    public double fatorDispersao = 3;
+    public double fatorSaida = 1.5;
+    public double velocidadePeMs = 3;
+    public long confirmacaoPuloMs = 30000;
+    public int janelaParado = 60;
+    public double fatorPasso = 0.8;
+    public double passoMaxM = 20;
+    public long janelaParadaMs = 20000;
+    public double fatorParada = 0.4;
+    public int confirmacoesParada = 3;
     public double velocidadeMinimaMs = 0.7;
     public long intervaloMinimoMs = 2000;
     public double velocidadeRapidaMs = 5;
@@ -74,6 +83,15 @@ public final class FiltroGps {
     LatLng(double lat, double lng) { this.lat = lat; this.lng = lng; }
   }
 
+  /** Estado parado: leituras no lugar, centro (mediana) e a saída em análise. */
+  private static final class Parado {
+    List<Leitura> leituras;
+    LatLng centro;
+    List<Leitura> fora = new ArrayList<>();
+    long ultimoDentroT;
+    Leitura ultimaLeitura, anterior;
+  }
+
   public final Cfg cfg;
   public final Map<String, Integer> contagem = new HashMap<>();
   private final List<Long> offsets = new ArrayList<>();
@@ -81,13 +99,12 @@ public final class FiltroGps {
   private long ultimoRuimT;
   private Leitura ultimaLeitura;
   private List<Leitura> suspeitos = new ArrayList<>();
-  private int foraDoLimiar;
   private double velRecente;
-  private final List<Leitura> recentes = new ArrayList<>();
   private final List<Leitura> janela = new ArrayList<>();
-  private LatLng ancoraMed;
   private final List<Leitura> aceitos = new ArrayList<>();
-  private double[] vetorAnterior;
+  private String estado;
+  private Parado parado;
+  private int paradaSeguida;
 
   public FiltroGps() { this(new Cfg()); }
   public FiltroGps(Cfg cfg) { this.cfg = cfg; reiniciar(); }
@@ -97,12 +114,12 @@ public final class FiltroGps {
     ultimoRuimT = 0;
     ultimaLeitura = null;
     suspeitos = new ArrayList<>();
-    foraDoLimiar = 0;
     velRecente = 0;
-    recentes.clear();
     janela.clear();
-    ancoraMed = null;
     aceitos.clear();
+    estado = null;
+    parado = null;
+    paradaSeguida = 0;
   }
 
   static double distancia(double lat1, double lng1, double lat2, double lng2) {
@@ -127,6 +144,14 @@ public final class FiltroGps {
     for (int i = 0; i < ls.size(); i++) { la[i] = ls.get(i).lat; ln[i] = ls.get(i).lng; }
     return new LatLng(med1(la), med1(ln));
   }
+
+  private static double precMediana(List<Leitura> ls) {
+    double[] v = new double[ls.size()];
+    for (int i = 0; i < ls.size(); i++) v[i] = p(ls.get(i).prec);
+    return med1(v);
+  }
+
+  private static <T> List<T> ultimas(List<T> ls, int n) { return new ArrayList<>(ls.subList(Math.max(0, ls.size() - n), ls.size())); }
 
   private void conta(String motivo) {
     Integer n = contagem.get(motivo);
@@ -183,11 +208,11 @@ public final class FiltroGps {
     if (a != null && t <= a.t) { conta("fora_de_ordem"); return resultado(null, new ArrayList<>(), "fora_de_ordem"); }
     ultimaLeitura = leitura;
     if (vel != null) velRecente = 0.5 * velRecente + 0.5 * vel;
-    recentes.add(leitura);
-    if (recentes.size() > 3) recentes.remove(0);
-    janela.add(leitura);
-    if (janela.size() > 10) janela.remove(0);
     boolean ruim = prec != null && prec > cfg.precisaoTrilhaM;
+    if (!ruim) {
+      janela.add(leitura);
+      while (janela.size() > 60 || t - janela.get(0).t > 30000) janela.remove(0);
+    }
 
     if (a == null) {
       if (ruim) {
@@ -195,7 +220,9 @@ public final class FiltroGps {
         ultimoRuimT = t;
         return aceitar(Collections.singletonList(leitura), "primeiro_ponto_impreciso", true);
       }
-      return aceitar(Collections.singletonList(leitura), "primeiro_ponto", false);
+      Resultado r0 = aceitar(Collections.singletonList(leitura), "primeiro_ponto", false);
+      ficarParado(Collections.singletonList(leitura));
+      return r0;
     }
 
     long dt = t - a.t;
@@ -225,6 +252,7 @@ public final class FiltroGps {
         Leitura ultimo = conf.get(conf.size() - 1), primeiro = conf.get(0);
         double dtc = Math.max((ultimo.t - primeiro.t) / 1000.0, 0.5);
         velRecente = Math.max(velRecente, distancia(primeiro.lat, primeiro.lng, ultimo.lat, ultimo.lng) / dtc);
+        andar();
         return aceitar(conf, "salto_confirmado", false);
       }
       return descartar(leitura, "salto_suspeito");
@@ -234,46 +262,162 @@ public final class FiltroGps {
     boolean rapido = emMovimentoRapido(vel);
     if (rapido) {
       if (dt < cfg.intervaloMinimoRapidoMs) return descartar(leitura, "intervalo_curto");
-      if (d >= cfg.distanciaMinimaRapidoM) return aceitar(Collections.singletonList(leitura), "movimento_rapido", false);
+      if (d >= cfg.distanciaMinimaRapidoM) { andar(); return aceitar(Collections.singletonList(leitura), "movimento_rapido", false); }
     }
-
-    double maiorPrec = Math.max(p(prec), p(a.prec));
-    double limiar = Math.max(cfg.distanciaMinimaM, Math.min(cfg.limiteOscilacaoM, cfg.fatorOscilacao * maiorPrec));
-    LatLng med = mediana(recentes);
-    LatLng ref = ancoraMed != null ? ancoraMed : new LatLng(a.lat, a.lng);
-    double dMed = distancia(ref.lat, ref.lng, med.lat, med.lng);
-    // A velocidade do GPS só conta com precisão boa: com leituras ruins, ela oscila sozinha (ruído de Doppler).
-    boolean porVelocidade = vel != null && vel >= cfg.velocidadeMinimaMs && d >= cfg.distanciaMinimaM
-        && maiorPrec <= cfg.precisaoVelocidadeM
-        && dMed >= Math.max(cfg.distanciaMinimaM, Math.min(cfg.limiteOscilacaoM, cfg.fatorVelocidadeConfirmada * maiorPrec));
-    boolean gpsParado = vel != null && vel < 0.3 && d < 1.5 * Math.max(maiorPrec, limiar);
-    double kLng = Math.cos(ref.lat * Math.PI / 180);
-    double[] vet = { (med.lat - ref.lat) * 111320, (med.lng - ref.lng) * 111320 * kLng };
-    boolean mesmaDirecao = vetorAnterior == null || (vet[0] * vetorAnterior[0] + vet[1] * vetorAnterior[1])
-        > 0.5 * Math.hypot(vet[0], vet[1]) * Math.hypot(vetorAnterior[0], vetorAnterior[1]);
-    if (d >= limiar && dMed >= limiar && mesmaDirecao) foraDoLimiar++;
-    else foraDoLimiar = d >= limiar && dMed >= limiar ? 1 : 0;
-    vetorAnterior = dMed >= limiar ? vet : null;
-    boolean movendo = porVelocidade || (!gpsParado && d >= limiar && dMed >= limiar
-        && (dMed >= Math.max(maiorPrec, 2 * limiar) || foraDoLimiar >= cfg.confirmacoesMovimento));
-    if (dt < cfg.intervaloMinimoMs) return descartar(leitura, "intervalo_curto");
-    if (movendo) return aceitar(Collections.singletonList(leitura), "movimento", false);
-    if (dt >= cfg.intervaloParadoMs) {
-      // parado: a confirmação grava o centro das últimas leituras, não uma leitura solta
-      Leitura c = janela.size() >= 5 ? centroParado(leitura) : leitura;
-      return aceitar(Collections.singletonList(c), "parado_periodico", false);
-    }
-    return descartar(leitura, "oscilacao_parado");
+    return "andando".equals(estado) ? processarAndando(leitura) : processarParado(leitura);
   }
 
-  // Posição estimada de quem está parado: mediana das leituras da janela (como no gps.js, centroParado).
-  private Leitura centroParado(Leitura leitura) {
-    double[] lats = new double[janela.size()], lngs = new double[janela.size()], precs = new double[janela.size()];
-    for (int i = 0; i < janela.size(); i++) {
-      Leitura l = janela.get(i);
-      lats[i] = l.lat; lngs[i] = l.lng; precs[i] = p(l.prec);
+  // Parado e andando: ver os comentários em public/js/gps.js (mesmos nomes e a mesma ordem).
+  private void ficarParado(List<Leitura> leituras) {
+    Parado P = new Parado();
+    P.leituras = ultimas(leituras, cfg.janelaParado);
+    P.centro = mediana(P.leituras);
+    P.ultimoDentroT = P.leituras.get(P.leituras.size() - 1).t;
+    P.ultimaLeitura = P.leituras.get(P.leituras.size() - 1);
+    estado = "parado";
+    parado = P;
+  }
+
+  private void andar() { estado = "andando"; parado = null; paradaSeguida = 0; }
+
+  private double raioParado() {
+    Parado P = parado;
+    double r = cfg.fatorOscilacao * precMediana(P.leituras);
+    if (P.leituras.size() >= 10) {
+      double[] ds = new double[P.leituras.size()];
+      for (int i = 0; i < ds.length; i++) ds[i] = distancia(P.centro.lat, P.centro.lng, P.leituras.get(i).lat, P.leituras.get(i).lng);
+      r = Math.max(r, cfg.fatorDispersao * med1(ds));
     }
-    return new Leitura(med1(lats), med1(lngs), med1(precs), leitura.t, leitura.vel, leitura.recebidaEm);
+    return Math.max(cfg.distanciaMinimaM, Math.min(cfg.limiteOscilacaoM, r));
+  }
+
+  private boolean velocidadeConfirma(boolean minima) {
+    List<Leitura> j = ultimas(janela, 3);
+    if (j.size() != 3) return false;
+    for (Leitura l : j) {
+      if (l.vel == null || p(l.prec) > cfg.precisaoVelocidadeM) return false;
+      if (minima ? l.vel < cfg.velocidadeMinimaMs : l.vel >= 0.3) return false;
+    }
+    return true;
+  }
+
+  private Leitura centro(Parado P, Leitura leitura) {
+    return new Leitura(P.centro.lat, P.centro.lng, precMediana(P.leituras), leitura.t, leitura.vel, leitura.recebidaEm);
+  }
+
+  private Resultado processarParado(Leitura leitura) {
+    Parado P = parado;
+    Resultado r = processarParadoLeitura(leitura);
+    if (parado == P) P.ultimaLeitura = leitura;
+    return r;
+  }
+
+  private Resultado processarParadoLeitura(Leitura leitura) {
+    Parado P = parado;
+    double R = raioParado();
+    if (distancia(P.centro.lat, P.centro.lng, leitura.lat, leitura.lng) <= R) {
+      P.fora = new ArrayList<>();
+      P.leituras.add(leitura);
+      if (P.leituras.size() > cfg.janelaParado) P.leituras.remove(0);
+      P.centro = mediana(P.leituras);
+      P.ultimoDentroT = leitura.t;
+      List<Leitura> saida = tendencia();
+      if (saida != null) { andar(); return aceitar(saida, "movimento", false); }
+      return confirmarParado(leitura, "oscilacao_parado");
+    }
+    if (P.fora.isEmpty()) P.anterior = P.ultimaLeitura;
+    P.fora.add(leitura);
+    Leitura f0 = P.fora.get(0);
+    double salto0 = distancia(P.centro.lat, P.centro.lng, f0.lat, f0.lng);
+    double precMed = precMediana(P.leituras);
+    double permitido = R + cfg.velocidadePeMs * Math.max(1, (f0.t - P.ultimoDentroT) / 1000.0) + 0.5 * precMed;
+    Leitura ant = P.anterior;
+    boolean degrau = ant != null && distancia(ant.lat, ant.lng, f0.lat, f0.lng)
+        > cfg.velocidadePeMs * Math.max(1, (f0.t - ant.t) / 1000.0) + Math.max(cfg.distanciaMinimaM, 0.5 * precMed);
+    LatLng med = mediana(ultimas(P.fora, 3));
+    double dMed = distancia(P.centro.lat, P.centro.lng, med.lat, med.lng);
+    boolean pulo = (salto0 > permitido || degrau) && distancia(f0.lat, f0.lng, med.lat, med.lng) < R;
+    if (pulo) {
+      if (leitura.t - f0.t >= cfg.confirmacaoPuloMs) {
+        ficarParado(P.fora);
+        return aceitar(Collections.singletonList(centro(parado, leitura)), "salto_confirmado", false);
+      }
+      return confirmarParado(leitura, "pulo_parado");
+    }
+    boolean porVel = velocidadeConfirma(true);
+    if (P.fora.size() >= (porVel ? 2 : cfg.confirmacoesMovimento) && dMed >= (porVel ? 1 : cfg.fatorSaida) * R
+        && leitura.t - ancora.t >= cfg.intervaloMinimoMs) {
+      List<Leitura> saida = espacar(P.fora);
+      andar();
+      return aceitar(saida, "movimento", false);
+    }
+    return confirmarParado(leitura, "oscilacao_parado");
+  }
+
+  private List<Leitura> tendencia() {
+    List<Leitura> ls = parado.leituras;
+    Leitura ult = ls.get(ls.size() - 1);
+    boolean porVel = velocidadeConfirma(true);
+    List<Leitura> w = new ArrayList<>();
+    for (Leitura l : ls) if (ult.t - l.t <= cfg.janelaParadaMs) w.add(l);
+    if (w.size() < (porVel ? 3 : 6) || ult.t - w.get(0).t < (porVel ? 2000 : cfg.janelaParadaMs * 0.5)
+        || ult.t - ancora.t < cfg.intervaloMinimoMs) return null;
+    int n = w.size() / 3;
+    LatLng a = mediana(w.subList(0, n)), b = mediana(w.subList(w.size() - n, w.size()));
+    double rPrec = Math.max(cfg.distanciaMinimaM, Math.min(cfg.limiteOscilacaoM, cfg.fatorOscilacao * precMediana(w)));
+    if (distancia(a.lat, a.lng, b.lat, b.lng) < (porVel ? 1 : cfg.fatorSaida) * rPrec) return null;
+    return espacar(w.subList(n, w.size()));
+  }
+
+  private Resultado confirmarParado(Leitura leitura, String motivo) {
+    Parado P = parado;
+    long dtA = leitura.t - ancora.t;
+    if (dtA >= cfg.intervaloParadoMs && (P.fora.isEmpty() || dtA >= 2 * cfg.intervaloParadoMs)) {
+      return aceitar(Collections.singletonList(centro(P, leitura)), "parado_periodico", false);
+    }
+    return descartar(leitura, motivo);
+  }
+
+  private double passo(Double prec) {
+    return Math.max(cfg.distanciaMinimaM, Math.min(cfg.passoMaxM, cfg.fatorPasso * p(prec)));
+  }
+
+  private List<Leitura> espacar(List<Leitura> ls) {
+    List<Leitura> out = new ArrayList<>();
+    double refLat = ancora.lat, refLng = ancora.lng;
+    long refT = ancora.t;
+    for (int i = 0; i < ls.size(); i++) {
+      Leitura l = ls.get(i);
+      if (l.t - refT < cfg.intervaloMinimoMs) continue;
+      if (i == ls.size() - 1 || distancia(refLat, refLng, l.lat, l.lng) >= passo(l.prec)) {
+        out.add(l); refLat = l.lat; refLng = l.lng; refT = l.t;
+      }
+    }
+    if (out.isEmpty()) out.add(ls.get(ls.size() - 1));
+    return out;
+  }
+
+  private boolean parou() {
+    Leitura ult = janela.get(janela.size() - 1);
+    List<Leitura> w = new ArrayList<>();
+    for (Leitura l : janela) if (ult.t - l.t <= cfg.janelaParadaMs) w.add(l);
+    if (w.size() < 6 || ult.t - w.get(0).t < cfg.janelaParadaMs * 0.75) return false;
+    int n = w.size() / 3;
+    LatLng a = mediana(w.subList(0, n)), b = mediana(w.subList(w.size() - n, w.size()));
+    return distancia(a.lat, a.lng, b.lat, b.lng) < Math.max(cfg.distanciaMinimaM, cfg.fatorParada * precMediana(w));
+  }
+
+  private Resultado processarAndando(Leitura leitura) {
+    paradaSeguida = parou() ? paradaSeguida + 1 : 0;
+    if (paradaSeguida >= cfg.confirmacoesParada || velocidadeConfirma(false)) {
+      ficarParado(ultimas(janela, 3));
+      return confirmarParado(leitura, "oscilacao_parado");
+    }
+    if (leitura.t - ancora.t < cfg.intervaloMinimoMs) return descartar(leitura, "intervalo_curto");
+    LatLng med = mediana(ultimas(janela, 3));
+    if (distancia(ancora.lat, ancora.lng, med.lat, med.lng) >= passo(leitura.prec)) return aceitar(Collections.singletonList(leitura), "movimento", false);
+    if (leitura.t - ancora.t >= cfg.intervaloParadoMs) return aceitar(Collections.singletonList(leitura), "parado_periodico", false);
+    return descartar(leitura, "oscilacao_parado");
   }
 
   private Resultado invalida() {
@@ -302,9 +446,6 @@ public final class FiltroGps {
       }
       if ("parado_periodico".equals(motivo)) velRecente *= 0.3;
       ancora = new Ancora(ultima.lat, ultima.lng, ultima.prec, ultima.t);
-      ancoraMed = recentes.size() >= 3 && !emMovimentoRapido(ultima.vel) ? mediana(recentes) : null;
-      foraDoLimiar = 0;
-      vetorAnterior = null;
     }
     for (int i = 0; i < leituras.size(); i++) conta(motivo);
     return resultado(ultima, pontos, motivo);

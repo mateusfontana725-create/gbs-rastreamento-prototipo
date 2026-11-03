@@ -938,9 +938,9 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 | Etapa | Como funciona agora (valores em `GPS.PADRAO`) |
 |---|---|
 | Captura | `watchPosition` com alta precisão, `maximumAge: 0`, `timeout: 30 s`, usando os **eventos reais do GPS** (não um temporizador). Um único observador; parado, pede leitura nova a cada 45 s; sem leituras por 90 s com a tela aberta, reinicia o observador |
-| A pé | ponto quando o afastamento sai do círculo de precisão, ou com a velocidade medida pelo GPS (≥ 0,7 m/s), ou quando o afastamento se mantém por 3 leituras **na mesma direção**; no máximo 1 ponto a cada 2 s. Na prática: ~1 ponto a cada 3 s andando (com velocidade do GPS) ou a cada ~5 s (sem ela) |
+| A pé | o filtro tem dois estados, **parado** e **andando**. Andando, entra uma leitura real a cada **passo de 0,8 × a precisão** (de 3 a 20 m; com GPS ruim, pontos colados só desenham o ruído), no máximo 1 a cada 2 s; a decisão usa a mediana das 3 últimas leituras (um pico isolado não vira passo). Volta a **parado** quando o deslocamento líquido em 20 s fica abaixo de 0,4 × a precisão por 3 leituras seguidas, ou quando o GPS, com precisão até 20 m, informa velocidade ~0 |
 | Veículo | acima de 18 km/h (velocidade do GPS, ou deslocamento rápido e em linha): **até 1 ponto por segundo**, a cada 8 m |
-| Parado | oscilação menor que 0,6 × a precisão (de 3 a 25 m) não vira trilha; com o GPS informando velocidade 0, só um afastamento claro conta; a **velocidade do GPS só indica movimento com precisão até 20 m** (com leituras ruins ela oscila sozinha e fazia a trilha tremer no lugar); a confirmação periódica grava o **centro das últimas 10 leituras**, não uma leitura solta; confirma a posição a cada **15 s** (o **intervalo máximo sem ponto**, configurável por operação em Dados da operação: 5 a 300 s) |
+| Parado | as leituras de quem está parado formam uma nuvem; a posição é o **centro** (mediana das últimas 60 leituras no lugar) e a confirmação a cada **15 s** (o **intervalo máximo sem ponto**, configurável por operação em Dados da operação: 5 a 300 s) grava esse centro, nunca uma leitura solta. O **raio do lugar** é 1 × a precisão ou 3 × a dispersão real das leituras (até 25 m). **Sair do lugar** é afastamento que se mantém (3 leituras seguidas fora, a 1,5 × o raio) ou deslocamento líquido em 20 s acima de 1,5 × o raio — com a velocidade do GPS confirmando (precisão até 20 m), basta 1 × o raio. As leituras desde a saída entram na trilha, então o começo do trecho não se perde. **Pulo do GPS** — a posição salta 20–40 m de uma leitura para a outra e fica lá, comum perto de prédios ou quando o celular troca o GPS pelo Wi-Fi — é ignorado ("pulo do GPS parado" no diagnóstico); se durar 30 s, é mudança de lugar de verdade e entra |
 | Guardado no aparelho | todo ponto aceito é gravado **primeiro no IndexedDB** (durabilidade `strict`; se falhar, no localStorage como reserva) com id único (UUID do aparelho), latitude, longitude, precisão, hora do GPS, usuário, operação e o estado (pendente, enviado ou recusado); vale também para a "Minha posição" do responsável. **Só é "salvo" quando o aparelho confirma a gravação**: sem confirmação (sem espaço, banco indisponível, só memória) o ponto fica marcado como **não gravado**, é regravado a cada tentativa e o usuário é avisado para não fechar a página. O app pede ao navegador **armazenamento persistente** e monitora o espaço. **Não há limite de pendentes nem descarte dos mais antigos.** A fila antiga (localStorage e a versão 1 do banco) é migrada sozinha |
 | Saltos | só é "salto" o que for incoerente com o movimento recente (> 12 m/s sem histórico, ou > 2,5 × a velocidade recente; nunca acima de 252 km/h). Um pico isolado é descartado; se a leitura seguinte confirmar o novo local (ex.: entrou num carro), **as duas entram** — nada de pontos intermediários perdidos |
 | Precisão | até 150 m entra na trilha (com as regras acima); pior que 150 m vira "posição aproximada" (no máximo 1 a cada 30 s), fora da linha da trilha |
@@ -2139,6 +2139,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 22b | No civil, tocar **MENSAGENS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
 | 22 | Criar uma operação de teste, registrar dados (diário, relatório) e **Excluir operação** (confirmar) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
 | 26 | Celular parado sobre uma mesa por 5 min | a trilha não vira um "novelo"; no diagnóstico (`&diag=1`) aparecem leituras descartadas como "oscilação parado" |
+| 26b | Celular parado 10 min junto a um prédio (ou dentro de casa, perto da janela); depois sair andando | a trilha fica num ponto só, sem "estrela" de linhas; no diagnóstico aparecem "pulo do GPS parado"; ao sair andando, o trecho começa perto de onde estava parado |
 | 27 | Enviar um destino a um civil com a página dele aberta | o cartão **IR ATÉ** aparece em poucos segundos, sem recarregar; a ficha mostra "✓ recebido no celular" |
 | 28 | Remover um civil e depois tocar em **Reincluir** | o celular dele mostra "Os bombeiros chamaram você de volta"; ao tocar, volta ao mesmo registro e a trilha continua |
 | 29 | No celular do civil, negar a localização e depois liberar pelas configurações | a página explica os passos e continua sozinha ao liberar (ou em VERIFICAR DE NOVO), sem novo cadastro |
@@ -2207,6 +2208,15 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
+
+- **Filtro de GPS parado/andando (pulos do GPS perto de prédios)**: avaliação com erro realista (deriva lenta + ruído +
+  pulos de 15–40 m de 3–15 s; velocidade do GPS ausente, boa ou ruidosa; 6 sementes). Trilha falsa em 10 min parado
+  (versão anterior → nova): junto a prédio 650–855 m → 90–100 m, com pontas de 44 m → 13–17 m; na mata 295–354 m →
+  100–111 m; em céu aberto 130–206 m → 46–54 m (a versão original chegava a 1.800 m). Andando: erro ao trajeto e
+  zigue-zague praticamente iguais aos da versão anterior. Custo: com GPS ruim (mata, prédio) o painel vê a saída do
+  lugar ~5–10 s depois (a trilha grava o começo do trecho mesmo assim). Unitários — 47 casos do filtro, incluindo
+  pulos, mudança de lugar real, saída devagar e ordem cronológica; app — o `FiltroGps.java` decide igual ao `gps.js`
+  nas 4.300 leituras dos casos gerados (985 pontos).
 
 - **Aplicativo Android (migração 051)**: banco — 972 verificações (código de uso único só do dono, resumo no banco, vencido e
   já usado recusados, participação passa para o aplicativo e o navegador perde o acesso, segredo do aparelho com resumo, envio

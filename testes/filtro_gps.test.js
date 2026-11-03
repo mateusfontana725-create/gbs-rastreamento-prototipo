@@ -53,6 +53,34 @@ chk(r.pts.length <= 11, 'intervalo configurado em 30 s (operação): parado, con
 { const fc = new GPS.Filtro(); fc.configurar({ intervaloParadoMs: 20000, inexistente: 1 });
   chk(fc.cfg.intervaloParadoMs === 20000 && !('inexistente' in fc.cfg), 'configurar() muda o intervalo sem aceitar chaves desconhecidas', fc.cfg.intervaloParadoMs); }
 
+// Parado junto a prédio: além do erro, o GPS pula 20–40 m por alguns segundos (multicaminho, troca para o Wi-Fi) e volta.
+function comPulos(amp, chance) {
+  const dv0 = deriva(amp); let pulo = null;
+  return (i) => {
+    if (!pulo && rnd() < chance) { const a = rnd() * 6.28, d = 20 + 20 * rnd(); pulo = { y: Math.cos(a) * d, x: Math.sin(a) * d, fim: i + 3 + Math.floor(rnd() * 12) }; }
+    if (pulo && i >= pulo.fim) pulo = null;
+    const e = dv0();
+    return [e[0] + (pulo ? pulo.y : 0), e[1] + (pulo ? pulo.x : 0), pulo ? 30 : 15];
+  };
+}
+const comprimento = (pts) => pts.slice(1).reduce((s, p, k) => s + dist(pts[k], p), 0);
+const afastamento = (pts) => Math.max(...pts.map((p) => GPS.distancia(-22.9, -43.2, p.lat, p.lng)));
+let fp = comPulos(6, 0.03);
+r = rodar(600, fp);
+chk(comprimento(r.pts) < 150 && afastamento(r.pts) < 20, 'parado 10 min junto a prédio, com pulos de 20–40 m: trilha não vira estrela (comprimento e afastamento pequenos)', [Math.round(comprimento(r.pts)), Math.round(afastamento(r.pts))]);
+chk(r.mot.includes('pulo_parado'), 'os pulos aparecem no diagnóstico como "pulo do GPS parado"', r.mot.filter((m) => m === 'pulo_parado').length);
+r = rodar(120, (i) => (i >= 40 && i < 48 ? [30 + ruido(2), ruido(2), 25] : [ruido(2), ruido(2), 8]));
+chk(!r.pts.some((p) => dist(p, { lat: -22.9, lng: -43.2 }) > 15), 'pulo de 30 m por 8 s, parado: ignorado', r.pts.map((p) => Math.round(dist(p, { lat: -22.9, lng: -43.2 }))));
+r = rodar(120, (i) => (i >= 40 ? [30 + ruido(2), ruido(2), 8] : [ruido(2), ruido(2), 8]));
+chk(r.mot.includes('salto_confirmado') && dist(r.pts[r.pts.length - 1], { lat: -22.9 + 30 * M, lng: -43.2 }) < 6, 'o mesmo deslocamento de uma vez que DURA (30 s): mudança de lugar real, aceita', r.mot.filter((m) => m === 'salto_confirmado').length);
+r = rodar(150, (i) => (i < 60 ? [ruido(2), ruido(2), 8] : [(i - 60) * 1.0 + ruido(2), ruido(2), 8]));
+{ const saida = r.pts.find((p) => p.i > 60 && dist(p, { lat: -22.9, lng: -43.2 }) > 4);
+  chk(saida && saida.i <= 75, 'parado 1 min e sai andando devagar (1 m/s): o começo do trecho entra (perto da hora da saída)', saida && saida.i); }
+r = rodar(80, (i) => [i * 1.0 + ruido(2), ruido(2), 8]);
+chk(r.pts.filter((p) => p.i <= 30).length >= 3, 'sai andando devagar logo na primeira leitura: o lugar não "persegue" quem anda', r.pts.map((p) => p.i));
+{ const todos = [rodar(600, comPulos(6, 0.03)), rodar(300, (i) => (Math.floor(i / 60) % 2 ? [i * 1.3 + ruido(8), ruido(8), 25] : [Math.floor(i / 120) * 78 + ruido(8), ruido(8), 25]))];
+  chk(todos.every((x) => x.pts.every((p, k) => !k || p.t > x.pts[k - 1].t)), 'pontos sempre em ordem cronológica (a saída grava as leituras de antes sem cruzar a confirmação)'); }
+
 console.log('A pé');
 r = rodar(120, (i) => [i * 1.4 + ruido(2), ruido(2), 6]);
 chk(r.pts.length >= 20, 'andando 1,4 m/s com precisão 6 m, sem velocidade do GPS: ponto a cada ~5 s (≈7 m)', r.pts.length);
@@ -64,7 +92,7 @@ chk(r.pts.length >= 6 && maiorIntervalo(r.pts) <= 35, 'andando com precisão rui
 r = rodar(120, (i) => [i * 1.2 + ruido(8), ruido(8), 30, 1.2]);
 chk(r.pts.length >= 8 && maiorIntervalo(r.pts) <= 35, 'mesma situação com velocidade do GPS, precisão 30 m: a velocidade sozinha não basta (ruído de Doppler); ponto quando afasta ~12 m (≤ 35 s)', [r.pts.length, maiorIntervalo(r.pts)]);
 r = rodar(120, (i) => [i * 1.2 + ruido(3), ruido(3), 8, 1.2]);
-chk(r.pts.length >= 30, 'andando com precisão boa (8 m) e velocidade do GPS: ponto a cada ~4 s ou menos', r.pts.length);
+chk(r.pts.length >= 15 && maiorIntervalo(r.pts) <= 10, 'andando com precisão boa (8 m) e velocidade do GPS: um ponto a cada ~6 m (0,8 × precisão), sem buracos', [r.pts.length, maiorIntervalo(r.pts)]);
 r = rodar(300, (i) => [i * 0.3, 0, 5]);
 chk(r.pts.length >= 20, 'passos lentos (0,3 m/s): deslocamento pequeno registrado', r.pts.length);
 

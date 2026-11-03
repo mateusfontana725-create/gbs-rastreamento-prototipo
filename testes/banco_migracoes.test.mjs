@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2682,5 +2682,63 @@ console.log('SCI novo: Posto de Comando (migração 057, só acréscimos)');
   chk((await trilha()) === 0, 'depois de tudo, a trilha continua sem pontos');
 }
 
-console.log('\nMigrações 007–058 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// ---------- Migração 059: cenário da operação (estimativa geral, sem vítima) ----------
+console.log('\nCenário da operação (estimativa geral, sem vítima) — migração 059');
+{
+  const opG = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CENARIO GERAL', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const d = (m) => m / 111194.93;
+  const circ = (nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 200 }) });
+  const sN = await circ('Norte', -25.40), sS = await circ('Sul', -25.40 - d(2000)), sL = await circ('Leste', -25.40 + d(4000));
+  const dadosG = (itens, fora, just, extra) => JSON.stringify(Object.assign({ justificativa: just, poa_fora: fora,
+    setores: itens.map(([s, poa]) => ({ setor_id: s.id, poa, justificativa: '' })) }, extra || {}));
+  const salvarG = (itens, fora, just, extra, uid) => rpc(uid || resp1, 'cenario_geral_salvar_rascunho', { p_operacao: opG.id, p_dados: dadosG(itens, fora, just, extra) });
+  const geraisDe = async () => (await db.query(`select id, numero, estado, base_numero, origem_poa, missao_id, poa_fora from public.busca_cenarios where operacao_id = $1 and vitima_id is null order by numero`, [opG.id])).rows;
+  const just = 'Área de avaria: maior chance no norte, pela última direção conhecida';
+
+  console.log('  estimativa sem vítima');
+  chk(/sem_permissao/.test(await erroDe(salvarG([[sN, 0.5]], 0.5, just, null, resp2))), 'responsável de outra operação não faz a estimativa desta');
+  const g1 = await salvarG([[sN, 0.5], [sS, 0.3]], 0.2, just);
+  chk(g1.cenario.vitima_id === null && g1.cenario.estado === 'rascunho' && g1.cenario.numero === 1 && g1.setores.length === 2, 'estimativa da operação: rascunho sem vítima, versão 1, com os setores');
+  const g1b = await salvarG([[sN, 0.4], [sS, 0.3], [sL, 0.1]], 0.2, just, { atualizado_em: g1.cenario.atualizado_em });
+  chk(g1b.cenario.id === g1.cenario.id && g1b.setores.length === 3, 'salvar de novo atualiza o mesmo rascunho (só um por operação)');
+  chk(/cenario_versao_desatualizada/.test(await erroDe(salvarG([[sN, 0.1]], 0.9, just, { atualizado_em: g1.cenario.atualizado_em }))), 'rascunho mudou por outra gravação: recusado');
+  chk(/cenario_poa_acima_de_100/.test(await erroDe(salvarG([[sN, 0.5], [sS, 0.3]], 0.3, just, { atualizado_em: g1b.cenario.atualizado_em }))), 'setores + fora da área acima de 100%: recusado ao salvar');
+  const soma80 = await salvarG([[sN, 0.5], [sS, 0.3]], 0.1, just, { atualizado_em: g1b.cenario.atualizado_em });
+  chk(/cenario_soma_diferente_de_100/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: soma80.cenario.id }))), 'setores + fora da área = 90%: aprovação recusada');
+  const g2 = await salvarG([[sN, 0.4], [sS, 0.4]], 0.2, just, { atualizado_em: soma80.cenario.atualizado_em });
+  const ap1 = await rpc(resp1, 'cenario_aprovar', { p_cenario: g2.cenario.id, p_revisao: g2.cenario.atualizado_em });
+  chk(ap1.cenario.estado === 'aprovada' && ap1.cenario.numero === 1 && ap1.cenario.vitima_id === null, 'aprovada: versão 1 da operação, sem vítima');
+  const diarioG = (await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and categoria = 'operacao' and tipo = 'cenario_aprovado' and titulo like 'Estimativa geral%'`, [opG.id])).rows[0].n;
+  chk(diarioG === 1, 'a aprovação da estimativa entra no diário (categoria operação)', diarioG);
+
+  console.log('  vítima e operação numeram separado');
+  const vit = await rpc(resp1, 'salvar_vitima', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Lia' }) });
+  const rv = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vit.id, p_dados: dadosG([[sS, 0.6]], 0.4, 'Lia: trilha para o sul') });
+  chk(rv.cenario.vitima_id === vit.id && rv.cenario.numero === 1, 'cenário da vítima começa na versão 1, sem contar a estimativa da operação');
+  const apv = await rpc(resp1, 'cenario_aprovar', { p_cenario: rv.cenario.id });
+  chk(apv.cenario.numero === 1 && apv.cenario.estado === 'aprovada', 'vítima aprovada na versão 1');
+  const g3 = await salvarG([[sN, 0.4], [sS, 0.4]], 0.2, 'Segunda versão da estimativa: sem vestígios ao norte', null);
+  chk(g3.cenario.id !== g1.cenario.id && g3.cenario.numero === 2, 'nova estimativa da operação: versão 2 (sem mexer na versão 1)');
+  const ap2 = await rpc(resp1, 'cenario_aprovar', { p_cenario: g3.cenario.id, p_revisao: g3.cenario.atualizado_em });
+  chk(ap2.cenario.numero === 2 && (await geraisDe()).length === 2, 'versão 2 aprovada; a operação tem duas versões gerais');
+  chk(/dados_invalidos|cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set vitima_id = $1 where id = $2`, [vit.id, ap2.cenario.id]))), 'versão aprovada não passa para outra vítima (nem para a operação)');
+
+  console.log('  busca negativa atualiza a estimativa da operação');
+  const criarM = (extra) => rpc(resp1, 'busca_missao_criar', { p_operacao: opG.id, p_dados: JSON.stringify(Object.assign({ setor_id: sN.id, equipe: 'Equipe 1', metodo: 'A pé, em linha', pod: 0.6, pod_base: 'Varredura em linha', vitima_id: null }, extra || {})) });
+  const mg = (await criarM({ chave_cliente: 'geral-1' })).missao;
+  const res = await rpc(resp1, 'busca_missao_resultado', { p_missao: mg.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(res.missao.calculo_estado === 'aplicado', 'missão sem vítima, negativa: cálculo aplicado', res.missao.calculo_estado);
+  const gerais = await geraisDe();
+  const nova = gerais[gerais.length - 1];
+  const pN = Number((await db.query(`select poa from public.busca_cenario_setores where cenario_id = $1 and setor_nome = 'Norte'`, [nova.id])).rows[0].poa);
+  // Norte 40% × (1 − 0,6) = 0,16 ; Sul 0,40 ; fora 0,20 ; Z = 0,76
+  chk(gerais.length === 3 && nova.numero === 3 && nova.origem_poa === 'calculo_pos_busca' && nova.missao_id === mg.id, 'a estimativa da operação ganhou a versão 3 (origem: busca negativa)');
+  chk(Math.abs(pN - 0.16 / 0.76) < 1e-5, 'Norte 21,05% = 0,4 × 0,4 ÷ 0,76 (r = p × (1 − q); p\' = r ÷ Σr)', pN);
+  chk(Math.abs(Number(nova.poa_fora) - 0.2 / 0.76) < 1e-5, '"Fora da área" recalculado: 26,32%, soma fecha em 100%');
+  chk((await db.query(`select count(*)::int n from public.busca_missao_efeitos where missao_id = $1 and vitima_id is null`, [mg.id])).rows[0].n === 1, 'o efeito da missão fica guardado com vítima nula (operação inteira)');
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vit.id])).rows[0].n === 1, 'a vítima Lia não tem setor Norte no cenário: nenhuma versão nova dela');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and categoria = 'operacao' and tipo = 'cenario_pos_busca'`, [opG.id])).rows[0].n === 1, 'a atualização da estimativa entra no diário');
+}
+
+console.log('\nMigrações 007–059 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

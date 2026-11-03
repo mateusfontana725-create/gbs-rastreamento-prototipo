@@ -558,8 +558,11 @@ participante recebe um e-mail com o botão **Abrir e começar** (o link do `civi
   décimos de ponto percentual), **Buscas** e **Versões**; detalhes extras ficam em "Mais detalhes" e as explicações atrás
   de um (i). Violeta é a cor de probabilidade (fora das cores de emergência e risco). (migrações **033** e **034**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`). Segue o guia
   "POA e POD no GBS": o app organiza decisões documentadas do comando e nunca inventa percentuais.
-  - **Sem vítimas nomeadas (desastre)**: quando ainda não há pessoas cadastradas, o POA/POD mostra **+ Pessoa não identificada**
-    (o cadastro rápido, que aceita nome em branco e vira "Não identificada"). Cadastre quantas forem precisas; cada uma tem o seu cenário.
+  - **Sem vítimas nomeadas (desastre)**: o seletor do POA/POD traz **Operação (estimativa geral)**, um cenário da operação inteira,
+    sem pessoa. Ele serve de base mesmo sem nenhuma pessoa cadastrada: a equipe vê, setor a setor, a chance de encontrar pessoas,
+    com "Fora da área" fechando 100%. Cada versão aprovada tem número próprio e entra no diário (categoria operação).
+    Quando souber quem procurar, cadastre as pessoas (cadastro rápido aceita nome em branco) e cada uma tem o seu cenário.
+    A busca negativa sem vítima específica (missão com "Todas (vítimas e operação)") atualiza também a estimativa geral.
   - **POA** = probabilidade de a pessoa estar em cada setor. É **decisão do responsável**, por vítima, num **cenário**:
     POA por setor mais **Fora da área** (a soma dos dois dá 100%; "fora" são os trechos sem setor desenhado, sem busca), justificativa geral e por setor,
     **horário de referência**, **hipóteses**, **limitações**, **sustentação dos dados** (baixa/média/alta, julgamento e não
@@ -1594,6 +1597,7 @@ rastreamento-sar/
 │       ├── 032_controle_tempo_missoes.sql     horários combinados, alertas de atraso e de falta de comunicação
 │       ├── 038_poa_fora_origem.sql / 039_missoes_busca_pos.sql   Fora da área, origem dos valores, missões de busca e cálculo pós-busca
 │       ├── 033_cenario_busca_pod_poa.sql / 034_poa_pod_guia.sql   POA/POD: cenários, versões, registros de busca
+│       ├── 059_cenario_operacao.sql           estimativa geral da operação (cenário sem vítima) para desastres
 │       ├── 035_pedidos_ajuda.sql              pedidos de ajuda com estados, prioridade, escalonamento e histórico
 │       ├── 036_recursos_equipes.sql           disponibilidade, capacidades e recursos das equipes
 │       └── 037_briefing_comando.sql           briefing, decisões pendentes e passagem de comando

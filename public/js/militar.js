@@ -3803,7 +3803,10 @@
       caixaDest.appendChild(destino.recebido_em
         ? UI.el('span', { classe: 'destino-recebido', texto: '✓ recebido no celular às ' + C.hora(destino.recebido_em, false) + ' ' })
         : UI.el('span', { classe: 'destino-aguardando', texto: 'aguardando o celular receber ' }));
-      caixaDest.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Encerrar', onclick: function () { encerrarDestinoPainel(destino); } }));
+      if (podeAlterar()) {
+        caixaDest.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-perigo ficha-destino-cancelar', type: 'button',
+          texto: destino.missao_id ? 'Cancelar deslocamento do grupo' : 'Cancelar destino', onclick: function () { cancelarDestinoFicha(destino); } }));
+      }
       caixaDest.appendChild(UI.el('span', { classe: 'ficha-rota', id: 'ficha-rota', hidden: true }));
     }
     $('ficha-enviar-destino').hidden = tipoDe(d) === 'responsavel' || d.removido || est.op.status !== 'ativa';
@@ -6872,13 +6875,33 @@
   }
 
   async function encerrarDestinoPainel(d) {
-    var r = await UI.confirmar({ titulo: 'Encerrar a navegação?', texto: 'O participante deixa de ver o destino "' + d.nome + '".', ok: 'Encerrar navegação' });
+    var r = await UI.confirmar({ titulo: 'Cancelar o destino?', texto: 'O participante deixa de ver o destino "' + d.nome + '".', ok: 'Cancelar destino', perigo: true });
     if (!r) return;
     try {
       await C.rpc('encerrar_destino', { p_destino: d.id });
       est.destinos.delete(d.participante_id);
       if (est.selecionado) atualizarFicha();
-      UI.aviso('Navegação encerrada.', 'ok');
+      UI.aviso('Destino cancelado.', 'ok');
+    } catch (e) { UI.aviso(e.message, 'erro'); }
+  }
+
+  // Destino de grupo (deslocamento): cancela o deslocamento para TODOS os membros (é o que foi enviado).
+  // Destino de um participante: cancela só para ele.
+  async function cancelarDestinoFicha(d) {
+    var m = d.missao_id ? est.missoes.get(d.missao_id) : null;
+    if (!m) return encerrarDestinoPainel(d);
+    var r = await UI.confirmar({
+      titulo: 'Cancelar o deslocamento de ' + m.grupo_nome + '?',
+      texto: 'O destino "' + d.nome + '" é do grupo inteiro: some do celular de todos os membros e não há mais alertas de retorno deste deslocamento.',
+      ok: 'Cancelar para o grupo', perigo: true,
+    });
+    if (!r) return;
+    try {
+      await C.rpc('encerrar_missao', { p_missao: m.id });
+      UI.aviso('Destino cancelado para o grupo ' + m.grupo_nome + '.', 'ok');
+      agendarMissoes();
+      agendarAreas();
+      if (est.selecionado) atualizarFicha();
     } catch (e) { UI.aviso(e.message, 'erro'); }
   }
 
@@ -8730,9 +8753,18 @@
       botoes.appendChild(UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Confirmar leitura', onclick: function () { confirmarParaMim(m.id, 'CIENTE'); } }));
     }
     caixa.hidden = false;
+    posicionarAlerta(caixa);
     var b = botoes.querySelector('button');
     if (b) b.focus({ preventScroll: true });
   }
+
+  // Cartão de mensagem: começa logo abaixo da etiqueta "Esconder cabeçalho" (não cobre a etiqueta nem a barra de ações).
+  function posicionarAlerta(caixa) {
+    var etiqueta = document.querySelector('.painel-topo .etiqueta-topo');
+    var visivel = etiqueta && etiqueta.getClientRects().length > 0;
+    caixa.style.top = (visivel ? Math.round(etiqueta.getBoundingClientRect().bottom + 6) : 40) + 'px';
+  }
+  window.addEventListener('resize', function () { var c = $('alerta-cmd'); if (c && !c.hidden) posicionarAlerta(c); });
 
   async function confirmarParaMim(id, resposta) {
     est.confirmadasLocal.add(id);

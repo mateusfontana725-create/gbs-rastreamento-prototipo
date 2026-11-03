@@ -738,7 +738,7 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
    - Sempre avisa: **linha reta não é caminho** — conferir o terreno e seguir os bombeiros.
 4. **Rota no app de mapas ↗**: continua disponível como alternativa (Google Maps, a pé ou de carro,
    conforme o modo escolhido).
-5. **Encerrar navegação**: pelo participante (botão no cartão) ou pelo responsável (ficha → **Encerrar**).
+5. **Cancelar o destino**: pelo participante (botão no cartão) ou pelo responsável, na ficha, pelo botão **Cancelar destino** (no celular, em linha própria). Um destino enviado a um **grupo** é um deslocamento: o botão **Cancelar deslocamento do grupo** cancela para todos os membros (some do celular de todos e encerra os alertas de retorno). O celular do participante recebe o cancelamento na hora.
    A ficha mostra o destino ativo, a **rota** da posição do participante até ele (distância, tempo,
    subida, avisos) e a desenha no mapa. Um novo destino substitui o anterior.
 6. **Como o destino chega ao celular** (sem recarregar a página):
@@ -1077,8 +1077,8 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     aparece ao passar o mouse).
   - **Faixa de alerta crítico em uma linha**: título e começo do texto; tocar no texto (▾) mostra o alerta inteiro,
     com horário e quantos outros alertas críticos há. **Ver no mapa** e **Ciente** continuam à direita.
-  - **Mensagem de outro responsável** (CONFIRME, ATENÇÃO…): cartão pequeno no canto do mapa (também no celular,
-    sem ocupar a tela toda), com as respostas em botões normais e **×** (ou Esc) para **responder depois**. A
+  - **Mensagem de outro responsável** (CONFIRME, ATENÇÃO…): cartão pequeno, como uma notificação, logo abaixo da
+    etiqueta **Esconder cabeçalho** (nunca por cima dela nem da barra de ações; também no celular, sem ocupar a tela toda), com as respostas em botões normais e **×** (ou Esc) para **responder depois**. A
     mensagem continua pendente: aparece no topo o botão **✉ N para você**, que reabre o cartão; uma mensagem nova
     também reabre. Os avisos rápidos do rodapé ficaram menores (com o × de sempre).
   - **Pontos, relatos e fotos agrupados juntos**: tudo que é ponto no mapa (pontos de interesse, relatos e fotos) entra

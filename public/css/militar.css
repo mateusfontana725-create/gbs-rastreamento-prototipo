@@ -1247,24 +1247,27 @@ body { font-size: 0.9375rem; }
 /* Camada "Pessoas" desligada: marcadores e grupos de pessoas escondidos (continuam rastreados) */
 #mapa.ocultar-pessoas .mk-wrap, #mapa.ocultar-pessoas .cluster-pessoas-wrap { display: none; }
 
-/* Mensagem de outro responsável: cartão compacto (nunca tela cheia), com × para responder depois */
+/* Mensagem de outro responsável: cartão compacto como uma notificação (nunca tela cheia), com × para responder depois.
+   A altura (top) é definida em posicionarAlerta (militar.js): logo abaixo da etiqueta do cabeçalho. */
 #alerta-cmd.alerta-painel {
-  position: fixed; inset: auto; z-index: 2800; top: 64px; right: 12px; width: min(340px, calc(100vw - 24px));
-  max-height: calc(100vh - 80px); border-radius: 10px; border: 2px solid var(--responsavel); box-shadow: 0 10px 34px rgba(0, 0, 0, .7);
+  position: fixed; inset: auto; z-index: 2800; top: 150px; right: 12px; width: min(300px, calc(100vw - 24px));
+  max-height: calc(100vh - 170px); border-radius: 8px; border: 1.5px solid var(--responsavel); box-shadow: 0 6px 22px rgba(0, 0, 0, .6);
 }
 @media (min-width: 861px) {
   body:not(.lateral-oculta) #alerta-cmd.alerta-painel { right: calc(var(--larg-lateral, 320px) + 12px); }
 }
-#alerta-cmd .alerta-cabeca { padding: 8px 40px 10px 12px; text-align: left; }
-#alerta-cmd .alerta-cabeca::after { height: 3px; }
-#alerta-cmd .alerta-cabeca .tit { font-size: 1.05rem; letter-spacing: .04em; }
-#alerta-cmd .alerta-cabeca .sub { font-size: .62rem; margin: 0 0 2px; letter-spacing: .08em; }
-#alerta-cmd .alerta-corpo { padding: 10px 12px 12px; gap: 6px; width: 100%; }
-#alerta-cmd .alerta-texto { font-size: .95rem; font-weight: 700; }
-#alerta-cmd .alerta-meta { font-size: .72rem; }
-#alerta-cmd .alerta-botoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-#alerta-cmd .alerta-botoes .btn { flex: 1 1 auto; min-height: 34px; }
-#alerta-cmd .alerta-fila { font-size: .7rem; text-align: left; }
+#alerta-cmd .alerta-cabeca { padding: 5px 34px 6px 10px; text-align: left; }
+#alerta-cmd .alerta-cabeca::after { height: 2px; }
+#alerta-cmd .alerta-cabeca .tit { font-size: .9rem; letter-spacing: .03em; line-height: 1.2; }
+#alerta-cmd .alerta-cabeca .sub { font-size: .56rem; margin: 0 0 1px; letter-spacing: .08em; }
+#alerta-cmd .alerta-corpo { padding: 7px 10px 9px; gap: 5px; width: 100%; }
+#alerta-cmd .alerta-texto { font-size: .86rem; font-weight: 700; line-height: 1.35; }
+#alerta-cmd .alerta-meta { font-size: .68rem; }
+#alerta-cmd .alerta-botoes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+#alerta-cmd .alerta-botoes .btn { flex: 1 1 auto; min-height: 30px; padding: 0 8px; font-size: .78rem; }
+#alerta-cmd .alerta-fila { font-size: .66rem; text-align: left; }
+#alerta-cmd .alerta-fechar { top: 2px; right: 2px; width: 28px; height: 28px; font-size: 1.1rem; }
+@media (pointer: coarse) { #alerta-cmd .alerta-fechar { width: 36px; height: 36px; } }
 #alerta-cmd.alerta-cmd-pare, #alerta-cmd.alerta-cmd-atencao { border-width: 2px; }
 .alerta-fechar {
   position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; display: grid; place-items: center; padding: 0;
@@ -2342,14 +2345,15 @@ html[data-tema="claro"] .briefing-chip { color: #6d28d9; }
 .painel-topo { position: relative; }
 .etiqueta-topo {
   position: absolute; left: 50%; transform: translateX(-50%); z-index: 1200; top: 100%;
-  display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 14px;
-  border: 0; border-radius: 0 0 10px 10px; background: var(--acento); color: #111827;
-  font-weight: 800; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px; min-height: 19px; padding: 0 8px;
+  border: 0; border-radius: 0 0 7px 7px; background: var(--acento); color: #111827;
+  font-weight: 800; font-size: .6rem; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
   box-shadow: 0 3px 8px rgba(0, 0, 0, .35); cursor: pointer;
 }
 .etiqueta-topo:hover { filter: brightness(1.08); }
 .etiqueta-topo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.btn-recolher-topo { min-height: 26px; }
+.btn-recolher-topo { min-height: 19px; }
+.ficha-destino-cancelar { margin-top: 6px; display: inline-flex; }
 html.topo-oculto .painel-topo { display: none; }
 .btn-mostrar-topo { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 1200; display: none; }
 html.topo-oculto .btn-mostrar-topo { display: inline-flex; }

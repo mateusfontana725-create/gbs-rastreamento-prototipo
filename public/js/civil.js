@@ -231,25 +231,26 @@
     $('form-inicio').addEventListener('submit', aoIniciar);
     $('btn-saida').addEventListener('click', aoSolicitarSaida);
     $('form-msg').addEventListener('submit', aoEnviarMensagem);
-    $('btn-encontrei').addEventListener('click', abrirEncontrei);
-    $('btn-falar').addEventListener('click', abrirConversa);
+    $('btn-registrar').addEventListener('click', abrirRegistro);
+    $('btn-ampliar-mapa').addEventListener('click', function () { alternarMapaAmpliado(true); });
+    $('btn-fechar-mapa').addEventListener('click', function () { alternarMapaAmpliado(false); });
+    $('bussola-ativar').addEventListener('click', pedirBussola);
     $('conversa-fechar').addEventListener('click', fecharConversa);
     $('btn-onde-estou').addEventListener('click', function () { estado.seguindo = true; centralizarEmMim(true); mostrarMinhasCoordenadas(); });
     $('nav-encerrar').addEventListener('click', encerrarNavegacao);
     $('nav-finalizar').addEventListener('click', finalizarBuscaSetor);
-    $('nav-bussola-ativar').addEventListener('click', pedirBussola);
     document.querySelectorAll('.nav-modos [data-modo]').forEach(function (b) {
       b.addEventListener('click', function () { trocarModoNav(b.getAttribute('data-modo')); });
     });
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape' && !$('painel-conversa').hidden && !document.querySelector('.modal-fundo')) fecharConversa();
+      if (ev.key === 'Escape' && document.querySelector('.mapa-civil-caixa.mapa-ampliado')) alternarMapaAmpliado(false);
     });
-    $('foto-camera').addEventListener('change', function (ev) { aoEscolherFoto(ev, true); });
-    $('foto-galeria').addEventListener('change', function (ev) { aoEscolherFoto(ev, false); });
     $('ini-cpf').addEventListener('input', function () { this.value = mascararCpf(this.value); });
     $('ini-tel').addEventListener('input', function () { this.value = mascararTelefone(this.value); });
     document.querySelectorAll('input[name="tipo"]').forEach(function (r) { r.addEventListener('change', marcarOpcionais); });
     marcarOpcionais();
+    iniciarBussola();
     $('opt-tela').addEventListener('change', function () {
       if (this.checked) pedirTelaLigada(); else liberarTelaLigada();
     });
@@ -1216,7 +1217,7 @@
   /* ------------------------------------------------------------------ */
   function abrirConversa() {
     $('painel-conversa').hidden = false;
-    $('btn-falar').setAttribute('aria-expanded', 'true');
+    $('btn-registrar').setAttribute('aria-expanded', 'true');
     document.body.classList.add('conversa-aberta');
     marcarConversaVista();
     renderizarHistorico();
@@ -1228,9 +1229,9 @@
   function fecharConversa() {
     if ($('painel-conversa').hidden) return;
     $('painel-conversa').hidden = true;
-    $('btn-falar').setAttribute('aria-expanded', 'false');
+    $('btn-registrar').setAttribute('aria-expanded', 'false');
     document.body.classList.remove('conversa-aberta');
-    $('btn-falar').focus();
+    $('btn-registrar').focus();
   }
 
   function marcarConversaVista() {
@@ -1252,12 +1253,25 @@
     var c = $('falar-contador');
     c.textContent = String(n);
     c.hidden = !n;
-    $('btn-falar').classList.toggle('tem-novas', n > 0);
+    $('btn-registrar').classList.toggle('tem-novas', n > 0);
   }
 
   /* ------------------------------------------------------------------ */
   /* Mapa: a minha posição e a dos bombeiros                              */
   /* ------------------------------------------------------------------ */
+  // Ampliar: o mapa ocupa a tela dentro deste site (não é o modo tela cheia do navegador). ✕ ou Esc voltam.
+  function alternarMapaAmpliado(ligar) {
+    var caixa = document.querySelector('.mapa-civil-caixa');
+    if (!caixa) return;
+    var ampliado = caixa.classList.contains('mapa-ampliado');
+    var novo = ligar == null ? !ampliado : ligar;
+    if (novo === ampliado) return;
+    caixa.classList.toggle('mapa-ampliado', novo);
+    $('btn-ampliar-mapa').setAttribute('aria-expanded', String(novo));
+    $('btn-fechar-mapa').hidden = !novo;
+    if (estado.mapa) setTimeout(function () { estado.mapa.invalidateSize(); }, 60);
+  }
+
   function iniciarMapa() {
     if (estado.mapa) { setTimeout(function () { estado.mapa.invalidateSize(); }, 50); return; }
     if (!window.L) { document.querySelector('.mapa-civil-caixa').hidden = true; return; }
@@ -1645,7 +1659,7 @@
     if (!id) return;
     var r = await UI.confirmar({
       titulo: 'A busca no setor terminou?',
-      texto: 'Os bombeiros são avisados e todo o grupo recebe o destino de volta para a base. Confirme só quando a busca no setor estiver concluída.',
+      texto: 'O grupo volta para a base. Confirme só com a busca concluída.',
       ok: 'Sim, busca concluída',
       cancelar: 'Voltar',
     });
@@ -1819,8 +1833,8 @@
     if (semGps) {
       caixa.className = 'navegacao sem-gps';
       $('nav-dist').textContent = 'Sem GPS';
-      $('nav-dir').textContent = 'Não dá para calcular a distância e a direção agora.';
-      aviso.textContent = 'Ligue a localização do celular ou vá para um lugar aberto. As coordenadas do destino estão abaixo.';
+      $('nav-dir').textContent = 'Sem GPS, sem direção.';
+      aviso.textContent = 'Ligue a localização do celular ou vá para um lugar aberto.';
       $('nav-seta').style.transform = 'rotate(0deg)';
       $('nav-bussola').classList.add('inativa');
       return;
@@ -1844,9 +1858,8 @@
       var px = $('nav-proxima');
       px.hidden = false;
       px.textContent = naRota
-        ? (prog.proximo ? 'Em ' + formatarDistancia(prog.distManobra) + ': ' + prog.proximo.instrucao : 'Siga pela rota até o destino.')
-        : rota.fixa ? 'Você está a ' + formatarDistancia(prog.distanciaDaRota) + ' do trajeto desenhado (linha azul). Volte para ele e siga a linha.'
-          : 'Você está a ' + formatarDistancia(prog.distanciaDaRota) + ' da rota azul. Volte para ela ou aguarde o recálculo.';
+        ? (prog.proximo ? 'Em ' + formatarDistancia(prog.distManobra) + ': ' + prog.proximo.instrucao : 'Siga a rota até o destino.')
+        : 'Você está a ' + formatarDistancia(prog.distanciaDaRota) + ' da linha. Volte para ela.';
     } else if (!rota && !estado.rotaCalculando && Date.now() - estado.rotaErroEm > 60000 && navigator.onLine !== false) {
       calcularRota(estado.rotaErro ? 'tentar' : 'gps');
     }
@@ -1857,15 +1870,14 @@
     $('nav-seta').style.transform = 'rotate(' + Math.round(giro) + 'deg)';
     $('nav-norte').style.transform = 'rotate(' + Math.round(bussolaOk ? -estado.rumo : 0) + 'deg) translateY(-34px)';
     $('nav-bussola').classList.toggle('com-bussola', bussolaOk);
-    $('nav-dir').textContent = chegou ? 'O destino está a menos de ' + Math.round(Math.max(15, l.prec || 0)) + ' m.'
-      : (prog ? 'pela rota · ' + formatarDistancia(dist) + ' em linha reta, ' + dir : 'em linha reta · ' + dir + ' (' + Math.round(rumoReta) + '°)') +
-        (bussolaOk ? ' · siga a seta' : ' · seta em relação ao N');
-    aviso.textContent = (fraco ? 'Sinal de GPS fraco (' + C.precisao(l.prec) + '): distância e direção aproximadas. ' : '') +
-      (prog ? (rota.fixa ? 'Siga o trajeto dos bombeiros, conferindo o terreno.' : 'Rota por caminhos mapeados: confira o terreno.')
-        : 'Linha reta não é caminho: confira o terreno.');
+    $('nav-dir').textContent = chegou ? 'Destino a menos de ' + Math.round(Math.max(15, l.prec || 0)) + ' m.'
+      : dir + ' · ' + Math.round(rumoReta) + '°' + (bussolaOk ? ' · siga a seta' : '');
+    aviso.textContent = (fraco ? 'GPS fraco: valores aproximados. ' : '') +
+      (prog ? (rota.fixa ? 'Siga a linha dos bombeiros.' : 'Confira o terreno.') : 'Linha reta: confira o terreno.');
   }
 
   // Bússola: Android (deviceorientationabsolute) ou iPhone (webkitCompassHeading, com permissão).
+  // A bússola do mapa e a seta da navegação usam a mesma leitura (estado.rumo).
   function aoGirar(ev) {
     var r = null;
     if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) r = ev.webkitCompassHeading;
@@ -1875,12 +1887,48 @@
     estado.rumo = (r + ang + 360) % 360;
     estado.rumoEm = Date.now();
     agendarNavegacao();
+    agendarBussola();
+  }
+
+  var DIRECAO_CURTA = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
+  function agendarBussola() {
+    if (estado.rafBussola) return;
+    estado.rafBussola = requestAnimationFrame(function () { estado.rafBussola = null; atualizarBussola(); });
+  }
+  // O disco gira para o Norte ficar em cima do N; a seta fixa mostra para onde o aparelho aponta.
+  function atualizarBussola() {
+    if (estado.rumo == null || Date.now() - estado.rumoEm > 3000) return;
+    $('bussola-civil').hidden = false;
+    $('bussola-rosa').style.transform = 'rotate(' + Math.round(-estado.rumo) + 'deg)';
+    var txt = DIRECAO_CURTA[Math.round(estado.rumo / 45) % 8] + ' ' + (Math.round(estado.rumo) % 360) + '°';
+    if ($('bussola-direcao').textContent !== txt) $('bussola-direcao').textContent = txt;
+    $('bussola-ativar').hidden = true;
+  }
+
+  // Ao abrir a página: no Android a bússola já funciona; no iPhone pede um toque (permissão de movimento).
+  // Sem sensor de direção (ex.: computador), a bússola fica escondida.
+  function iniciarBussola() {
+    // computador (sem tela de toque) não tem sensor de direção: nem mostra a bússola
+    if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
+    if (!('ondeviceorientationabsolute' in window) && !('ondeviceorientation' in window)) return;
+    if (typeof DeviceOrientationEvent === 'undefined') return;
+    var caixa = $('bussola-civil');
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      caixa.hidden = false;
+      $('bussola-direcao').textContent = 'Toque para ativar';
+      $('bussola-ativar').hidden = false;
+      return;
+    }
+    ligarBussola();
+    caixa.hidden = false;
+    $('bussola-direcao').textContent = 'Procurando…';
+    setTimeout(function () { if (!estado.rumoEm) caixa.hidden = true; }, 5000);
   }
 
   function ligarBussola() {
     if (estado.ouvindoBussola) return;
     if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      $('nav-bussola-ativar').hidden = false;   // iPhone: precisa de um toque para pedir permissão
+      if (!estado.ouvindoBussola) { $('bussola-civil').hidden = false; $('bussola-ativar').hidden = false; }   // iPhone: precisa de um toque
       return;
     }
     if ('ondeviceorientationabsolute' in window) {
@@ -1897,11 +1945,16 @@
       if (r === 'granted') {
         window.addEventListener('deviceorientation', aoGirar);
         estado.ouvindoBussola = true;
-        $('nav-bussola-ativar').hidden = true;
+        $('bussola-ativar').hidden = true;
+        $('bussola-direcao').textContent = 'Procurando…';
       } else {
-        UI.aviso('Sem permissão para a bússola: a seta vai apontar em relação ao Norte.', 'erro', 7000);
+        $('bussola-direcao').textContent = 'Sem permissão';
+        UI.aviso('Sem permissão para a bússola. Libere o acesso a movimento e orientação nas configurações do navegador.', 'erro', 7000);
       }
-    }).catch(function () { UI.aviso('Bússola indisponível neste celular.', 'erro'); });
+    }).catch(function () {
+      $('bussola-direcao').textContent = 'Indisponível';
+      UI.aviso('Bússola indisponível neste celular.', 'erro');
+    });
   }
 
   async function encerrarNavegacao() {
@@ -2001,15 +2054,45 @@
     }
   }
 
-  // "Encontrei algo": escolhe o que é, escreve (se quiser) e envia com a localização.
+  // Um botão só para o que o participante registra: mensagem, algo encontrado ou foto.
+  function abrirRegistro() {
+    if (!estado.part || estado.finalizado) return;
+    var novas = Number($('falar-contador').textContent) || 0;
+    var fechar = null;
+    var fotoCamera = UI.el('input', { classe: 'sr-only', type: 'file', accept: 'image/*', capture: 'environment' });
+    var fotoGaleria = UI.el('input', { classe: 'sr-only', type: 'file', accept: 'image/*' });
+    fotoCamera.addEventListener('change', function (ev) { fechar(); aoEscolherFoto(ev, true); });
+    fotoGaleria.addEventListener('change', function (ev) { fechar(); aoEscolherFoto(ev, false); });
+    function opcao(icone, titulo, sub, acao) {
+      return UI.el('button', { classe: 'opcao-registro', type: 'button', onclick: function () { fechar(); acao(); } }, [
+        UI.el('span', { classe: 'opcao-registro-icone', 'aria-hidden': 'true', texto: icone }),
+        UI.el('span', { classe: 'opcao-registro-texto' }, [UI.el('strong', { texto: titulo }), UI.el('small', { texto: sub })]),
+      ]);
+    }
+    fechar = UI.abrirModal(UI.el('div', { classe: 'registro' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Registrar informação' }),
+      opcao('💬', 'Mensagem aos bombeiros', novas ? novas + ' resposta(s) nova(s)' : 'Escrever o que está acontecendo', abrirConversa),
+      opcao('🔍', 'Algo encontrado', 'Pista, objeto, vestígio, obstáculo ou vítima', abrirEncontrei),
+      UI.el('div', { classe: 'opcao-registro opcao-registro-foto' }, [
+        UI.el('span', { classe: 'opcao-registro-icone', 'aria-hidden': 'true', texto: '📷' }),
+        UI.el('span', { classe: 'opcao-registro-texto' }, [UI.el('strong', { texto: 'Foto' }), UI.el('small', { texto: 'Tirar agora ou escolher da galeria' })]),
+        UI.el('span', { classe: 'registro-foto-botoes' }, [
+          UI.el('label', { classe: 'btn btn-pequeno btn-escuro' }, ['Tirar', fotoCamera]),
+          UI.el('label', { classe: 'btn btn-pequeno' }, ['Galeria', fotoGaleria]),
+        ]),
+      ]),
+    ]), { fecharNoFundo: true });
+  }
+
+  // "Algo encontrado": escolhe o que é, escreve (se quiser), anexa fotos e envia com a localização.
   function abrirEncontrei() {
     if (!estado.part || estado.finalizado) return;
     var opcoes = [
-      ['PISTA', 'Possível pista', 'pegada, rastro, roupa, sinal de passagem'],
-      ['OBJETO', 'Objeto', 'mochila, celular, documento, calçado'],
-      ['VESTIGIO', 'Vestígio', 'sangue, fogueira, restos de comida'],
-      ['OBSTACULO', 'Obstáculo', 'rio, barranco, mata fechada, trilha bloqueada'],
-      ['OUTRO', 'Outra coisa', 'qualquer informação importante'],
+      ['PISTA', 'Possível pista', 'pegada, rastro, roupa'],
+      ['OBJETO', 'Objeto', 'mochila, celular, documento'],
+      ['VESTIGIO', 'Vestígio', 'sangue, fogueira, restos'],
+      ['OBSTACULO', 'Obstáculo', 'rio, barranco, mata fechada'],
+      ['OUTRO', 'Outra coisa', 'informação importante'],
     ];
     var grade = UI.el('div', { classe: 'encontrei-opcoes' });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'encontrei' }, [
@@ -2021,7 +2104,7 @@
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
     opcoes.forEach(function (o) {
-      grade.appendChild(UI.el('button', { classe: 'opcao-encontrei', type: 'button', 'data-cat': o[0], onclick: function () { detalharEncontrei(o); } }, [
+      grade.appendChild(UI.el('button', { classe: 'opcao-encontrei', type: 'button', 'data-cat': o[0], onclick: function () { fechar(); detalharEncontrei(o); } }, [
         UI.el('strong', { texto: o[1] }), UI.el('span', { texto: o[2] }),
       ]));
     });
@@ -2030,13 +2113,21 @@
   function detalharEncontrei(o) {
     var area = UI.el('textarea', { classe: 'campo', id: 'encontrei-texto', rows: '2', maxlength: '1000', placeholder: 'Ex.: mochila azul perto da cerca' });
     var btnEnviar = UI.el('button', { classe: 'btn btn-primario btn-gigante', type: 'button', id: 'encontrei-enviar', texto: 'ENVIAR AOS BOMBEIROS' });
-    var inFoto = UI.el('input', { classe: 'sr-only', type: 'file', accept: 'image/*', capture: 'environment', id: 'encontrei-foto' });
-    var comFoto = UI.el('label', { classe: 'btn btn-escuro btn-gigante' }, [UI.el('span', { 'aria-hidden': 'true', texto: '📷 ' }), 'ENVIAR E TIRAR FOTO', inFoto]);
+    // Fotos do registro: cada uma abre a prévia e segue com a mesma descrição e a localização
+    function legendaFoto() { return o[1] + (area.value.trim() ? ': ' + area.value.trim() : ''); }
+    var fotoCamera = UI.el('input', { classe: 'sr-only', type: 'file', accept: 'image/*', capture: 'environment', id: 'encontrei-foto-camera' });
+    var fotoGaleria = UI.el('input', { classe: 'sr-only', type: 'file', accept: 'image/*', id: 'encontrei-foto-galeria' });
+    fotoCamera.addEventListener('change', function (ev) { aoEscolherFoto(ev, true, legendaFoto()); });
+    fotoGaleria.addEventListener('change', function (ev) { aoEscolherFoto(ev, false, legendaFoto()); });
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: o[1] }),
-      UI.campo('Explique (opcional)', area, { para: 'encontrei-texto', dica: 'Sua localização vai junto com o aviso.' }),
-      UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar, comFoto]),
-      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); } })]),
+      UI.campo('Descreva (opcional)', area, { para: 'encontrei-texto', dica: 'Sua localização vai junto.' }),
+      UI.el('div', { classe: 'registro-fotos' }, [
+        UI.el('label', { classe: 'btn btn-escuro' }, ['📷 Tirar foto', fotoCamera]),
+        UI.el('label', { classe: 'btn' }, ['🖼 Da galeria', fotoGaleria]),
+      ]),
+      UI.el('div', { classe: 'encontrei-botoes' }, [btnEnviar]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Voltar', onclick: function () { fechar(); abrirEncontrei(); } })]),
     ]), { fecharNoFundo: false });
     var enviado = false;
     async function enviar() {
@@ -2050,13 +2141,6 @@
       else if (!r.item.erro) UI.aviso('Sem internet: o aviso vai ser enviado quando o sinal voltar.', 'erro', 7000);
     }
     btnEnviar.addEventListener('click', function () { fechar(); enviar(); });
-    // A foto abre logo em seguida; o aviso é enviado na hora.
-    inFoto.addEventListener('change', function (ev) {
-      var legenda = area.value.trim() || o[1];
-      fechar();
-      enviar();
-      aoEscolherFoto(ev, true, legenda);
-    });
   }
 
   // "Encontrei a vítima": escolhe a condição, confirma e envia com a localização.

@@ -2374,3 +2374,74 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 #tela-inicio .consentimento { font-size: .85rem; }
 /* com destino ativo a navegação vem antes: o mapa encolhe para os botões continuarem à vista */
 #tela-rastreio:has(#navegacao:not([hidden])) #mapa-civil { height: 34vh; height: 34dvh; min-height: 200px; }
+
+/* =====================================================================
+ * PARTICIPANTE (civil.html): um botão de registro, mapa ampliado e bússola
+ * ===================================================================== */
+/* um botão só embaixo: REGISTRAR INFORMAÇÃO (abre mensagem, algo encontrado ou foto) */
+#tela-rastreio .acoes-civil { grid-template-columns: 1fr; }
+#tela-rastreio .acao-registrar {
+  min-height: 60px; flex-direction: row; gap: 10px; padding: 8px 14px; font-size: 1rem; letter-spacing: .05em;
+  background: #e8edf2; border-color: #e8edf2; color: #0a0d10; border-radius: 12px;
+}
+#tela-rastreio .acao-registrar .acao-icone { font-size: 1.5rem; font-weight: 900; }
+#tela-rastreio .acao-registrar.tem-novas { box-shadow: 0 0 0 3px rgba(6, 182, 212, .45); }
+
+/* folha "Registrar informação" */
+.registro { display: flex; flex-direction: column; gap: 8px; }
+.opcao-registro {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px;
+  border: 1.5px solid var(--borda-forte); border-radius: 12px; background: var(--superficie-2); color: var(--texto);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.opcao-registro:hover, .opcao-registro:focus-visible { border-color: var(--acento); outline: none; }
+.opcao-registro-icone { flex: none; font-size: 1.6rem; line-height: 1; }
+.opcao-registro-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.opcao-registro-texto strong { font-size: 1rem; }
+.opcao-registro-texto small { color: var(--texto-3); font-size: .8rem; line-height: 1.3; }
+.opcao-registro-foto { cursor: default; flex-wrap: wrap; }
+.opcao-registro-foto:hover { border-color: var(--borda-forte); }
+.registro-foto-botoes, .registro-fotos { display: flex; gap: 6px; flex-wrap: wrap; }
+.registro-foto-botoes { flex: 1 0 100%; }
+.registro-foto-botoes .btn, .registro-fotos .btn { flex: 1 1 0; min-height: 44px; cursor: pointer; }
+.registro-fotos { margin: 2px 0 6px; }
+
+/* mapa ampliado (dentro do site) */
+#tela-rastreio .btn-ampliar-mapa {
+  position: absolute; z-index: 1000; top: 52px; right: 8px; min-width: 36px; min-height: 36px; padding: 0 8px;
+  font-size: 1rem; background: rgba(18, 23, 28, .94);
+}
+.btn-fechar-mapa {
+  position: absolute; z-index: 1100; top: 8px; left: 50%; transform: translateX(-50%); min-height: 40px;
+  background: rgba(18, 23, 28, .94); font-weight: 700; white-space: nowrap;
+}
+.mapa-civil-caixa.mapa-ampliado .btn-ampliar-mapa { display: none; }
+#tela-rastreio .mapa-civil-caixa.mapa-ampliado { position: fixed; inset: 0; z-index: 2400; margin: 0; border: 0; border-radius: 0; background: #0e1318; }
+#tela-rastreio .mapa-civil-caixa.mapa-ampliado #mapa-civil { height: 100% !important; min-height: 0 !important; max-height: none !important; }
+.mapa-civil-caixa.mapa-ampliado .legenda-civil { bottom: 26px; }
+
+/* bússola: o disco gira para o Norte; a seta fixa mostra para onde o celular aponta */
+.bussola-civil {
+  position: absolute; z-index: 1000; right: 8px; bottom: 26px; display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px 3px 3px; border-radius: 999px; background: rgba(6, 8, 10, .88); border: 1px solid var(--borda-forte);
+}
+.bussola-civil[hidden] { display: none; }
+.bussola-disco { position: relative; width: 46px; height: 46px; flex: none; margin-top: 4px; }
+.bussola-rosa {
+  position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--borda-forte);
+  background: radial-gradient(circle, #1f2933 60%, #0e1318 62%); transition: transform .12s linear;
+}
+.bussola-n { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font: 800 .62rem/1 var(--fonte); color: #f87171; }
+.bussola-ponteiro {
+  position: absolute; top: -7px; left: 50%; transform: translateX(-50%); width: 0; height: 0; pointer-events: none;
+  border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 9px solid var(--acento);
+}
+.bussola-info { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.bussola-info strong { font: 700 .82rem/1.1 var(--mono); color: var(--texto); white-space: nowrap; }
+.bussola-info .btn { min-height: 28px; padding: 0 8px; font-size: .72rem; }
+
+/* celular: menos altura nas telas de orientação */
+@media (max-width: 380px) {
+  #tela-rastreio .acao-registrar { font-size: .9rem; }
+  .opcao-registro { min-height: 58px; }
+}

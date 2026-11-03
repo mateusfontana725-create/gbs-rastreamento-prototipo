@@ -87,10 +87,18 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   bombeiro com mais de 2 minutos aparece apagada e com "há X min"; com mais de 15 minutos, some do
   mapa (nunca é mostrada como atual). Atualiza a cada 15 s. O botão **📍 Onde estou** volta para a
   sua posição.
-- **Três botões numa linha** (abaixo do mapa): **FOTO**, **ENCONTREI ALGO** (escolhe Possível pista, Objeto,
-  Vestígio, Obstáculo ou Outra coisa, escreve se quiser e envia — a localização vai junto
-  automaticamente; dá para enviar e já tirar a foto) e **MENSAGENS** (falar com os bombeiros).
-- **Tela enxuta**: durante a busca o cabeçalho encolhe e o mapa ocupa o espaço livre. O bloco técnico do
+- **Um botão só** embaixo do mapa: **＋ REGISTRAR INFORMAÇÃO**. Abre três opções: **Mensagem aos bombeiros**
+  (a conversa; mostra quantas respostas novas), **Algo encontrado** (Possível pista, Objeto, Vestígio,
+  Obstáculo ou Outra coisa, com descrição opcional e fotos; a localização vai junto automaticamente; a
+  **Encontrei a vítima** continua aqui) e **Foto** (tirar agora ou escolher da galeria, cada foto abre a
+  prévia antes de ser guardada).
+- **Mapa ampliado**: o botão **⛶** no mapa abre o mapa em tela cheia dentro do site (não é o modo tela
+  cheia do navegador); **✕ Fechar mapa** ou Esc voltam. Os controles de zoom e **📍 Onde estou** continuam.
+- **Bússola no mapa** (canto inferior direito, só em celular): o disco gira com o aparelho e a seta fixa
+  mostra para onde ele aponta, com o rumo em graus. No Android funciona sem permissão; no iPhone toque em
+  **Ativar bússola** (o iOS pede permissão de movimento). Sem sensor de direção, a bússola não aparece.
+- **Tela enxuta**: durante a busca o cabeçalho encolhe e o mapa ocupa o espaço livre. Textos de rota e setor
+  em frases curtas ("Confira o terreno.", "Siga a linha dos bombeiros."). O bloco técnico do
   envio (fila de pontos) só aparece quando há risco de perder pontos; o resto fica no quadro de estado.
 - **Falar com os bombeiros** abre a conversa numa tela própria (e só quando a pessoa toca): as
   mensagens recebidas aparecem como **"Bombeiros"** (à esquerda) e as enviadas à direita, com o texto
@@ -730,9 +738,9 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
    Se a pessoa sair da rota (mais de 50 m por 3 leituras), a rota é **recalculada** a partir de onde ela
    está (no máximo 1 vez a cada 30 s). Sem rota (serviço fora, sem internet, sem caminho mapeado), volta
    a mostrar a distância e a direção em linha reta e diz o motivo.
-   - **Bússola**: no Android (Chrome) a seta gira com o celular ("siga a seta"). No iPhone aparece o botão
-     **Usar a bússola do celular** (o iOS exige permissão). Sem bússola confiável, a seta aponta em
-     relação ao **Norte (N)** — e o texto diz isso.
+   - **Bússola**: no Android (Chrome) a seta gira com o celular ("siga a seta"). No iPhone, a bússola do
+     mapa pede a permissão (**Ativar bússola**). Sem bússola confiável, a seta aponta em relação ao
+     **Norte (N)** — e o texto diz isso.
    - **Sem GPS**: mostra "Sem GPS" e não calcula nada. **GPS impreciso** (± 50 m ou pior): avisa que a
      distância e a direção são aproximadas. Ao chegar (a até 15 m ou dentro da precisão): "Você chegou".
    - Sempre avisa: **linha reta não é caminho** — conferir o terreno e seguir os bombeiros.
@@ -2116,7 +2124,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 14 | No celular do civil, tocar em **Solicitar encerramento** | o painel toca alarme e mostra "Pediu para sair"; o rastreamento continua; ao **Liberar saída**, o celular mostra "Saída liberada" |
 | 15 | Adicionar um segundo responsável em **Equipe** e abrir a operação nos dois painéis (**Minha posição** liga sozinha) | cada um vê o outro no mapa (losango vermelho com R); mensagem de um para o outro chega como alerta |
 | 16 | Abrir o painel no celular (em pé e deitado) e no tablet | mapa, lista e ficha ficam utilizáveis, sem rolagem lateral |
-| 17 | No celular do civil, tocar **ENCONTREI ALGO → Possível pista**, escrever e enviar | o painel avisa com som, o botão **Mensagens** mostra 1, o marcador laranja aparece no mapa; ao abrir, o civil vê "Lida por …" |
+| 17 | No celular do civil, tocar **REGISTRAR INFORMAÇÃO → Algo encontrado → Possível pista**, escrever, tirar uma foto e enviar | o painel avisa com som, o botão **Mensagens** mostra 1, o marcador laranja aparece no mapa; ao abrir, o civil vê "Lida por …" |
 | 18 | Responder pela ficha (**Conversa**) | o civil recebe o alerta em tela cheia e confirma |
 | 19 | No civil, **FOTO** → conferir → **SALVAR FOTO** | a câmera aparece no mapa no ponto; tocar abre a foto com autor, horários e coordenadas; **Ampliar** mostra em tela cheia |
 | 20 | Repetir com o celular em modo avião | a foto fica "Na fila"; ao voltar a internet, é enviada sozinha |
@@ -2125,7 +2133,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 24 | Marcar um **Ponto de encontro** e **Enviar como destino** ao civil; ele anda em direção ao ponto | o celular mostra distância e direção que diminuem/atualizam; testar com o GPS desligado (aviso "Sem GPS") |
 | 25 | Trocar para **Topográfico** e abrir **Relevo em 3D** numa região com morros | curvas de nível visíveis com trilhas e setores por cima; o 3D mostra os morros e a altitude ao tocar |
 | 22a | No celular do civil, olhar o mapa com um militar andando e o responsável com "Minha posição" ligada | aparecem o ponto azul (você), o **M** vermelho e o **R** vermelhoo; outros civis não aparecem |
-| 22b | No civil, tocar **MENSAGENS**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
+| 22b | No civil, tocar **REGISTRAR INFORMAÇÃO → Mensagem aos bombeiros**, escrever e enviar; responder pelo painel (ficha → Mensagens) | a conversa abre só ao tocar; a resposta chega como "Bombeiros" e o botão mostra o número de novas |
 | 22 | Criar uma operação de teste, registrar dados (diário, relatório) e **Excluir operação** (confirmar) | some da lista; o link/QR do participante para de funcionar; no Supabase, **Storage → fotos** não tem mais a pasta da operação |
 | 26 | Celular parado sobre uma mesa por 5 min | a trilha não vira um "novelo"; no diagnóstico (`&diag=1`) aparecem leituras descartadas como "oscilação parado" |
 | 26b | Celular parado 10 min junto a um prédio (ou dentro de casa, perto da janela); depois sair andando | a trilha fica num ponto só, sem "estrela" de linhas; no diagnóstico aparecem "pulo do GPS parado"; ao sair andando, o trecho começa perto de onde estava parado |

@@ -1,4 +1,4 @@
-// Teste do banco (schema.sql e migrações 007–056) num PostgreSQL REAL rodando no Node (PGlite),
+// Teste do banco (schema.sql e migrações 007–057) num PostgreSQL REAL rodando no Node (PGlite),
 // simulando o Supabase: papéis anon/authenticated/service_role, auth.uid() pela claim do JWT,
 // Storage (buckets/objects com RLS) e a publicação do Realtime. Confere instalação, idempotência,
 // RLS e o fluxo completo (cadastro, vítimas, grupos, trilha com confirmação, deslocamento e retorno).
@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2535,5 +2535,239 @@ console.log('Mensagens no aplicativo com a tela apagada (migração 056)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: op56.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–056 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('SCI novo: Posto de Comando (migração 057, só acréscimos)');
+{
+  const J = (o) => JSON.stringify(o);
+  const op7 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 057', p_retencao_horas: 0, p_dados: J({ tipo: 'aquatica' }) });
+  const funcoesAntes = (await db.query(`select p.proname, md5(pg_get_functiondef(p.oid)) h from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname not like 'sci2\\_%' order by 1, 2`)).rows;
+  const est = (d) => rpc(resp1, 'sci2_salvar_estado', { p_operacao: op7.id, p_dados: J(d) });
+  const org = (m, uid) => rpc(uid || resp1, 'sci2_organograma', { p_operacao: op7.id, p_mudancas: J(m) });
+  const diario = async (padrao) => (await db.query(`select titulo, detalhe from public.diario where operacao_id = $1 and titulo like $2 order by id`, [op7.id, padrao])).rows;
+
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'sci2_salvar_estado', { p_operacao: op7.id, p_dados: J({ boletim: 'x' }) }))), 'responsável de fora da operação não mexe no SCI');
+  chk((await como(resp2, 'select count(*)::int n from public.sci2_estado where operacao_id = $1', [op7.id])).rows[0].n === 0, 'responsável de fora não lê o SCI da operação');
+  chk(/permission denied/.test(await erroDe(como(resp1, `insert into public.sci2_estado (operacao_id) values ($1)`, [op7.id]))), 'escrita direta na tabela: recusada (só pelas funções)');
+  const base = await rpc(resp1, 'salvar_ponto', { p_operacao: op7.id, p_id: null, p_dados: J({ categoria: 'BASE', titulo: 'PC Ponte', lat: -25.4, lng: -49.2 }) });
+  let s = await est({ comando: { modalidade: 'unificado', instituicoes: ['CBMPR', ' Defesa Civil ', 'CBMPR', ''], pc_ponto_id: base.id, pc_texto: 'PC na ponte', canal_comando: 'Canal 1' } });
+  chk(s.comando.modalidade === 'unificado' && J(s.comando.instituicoes.sort()) === J(['CBMPR', 'Defesa Civil']) && s.comando.pc_ponto_id === base.id && !s.estabelecido_em,
+    'comando inicial salvo (instituições limpas, sem repetir; PC ligado ao ponto do mapa); ainda não estabelecido', s.comando);
+  chk(/dados_invalidos/.test(await erroDe(est({ comando: { modalidade: 'triplo' } }))), 'modalidade desconhecida: recusada');
+  chk(/dados_invalidos/.test(await erroDe(est({ comando: { qualquer: 1 } }))), 'campo de comando desconhecido: recusado');
+  const outraOp = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 057b', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const pontoFora = await rpc(resp1, 'salvar_ponto', { p_operacao: outraOp.id, p_id: null, p_dados: J({ categoria: 'BASE', titulo: 'Outra', lat: -25, lng: -49 }) });
+  chk(/ponto_invalido/.test(await erroDe(est({ comando: { base_ponto_id: pontoFora.id } }))), 'base apontando para ponto de outra operação: recusada');
+  s = await est({ estabelecer: true, boletim: 'Busca nos setores 1 e 2.' });
+  chk(s.estabelecido_em && s.estabelecido_por_nome === 'Sgt Um' && s.boletim === 'Busca nos setores 1 e 2.' && s.boletim_em, 'SCI estabelecido, com o boletim do CI');
+  chk((await diario('SCI · SCI estabelecido')).length === 1 && /Comando unificado/.test((await diario('SCI · SCI estabelecido'))[0].detalhe) && (await diario('SCI · Boletim do CI')).length === 1,
+    'estabelecer e o boletim vão para o diário da operação');
+  const t0 = s.estabelecido_em;
+  s = await est({ estabelecer: true });
+  chk(s.estabelecido_em === t0 && (await diario('SCI · SCI estabelecido')).length === 1, 'estabelecer de novo não muda a hora nem duplica o registro');
+
+  // organograma
+  chk(/funcao_sci_sem_pai/.test(await erroDe(org([{ id: 'log.sup', ativa: true }]))), 'unidade sem a seção ativa: recusada');
+  chk(/funcao_sci_invalida/.test(await erroDe(org([{ id: 'chefe.geral', ativa: true }]))), 'função fora do catálogo: recusada');
+  chk(/dados_invalidos/.test(await erroDe(org([{ id: 'ops', ativa: false }]))), 'Operações não desativa');
+  chk(/funcao_sci_invalida/.test(await erroDe(org([{ id: 'adm', nome: 'Ten X' }]))), 'designar em função não ativada: recusado');
+  chk((await org([{ id: 'ops.espera', ativa: true }])).organograma.ativas['ops.espera'], 'unidade de Operações ativa sem precisar ativar Operações (sempre ativa)');
+  s = await org([{ id: 'seg', ativa: true, nome: ' Sgt   Lima ' }, { id: 'log', ativa: true }, { id: 'log.apoio', ativa: true }, { id: 'log.sup', ativa: true, nome: 'Cb Dias' }, { id: 'ops', nome: 'Ten Souza' }]);
+  const a = s.organograma.ativas;
+  chk(a.seg.nome === 'Sgt Lima' && a.log && a['log.apoio'] && a['log.sup'].nome === 'Cb Dias' && a.ops.nome === 'Ten Souza', 'staff, seção, setor e unidade ativados e designados', a);
+  const dono = (await db.query('select responsavel_id from public.operacoes where id = $1', [op7.id])).rows[0].responsavel_id;
+  chk(/responsavel_fora_da_operacao/.test(await erroDe(org([{ id: 'seg', user_id: resp2 }]))), 'ligar a função a quem não é responsável da operação: recusado');
+  chk((await org([{ id: 'seg', user_id: dono }])).organograma.ativas.seg.user_id === dono, 'função ligada à conta de um responsável da operação');
+  s = await org([{ id: 'log', ativa: false }]);
+  chk(!s.organograma.ativas.log && !s.organograma.ativas['log.apoio'] && !s.organograma.ativas['log.sup'] && s.organograma.ativas.seg, 'desativar a Logística leva o setor e a unidade; o resto fica');
+  chk((await diario('SCI · Desativada: Seção de Logística%')).length === 1 && (await diario('SCI · Ativada: Oficial de Segurança')).length === 1, 'ativações e desativações no diário');
+  const g = await rpc(resp1, 'salvar_grupo', { p_operacao: op7.id, p_id: null, p_dados: J({ nome: 'Alfa', cor: '#2563eb' }) });
+  chk((await org([{ equipe: g.id, tipo: 'ft' }])).organograma.equipes[g.id] === 'ft', 'tipo da equipe no organograma (Força-Tarefa)');
+  chk(/dados_invalidos/.test(await erroDe(org([{ equipe: g.id, tipo: 'tropa' }]))), 'tipo de equipe desconhecido: recusado');
+
+  // informações iniciais
+  const inf = await rpc(resp1, 'sci2_informacao', { p_operacao: op7.id, p_id: null, p_dados: J({ texto: '2 pessoas caíram da ponte', fonte: 'COPOM' }) });
+  chk(inf.confirmada_em === null && inf.fonte === 'COPOM', 'informação nasce NÃO CONFIRMADA, com a fonte');
+  chk(/texto_obrigatorio/.test(await erroDe(rpc(resp1, 'sci2_informacao', { p_operacao: op7.id, p_id: null, p_dados: J({ texto: '  ' }) }))), 'informação sem texto: recusada');
+  chk(/data_invalida/.test(await erroDe(rpc(resp1, 'sci2_informacao', { p_operacao: op7.id, p_id: null, p_dados: J({ texto: 'x', recebida_em: new Date(Date.now() + 3600e3).toISOString() }) }))), 'informação no futuro: recusada');
+  chk((await rpc(resp1, 'sci2_informacao', { p_operacao: op7.id, p_id: inf.id, p_dados: J({ confirmar: true }) })).confirmada_por_nome === 'Sgt Um', 'informação confirmada');
+  const inf2 = await rpc(resp1, 'sci2_informacao', { p_operacao: op7.id, p_id: null, p_dados: J({ texto: 'Carro no rio' }) });
+  chk(/motivo_obrigatorio/.test(await erroDe(rpc(resp1, 'sci2_informacao', { p_operacao: op7.id, p_id: inf2.id, p_dados: J({ descartar: '' }) }))), 'descartar sem motivo: recusado');
+  chk((await rpc(resp1, 'sci2_informacao', { p_operacao: op7.id, p_id: inf2.id, p_dados: J({ descartar: 'trote' }) })).descartada_motivo === 'trote', 'informação descartada com motivo (fica no histórico)');
+
+  // períodos
+  const ini = new Date(), fim = new Date(Date.now() + 12 * 3600e3);
+  const p1 = await rpc(resp1, 'sci2_periodo', { p_operacao: op7.id, p_id: null, p_dados: J({ inicio: ini.toISOString(), fim: fim.toISOString(), objetivos: [{ texto: 'Varrer setores 1 e 2' }, { texto: 'Leitura do rio a cada 30 min', estado: 'em_curso' }] }) });
+  chk(p1.numero === 1 && p1.objetivos.length === 2 && p1.objetivos[0].estado === 'pendente', 'período 1 com objetivos (estado padrão: pendente)');
+  chk(/periodo_invalido/.test(await erroDe(rpc(resp1, 'sci2_periodo', { p_operacao: op7.id, p_id: null, p_dados: J({ inicio: fim.toISOString(), fim: ini.toISOString() }) }))), 'fim antes do início: recusado');
+  const p1b = await rpc(resp1, 'sci2_periodo', { p_operacao: op7.id, p_id: p1.id, p_dados: J({ objetivos: [{ texto: 'Varrer setores 1 e 2', estado: 'cumprido' }] }) });
+  chk(p1b.objetivos[0].estado === 'cumprido' && p1b.numero === 1, 'objetivo marcado como cumprido');
+  chk((await rpc(resp1, 'sci2_periodo', { p_operacao: op7.id, p_id: null, p_dados: J({ inicio: fim.toISOString(), fim: new Date(fim.getTime() + 12 * 3600e3).toISOString() }) })).numero === 2, 'próximo período recebe o número 2');
+
+  // vítimas: plotada → remoção → ACV → entregue
+  const anV = await usuario(null, true);
+  const pV = await rpc(anV, 'ingressar', { p_token: op7.token_civil, p_nome: 'Gabi', p_tipo: 'civil', p_cpf: null, p_telefone: '21998765450' });
+  await rpc(anV, 'participante_registrar_vitima', { p_participante: pV.participante_id, p_condicao: 'viva', p_lat: -25.41, p_lng: -49.21, p_precisao: 8, p_posicao_em: new Date().toISOString(), p_client_id: '57575757-0000-4000-8000-000000000001' });
+  const loc = (await db.query('select id from public.vitima_localizacoes where operacao_id = $1', [op7.id])).rows[0].id;
+  const vit = (id, d) => rpc(resp1, 'sci2_vitima', { p_operacao: op7.id, p_id: id, p_dados: J(d) });
+  let v1 = await vit(null, { localizacao_id: loc });
+  chk(v1.numero === 1 && v1.fase === 'plotada' && v1.condicao === 'viva' && v1.localizacao_id === loc, 'vítima encontrada no mapa entra no quadro como V-01, plotada, com a condição do registro');
+  chk(/localizacao_ja_no_quadro/.test(await erroDe(vit(null, { localizacao_id: loc }))), 'a mesma vítima encontrada não entra duas vezes');
+  chk(/vitima_sci_sem_equipe/.test(await erroDe(vit(v1.id, { fase: 'remocao' }))), 'iniciar remoção sem equipe: recusado');
+  v1 = await vit(v1.id, { fase: 'remocao', equipe_grupo_id: g.id });
+  chk(v1.fase === 'remocao' && v1.equipe_nome === 'Alfa' && v1.remocao_em, 'em remoção pela equipe Alfa (bloqueada)');
+  const g2 = await rpc(resp1, 'salvar_grupo', { p_operacao: op7.id, p_id: null, p_dados: J({ nome: 'Bravo' }) });
+  chk(/vitima_sci_bloqueada/.test(await erroDe(vit(v1.id, { fase: 'remocao', equipe_grupo_id: g2.id }))), 'trocar a equipe durante a remoção: recusado (precisa liberar antes)');
+  chk(/vitima_sci_fase_invalida/.test(await erroDe(vit(v1.id, { fase: 'plotada' }))), 'voltar de fase: recusado (só liberando o bloqueio)');
+  const lib = await vit(v1.id, { liberar: true });
+  chk(lib.fase === 'plotada' && lib.equipe_grupo_id === null, 'liberar o bloqueio: volta a aguardar equipe');
+  v1 = await vit(v1.id, { fase: 'remocao', equipe_grupo_id: g2.id });
+  v1 = await vit(v1.id, { fase: 'acv' });
+  chk(v1.fase === 'acv' && v1.acv_em && v1.equipe_nome === 'Bravo', 'check-in na ACV');
+  chk(/vitima_sci_sem_destino/.test(await erroDe(vit(v1.id, { fase: 'entregue' }))), 'entregar sem destino: recusado');
+  v1 = await vit(v1.id, { fase: 'entregue', destino: 'SAMU – HU' });
+  chk(v1.fase === 'entregue' && v1.entregue_em && v1.destino === 'SAMU – HU', 'entregue ao SAMU');
+  const v2 = await vit(null, { fase: 'acv', condicao: 'viva', observacao: 'chegou sem fita' });
+  chk(v2.numero === 2 && v2.fase === 'acv' && v2.acv_em && v2.localizacao_id === null, 'chegou na ACV sem plotagem: V-02 direto na ACV');
+  const dv = await diario('SCI · V-01%');
+  chk(['SCI · V-01 no quadro de vítimas', 'SCI · V-01 em remoção', 'SCI · V-01: bloqueio liberado', 'SCI · V-01 check-in na ACV', 'SCI · V-01 entregue'].every((x) => dv.some((d) => d.titulo === x)),
+    'cada passo da vítima vai para o diário', dv.map((d) => d.titulo));
+
+  // só acréscimos: a migração só cria objetos sci2_ e rodá-la de novo não muda nenhuma função de fora
+  const sql57 = ler('supabase/migracoes/057_sci_posto_comando.sql').replace(/--[^\n]*/g, '');
+  const criadas = [...sql57.matchAll(/create\s+(?:or\s+replace\s+)?(?:function|table(?:\s+if\s+not\s+exists)?|index(?:\s+if\s+not\s+exists)?)\s+(?:public\.)?([a-z0-9_]+)/gi)].map((m) => m[1]);
+  const alteradas = [...sql57.matchAll(/alter\s+table\s+public\.([a-z0-9_]+)/gi)].map((m) => m[1]);
+  chk(criadas.length >= 12 && criadas.every((n) => n.startsWith('sci2_')) && alteradas.length === 0, 'a 057 só cria objetos com o prefixo sci2_ e não altera tabela existente', criadas.filter((n) => !n.startsWith('sci2_')));
+  await db.exec(ler('supabase/migracoes/057_sci_posto_comando.sql'));
+  const funcoesDepois = (await db.query(`select p.proname, md5(pg_get_functiondef(p.oid)) h from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname not like 'sci2\\_%' order by 1, 2`)).rows;
+  chk(J(funcoesAntes) === J(funcoesDepois), 'rodar a 057 de novo (e usar o SCI novo) não muda nenhuma função de fora do sci2_');
+  const gatilhos = (await db.query(`select c.relname, t.tgname from pg_trigger t join pg_class c on c.oid = t.tgrelid where not t.tgisinternal and t.tgname like '%sci2%'`)).rows;
+  chk(gatilhos.every((x) => x.relname.startsWith('sci2_')), 'gatilhos novos só nas tabelas novas', gatilhos);
+
+  // operação encerrada: só leitura; arquivar e excluir continuam funcionando
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op7.id });
+  chk(/operacao_encerrada/.test(await erroDe(est({ boletim: 'depois' }))), 'operação encerrada: SCI só para consulta');
+  chk((await como(resp1, 'select count(*)::int n from public.sci2_vitimas where operacao_id = $1', [op7.id])).rows[0].n === 2, 'quadro de vítimas continua legível depois de encerrar');
+  chk((await db.query(`select count(*)::int n from public.arquivo_tabelas() where tabela like 'sci2\\_%' and apagar`)).rows[0].n === 4, 'as 4 tabelas novas entram no arquivamento da operação (migração 055) sozinhas');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: op7.id });
+  chk((await db.query(`select (select count(*) from public.sci2_estado where operacao_id = $1) + (select count(*) from public.sci2_vitimas where operacao_id = $1)
+    + (select count(*) from public.sci2_periodos where operacao_id = $1) + (select count(*) from public.sci2_informacoes where operacao_id = $1) n`, [op7.id])).rows[0].n == 0,
+    'excluir a operação leva o SCI dela junto');
+  await rpc(resp1, 'excluir_operacao', { p_operacao: outraOp.id }).catch(() => null);
+}
+
+// 058 — localização do responsável sem gravar a trilha (só acréscimo)
+{
+  const op58 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 058', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const r58 = await rpc(resp1, 'entrar_como_responsavel', { p_operacao: op58.id });
+  const agora = Date.now();
+  const trilha = async () => (await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [r58.id])).rows[0].n;
+  const ultima = async () => (await db.query(`select ultima_lat, ultima_lng, ultima_precisao, ultima_posicao_em, rastreando from public.participantes where id = $1`, [r58.id])).rows[0];
+  const nova = await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.43, p_lng: -49.27, p_precisao: 9, p_registrado_em: new Date(agora - 5000).toISOString() });
+  chk(nova.status === 'ativa', 'o responsável atualiza a própria posição', nova);
+  let u = await ultima();
+  chk(Number(u.ultima_lat) === -25.43 && Number(u.ultima_lng) === -49.27 && Number(u.ultima_precisao) === 9 && u.rastreando === true, 'a última posição do responsável é gravada');
+  chk((await trilha()) === 0, 'a posição atual NÃO grava pontos na trilha (posicoes)');
+  await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.5, p_lng: -49.5, p_precisao: 5, p_registrado_em: new Date(agora - 60000).toISOString() });
+  u = await ultima();
+  chk(Number(u.ultima_lat) === -25.43, 'leitura mais antiga que a última gravada não a substitui');
+  await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.44, p_lng: -49.28, p_precisao: 6, p_registrado_em: new Date(agora + 3600e3).toISOString() });
+  u = await ultima();
+  chk(new Date(u.ultima_posicao_em).getTime() <= Date.now() + 1000, 'hora no futuro é limitada ao agora (relógio do aparelho adiantado)');
+  chk((await rpc(resp2, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: 1, p_lng: 1 })).status === 'inexistente', 'outro responsável não atualiza a posição deste');
+  chk((await rpc(anA, 'responsavel_posicao_atual', { p_participante: pA.participante_id, p_lat: 1, p_lng: 1 })).status === 'inexistente', 'participante de campo (não responsável) não usa esta função');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: 95, p_lng: 1 }))), 'latitude inválida é recusada');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op58.id });
+  chk((await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.4, p_lng: -49.2 })).status === 'encerrada', 'operação encerrada: a posição atual não é mais atualizada');
+  chk((await trilha()) === 0, 'depois de tudo, a trilha continua sem pontos');
+}
+
+// ---------- Migração 059: cenário da operação (estimativa geral, sem vítima) ----------
+console.log('\nCenário da operação (estimativa geral, sem vítima) — migração 059');
+{
+  const opG = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CENARIO GERAL', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const d = (m) => m / 111194.93;
+  const circ = (nome, lat) => rpc(resp1, 'salvar_setor', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome, forma: 'circulo', centro_lat: lat, centro_lng: -49.2, raio_m: 200 }) });
+  const sN = await circ('Norte', -25.40), sS = await circ('Sul', -25.40 - d(2000)), sL = await circ('Leste', -25.40 + d(4000));
+  const dadosG = (itens, fora, just, extra) => JSON.stringify(Object.assign({ justificativa: just, poa_fora: fora,
+    setores: itens.map(([s, poa]) => ({ setor_id: s.id, poa, justificativa: '' })) }, extra || {}));
+  const salvarG = (itens, fora, just, extra, uid) => rpc(uid || resp1, 'cenario_geral_salvar_rascunho', { p_operacao: opG.id, p_dados: dadosG(itens, fora, just, extra) });
+  const geraisDe = async () => (await db.query(`select id, numero, estado, base_numero, origem_poa, missao_id, poa_fora from public.busca_cenarios where operacao_id = $1 and vitima_id is null order by numero`, [opG.id])).rows;
+  const just = 'Área de avaria: maior chance no norte, pela última direção conhecida';
+
+  console.log('  estimativa sem vítima');
+  chk(/sem_permissao/.test(await erroDe(salvarG([[sN, 0.5]], 0.5, just, null, resp2))), 'responsável de outra operação não faz a estimativa desta');
+  const g1 = await salvarG([[sN, 0.5], [sS, 0.3]], 0.2, just);
+  chk(g1.cenario.vitima_id === null && g1.cenario.estado === 'rascunho' && g1.cenario.numero === 1 && g1.setores.length === 2, 'estimativa da operação: rascunho sem vítima, versão 1, com os setores');
+  const g1b = await salvarG([[sN, 0.4], [sS, 0.3], [sL, 0.1]], 0.2, just, { atualizado_em: g1.cenario.atualizado_em });
+  chk(g1b.cenario.id === g1.cenario.id && g1b.setores.length === 3, 'salvar de novo atualiza o mesmo rascunho (só um por operação)');
+  chk(/cenario_versao_desatualizada/.test(await erroDe(salvarG([[sN, 0.1]], 0.9, just, { atualizado_em: g1.cenario.atualizado_em }))), 'rascunho mudou por outra gravação: recusado');
+  chk(/cenario_poa_acima_de_100/.test(await erroDe(salvarG([[sN, 0.5], [sS, 0.3]], 0.3, just, { atualizado_em: g1b.cenario.atualizado_em }))), 'setores + fora da área acima de 100%: recusado ao salvar');
+  const soma80 = await salvarG([[sN, 0.5], [sS, 0.3]], 0.1, just, { atualizado_em: g1b.cenario.atualizado_em });
+  chk(/cenario_soma_diferente_de_100/.test(await erroDe(rpc(resp1, 'cenario_aprovar', { p_cenario: soma80.cenario.id }))), 'setores + fora da área = 90%: aprovação recusada');
+  const g2 = await salvarG([[sN, 0.4], [sS, 0.4]], 0.2, just, { atualizado_em: soma80.cenario.atualizado_em });
+  const ap1 = await rpc(resp1, 'cenario_aprovar', { p_cenario: g2.cenario.id, p_revisao: g2.cenario.atualizado_em });
+  chk(ap1.cenario.estado === 'aprovada' && ap1.cenario.numero === 1 && ap1.cenario.vitima_id === null, 'aprovada: versão 1 da operação, sem vítima');
+  const diarioG = (await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and categoria = 'operacao' and tipo = 'cenario_aprovado' and titulo like 'Estimativa geral%'`, [opG.id])).rows[0].n;
+  chk(diarioG === 1, 'a aprovação da estimativa entra no diário (categoria operação)', diarioG);
+
+  console.log('  vítima e operação numeram separado');
+  const vit = await rpc(resp1, 'salvar_vitima', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Lia' }) });
+  const rv = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vit.id, p_dados: dadosG([[sS, 0.6]], 0.4, 'Lia: trilha para o sul') });
+  chk(rv.cenario.vitima_id === vit.id && rv.cenario.numero === 1, 'cenário da vítima começa na versão 1, sem contar a estimativa da operação');
+  const apv = await rpc(resp1, 'cenario_aprovar', { p_cenario: rv.cenario.id });
+  chk(apv.cenario.numero === 1 && apv.cenario.estado === 'aprovada', 'vítima aprovada na versão 1');
+  const g3 = await salvarG([[sN, 0.4], [sS, 0.4]], 0.2, 'Segunda versão da estimativa: sem vestígios ao norte', null);
+  chk(g3.cenario.id !== g1.cenario.id && g3.cenario.numero === 2, 'nova estimativa da operação: versão 2 (sem mexer na versão 1)');
+  const ap2 = await rpc(resp1, 'cenario_aprovar', { p_cenario: g3.cenario.id, p_revisao: g3.cenario.atualizado_em });
+  chk(ap2.cenario.numero === 2 && (await geraisDe()).length === 2, 'versão 2 aprovada; a operação tem duas versões gerais');
+  chk(/dados_invalidos|cenario_imutavel_aprovado/.test(await erroDe(db.query(`update public.busca_cenarios set vitima_id = $1 where id = $2`, [vit.id, ap2.cenario.id]))), 'versão aprovada não passa para outra vítima (nem para a operação)');
+
+  console.log('  busca negativa atualiza a estimativa da operação');
+  const criarM = (extra) => rpc(resp1, 'busca_missao_criar', { p_operacao: opG.id, p_dados: JSON.stringify(Object.assign({ setor_id: sN.id, equipe: 'Equipe 1', metodo: 'A pé, em linha', pod: 0.6, pod_base: 'Varredura em linha', vitima_id: null }, extra || {})) });
+  const mg = (await criarM({ chave_cliente: 'geral-1' })).missao;
+  const res = await rpc(resp1, 'busca_missao_resultado', { p_missao: mg.id, p_dados: JSON.stringify({ resultado: 'nao_localizado' }) });
+  chk(res.missao.calculo_estado === 'aplicado', 'missão sem vítima, negativa: cálculo aplicado', res.missao.calculo_estado);
+  const gerais = await geraisDe();
+  const nova = gerais[gerais.length - 1];
+  const pN = Number((await db.query(`select poa from public.busca_cenario_setores where cenario_id = $1 and setor_nome = 'Norte'`, [nova.id])).rows[0].poa);
+  // Norte 40% × (1 − 0,6) = 0,16 ; Sul 0,40 ; fora 0,20 ; Z = 0,76
+  chk(gerais.length === 3 && nova.numero === 3 && nova.origem_poa === 'calculo_pos_busca' && nova.missao_id === mg.id, 'a estimativa da operação ganhou a versão 3 (origem: busca negativa)');
+  chk(Math.abs(pN - 0.16 / 0.76) < 1e-5, 'Norte 21,05% = 0,4 × 0,4 ÷ 0,76 (r = p × (1 − q); p\' = r ÷ Σr)', pN);
+  chk(Math.abs(Number(nova.poa_fora) - 0.2 / 0.76) < 1e-5, '"Fora da área" recalculado: 26,32%, soma fecha em 100%');
+  chk((await db.query(`select count(*)::int n from public.busca_missao_efeitos where missao_id = $1 and vitima_id is null`, [mg.id])).rows[0].n === 1, 'o efeito da missão fica guardado com vítima nula (operação inteira)');
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where vitima_id = $1`, [vit.id])).rows[0].n === 1, 'a vítima Lia não tem setor Norte no cenário: nenhuma versão nova dela');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and categoria = 'operacao' and tipo = 'cenario_pos_busca'`, [opG.id])).rows[0].n === 1, 'a atualização da estimativa entra no diário');
+}
+
+// ---------- Migração 060: arquivar operação com POA aprovado ----------
+console.log('\nArquivamento de operação com cenário aprovado — migração 060');
+{
+  const svc060 = (sql, params) => como(null, sql, params, 'service_role');
+  const opC = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ARQ CENARIO', p_retencao_horas: 24, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const setorC = await rpc(resp1, 'salvar_setor', { p_operacao: opC.id, p_id: null, p_dados: JSON.stringify({ nome: 'Norte', forma: 'circulo', centro_lat: -25.4, centro_lng: -49.2, raio_m: 200 }) });
+  const vitC = await rpc(resp1, 'salvar_vitima', { p_operacao: opC.id, p_id: null, p_dados: JSON.stringify({ nome: 'Ana' }) });
+  const rascC = await rpc(resp1, 'cenario_salvar_rascunho', { p_vitima: vitC.id, p_dados: JSON.stringify({ justificativa: 'Trilha do norte, última vez vista ali', setores: [{ setor_id: setorC.id, poa: 0.5 }] }) });
+  const apC = await rpc(resp1, 'cenario_aprovar', { p_cenario: rascC.cenario.id });
+  chk(apC.cenario.estado === 'aprovada', 'operação com POA aprovado (o caso que não arquivava)');
+  chk(/cenario_imutavel_aprovado/.test(await erroDe(db.query(`delete from public.busca_cenarios where id = $1`, [apC.cenario.id]))), 'fora do arquivamento, cenário aprovado continua sem poder ser apagado');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opC.id });
+  const prepC = (await svc060('select public.servidor_arquivo_preparar($1) d', [opC.id])).rows[0].d;
+  const totC = Object.fromEntries(prepC.tabelas.map((t) => [t.tabela, Number(t.total)]));
+  chk(totC.busca_cenarios === 1 && totC.busca_cenario_setores === 1, 'o arquivo leva o cenário e os setores', totC);
+  const caminhoC = opC.id + '/22222222-2222-4222-8222-222222222222.json.gz';
+  await db.query(`insert into storage.objects (bucket_id, name) values ('arquivos', $1)`, [caminhoC]);
+  const exportadoC = {};
+  for (const t of prepC.tabelas) {
+    exportadoC[t.tabela] = (await svc060('select public.servidor_arquivo_tabela($1, $2, 0, 5000) d', [opC.id, t.tabela])).rows[0].d;
+  }
+  const contC = Object.fromEntries(Object.entries(exportadoC).map(([k, v]) => [k, v.length]));
+  const dC = (await svc060('select public.servidor_arquivo_confirmar($1, $2, 100, $3, $4) d', [opC.id, caminhoC, 'c'.repeat(64), JSON.stringify(contC)]).catch((e) => ({ erro: e.message }))).rows?.[0]?.d;
+  chk(dC && !dC.erro, 'arquivar a operação com POA aprovado: confirmado', dC || (await erroDe(svc060('select 1'))));
+  chk((await db.query(`select count(*)::int n from public.busca_cenarios where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'depois do arquivamento, os cenários saem do banco (uma linha de operação, como antes)');
+  chk((await db.query(`select count(*)::int n from public.busca_cenario_setores where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'os setores do cenário também saem');
+  chk((await db.query(`select count(*)::int n from public.vitimas where operacao_id = $1`, [opC.id])).rows[0].n === 1, 'vítimas ficam no banco (como antes)');
+}
+
+console.log('\nMigrações 007–060 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

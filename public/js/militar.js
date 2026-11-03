@@ -123,7 +123,8 @@
     audio: null,
     // presença e posição do próprio responsável
     meuPart: null,
-    compartilhando: false,
+    compartilhando: false,   // localização ligada: o responsável aparece no mapa (sempre que a operação está ativa)
+    gravandoTrilha: false,   // gravação da trilha: manual, pelo botão "Gravar minha trilha" (só grava pontos quando ligada)
     watchId: null,
     gpsMeu: 'aguardando',
     ultimoAceitoMeu: null,      // última leitura válida do meu GPS { lat, lng, prec, t }
@@ -384,7 +385,6 @@
     aplicarLadoAcoes();
     $('menu-ajuda').addEventListener('click', function () { fecharMenu(false); if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
     $('btn-ajuda').addEventListener('click', function () { if (window.AjudaPedidos) window.AjudaPedidos.abrir(); });
-    $('menu-sci').addEventListener('click', function () { fecharMenu(false); abrirSci(); });
     $('menu-binomio').addEventListener('click', function () { fecharMenu(false); if (window.Binomio) window.Binomio.abrir(); });
     $('menu-drone-agua').addEventListener('click', function () { fecharMenu(false); if (window.ObservacoesCampo) window.ObservacoesCampo.abrir(); });
     $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
@@ -1506,9 +1506,10 @@
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
     iniciarPolling();
     if (op.status === 'ativa') {
-      // O responsável só entra no mapa (e só registra posição) quando liga "Registrar minha trilha".
-      // Se já tem registro nesta operação (ligou antes), ele é reaproveitado para mensagens e fotos.
+      // A localização do responsável fica ligada desde a abertura (aparece no mapa para a equipe).
+      // A gravação da trilha é à parte e manual ("Gravar minha trilha"). Se já tem registro nesta operação, ele é reaproveitado.
       acharMeuRegistro();
+      if (!est.compartilhando && !est.iniciandoMinhaPos) ligarMinhaPosicao(true);
       est.timerMeuSinal = setInterval(function () {
         if (!est.op || est.op.status !== 'ativa') return;
         if (est.compartilhando && !est.meuPart) entrarComoResponsavel();
@@ -1529,6 +1530,7 @@
   }
 
   function fecharPainel() {
+    if (window.SciModo) window.SciModo.sair();   // trocar de operação ou voltar à lista sai do Modo SCI
     carregandoPainel(false);
     pararMinhaPosicao(true);
     clearInterval(est.timerMeuSinal);
@@ -3088,7 +3090,10 @@
   // Pede atenção (ajuda, saída, selecionado, você): sempre visível, fora do agrupamento.
   function colocarPessoaNoMapa(p) {
     if (!p.marcador || !est.camadaPessoas) return;
-    var fixo = !window.MapaRotulos || window.MapaRotulos.ehDestaque(classesMarcador(p));
+    // o próprio responsável (classe "eu") também agrupa com os demais: o destaque de "eu" é para militares e civis
+    var cls = classesMarcador(p);
+    if (tipoDe(p.dados) === 'responsavel') cls = cls.replace(/(^| )eu( |$)/, ' ');
+    var fixo = !window.MapaRotulos || window.MapaRotulos.ehDestaque(cls);
     if (p._fixo === fixo) return;
     var sai = fixo ? est.camadaPessoas : est.camadaPessoasFixas, entra = fixo ? est.camadaPessoasFixas : est.camadaPessoas;
     if (sai.hasLayer(p.marcador)) sai.removeLayer(p.marcador);
@@ -3803,7 +3808,10 @@
       caixaDest.appendChild(destino.recebido_em
         ? UI.el('span', { classe: 'destino-recebido', texto: '✓ recebido no celular às ' + C.hora(destino.recebido_em, false) + ' ' })
         : UI.el('span', { classe: 'destino-aguardando', texto: 'aguardando o celular receber ' }));
-      caixaDest.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Encerrar', onclick: function () { encerrarDestinoPainel(destino); } }));
+      if (podeAlterar()) {
+        caixaDest.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-perigo ficha-destino-cancelar', type: 'button',
+          texto: destino.missao_id ? 'Cancelar deslocamento do grupo' : 'Cancelar destino', onclick: function () { cancelarDestinoFicha(destino); } }));
+      }
       caixaDest.appendChild(UI.el('span', { classe: 'ficha-rota', id: 'ficha-rota', hidden: true }));
     }
     $('ficha-enviar-destino').hidden = tipoDe(d) === 'responsavel' || d.removido || est.op.status !== 'ativa';
@@ -4685,22 +4693,9 @@
           window.Cadastro.abrirFichaPorId(op, f.id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas });
         } }) : null,
         m.lat != null ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }) : null,
-        reg && window.SCI ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitloc-sci', texto: 'Abrir no SCI', onclick: function () {
-          fechar(); try { localStorage.setItem('gbs-sci-aba', 'vitimas'); } catch (e) { /* abre na última aba */ } abrirSci();
-        } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
     ])));
-    // no quadro do SCI: número, quadro (ACV, transportada) e triagem
-    if (reg && !est.semSci) {
-      C.consultar(C.cliente.from('sci_vitimas').select('numero,fase,triagem,destino').eq('localizacao_id', reg.id).maybeSingle()).then(function (sv) {
-        var alvo = document.querySelector('.visor-vitima-loc .vit-loc-selos');
-        if (!sv || !alvo) return;
-        var fases = { localizada: 'localizada, aguardando remoção', removida: 'na ACV', transportada: 'transportada' + (sv.destino ? ' — ' + sv.destino : '') };
-        var tri = { verde: 'verde', amarelo: 'amarela', vermelho: 'vermelha', cinza: 'cinza (óbito)' };
-        alvo.appendChild(UI.el('span', { classe: 'selo selo-neutro', texto: 'SCI: V-' + (sv.numero < 10 ? '0' : '') + sv.numero + ' · ' + fases[sv.fase] + (sv.triagem ? ' · triagem ' + tri[sv.triagem] : '') }));
-      }).catch(function (e) { if (ehTabelaAusente(e)) est.semSci = true; });
-    }
   }
 
   function abrirRelato(id) {
@@ -6885,13 +6880,33 @@
   }
 
   async function encerrarDestinoPainel(d) {
-    var r = await UI.confirmar({ titulo: 'Encerrar a navegação?', texto: 'O participante deixa de ver o destino "' + d.nome + '".', ok: 'Encerrar navegação' });
+    var r = await UI.confirmar({ titulo: 'Cancelar o destino?', texto: 'O participante deixa de ver o destino "' + d.nome + '".', ok: 'Cancelar destino', perigo: true });
     if (!r) return;
     try {
       await C.rpc('encerrar_destino', { p_destino: d.id });
       est.destinos.delete(d.participante_id);
       if (est.selecionado) atualizarFicha();
-      UI.aviso('Navegação encerrada.', 'ok');
+      UI.aviso('Destino cancelado.', 'ok');
+    } catch (e) { UI.aviso(e.message, 'erro'); }
+  }
+
+  // Destino de grupo (deslocamento): cancela o deslocamento para TODOS os membros (é o que foi enviado).
+  // Destino de um participante: cancela só para ele.
+  async function cancelarDestinoFicha(d) {
+    var m = d.missao_id ? est.missoes.get(d.missao_id) : null;
+    if (!m) return encerrarDestinoPainel(d);
+    var r = await UI.confirmar({
+      titulo: 'Cancelar o deslocamento de ' + m.grupo_nome + '?',
+      texto: 'O destino "' + d.nome + '" é do grupo inteiro: some do celular de todos os membros e não há mais alertas de retorno deste deslocamento.',
+      ok: 'Cancelar para o grupo', perigo: true,
+    });
+    if (!r) return;
+    try {
+      await C.rpc('encerrar_missao', { p_missao: m.id });
+      UI.aviso('Destino cancelado para o grupo ' + m.grupo_nome + '.', 'ok');
+      agendarMissoes();
+      agendarAreas();
+      if (est.selecionado) atualizarFicha();
     } catch (e) { UI.aviso(e.message, 'erro'); }
   }
 
@@ -8283,34 +8298,51 @@
   function atualizarBotaoMinhaTrilha() {
     var b = $('menu-minha-trilha');
     if (!b) return;
-    var ligado = est.compartilhando || est.iniciandoMinhaPos;
+    var ligado = est.gravandoTrilha || est.iniciandoMinhaPos;
     b.setAttribute('aria-pressed', String(Boolean(ligado)));
     b.classList.toggle('btn-ativo', Boolean(ligado));
-    $('menu-minha-trilha-estado').textContent = est.iniciandoMinhaPos ? 'ligando…' : est.compartilhando ? (est.minhaPosEstado === 'ativa' ? 'gravando' : 'gravando · sem sinal') : 'desligado';
+    $('menu-minha-trilha-estado').textContent = est.iniciandoMinhaPos ? 'ligando…'
+      : est.gravandoTrilha ? (est.minhaPosEstado === 'ativa' ? 'gravando' : 'gravando · sem sinal')
+      : est.compartilhando ? 'só localização' : 'desligado';
   }
+  // Grava a trilha (pontos enviados à trilha) ou para de gravar. A localização continua ligada nos dois casos.
   async function alternarMinhaTrilha() {
     if (!est.op || est.op.status !== 'ativa' || est.iniciandoMinhaPos) return;
-    if (est.compartilhando) {
-      var parar = await UI.confirmar({ titulo: 'Interromper o registro da sua trilha?', ok: 'Interromper',
-        texto: 'Sua posição deixa de ser enviada à equipe e a sua trilha para de ser gravada. O que já foi gravado continua no mapa. Para voltar a gravar, toque de novo em "Registrar minha trilha".' });
+    if (est.gravandoTrilha) {
+      var parar = await UI.confirmar({ titulo: 'Parar a gravação da sua trilha?', ok: 'Parar gravação',
+        texto: 'Sua localização continua no mapa para a equipe. O que já foi gravado continua na trilha. Para voltar a gravar, toque de novo em "Gravar minha trilha".' });
       if (!parar) return;
-      C.local.apagar(chaveMinhaTrilha());
-      pararMinhaPosicao(false);
-      UI.aviso('Registro da sua trilha interrompido.', 'ok');
+      pararGravacaoTrilha();
+      UI.aviso('Gravação da trilha parada. Sua localização continua no mapa.', 'ok');
       return;
     }
-    var iniciar = await UI.confirmar({ titulo: 'Iniciar o registro da sua trilha?', ok: 'Iniciar registro',
-      texto: 'Sua posição passa a aparecer no mapa para a equipe e a sua trilha é gravada até você interromper. Mantenha o painel aberto e a tela ligada.' });
-    if (!iniciar) return;
-    if (!('geolocation' in navigator) || !window.isSecureContext) {
-      est.minhaPosEstado = 'indisponivel';
-      atualizarEstadoGps();
-      return;
+    var gravar = await UI.confirmar({ titulo: 'Gravar a sua trilha?', ok: 'Gravar trilha',
+      texto: 'Os seus passos passam a ser gravados como trilha no mapa até você parar. Mantenha o painel aberto e a tela ligada.' });
+    if (!gravar) return;
+    if (!est.compartilhando) {
+      if (!('geolocation' in navigator) || !window.isSecureContext) {
+        est.minhaPosEstado = 'indisponivel';
+        atualizarEstadoGps();
+        return;
+      }
+      await verificarPermissaoMinha();
+      if (est.permissaoMinha === 'denied') { est.minhaPosEstado = 'bloqueada'; atualizarEstadoGps(); mostrarComoLiberarMinha(); return; }
+      await ligarMinhaPosicao(false);
+      if (!est.compartilhando) return;
     }
-    await verificarPermissaoMinha();
-    if (est.permissaoMinha === 'denied') { est.minhaPosEstado = 'bloqueada'; atualizarEstadoGps(); mostrarComoLiberarMinha(); return; }
+    est.gravandoTrilha = true;
     C.local.gravar(chaveMinhaTrilha(), 1);
-    ligarMinhaPosicao(false);
+    atualizarBotaoMinhaTrilha();
+    atualizarEstadoGps();
+  }
+  function pararGravacaoTrilha() {
+    est.gravandoTrilha = false;
+    C.local.apagar(chaveMinhaTrilha());
+    clearTimeout(est.timerMinhaFila);
+    est.timerMinhaFila = null;
+    enviarMinhaFila();   // o que já foi gravado vai para a trilha
+    atualizarBotaoMinhaTrilha();
+    atualizarEstadoGps();
   }
   async function oferecerRetomarMinhaTrilha() {
     if (!Number(C.local.ler(chaveMinhaTrilha(), 0))) return;
@@ -8319,7 +8351,9 @@
       texto: 'Você estava registrando a sua trilha neste aparelho quando o painel foi fechado. Quer continuar?' });
     if (!est.op || est.op.id !== opId) return;
     if (!sim) { C.local.apagar(chaveMinhaTrilha()); return; }
-    ligarMinhaPosicao(false);
+    est.gravandoTrilha = true;
+    if (!est.compartilhando) ligarMinhaPosicao(false);
+    atualizarBotaoMinhaTrilha();
   }
 
   // Permissions API: acompanha mudanças (ex.: o responsável liberou nas configurações).
@@ -8351,7 +8385,7 @@
   async function garantirMinhaPosicao() {
     if (est.iniciandoMinhaPos) return;
     if (est.compartilhando) {
-      UI.aviso('Sua posição está sendo compartilhada com a equipe. Para parar, use "Registrar minha trilha" em Ferramentas.', 'ok');
+      UI.aviso('Sua localização está no mapa para a equipe. Para gravar a sua trilha, use "Gravar minha trilha" em Ferramentas.', 'ok');
       return;
     }
     if (!est.op || est.op.status !== 'ativa') return;
@@ -8415,9 +8449,9 @@
       iniciarMeuWatch();
       pedirTelaLigada();
       enviarMeuSinal();
-      UI.aviso(est.minhaPosEstado === 'ativa'
-        ? 'Sua posição está sendo compartilhada com a equipe. Mantenha o painel aberto.'
-        : 'Compartilhamento ligado, mas ainda sem sinal de GPS.', est.minhaPosEstado === 'ativa' ? 'ok' : 'erro', 7000);
+      if (!automatico || est.minhaPosEstado !== 'ativa') UI.aviso(est.minhaPosEstado === 'ativa'
+        ? 'Sua localização está no mapa para a equipe. Mantenha o painel aberto.'
+        : 'Localização ligada, mas ainda sem sinal de GPS.', est.minhaPosEstado === 'ativa' ? 'ok' : 'erro', 7000);
     } catch (e) {
       est.minhaPosEstado = 'desligada';
       UI.aviso(e.message, 'erro');
@@ -8452,8 +8486,14 @@
       est.ultimoAceitoMeu = { lat: a.lat, lng: a.lng, prec: a.prec, t: a.t, recebidaEm: a.recebidaEm };
       est.gpsMeu = a.prec != null && a.prec > 50 ? 'fraco' : 'ok';
       est.minhaPosEstado = 'ativa';
+      // ao iniciar a operação, o mapa vai para a sua localização (uma vez por operação)
+      if (est.mapa && est.op && est.centradoNoInicio !== est.op.id) {
+        est.centradoNoInicio = est.op.id;
+        est.mapa.setView([a.lat, a.lng], Math.max(est.mapa.getZoom(), 16));
+      }
     }
-    if (r.pontos.length) {
+    if (r.atual && !est.gravandoTrilha) enviarPosicaoAtual();
+    if (r.pontos.length && est.gravandoTrilha) {
       var rapido = r.rapido;
       // gravado primeiro no aparelho (IndexedDB), com id único; depois enviado
       guardarMinhaPosicao(r.pontos.map(function (p) { return { id: C.uuid(), lat: p.lat, lng: p.lng, prec: p.prec, t: p.t }; })).then(function () {
@@ -8521,6 +8561,18 @@
       });
     }
     if (est.filaMinhaUI) est.filaMinhaUI.atualizar();
+  }
+
+  // Localização ligada sem gravar a trilha: manda só a última posição (no máximo a cada 15 s). Não grava pontos.
+  async function enviarPosicaoAtual() {
+    var u = est.ultimoAceitoMeu;
+    if (!u || !est.meuPart || Date.now() - (est.posAtualEnviadaEm || 0) < 15000) return;
+    est.posAtualEnviadaEm = Date.now();
+    try {
+      var r = await C.rpc('responsavel_posicao_atual', { p_participante: est.meuPart, p_lat: u.lat, p_lng: u.lng,
+        p_precisao: u.prec == null ? null : u.prec, p_registrado_em: new Date(u.t).toISOString() }, 12000);
+      if (r && r.status === 'inexistente') est.meuPart = null;   // registro apagado: será recriado
+    } catch (e) { est.posAtualEnviadaEm = 0; }   // sem internet: tenta de novo na próxima leitura
   }
 
   function pendentesMinha() {
@@ -8614,6 +8666,7 @@
   function pararMinhaPosicao(silencioso) {
     var estava = est.compartilhando;
     est.compartilhando = false;
+    est.gravandoTrilha = false;
     if (est.watchId != null) {
       navigator.geolocation.clearWatch(est.watchId);
       est.watchId = null;
@@ -8743,9 +8796,18 @@
       botoes.appendChild(UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Confirmar leitura', onclick: function () { confirmarParaMim(m.id, 'CIENTE'); } }));
     }
     caixa.hidden = false;
+    posicionarAlerta(caixa);
     var b = botoes.querySelector('button');
     if (b) b.focus({ preventScroll: true });
   }
+
+  // Cartão de mensagem: começa logo abaixo da etiqueta "Esconder cabeçalho" (não cobre a etiqueta nem a barra de ações).
+  function posicionarAlerta(caixa) {
+    var etiqueta = document.querySelector('.painel-topo .etiqueta-topo');
+    var visivel = etiqueta && etiqueta.getClientRects().length > 0;
+    caixa.style.top = (visivel ? Math.round(etiqueta.getBoundingClientRect().bottom + 6) : 40) + 'px';
+  }
+  window.addEventListener('resize', function () { var c = $('alerta-cmd'); if (c && !c.hidden) posicionarAlerta(c); });
 
   async function confirmarParaMim(id, resposta) {
     est.confirmadasLocal.add(id);
@@ -10054,7 +10116,7 @@
         if (noEncerramento) { pre.aoRegistrar(r, e.condicao, dados); return; }
         UI.aviso('Vítima encontrada registrada. Os responsáveis receberam o alerta.', 'ok', 7000);
         sincronizar();
-        if (pre.depois) { pre.depois(); return; }   // veio do SCI: volta para ele (a vítima já está no quadro)
+        if (pre.depois) { pre.depois(); return; }   // aberto de outra tela (ex.: Modo SCI): volta para ela
         if (args.p_lat != null && est.mapa) est.mapa.setView([args.p_lat, args.p_lng], Math.max(est.mapa.getZoom(), 16));
       } catch (e2) {
         btn.disabled = false;
@@ -10121,26 +10183,6 @@
     est.alertas.forEach(function (a) { if (a.tipo === 'vitima_localizada' && a.chave === 'vitima:' + reg.id) achado = a; });
     var p = achado && achado.participante_id ? est.participantes.get(achado.participante_id) : null;
     return p && p.id !== reg.participante_id ? p : null;
-  }
-
-  // Painel de comando SCI (js/sci.js) numa janela grande; "Outra janela" abre sci.html para o comando remoto
-  function abrirSci() {
-    if (!est.op || !window.SCI) return;
-    var caixa = UI.el('div', { classe: 'sci-no-painel' });
-    var ctl = null;
-    var fechar = UI.abrirModal(UI.el('div', null, [UI.el('h2', { id: 'modal-titulo', texto: 'Comando SCI' }), caixa]), { tamanho: 'cheio', aoFechar: function () { if (ctl) ctl.parar(); } });
-    ctl = window.SCI.montar(caixa, {
-      op: est.op, podeAlterar: podeAlterar,
-      setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },
-      irPara: function (lat, lng) { fechar(); if (est.mapa) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 16)); },
-      // o mesmo "Vítima encontrada" do app (ponto no mapa, quem encontrou, alerta, diário); ao terminar, volta ao SCI
-      registrarVitima: function (pre) { fechar(); abrirRegistroVitima(Object.assign({}, pre, { depois: abrirSci })); },
-      abrirFicha: function (id) { if (window.Cadastro) window.Cadastro.abrirFichaPorId(est.op, id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas }); },
-      cadastroRapido: function () { if (window.Cadastro) window.Cadastro.abrirRapido(est.op, { empilhar: true, aoSalvar: function () { carregarFichas(); } }); },
-      abrirBriefing: window.Briefing ? function () { fechar(); window.Briefing.abrir(); } : null,
-      abrirGrupos: function (gid) { fechar(); if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
-      abrirRecursos: window.RecursosEquipe ? function () { fechar(); window.RecursosEquipe.abrir(); } : null,
-    });
   }
 
   function abrirCadastroRapido() {
@@ -10781,6 +10823,20 @@
     atualizarCentral: function () { if (est.op) agendarCentral(); },
     abrirRelato: function (id) { abrirRelato(id); },
     mensagens: function () { return Array.from(est.mensagens.values()); },
+    // Modo SCI (js/sci-modo.js): lê o que o painel já tem carregado e abre as telas do app pelo mesmo caminho
+    vitimasLocalizadas: function () { return Array.from(est.vitimasLoc.values()); },
+    fichas: function () { return Array.from(est.fichas.values()); },
+    alertasAtivos: function () { return Array.from(est.alertas.values()).filter(function (a) { return !a.reconhecido_em; }); },
+    estadoParticipante: function (p) { return estadoDe(p); },
+    membros: function (gid) { var m = est.membros.get(gid); return m ? Array.from(m.values()) : []; },
+    abrirRegistroVitima: function (pre) { abrirRegistroVitima(pre || {}); },
+    abrirFicha: function (id) { if (window.Cadastro && est.op) window.Cadastro.abrirFichaPorId(est.op, id, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas }); },
+    cadastroRapido: function () { if (window.Cadastro && est.op) window.Cadastro.abrirRapido(est.op, { aoSalvar: function () { carregarFichas(); } }); },
+    abrirGrupos: function (gid) { if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
+    abrirMissoes: function () { abrirMissoes(); },
+    abrirEquipe: function () { abrirEquipe(); },
+    abrirConvite: function () { abrirConvite(); },
+    abrirDadosOperacao: function () { abrirDadosOperacao(); },
   };
 
   iniciar();

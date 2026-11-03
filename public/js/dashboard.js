@@ -918,8 +918,6 @@
     // Várias vítimas por ocorrência (migração 048): cada uma com a própria localização, condição, tempo e distância.
     var vitimas = d && Array.isArray(d.vitimas) ? d.vitimas : null;
     var nomesVit = (r && r.nomesVitimas) || {};
-    var TRIAGEM = { verde: 'verde', amarelo: 'amarela', vermelho: 'vermelha', cinza: 'cinza' };
-    var FASE_SCI = { localizada: 'localizada', removida: 'removida (ACV)', transportada: 'transportada' };
     function nomeVitima(v) { return (v.vitima_id && nomesVit[v.vitima_id]) || (v.sem_ficha ? 'Vítima sem ficha' : 'Vítima'); }
     function descVitima(v) {
       return [v.idade != null ? v.idade + ' anos' : null, v.sexo === 'F' ? 'feminino' : v.sexo === 'M' ? 'masculino' : null,
@@ -938,7 +936,6 @@
           ['Hora', v.em ? diaMes(Date.parse(v.em)) + ' ' + hora(Date.parse(v.em)) : '—'],
           ['Tempo após o início', v.minutos_ate != null ? minutos(v.minutos_ate) : '—'],
           ['Distância do ULV', v.distancia_km != null ? km(v.distancia_km) : (d && d.ulv ? '—' : 'sem ULV')],
-          ['No SCI', v.sci ? 'V-' + String(v.sci.numero).padStart(2, '0') + ' · ' + (FASE_SCI[v.sci.fase] || v.sci.fase) + (v.sci.triagem ? ' · triagem ' + TRIAGEM[v.sci.triagem] : '') : '—'],
         ],
       });
     }

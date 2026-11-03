@@ -230,6 +230,10 @@
         <span id="op-sub"></span>
         <button class="comando-chip" type="button" id="comando-chip" hidden></button>
       </div>
+      <div class="modo-seletor" id="modo-seletor" role="group" aria-label="Modo da tela">
+        <button type="button" id="modo-operacao" class="ativo" aria-pressed="true" title="Mapa operacional">Operação</button>
+        <button type="button" id="modo-sci" aria-pressed="false" title="Modo SCI: Posto de Comando, organograma, períodos, vítimas e formulários">SCI</button>
+      </div>
       <span class="pilula-conexao" id="pilula" role="status"><span class="ponto ponto-aguardando"></span><span>Conectando…</span></span>
       <!-- Ações mais usadas, sempre à vista no topo (no celular, numa faixa logo abaixo) -->
       <div class="acoes-topo" id="acoes-topo" role="toolbar" aria-label="Ações rápidas">
@@ -240,7 +244,6 @@
         <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="btn-regua" aria-pressed="false" title="Régua circular no centro da tela: mostra as distâncias a partir do centro"><span class="ico-acao" aria-hidden="true">◎</span><span class="rotulo-acao">Régua</span></button>
         <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-cenario" title="POA/POD: probabilidade de a pessoa estar em cada setor e registro das buscas"><span class="ico-acao" aria-hidden="true">◍</span><span class="rotulo-acao">POA/POD</span></button>
         <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-dashboard" title="Dashboard da operação"><span class="ico-acao" aria-hidden="true">▦</span><span class="rotulo-acao">Dashboard</span></button>
-        <button class="btn btn-barra btn-pequeno btn-acao-topo" type="button" id="menu-sci" title="Painel de comando SCI: vítimas, funções, linha do tempo, órgãos, recursos e alertas"><span class="ico-acao" aria-hidden="true">✪</span><span class="rotulo-acao">SCI</span></button>
         <button class="btn btn-barra btn-pequeno btn-acao-topo btn-msgs" type="button" id="btn-mensagens" aria-label="Mensagens, relatos e fotos" aria-controls="central" aria-expanded="false" title="Mensagens, relatos e fotos dos participantes">
           <span class="ico-msg" aria-hidden="true"></span><span class="rotulo-acao">Mensagens</span>
           <span class="contador" id="contador-msgs" hidden>0</span>
@@ -277,7 +280,7 @@
               <section class="menu-secao" data-secao="campo">
                 <button class="menu-secao-titulo" type="button" aria-expanded="true">Em campo</button>
                 <div class="menu-secao-itens">
-                <button class="menu-item menu-minha-trilha" type="button" id="menu-minha-trilha" aria-pressed="false" title="Liga ou desliga o registro da sua posição e da sua trilha (sempre com confirmação)"><span class="ico-item" aria-hidden="true">◉</span><span>Registrar minha trilha</span><small class="menu-estado" id="menu-minha-trilha-estado">desligado</small></button>
+                <button class="menu-item menu-minha-trilha" type="button" id="menu-minha-trilha" aria-pressed="false" title="Grava os seus passos como trilha no mapa. A sua localização já fica sempre ligada (sempre com confirmação)"><span class="ico-item" aria-hidden="true">◉</span><span>Gravar minha trilha</span><small class="menu-estado" id="menu-minha-trilha-estado">desligado</small></button>
                 <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
                 <button class="menu-item" type="button" id="menu-vitima-rapida"><span class="ico-item" aria-hidden="true">⚡</span><span>Cadastro rápido de vítima</span></button>
                 <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
@@ -454,8 +457,7 @@
         <button class="btn btn-pequeno meteo-mais" type="button" id="meteo-mais-alertas" hidden></button>
 
         <div class="meteo-chips" role="group" aria-label="Camadas no mapa">
-          <button class="meteo-chip" type="button" id="meteo-satelite" aria-pressed="true" title="Nuvens de chuva e tempestade vistas pelo satélite GOES, em todo o Brasil, a cada 10 min">Satélite</button>
-          <button class="meteo-chip" type="button" id="meteo-chuva" aria-pressed="true" title="Mapa de chuva em cores de radar (previsão de modelo para agora)">Chuva</button>
+          <button class="meteo-chip" type="button" id="meteo-chuva" aria-pressed="true" title="Radar de chuva: intensidade da chuva em cores de radar (previsão de modelo para agora)">Radar de chuva</button>
           <button class="meteo-chip" type="button" id="meteo-radar" aria-pressed="true">Radar</button>
           <button class="meteo-chip" type="button" id="meteo-vento" aria-pressed="false">Vento</button>
           <button class="meteo-chip" type="button" id="meteo-temp" aria-pressed="false">Temperatura</button>
@@ -467,12 +469,6 @@
           <button class="meteo-chip" type="button" role="radio" data-area="brasil" aria-checked="false" title="O Brasil inteiro (menos detalhe)">Brasil</button>
         </div>
         <div class="meteo-legenda" id="meteo-legenda" hidden></div>
-
-        <div class="meteo-radar-controle" id="meteo-sat-bloco" hidden>
-          <button class="btn btn-pequeno" type="button" id="meteo-sat-play" aria-label="Animar o satélite (últimas 2 horas)">▶</button>
-          <input type="range" id="meteo-sat-range" min="0" max="0" value="0" aria-label="Horário da imagem de satélite">
-          <span class="meteo-detalhe" id="meteo-sat-hora"></span>
-        </div>
 
         <div class="meteo-radar-controle" id="meteo-radar-bloco" hidden>
           <button class="btn btn-pequeno" type="button" id="meteo-play" aria-label="Animar o radar">▶</button>
@@ -766,8 +762,8 @@
   <script src="js/recursos-equipe.js"></script>
   <script src="js/briefing.js"></script>
   <script src="js/convites.js"></script>
-  <script src="js/sci-core.js"></script>
-  <script src="js/sci.js"></script>
+  <script src="js/sci-dados.js"></script>
+  <script src="js/sci-modo.js"></script>
   <script src="js/relatos-revisao.js"></script>
   <script src="js/binomio.js"></script>
   <script src="js/observacoes-campo.js"></script>

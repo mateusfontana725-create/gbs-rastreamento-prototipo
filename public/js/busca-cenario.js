@@ -27,11 +27,14 @@
   var METODOS = ['A pé, em linha', 'A pé, em grupo livre', 'Cão de busca', 'Drone', 'Embarcação', 'Mergulho', 'Veículo ou moto', 'Outro'];
 
   /* ---------- Formatação e dados ---------------------------------------- */
+  // Alvo "operação inteira" (estimativa geral, sem vítima): é o cenário com vitima_id nulo
+  var GERAL = '__geral__';
   function pct(v, casas) {
     return v == null ? '—' : (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: casas == null ? 1 : casas }) + '%';
   }
   function podeAlterar() { return Boolean(P.podeAlterar && P.podeAlterar()); }
   function nomeVitima(id) {
+    if (id === GERAL) return 'Operação (estimativa geral)';
     var v = est.vitimas.find(function (x) { return x.id === id; });
     return v ? v.nome : 'Vítima';
   }
@@ -43,7 +46,7 @@
     return est.localizacoes.find(function (l) { return l.vitima_id === vitimaId; }) || null;
   }
   function versoesDa(vitimaId) {
-    return est.cenarios.filter(function (c) { return c.vitima_id === vitimaId; }).sort(function (a, b) { return a.numero - b.numero; })
+    return est.cenarios.filter(function (c) { return vitimaId === GERAL ? c.vitima_id == null : c.vitima_id === vitimaId; }).sort(function (a, b) { return a.numero - b.numero; })
       .map(function (c) {
         return Object.assign({}, c, {
           setores: est.itens.filter(function (i) { return i.cenario_id === c.id; }),
@@ -272,7 +275,7 @@
   function rotuloComDica(texto, para, textoDica) {
     return el('label', { classe: 'rotulo', for: para || null }, [texto, textoDica ? dica(textoDica) : null]);
   }
-  var DICA_GERAL = 'POA: chance de a pessoa estar em cada setor. POD: chance de a busca achá-la se ela estiver ali; vem do registro da equipe, nunca do GPS. POS = POA × POD: chance de localizar nesta busca (não é chance de sobrevivência).';
+  var DICA_GERAL = 'POA: chance de a pessoa estar em cada setor. POD: chance de a busca achá-la se ela estiver ali; vem do registro da equipe, nunca do GPS. POS = POA × POD: chance de localizar nesta busca (não é chance de sobrevivência). Sem nomes (desastre): use a Operação (estimativa geral), que vale para a operação inteira.';
 
   /* ---------- Tela principal: painel POA/POD (botão do topo) ------------- */
   var ABAS = [['poa', 'POA'], ['buscas', 'Missões'], ['versoes', 'Versões']];
@@ -358,24 +361,24 @@
         return;
       }
       if (est.erro) corpo.appendChild(aviso('Não foi possível atualizar: ' + est.erro));
-      if (!est.vitimas.length) {
-        corpo.appendChild(aviso('Cadastre a vítima em "Dados da operação": o cenário é feito por vítima.'));
-        corpo.appendChild(rodape());
-        return;
+      // Sem nomes (desastre): a estimativa da operação já serve de base; pessoas são opcionais
+      if (!est.vitimaSel || (est.vitimaSel !== GERAL && !est.vitimas.some(function (v) { return v.id === est.vitimaSel; }))) {
+        est.vitimaSel = est.vitimas.length ? est.vitimas[0].id : GERAL;
       }
-      if (!est.vitimaSel || !est.vitimas.some(function (v) { return v.id === est.vitimaSel; })) est.vitimaSel = est.vitimas[0].id;
       var vid = est.vitimaSel;
       var ap = aprovadaDa(vid), rasc = rascunhoDa(vid), loc = localizacaoDa(vid);
       var editavel = podeAlterar() && !loc;
 
       var linhaTopo = [];
-      if (est.vitimas.length > 1) {
-        var sel = el('select', { classe: 'campo', id: 'cenario-vitima', 'aria-label': 'Vítima' }, est.vitimas.map(function (v) {
-          return el('option', { value: v.id, selected: v.id === vid ? true : null, texto: v.nome + (localizacaoDa(v.id) ? ' (localizada)' : '') });
-        }));
-        sel.addEventListener('change', function () { est.vitimaSel = sel.value; est.editorSujo = false; desenhar(); });
-        linhaTopo.push(sel);
-      } else linhaTopo.push(el('strong', { texto: nomeVitima(vid) }));
+      var alvos = [GERAL].concat(est.vitimas.map(function (v) { return v.id; }));
+      var sel = el('select', { classe: 'campo', id: 'cenario-vitima', 'aria-label': 'Pessoa ou operação' }, alvos.map(function (id) {
+        return el('option', { value: id, selected: id === vid ? true : null, texto: nomeVitima(id) + (id !== GERAL && localizacaoDa(id) ? ' (localizada)' : '') });
+      }));
+      sel.addEventListener('change', function () { est.vitimaSel = sel.value; est.editorSujo = false; desenhar(); });
+      linhaTopo.push(sel);
+      if (!est.vitimas.length) {
+        corpo.appendChild(aviso('Sem pessoas cadastradas: a estimativa da operação vale para a operação inteira. Cadastre pessoas quando souber quem procurar, mesmo sem nome.', 'nota'));
+      }
       linhaTopo.push(el('span', { classe: 'selo selo-prob', texto: ap ? 'Vigente: v' + ap.numero + ' · ref. ' + C.hora(ap.horario_referencia || ap.aprovada_em, false) : 'Sem versão publicada' }));
       if (rasc) linhaTopo.push(el('span', { classe: 'selo selo-prob-rasc', texto: 'Rascunho v' + rasc.numero }));
       if (ap && P.camadaProbabilidade) {
@@ -609,7 +612,9 @@
       }
       ocupado(true);
       try {
-        var r = await C.rpc('cenario_salvar_rascunho', { p_vitima: vitimaId, p_dados: dados });
+        var r = vitimaId === GERAL
+          ? await C.rpc('cenario_geral_salvar_rascunho', { p_operacao: P.op().id, p_dados: dados })
+          : await C.rpc('cenario_salvar_rascunho', { p_vitima: vitimaId, p_dados: dados });
         if (aprovar) {
           await C.rpc('cenario_aprovar', { p_cenario: r.cenario.id, p_revisao: r.cenario.atualizado_em, p_chave: chaveAprovacao });
           UI.aviso('Versão ' + r.cenario.numero + ' publicada.', 'ok');
@@ -772,7 +777,7 @@
     var grupos = (P.grupos ? P.grupos() : []) || [];
     var chave = chaveNova();   // a mesma chave se o envio for repetido: o servidor não duplica
     var selSetor = el('select', { classe: 'campo', id: 'missao-setor' }, setores.map(function (s) { return el('option', { value: s.id, selected: s.id === o.setorId ? true : null, texto: s.nome }); }));
-    var selVitima = el('select', { classe: 'campo', id: 'missao-vitima' }, [el('option', { value: '', texto: 'Todas' })].concat(vitimasAtivas().map(function (v) { return el('option', { value: v.id, texto: v.nome }); })));
+    var selVitima = el('select', { classe: 'campo', id: 'missao-vitima' }, [el('option', { value: '', texto: 'Todas (vítimas e operação)' })].concat(vitimasAtivas().map(function (v) { return el('option', { value: v.id, texto: v.nome }); })));
     var equipe = el('input', { classe: 'campo', id: 'missao-equipe', maxlength: '60', list: 'missao-equipes', placeholder: 'Escolha ou digite', autocomplete: 'off' });
     var lista = el('datalist', { id: 'missao-equipes' }, grupos.map(function (g) { return el('option', { value: g.nome }); }));
     var metodo = el('select', { classe: 'campo', id: 'missao-metodo' }, [el('option', { value: '', texto: 'Escolha' })].concat(METODOS.map(function (m) { return el('option', { value: m, texto: m }); })));
@@ -1020,12 +1025,14 @@
   /* ---------- Dados para o relatório final (versões aprovadas e missões de busca) ---------- */
   async function dadosRelatorio() {
     await carregar();
-    if (est.ausente || !est.vitimas.length) return null;
-    var vitimas = est.vitimas.map(function (v) {
-      var loc = localizacaoDa(v.id);
-      var versoes = versoesDa(v.id).filter(function (c) { return c.estado === 'aprovada'; });
+    if (est.ausente) return null;
+    // a estimativa da operação (sem vítima) entra como mais uma linha, com o nome que aparece no painel
+    var alvosRel = [GERAL].concat(est.vitimas.map(function (v) { return v.id; }));
+    var vitimas = alvosRel.map(function (id) {
+      var loc = id === GERAL ? null : localizacaoDa(id);
+      var versoes = versoesDa(id).filter(function (c) { return c.estado === 'aprovada'; });
       return {
-        nome: v.nome, localizada: loc ? { condicao: loc.condicao, em: loc.registrado_em } : null,
+        nome: nomeVitima(id), localizada: loc ? { condicao: loc.condicao, em: loc.registrado_em } : null,
         versoes: versoes.map(function (c) {
           return { numero: c.numero, aprovada_em: c.aprovada_em, aprovada_por_nome: c.aprovada_por_nome, horario_referencia: c.horario_referencia, justificativa: c.justificativa,
             hipoteses: c.hipoteses, limitacoes: c.limitacoes, confianca: c.confianca, origem_poa: c.origem_poa, ponto_confiavel: c.ponto_confiavel,

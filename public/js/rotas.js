@@ -109,9 +109,9 @@
     rota.inicio_m = o.origem ? Math.round(dist(o.origem, g[0])) : null;
     rota.avisos = [];
     if (rota.inicio_m != null && rota.inicio_m > 40) {
-      rota.avisos.push('O trajeto começa a ' + formatarDistancia(rota.inicio_m) + ' de você: vá até o início (ponto verde) e siga a linha.');
+      rota.avisos.push('O trajeto começa a ' + formatarDistancia(rota.inicio_m) + ': vá ao ponto verde.');
     }
-    rota.limites = 'Trajeto desenhado pelos bombeiros no mapa: não foi calculado por caminhos. Siga a linha conferindo o terreno e as orientações da equipe.';
+    rota.limites = 'Trajeto desenhado pelos bombeiros: siga a linha e confira o terreno.';
     return rota;
   }
 

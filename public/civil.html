@@ -93,6 +93,7 @@
         <!-- Aplicativo Android (aparece só no Android, fora do aplicativo) -->
         <section class="cartao secao app-oferta" id="ini-app" hidden>
           <button class="btn btn-escuro" type="button" id="btn-app-inicio">📱 Baixar aplicativo Android</button>
+          <button class="btn" type="button" id="btn-app-abrir">Já tenho o aplicativo: abrir nele</button>
         </section>
       </section>
 
@@ -145,7 +146,6 @@
           <p class="nav-aviso" id="nav-aviso"></p>
           <div class="nav-botoes">
             <button class="btn btn-ok btn-gigante" type="button" id="nav-finalizar" hidden>BUSCA NO SETOR CONCLUÍDA</button>
-            <button class="btn" type="button" id="nav-bussola-ativar" hidden>Usar a bússola do celular</button>
             <a class="btn" id="nav-rota" target="_blank" rel="noopener noreferrer">Rota no app de mapas ↗</a>
             <button class="btn btn-saida-nav" type="button" id="nav-encerrar">Encerrar navegação</button>
           </div>
@@ -157,6 +157,19 @@
         <div class="mapa-civil-caixa">
           <div id="mapa-civil" role="region" aria-label="Mapa com a sua posição e a dos bombeiros"></div>
           <button class="btn btn-pequeno btn-onde-estou" type="button" id="btn-onde-estou" aria-label="Mostrar onde estou no mapa">📍 Onde estou</button>
+          <button class="btn btn-pequeno btn-ampliar-mapa" type="button" id="btn-ampliar-mapa" aria-label="Ampliar o mapa" aria-expanded="false" aria-controls="mapa-civil" title="Ampliar o mapa">⛶</button>
+          <button class="btn btn-pequeno btn-fechar-mapa" type="button" id="btn-fechar-mapa" hidden>✕ Fechar mapa</button>
+          <!-- Bússola: para onde o aparelho está apontado (sensor do celular; ver js/civil.js) -->
+          <div class="bussola-civil" id="bussola-civil" hidden role="status" aria-live="off">
+            <div class="bussola-disco">
+              <div class="bussola-rosa" id="bussola-rosa" aria-hidden="true"><span class="bussola-n">N</span></div>
+              <i class="bussola-ponteiro" aria-hidden="true"></i>
+            </div>
+            <div class="bussola-info">
+              <strong id="bussola-direcao">—</strong>
+              <button class="btn btn-pequeno" type="button" id="bussola-ativar" hidden>Ativar bússola</button>
+            </div>
+          </div>
           <div class="legenda-civil" aria-hidden="true">
             <span><i class="lg-eu"></i> Você</span>
             <span><i class="simbolo simbolo-militar"><span>M</span></i> Bombeiro</span>
@@ -169,26 +182,14 @@
         <p class="mapa-offline-estado" id="mapa-offline" role="status" hidden></p>
 
         <!-- Ações principais -->
+        <!-- Um botão só: mensagem, algo encontrado ou foto (as opções abrem em "Registrar informação") -->
         <div class="acoes-civil">
-          <label class="acao acao-foto">
-            <span class="acao-icone" aria-hidden="true">📷</span>
-            <span class="acao-texto">FOTO</span>
-            <input class="sr-only" type="file" accept="image/*" capture="environment" id="foto-camera">
-          </label>
-          <button class="acao acao-encontrei" type="button" id="btn-encontrei">
-            <span class="acao-icone" aria-hidden="true">🔍</span>
-            <span class="acao-texto">ENCONTREI ALGO</span>
-          </button>
-          <button class="acao acao-falar" type="button" id="btn-falar" aria-controls="painel-conversa" aria-expanded="false" aria-label="Falar com os bombeiros">
-            <span class="acao-icone" aria-hidden="true">💬</span>
-            <span class="acao-texto">MENSAGENS</span>
+          <button class="acao acao-registrar" type="button" id="btn-registrar" aria-haspopup="dialog" aria-controls="painel-conversa">
+            <span class="acao-icone" aria-hidden="true">＋</span>
+            <span class="acao-texto">REGISTRAR INFORMAÇÃO</span>
             <span class="contador acao-contador" id="falar-contador" hidden>0</span>
           </button>
         </div>
-        <label class="link-galeria">
-          enviar foto da galeria
-          <input class="sr-only" type="file" accept="image/*" id="foto-galeria">
-        </label>
 
         <!-- Fotos enviadas (aparece só quando houver) -->
         <section class="fotos-civil" id="fotos-civil" hidden aria-labelledby="tit-fotos">

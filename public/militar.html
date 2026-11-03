@@ -226,13 +226,13 @@
     <header class="barra-topo painel-topo">
       <button class="btn btn-barra btn-pequeno" type="button" id="btn-voltar" title="Voltar para as operações" aria-label="Voltar para as operações">◀</button>
       <div class="titulo-op">
-        <div class="modo-seletor" id="modo-seletor" role="group" aria-label="Modo da tela">
-          <button type="button" id="modo-operacao" class="ativo" aria-pressed="true" title="Mapa operacional">Operação</button>
-          <button type="button" id="modo-sci" aria-pressed="false" title="Modo SCI: Posto de Comando, organograma, períodos, vítimas e formulários">SCI</button>
-        </div>
         <strong id="op-codigo"></strong>
         <span id="op-sub"></span>
         <button class="comando-chip" type="button" id="comando-chip" hidden></button>
+      </div>
+      <div class="modo-seletor" id="modo-seletor" role="group" aria-label="Modo da tela">
+        <button type="button" id="modo-operacao" class="ativo" aria-pressed="true" title="Mapa operacional">Operação</button>
+        <button type="button" id="modo-sci" aria-pressed="false" title="Modo SCI: Posto de Comando, organograma, períodos, vítimas e formulários">SCI</button>
       </div>
       <span class="pilula-conexao" id="pilula" role="status"><span class="ponto ponto-aguardando"></span><span>Conectando…</span></span>
       <!-- Ações mais usadas, sempre à vista no topo (no celular, numa faixa logo abaixo) -->

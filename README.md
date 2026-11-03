@@ -401,7 +401,7 @@ ainda não foi aplicada; o resto do painel segue normal. Detalhes e erros de cad
 
 ### Modo SCI: Posto de Comando (migração 057)
 
-A operação abre no **mapa operacional**, como sempre. O seletor **OPERAÇÃO | SCI** no canto do título do painel troca a
+A operação abre no **mapa operacional**, como sempre. O seletor **OPERAÇÃO | SCI** no topo do painel, ao lado do título troca a
 interface inteira para o **Modo SCI** (Sistema de Comando de Incidentes); no Modo SCI o mesmo seletor fica no topo e volta ao
 mapa operacional. É a mesma operação: nada é cadastrado duas vezes.
 
@@ -2165,7 +2165,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40l | **Novo grupo**: tocar em **＋**, escolher uma cor pelo tom/claridade, **Guardar em "Minhas cores"**, criar outro grupo e reutilizá-la; repetir no **Setor** | a cor escolhida aparece no marcador, na trilha e na lista; "Minhas cores" aparece nos dois formulários |
 | 40m | Aproximar o mapa de uma equipe de 3 pessoas a ~15 m uma da outra, do zoom 16 até o 20 | até o zoom 18 ficam num círculo com o número; a partir do 19 se separam; os ícones diminuem do 17 em diante e a vítima localizada continua grande |
 | 40n | **Convidar → ✉ Convidar por e-mail** com nome e e-mail reais; abrir o e-mail no celular e o link | o e-mail chega com o botão; a página abre com o nome preenchido; ao começar, o convite passa a **Entrou**; sem `RESEND_API_KEY`, aparecem **Abrir no meu e-mail** e **Copiar link** |
-| 40n2 | No painel, tocar em **SCI** (canto do título) numa operação nova | abre **Estabelecer o SCI**; concluir os 4 passos leva ao Resumo com o comando, a informação NÃO CONFIRMADA e o 1º período; **Operação** volta ao mapa como estava |
+| 40n2 | No painel, tocar em **SCI** (seletor ao lado do título) numa operação nova | abre **Estabelecer o SCI**; concluir os 4 passos leva ao Resumo com o comando, a informação NÃO CONFIRMADA e o 1º período; **Operação** volta ao mapa como estava |
 | 40n3 | No celular de campo, **Encontrei a vítima**; no Modo SCI → **Vítimas e ACV** | a vítima aparece em **Conciliação mapa × quadro**; **Trazer para o quadro** → V-01 plotada; iniciar remoção com uma equipe, check-in na ACV, entrega com destino; cada passo no diário |
 | 40o | Modo SCI → **SCI · organograma**: ativar Logística, designar a Seção de Planejamento com a conta de outro responsável | Logística sai de "com o CI" no menu; o outro responsável, ao abrir o Modo SCI, cai em Recursos e vê **★ Sua função** |
 | 40p | Modo SCI → **Mapa operacional e setores**, depois **← Voltar** e **Operação** | o mapa aparece dentro do Modo SCI com o menu; volta para a página anterior; no modo Operação o mapa está no lugar e do tamanho certo |

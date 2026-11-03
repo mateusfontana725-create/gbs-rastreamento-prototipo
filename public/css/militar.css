@@ -477,6 +477,8 @@ html[data-tema="claro"] .marca-opcao { background: var(--superficie-2); }
 html[data-tema="claro"] #mapa,
 html[data-tema="claro"] .leaflet-container,
 html[data-tema="claro"] .visao-3d-mapa { background: #dfe6ec; }
+/* tema claro: o mapa OpenStreetMap volta às cores normais (no escuro ele é invertido, em estilos.css) */
+html[data-tema="claro"] .leaflet-tile[src*="tile.openstreetmap.org"] { filter: none; }
 html[data-tema="claro"] .leaflet-control-attribution { background: rgba(255, 255, 255, .85) !important; color: #4b5563 !important; }
 html[data-tema="claro"] .leaflet-control-scale-line { background: rgba(255, 255, 255, .85); color: #111827; border-color: #374151; }
 html[data-tema="claro"] .legenda,
@@ -2429,8 +2431,6 @@ html.topo-oculto .btn-mostrar-topo { display: inline-flex; }
 .modo-seletor button:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
 @media (pointer: coarse) { .modo-seletor button { min-height: 38px; } }
 /* no painel, o seletor fica no canto do bloco do título (não ocupa lugar na linha de botões; o código encolhe com reticências) */
-.titulo-op > .modo-seletor { float: right; margin: 1px 0 2px 8px; }
-.titulo-op > .modo-seletor button { min-height: 30px; padding: 0 9px; font-size: .66rem; letter-spacing: .04em; }
 
 :root { --sci-laranja: #ff6a3d; --sci-ambar: #f5b940; --sci-azul: #66b2ff; --sci-verde: #4fd08f; }   /* também nos modais do Modo SCI */
 .sci2 {
@@ -2676,3 +2676,15 @@ button.sci2-kpi:hover { border-color: var(--borda-forte); background: var(--supe
   .sci2-wizard-rodape > .btn:not(.btn-link) { flex: 1 1 auto; }
   .sci2-wizard-corpo { padding: 10px; }
 }
+
+/* =====================================================================
+ * Seletor OPERAÇÃO | SCI: peça própria do topo, entre o título e o estado da conexão
+ * (antes ficava dentro do bloco do título, flutuando à direita)
+ * ===================================================================== */
+.painel-topo > .modo-seletor { grid-area: modo; flex: 0 0 auto; align-self: center; height: 32px; }
+.painel-topo > .modo-seletor button { min-height: 30px; padding: 0 12px; font-size: .7rem; letter-spacing: .05em; }
+@media (max-width: 860px) {
+  .painel-topo { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "voltar titulo modo pilula acoes" "rapidas rapidas rapidas rapidas rapidas"; }
+  .painel-topo > .modo-seletor button { padding: 0 8px; font-size: .64rem; letter-spacing: .03em; }
+}
+

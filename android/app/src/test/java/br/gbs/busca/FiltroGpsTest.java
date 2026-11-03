@@ -52,7 +52,7 @@ public class FiltroGpsTest {
         leituras++;
       }
     }
-    assertTrue("casos suficientes", leituras > 2000 && pontos > 300);
+    assertTrue("casos suficientes", leituras > 4000 && pontos > 800);
   }
 
   @Test
@@ -72,6 +72,7 @@ public class FiltroGpsTest {
       lat += 1.4 * m;
       andando += f.processar(lat, lng, 6.0, 1.4, t, t).pontos.size();
     }
-    assertTrue("andando a 1,4 m/s: um ponto a cada 3 m (~3 s)", andando >= 9 && andando <= 11);
+    // passo de 0,8 × a precisão (≈5 m com 6 m de precisão); a saída conta depois de passar do raio do lugar (~10 m)
+    assertTrue("andando a 1,4 m/s: um ponto a cada ~5 m", andando >= 5 && andando <= 9);
   }
 }

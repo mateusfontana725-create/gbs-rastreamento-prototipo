@@ -72,6 +72,24 @@ const casos = [
     s.lat += 25 * M;
     return { lat: s.lat + (rnd() - 0.5) * 5 * M, lng: s.lng, prec: 5 + rnd() * 5, vel: rnd() < 0.5 ? 25 : null, ts: s.agora, agora: s.agora };
   }),
+  cenario('parado junto a prédio (pulos do GPS)', 600, null, (i, s) => {
+    // deriva lenta + pulos de 20–40 m que duram alguns segundos (multicaminho, troca do GPS pelo Wi-Fi)
+    s.agora += 1000;
+    s.ex = 0.95 * (s.ex || 0) + (rnd() - 0.5) * 3; s.ey = 0.95 * (s.ey || 0) + (rnd() - 0.5) * 3;
+    if (!s.pulo && rnd() < 0.03) { const a = rnd() * 6.28, d = 20 + 20 * rnd(); s.pulo = { x: Math.cos(a) * d, y: Math.sin(a) * d, fim: i + 3 + Math.floor(rnd() * 40) }; }
+    if (s.pulo && i >= s.pulo.fim) s.pulo = null;
+    const y = s.ey + (s.pulo ? s.pulo.y : 0), x = s.ex + (s.pulo ? s.pulo.x : 0);
+    return { lat: s.lat + y * M, lng: s.lng + x * M / Math.cos(s.lat * Math.PI / 180), prec: s.pulo ? 30 : 12 + rnd() * 10,
+      vel: rnd() < 0.5 ? rnd() * 1.2 : null, ts: s.agora - 200, agora: s.agora };
+  }),
+  cenario('parar e andar', 600, null, (i, s) => {
+    s.agora += 1000;
+    const andando = Math.floor(i / 90) % 2 === 1;
+    if (andando) { s.lat += 1.3 * Math.cos(i / 30) * M; s.lng += 1.3 * Math.sin(i / 30) * M / Math.cos(s.lat * Math.PI / 180); }
+    const prec = 6 + rnd() * 20;
+    return { lat: s.lat + (rnd() - 0.5) * prec * 0.6 * M, lng: s.lng + (rnd() - 0.5) * prec * 0.6 * M, prec,
+      vel: rnd() < 0.6 ? (andando ? 1.3 + (rnd() - 0.5) * 0.4 : rnd() * 0.4) : null, ts: s.agora, agora: s.agora };
+  }),
   cenario('parado em mata (precisão ruim)', 400, null, (i, s) => {
     s.agora += 1000 + Math.round(rnd() * 2000);
     const prec = 30 + rnd() * 140;

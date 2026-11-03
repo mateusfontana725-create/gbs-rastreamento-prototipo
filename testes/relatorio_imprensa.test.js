@@ -18,6 +18,7 @@ const d = {
   ],
   busca: { secreto: true },
   participantes_grupos: [],
+  grupos: [{ nome: 'Alfa' }, { nome: 'Bravo' }],
 };
 const doc = RP.montarImprensa(d, { logo: null });
 const json = JSON.stringify(doc);
@@ -32,4 +33,8 @@ assert.ok(!json.includes('Pedro Civil entrou'), 'registro de pessoas fica de for
 assert.ok(json.includes('DIVULGAÇÃO'), 'cabeçalho de divulgação');
 assert.ok(!json.includes('DOCUMENTO RESTRITO'), 'sem a marca de documento restrito');
 assert.ok(json.includes('Vítima localizada com vida'), 'desfecho geral');
+// resumo em texto: tipo, datas, quantas pessoas e equipes, setores (sem nomes)
+assert.ok(json.includes('Resumo'), 'seção de resumo');
+assert.ok(json.includes('2 pessoas de campo participaram, organizadas em 2 equipes'), 'resumo conta pessoas e equipes (sem a removida)');
+assert.ok(json.includes('2 setores de busca, 1 deles concluídos'), 'resumo conta setores e concluídos');
 console.log('  OK  imprensa: sem nomes, documentos, fotos, trilhas nem observações; marcos automáticos presentes');

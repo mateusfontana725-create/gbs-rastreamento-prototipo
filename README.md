@@ -558,6 +558,8 @@ participante recebe um e-mail com o botão **Abrir e começar** (o link do `civi
   décimos de ponto percentual), **Buscas** e **Versões**; detalhes extras ficam em "Mais detalhes" e as explicações atrás
   de um (i). Violeta é a cor de probabilidade (fora das cores de emergência e risco). (migrações **033** e **034**; cálculo em `public/js/pod.js`, telas em `public/js/busca-cenario.js`). Segue o guia
   "POA e POD no GBS": o app organiza decisões documentadas do comando e nunca inventa percentuais.
+  - **Sem vítimas nomeadas (desastre)**: quando ainda não há pessoas cadastradas, o POA/POD mostra **+ Pessoa não identificada**
+    (o cadastro rápido, que aceita nome em branco e vira "Não identificada"). Cadastre quantas forem precisas; cada uma tem o seu cenário.
   - **POA** = probabilidade de a pessoa estar em cada setor. É **decisão do responsável**, por vítima, num **cenário**:
     POA por setor mais **Fora da área** (a soma dos dois dá 100%; "fora" são os trechos sem setor desenhado, sem busca), justificativa geral e por setor,
     **horário de referência**, **hipóteses**, **limitações**, **sustentação dos dados** (baixa/média/alta, julgamento e não
@@ -770,13 +772,10 @@ e o mapa e o rastreamento continuam funcionando.
 > **não foi verificado contra as APIs reais** (o ambiente de desenvolvimento não tinha acesso a elas). Confirme a
 > resposta real de cada fonte depois de publicar, em Preview, antes de usar em operação.
 
-- **Satélite (nuvens de chuva em todo o Brasil)**: botão **Satélite** no painel da Meteorologia, ligado por padrão. Imagem
-  do **GOES-East** (NOAA), canal infravermelho realçado, pelo **NASA GIBS** (domínio público, sem chave), **nova a cada 10 min**
-  (atraso de ~30 min) e cobrindo **o Brasil inteiro**. O painel filtra a imagem: as nuvens de topo muito frio (onde chove
-  forte e há tempestade) aparecem coloridas — azul, verde, amarelo e vermelho, do mais fraco ao mais forte —, as nuvens altas
-  ficam brancas translúcidas e o resto fica transparente, então o mapa continua visível. **▶** anima as **últimas 2 horas**
-  (12 imagens) e a barra escolhe o horário ("Satélite GOES · 11:50 (há 26 min)"). Mostra as nuvens que costumam dar chuva,
-  não a chuva medida no chão (isso é radar).
+- **Radar de chuva**: o botão **Radar de chuva** no painel da Meteorologia (ligado por padrão) pinta a intensidade da chuva
+  sobre o mapa, em cores de radar (azul-claro garoa, verde, amarelo, laranja e vermelho chuva forte). É a grade de previsão
+  do modelo, não a chuva medida no chão; o radar de medição (RainViewer) continua desligado por padrão (licença). O satélite
+  foi retirado do painel, porque mostrava a mesma informação de nuvens e confundia.
 - **Área do vento, da temperatura e da chuva no mapa**: **Operação** (240 km ao redor, mais detalhe), **Paraná** (o estado
   inteiro, padrão) ou **Brasil** (o país inteiro, menos detalhe). Paraná e Brasil são iguais para todas as operações e ficam
   30 min em cache no servidor (`/api/meteo?tipo=grade&area=parana|brasil`). Os alertas de chuva perto da operação continuam
@@ -886,18 +885,20 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
   **"Reincluído · aguardando o celular voltar"**.
 - Sem reinclusão, quem foi removido não consegue voltar sozinho pelo link.
 
-### Localização e trilha do responsável (opcional, liga e desliga à mão)
+### Localização e trilha do responsável
 
-- Ao abrir ou criar uma operação, **nada é registrado**: o responsável não entra no mapa e a posição dele não é enviada.
-- **Ferramentas → Registrar minha trilha** (o estado aparece ao lado: *desligado*, *ligando…*, *gravando*, *gravando · sem sinal*)
-  liga o registro **depois de uma confirmação** ("Iniciar o registro da sua trilha?"). Só então o responsável entra no mapa e a
-  trilha começa a ser gravada. Tocar de novo pede outra confirmação ("Interromper o registro da sua trilha?") e para o envio; o que
-  já foi gravado continua no mapa. O item pode ir para o topo pelo **Personalizar tela**.
-- Se a página recarregar (ou for reaberta) enquanto gravava neste aparelho, o painel **pergunta** se retoma — nunca liga sozinho.
-- Se o navegador bloqueia a localização, o aviso do menu traz **Como liberar**; ao liberar, o registro já confirmado continua.
+- **A sua localização fica sempre ligada**: ao abrir uma operação ativa, o painel pede a localização e o responsável
+  aparece no mapa para a equipe (a posição atual é enviada a cada 15 s, sem gravar pontos de trilha).
+- **A gravação da trilha é manual**: **Ferramentas → Gravar minha trilha** (o estado aparece ao lado: *desligado*,
+  *só localização*, *gravando*, *gravando · sem sinal*) passa a gravar os seus passos como trilha, **depois de uma
+  confirmação**. Tocar de novo pede outra confirmação ("Parar a gravação da sua trilha?") e para só a gravação; a
+  localização continua no mapa. O que já foi gravado continua no mapa. O item pode ir para o topo pelo **Personalizar tela**.
+- Se a página recarregar (ou for reaberta) enquanto gravava neste aparelho, o painel **pergunta** se retoma a gravação —
+  nunca grava sozinho.
+- Se o navegador bloqueia a localização, o aviso do menu traz **Como liberar**; ao liberar, a localização volta sozinha.
 - Se o mesmo responsável está com o painel aberto em **dois aparelhos** e um deles já compartilha, o
   outro mostra *enviada por outro aparelho seu*; o aviso do menu **Ferramentas** oferece **Usar este aparelho**.
-- Fotos e mensagens do responsável continuam funcionando sem o registro da trilha (o cadastro no mapa é feito na hora, se preciso).
+- Fotos e mensagens do responsável continuam funcionando sem a gravação da trilha.
 - Limite: funciona com o painel **aberto e a tela ligada**. Em segundo plano ou com a tela bloqueada o
   navegador pode pausar o GPS (seção 8).
 
@@ -1039,7 +1040,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   vem ao passar o mouse); no celular e no tablet em pé, numa faixa logo abaixo do título, dividindo a largura.
 - O menu **Ferramentas** tem uma **busca** no topo ("Buscar função…": filtra pelo nome; Enter abre a primeira) e as funções
   em **seções recolhíveis** (tocar no título recolhe/abre; fica lembrado neste aparelho):
-  **Em campo** (Registrar minha trilha, Vítima encontrada, Cadastro rápido, Enviar destino, Pedidos de ajuda) ·
+  **Em campo** (Gravar minha trilha, Vítima encontrada, Cadastro rápido, Enviar destino, Pedidos de ajuda) ·
   **Equipes** (Grupos, Deslocamentos, Binômio, Drone e água, Equipe de responsáveis) ·
   **Mapa e arquivos** (Setores, trilhas e pontos, Ir para coordenada, Medir, Régua, Importar, Exportar) ·
   **Comando e registros** (Briefing e passagem, Dados da operação, Diário, Relatório) ·
@@ -1143,7 +1144,8 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   não pede desfecho: sai o que estiver registrado, ou "Não apurado". **Ver lista** abre a lista por cima da tela (**Fechar** volta
   para ela) e fica desabilitado quando o tipo não tem nenhum relatório. Cada item tem o selo do tipo e o arquivo baixado leva o
   tipo no nome. **Excluir** aparece só para o administrador.
-- **Relatório para imprensa** (migração 054): versão de divulgação, com dados reduzidos: números gerais (pessoas de campo,
+- **Relatório para imprensa** (migração 054): versão de divulgação, com dados reduzidos: um **resumo em texto** (tipo da
+  operação, início e duração, pessoas de campo e equipes, setores trabalhados e concluídos), números gerais (pessoas de campo,
   setores, pessoas procuradas), desfecho geral e a linha do tempo só dos marcos automáticos da operação e dos setores. Sem nomes,
   documentos, telefones, fotos, trilhas, posições e observações; sem o autor no rodapé e nos metadados do PDF. O teste
   `testes/relatorio_imprensa.test.js` confere que nada disso aparece.
@@ -1993,7 +1995,8 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 
 ### Aplicativo Android do participante (rastreamento com a tela apagada, migração 051)
 
-A página do participante tem o botão **📱 Baixar aplicativo** (só aparece no Android, fora do aplicativo). O aplicativo
+A página do participante tem o botão **📱 Baixar aplicativo** (só aparece no Android, fora do aplicativo) e, na tela
+inicial, **Já tenho o aplicativo: abrir nele** (abre direto no aplicativo instalado; sem ele, cai no download). O aplicativo
 **GBS Busca** (pasta `android/`) é a própria página do participante, aberta numa WebView presa ao servidor da operação,
 com o GPS lido e enviado por um serviço do Android. Funciona com a tela apagada, com o aplicativo minimizado ou fechado
 da lista de recentes, e sem internet.
@@ -2170,7 +2173,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40o | Modo SCI → **SCI · organograma**: ativar Logística, designar a Seção de Planejamento com a conta de outro responsável | Logística sai de "com o CI" no menu; o outro responsável, ao abrir o Modo SCI, cai em Recursos e vê **★ Sua função** |
 | 40p | Modo SCI → **Mapa operacional e setores**, depois **← Voltar** e **Operação** | o mapa aparece dentro do Modo SCI com o menu; volta para a página anterior; no modo Operação o mapa está no lugar e do tamanho certo |
 | 40q | Abrir o Modo SCI numa operação encerrada, com outro responsável | tudo visível, sem botões de alterar; sem o assistente "Estabelecer o SCI" |
-| 40r2 | Abrir uma operação no celular do responsável; depois **Ferramentas → Registrar minha trilha** → **Iniciar registro**; andar 2 min; tocar de novo → **Interromper** | ao abrir, o responsável não aparece no mapa; só depois de confirmar ele aparece e a trilha é gravada; ao interromper, o envio para e o item volta a "desligado" |
+| 40r2 | Abrir uma operação no celular do responsável; a localização já aparece no mapa sem nenhum toque; depois **Ferramentas → Gravar minha trilha** → **Gravar trilha**; andar 2 min; tocar de novo → **Parar gravação** | a localização aparece logo ao abrir (sem gravar trilha); ao gravar, a trilha desenha os passos; ao parar, a trilha para e a localização continua no mapa |
 | 40r3 | No celular do civil, tocar **COMEÇAR** | aparece "Começar a enviar sua localização?"; **Agora não** não envia nada; **Começar** entra no rastreamento |
 | 40r4 | **Trilha → • Ponto a ponto**, tocar 4 pontos, arrastar o mapa, **Desfazer ponto**, **✔ Concluir** | os pontos aparecem ligados por retas; arrastar só move o mapa; a trilha é salva como planejada ("Trilha N · hora") sem abrir janelas |
 | 40r5 | Abrir o painel com trilhas no computador e no celular (e girar o celular) | no celular as trilhas ficam mais finas; no computador, iguais às de antes |

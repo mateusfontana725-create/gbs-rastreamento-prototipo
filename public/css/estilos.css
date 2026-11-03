@@ -103,7 +103,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   cursor: pointer; text-decoration: none; white-space: nowrap; user-select: none;
 }
 .btn:hover { background: #283340; border-color: #536170; }
-.btn:active { transform: translateY(1px); }
+/* ao apertar, o botão desce 1 px sem trocar o transform (um botão centralizado com translateX(-50%)
+   pulava de lugar quando era apertado: o clique caía fora dele) */
+@supports (translate: 0 1px) { .btn:active { translate: 0 1px; } }
+@supports not (translate: 0 1px) { .btn:active { transform: translateY(1px); } }
 .btn:focus-visible, .campo:focus-visible, .lista-item:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; }
 .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .btn-primario { background: var(--primaria); border-color: var(--primaria); color: #fff; }

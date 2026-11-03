@@ -1,8 +1,8 @@
 /* =====================================================================
  * meteo.js — painel "Meteorologia" do responsável.
  *   - alertas: chuva na área (distância e direção), previsão e alertas oficiais
- *   - camadas no mapa: Satélite (GOES-East, nuvens de chuva em todo o Brasil, a cada 10 min), Chuva (mapa de chuva
- *     em cores de radar, da grade de previsão), Radar (RainViewer, desligado por padrão), Vento e Temperatura
+ *   - camadas no mapa: Radar de chuva (cores de radar, da grade de previsão; o radar de medição RainViewer fica
+ *     desligado por padrão), Vento e Temperatura
  *     (previsão de modelo: MET Norway). Área da grade no mapa: Operação, Paraná ou Brasil.
  *   - aviso no mapa que pode ser ocultado sem parar o monitoramento; som só para Alerta e Crítico
  * Dados sempre de /api/meteo (servidor). Se uma fonte falhar, o painel diz qual; o mapa e o GPS seguem.
@@ -15,7 +15,7 @@
 
   var CHAVE_LIG = 'gbs-meteo-ligada', CHAVE_SOM = 'gbs-meteo-som';
   var CHAVE_RADAR = 'gbs-meteo-radar', CHAVE_VENTO = 'gbs-meteo-vento', CHAVE_TEMP = 'gbs-meteo-temp', CHAVE_CHUVA = 'gbs-meteo-chuva';
-  var CHAVE_SAT = 'gbs-meteo-satelite', CHAVE_AREA = 'gbs-meteo-area';
+  var CHAVE_AREA = 'gbs-meteo-area';
   var AREAS_GRADE = { operacao: 'ao redor da operação', parana: 'no Paraná', brasil: 'no Brasil' };
   var CHAVE_HIST = 'gbs-meteo-historico:';
   var INTERVALO_MS = 5 * 60e3, LIMITE_DESATUALIZADO_MIN = 20, MIN_ENTRE_SONS_MS = 10 * 60e3;
@@ -34,9 +34,8 @@
     vento: Boolean(lerLocal(CHAVE_VENTO, false)),
     temp: Boolean(lerLocal(CHAVE_TEMP, false)),
     chuva: lerLocal(CHAVE_CHUVA, true) !== false,   // ligada por padrão: é o "radar" visual disponível sempre
-    satelite: lerLocal(CHAVE_SAT, true) !== false,  // nuvens de chuva vistas do satélite (todo o Brasil)
     area: AREAS_GRADE[lerLocal(CHAVE_AREA, 'parana')] ? lerLocal(CHAVE_AREA, 'parana') : 'parana',
-    gradeMapa: null, gradeMapaArea: null, sat: null, satQuadro: 0, satTocando: null, camadaSat: null,
+    gradeMapa: null, gradeMapaArea: null, 
     som: lerLocal(CHAVE_SOM, true) !== false,
     opId: null, alertas: [], estados: [], historico: [], chuvaHist: [], previsao: null,
     quadros: [], host: null, quadro: 0, tocando: null,
@@ -54,7 +53,7 @@
     var b = $('opt-meteo');
     if (b) b.setAttribute('aria-pressed', String(est.ligada));
     Array.prototype.forEach.call(document.querySelectorAll('.meteo-area-grade [data-area]'), function (b) { b.setAttribute('aria-checked', String(b.getAttribute('data-area') === est.area)); });
-    [['meteo-radar', est.radar], ['meteo-satelite', est.satelite], ['meteo-chuva', est.chuva], ['meteo-vento', est.vento], ['meteo-temp', est.temp], ['meteo-som', est.som]].forEach(function (x) {
+    [['meteo-radar', est.radar], ['meteo-chuva', est.chuva], ['meteo-vento', est.vento], ['meteo-temp', est.temp], ['meteo-som', est.som]].forEach(function (x) {
       var el = $(x[0]);
       if (el) el.setAttribute('aria-pressed', String(x[1]));
     });
@@ -99,13 +98,6 @@
     if (!est.camadaVento) est.camadaVento = MeteoMapa.criarVento();
     if (!est.camadaTemp) est.camadaTemp = MeteoMapa.criarTemperatura();
     if (!est.camadaChuva && MeteoMapa.criarChuva) est.camadaChuva = MeteoMapa.criarChuva();
-    // satélite: por baixo das outras camadas do tempo
-    if (!est.camadaSat && MeteoMapa.criarSatelite && est.sat) est.camadaSat = MeteoMapa.criarSatelite(est.sat.url);
-    if (est.camadaSat) {
-      var querSat = est.ligada && est.satelite && est.sat;
-      if (querSat) { est.camadaSat.setTempo(est.sat.quadros[est.satQuadro], est.sat.url); if (!m.hasLayer(est.camadaSat)) est.camadaSat.addTo(m); }
-      else if (m.hasLayer(est.camadaSat)) m.removeLayer(est.camadaSat);
-    }
     var gradeMapa = est.gradeMapa || est.grade;
     // Chuva da grade: com o radar real ligado e carregado, ele substitui (não sobrepõe duas camadas de chuva)
     var querChuva = est.ligada && est.chuva && !quer;
@@ -250,7 +242,7 @@
       est.gradeErro = e.message;
     }
     integrarAlertas();
-    await Promise.all([buscarGradeMapa(), buscarSatelite()]);
+    await buscarGradeMapa();
     aplicarCamadas();
   }
 
@@ -269,37 +261,6 @@
     }
   }
 
-  // Satélite: horários das últimas imagens (a cada 10 min). Mostra a mais recente, a não ser que a pessoa esteja vendo outra.
-  async function buscarSatelite() {
-    if (!est.satelite) return;
-    try {
-      var token = await sessaoToken();
-      var r = await fetch('/api/meteo?tipo=satelite', { headers: { Authorization: 'Bearer ' + token } });
-      var d = await r.json().catch(function () { return {}; });
-      if (!r.ok || !d.ok || !d.satelite) throw new Error(d.erro || 'satélite indisponível');
-      var noFim = !est.sat || est.satQuadro >= est.sat.quadros.length - 1;
-      est.sat = d.satelite; est.satErro = null;
-      $('meteo-sat-range').max = String(est.sat.quadros.length - 1);
-      if (noFim) mostrarQuadroSat(est.sat.quadros.length - 1);
-    } catch (e) {
-      est.satErro = e.message;
-    }
-  }
-  function mostrarQuadroSat(i) {
-    if (!est.sat) return;
-    est.satQuadro = i;
-    $('meteo-sat-range').value = String(i);
-    var t = est.sat.quadros[i], min = Math.round((Date.now() - Date.parse(t)) / 60000);
-    $('meteo-sat-hora').textContent = 'Satélite GOES · ' + hora(t) + ' (há ' + min + ' min)';
-    if (est.camadaSat && mapa() && mapa().hasLayer(est.camadaSat)) est.camadaSat.setTempo(t);
-  }
-  function tocarSat() {
-    var b = $('meteo-sat-play');
-    if (est.satTocando) { clearInterval(est.satTocando); est.satTocando = null; b.textContent = '▶'; return; }
-    if (!est.sat || est.sat.quadros.length < 2) return;
-    b.textContent = '❚❚';
-    est.satTocando = setInterval(function () { mostrarQuadroSat((est.satQuadro + 1) % est.sat.quadros.length); }, 1200);
-  }
 
   function processar(d) {
     est.erro = null;
@@ -399,7 +360,6 @@
     desenharAlertas();
     desenharLegenda();
     $('meteo-radar-bloco').hidden = !(est.radar && est.quadros.length);
-    $('meteo-sat-bloco').hidden = !(est.satelite && est.sat);
     // Sem radar no servidor (desligado por padrão), o botão Radar não aparece
     $('meteo-radar').hidden = !est.quadros.length;
     desenharPrevisao();
@@ -450,8 +410,7 @@
     var bloco = $('meteo-legenda');
     var partes = [];
     if (est.ligada && est.radar && est.quadros.length) partes.push('<div class="meteo-legenda-bloco"><strong>Radar · intensidade da chuva</strong><p class="meteo-legenda-linha"><span class="meteo-swatch meteo-swatch-radar"></span>tons claros = fraca; escuros e vermelhos = intensa</p></div>');
-    if (est.ligada && est.satelite && est.sat) partes.push('<div class="meteo-legenda-bloco"><strong>Satélite · nuvens de chuva</strong><div class="meteo-escala"><div class="meteo-barra meteo-barra-sat"></div><div class="meteo-escala-rotulos"><span>nuvem alta</span><span>chuva forte</span><span>tempestade</span></div></div><p class="meteo-legenda-linha muted">GOES-East, infravermelho, imagem a cada 10 min (atraso de ~30 min). Mostra topos de nuvens frios (onde costuma chover), não a chuva medida no chão.</p></div>');
-    if (est.ligada && est.chuva && !(est.radar && est.quadros.length)) partes.push('<div class="meteo-legenda-bloco"><strong>Chuva · intensidade (mm/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-chuva"></div><div class="meteo-escala-rotulos"><span>0,1</span><span>2,5</span><span>10</span><span>50+ mm/h</span></div></div><p class="meteo-legenda-linha muted">Previsão de modelo para agora (pontos a cada ' + ({ operacao: '~40 km', parana: '~60 km', brasil: '~450 km' }[est.gradeMapa ? est.gradeMapaArea : 'operacao']) + '): mostra onde chove, não substitui o radar' + (est.satelite ? '; o satélite mostra as nuvens de chuva com mais detalhe' : '') + '.</p></div>');
+    if (est.ligada && est.chuva && !(est.radar && est.quadros.length)) partes.push('<div class="meteo-legenda-bloco"><strong>Radar de chuva · intensidade (mm/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-chuva"></div><div class="meteo-escala-rotulos"><span>0,1</span><span>2,5</span><span>10</span><span>50+ mm/h</span></div></div><p class="meteo-legenda-linha muted">Previsão de modelo para agora (pontos a cada ' + ({ operacao: '~40 km', parana: '~60 km', brasil: '~450 km' }[est.gradeMapa ? est.gradeMapaArea : 'operacao']) + '): mostra onde chove, não substitui o radar' + (est.satelite ? '; o satélite mostra as nuvens de chuva com mais detalhe' : '') + '.</p></div>');
     if (est.ligada && est.vento) partes.push('<div class="meteo-legenda-bloco"><strong>Vento · velocidade (km/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-vento"></div><div class="meteo-escala-rotulos"><span>0</span><span>25</span><span>50+ km/h</span></div></div></div>');
     if (est.ligada && est.temp) partes.push('<div class="meteo-legenda-bloco"><strong>Temperatura (°C)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-temp"></div><div class="meteo-escala-rotulos"><span>-5 °C</span><span>16 °C</span><span>38 °C</span></div></div></div>');
     bloco.innerHTML = partes.join('');
@@ -526,7 +485,7 @@
     else if (est.gradeMapaErro) el.textContent = 'Grade ' + AREAS_GRADE[est.area] + ' indisponível (' + est.gradeMapaErro + '): o mapa mostra a da operação.';
     else el.textContent = 'Vento, temperatura e chuva ' + AREAS_GRADE[est.gradeMapa ? est.gradeMapaArea : 'operacao'] + ' (previsão de modelo' +
       (est.gradeMapa && est.gradeMapaEm ? ', ' + hora(est.gradeMapaEm) : est.gradeEm ? ', ' + hora(est.gradeEm) : '') + '). Previsão: MET Norway, com atribuição.' +
-      (est.satErro ? ' Satélite indisponível: ' + est.satErro + '.' : est.sat ? ' Satélite: GOES-East (NOAA), via NASA GIBS.' : '');
+      '';
     el.className = 'meteo-detalhe' + (est.gradeErro || est.gradeMapaErro ? ' meteo-desat' : '');
   }
 
@@ -563,9 +522,6 @@
     $('meteo-vento').addEventListener('click', function () { alternar({ nome: 'vento', chave: CHAVE_VENTO }); });
     $('meteo-temp').addEventListener('click', function () { alternar({ nome: 'temp', chave: CHAVE_TEMP }); });
     $('meteo-chuva').addEventListener('click', function () { alternar({ nome: 'chuva', chave: CHAVE_CHUVA }); });
-    $('meteo-satelite').addEventListener('click', function () { alternar({ nome: 'satelite', chave: CHAVE_SAT }); });
-    $('meteo-sat-play').addEventListener('click', tocarSat);
-    $('meteo-sat-range').addEventListener('input', function () { mostrarQuadroSat(Number(this.value)); });
     Array.prototype.forEach.call(document.querySelectorAll('.meteo-area-grade [data-area]'), function (b) {
       b.addEventListener('click', async function () {
         var a = b.getAttribute('data-area');

@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2656,5 +2656,31 @@ console.log('SCI novo: Posto de Comando (migração 057, só acréscimos)');
   await rpc(resp1, 'excluir_operacao', { p_operacao: outraOp.id }).catch(() => null);
 }
 
-console.log('\nMigrações 007–057 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// 058 — localização do responsável sem gravar a trilha (só acréscimo)
+{
+  const op58 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 058', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre' }) });
+  const r58 = await rpc(resp1, 'entrar_como_responsavel', { p_operacao: op58.id });
+  const agora = Date.now();
+  const trilha = async () => (await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [r58.id])).rows[0].n;
+  const ultima = async () => (await db.query(`select ultima_lat, ultima_lng, ultima_precisao, ultima_posicao_em, rastreando from public.participantes where id = $1`, [r58.id])).rows[0];
+  const nova = await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.43, p_lng: -49.27, p_precisao: 9, p_registrado_em: new Date(agora - 5000).toISOString() });
+  chk(nova.status === 'ativa', 'o responsável atualiza a própria posição', nova);
+  let u = await ultima();
+  chk(Number(u.ultima_lat) === -25.43 && Number(u.ultima_lng) === -49.27 && Number(u.ultima_precisao) === 9 && u.rastreando === true, 'a última posição do responsável é gravada');
+  chk((await trilha()) === 0, 'a posição atual NÃO grava pontos na trilha (posicoes)');
+  await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.5, p_lng: -49.5, p_precisao: 5, p_registrado_em: new Date(agora - 60000).toISOString() });
+  u = await ultima();
+  chk(Number(u.ultima_lat) === -25.43, 'leitura mais antiga que a última gravada não a substitui');
+  await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.44, p_lng: -49.28, p_precisao: 6, p_registrado_em: new Date(agora + 3600e3).toISOString() });
+  u = await ultima();
+  chk(new Date(u.ultima_posicao_em).getTime() <= Date.now() + 1000, 'hora no futuro é limitada ao agora (relógio do aparelho adiantado)');
+  chk((await rpc(resp2, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: 1, p_lng: 1 })).status === 'inexistente', 'outro responsável não atualiza a posição deste');
+  chk((await rpc(anA, 'responsavel_posicao_atual', { p_participante: pA.participante_id, p_lat: 1, p_lng: 1 })).status === 'inexistente', 'participante de campo (não responsável) não usa esta função');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: 95, p_lng: 1 }))), 'latitude inválida é recusada');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op58.id });
+  chk((await rpc(resp1, 'responsavel_posicao_atual', { p_participante: r58.id, p_lat: -25.4, p_lng: -49.2 })).status === 'encerrada', 'operação encerrada: a posição atual não é mais atualizada');
+  chk((await trilha()) === 0, 'depois de tudo, a trilha continua sem pontos');
+}
+
+console.log('\nMigrações 007–058 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

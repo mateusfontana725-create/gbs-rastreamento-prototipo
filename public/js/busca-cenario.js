@@ -359,7 +359,12 @@
       }
       if (est.erro) corpo.appendChild(aviso('Não foi possível atualizar: ' + est.erro));
       if (!est.vitimas.length) {
-        corpo.appendChild(aviso('Cadastre a vítima em "Dados da operação": o cenário é feito por vítima.'));
+        // Sem nomes (desastre, muitas pessoas): o cenário também vale para pessoas não identificadas
+        corpo.appendChild(aviso('Ainda não há pessoas cadastradas. O cenário é feito por pessoa: cadastre quantas forem precisas, mesmo sem nome.'));
+        if (P.cadastroRapido) {
+          corpo.appendChild(el('div', { classe: 'acoes' }, [el('button', { classe: 'btn btn-escuro', type: 'button', id: 'cenario-nao-identificada',
+            texto: '+ Pessoa não identificada', onclick: function () { P.cadastroRapido(); } })]));
+        }
         corpo.appendChild(rodape());
         return;
       }

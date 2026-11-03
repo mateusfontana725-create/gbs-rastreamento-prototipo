@@ -620,6 +620,18 @@
     var resultado = op.resultado && RESULTADO[op.resultado] ? RESULTADO[op.resultado].rotulo : 'Não apurado';
     var periodo = 'Início: ' + dataHora(op.acionado_em || op.criada_em) + '   ·   ' +
       (op.encerrada_em ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'em andamento');
+    // Resumo em texto corrido: só números, tipo e datas (sem nomes, sem o texto livre do resultado)
+    var grupos = (d.grupos || []).length;
+    var tipoOp = { aquatica: 'aquática', terrestre: 'terrestre', aerea: 'aérea' }[op.tipo] || (op.tipo_outro ? op.tipo_outro.toLowerCase() : null);
+    var fim = op.encerrada_em || Date.now();
+    var frases = [
+      'Operação de busca' + (tipoOp ? ' ' + tipoOp : '') + ', acionada em ' + dataHora(op.acionado_em || op.criada_em) +
+        (op.encerrada_em ? ' e encerrada em ' + dataHora(op.encerrada_em) + ' (duração de ' + duracao(op.acionado_em || op.criada_em, fim) + ')' : ', ainda em andamento') + '.',
+      pessoas + (pessoas === 1 ? ' pessoa de campo participou' : ' pessoas de campo participaram') +
+        (grupos ? ', organizadas em ' + grupos + (grupos === 1 ? ' equipe' : ' equipes') : '') + '.',
+      d.setores.length ? 'Foram trabalhados ' + d.setores.length + (d.setores.length === 1 ? ' setor' : ' setores') +
+        ' de busca, ' + concluidos + ' deles concluídos.' : 'Nenhum setor de busca foi definido.',
+    ];
     var conteudo = [
       { text: 'DIVULGAÇÃO PÚBLICA', style: 'sobretitulo', margin: [0, 0, 0, 10] },
       { text: 'Operação de busca e salvamento', style: 'tituloCapa' },
@@ -628,6 +640,8 @@
       { columns: numeros.map(function (n) {
         return { width: '*', stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }] };
       }), columnGap: 10, margin: [0, 0, 0, 22] },
+      { text: 'Resumo', style: 'h2' },
+      { text: frases.join(' '), fontSize: 10, lineHeight: 1.35, margin: [0, 0, 0, 14] },
       { text: 'Resultado geral', style: 'h2' },
       { text: resultado, fontSize: 11, bold: true, margin: [0, 0, 0, 16] },
       { text: 'Linha do tempo', style: 'h2' },

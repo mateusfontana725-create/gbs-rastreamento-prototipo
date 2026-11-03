@@ -280,7 +280,7 @@
               <section class="menu-secao" data-secao="campo">
                 <button class="menu-secao-titulo" type="button" aria-expanded="true">Em campo</button>
                 <div class="menu-secao-itens">
-                <button class="menu-item menu-minha-trilha" type="button" id="menu-minha-trilha" aria-pressed="false" title="Liga ou desliga o registro da sua posição e da sua trilha (sempre com confirmação)"><span class="ico-item" aria-hidden="true">◉</span><span>Registrar minha trilha</span><small class="menu-estado" id="menu-minha-trilha-estado">desligado</small></button>
+                <button class="menu-item menu-minha-trilha" type="button" id="menu-minha-trilha" aria-pressed="false" title="Grava os seus passos como trilha no mapa. A sua localização já fica sempre ligada (sempre com confirmação)"><span class="ico-item" aria-hidden="true">◉</span><span>Gravar minha trilha</span><small class="menu-estado" id="menu-minha-trilha-estado">desligado</small></button>
                 <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
                 <button class="menu-item" type="button" id="menu-vitima-rapida"><span class="ico-item" aria-hidden="true">⚡</span><span>Cadastro rápido de vítima</span></button>
                 <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
@@ -457,8 +457,7 @@
         <button class="btn btn-pequeno meteo-mais" type="button" id="meteo-mais-alertas" hidden></button>
 
         <div class="meteo-chips" role="group" aria-label="Camadas no mapa">
-          <button class="meteo-chip" type="button" id="meteo-satelite" aria-pressed="true" title="Nuvens de chuva e tempestade vistas pelo satélite GOES, em todo o Brasil, a cada 10 min">Satélite</button>
-          <button class="meteo-chip" type="button" id="meteo-chuva" aria-pressed="true" title="Mapa de chuva em cores de radar (previsão de modelo para agora)">Chuva</button>
+          <button class="meteo-chip" type="button" id="meteo-chuva" aria-pressed="true" title="Radar de chuva: intensidade da chuva em cores de radar (previsão de modelo para agora)">Radar de chuva</button>
           <button class="meteo-chip" type="button" id="meteo-radar" aria-pressed="true">Radar</button>
           <button class="meteo-chip" type="button" id="meteo-vento" aria-pressed="false">Vento</button>
           <button class="meteo-chip" type="button" id="meteo-temp" aria-pressed="false">Temperatura</button>
@@ -470,12 +469,6 @@
           <button class="meteo-chip" type="button" role="radio" data-area="brasil" aria-checked="false" title="O Brasil inteiro (menos detalhe)">Brasil</button>
         </div>
         <div class="meteo-legenda" id="meteo-legenda" hidden></div>
-
-        <div class="meteo-radar-controle" id="meteo-sat-bloco" hidden>
-          <button class="btn btn-pequeno" type="button" id="meteo-sat-play" aria-label="Animar o satélite (últimas 2 horas)">▶</button>
-          <input type="range" id="meteo-sat-range" min="0" max="0" value="0" aria-label="Horário da imagem de satélite">
-          <span class="meteo-detalhe" id="meteo-sat-hora"></span>
-        </div>
 
         <div class="meteo-radar-controle" id="meteo-radar-bloco" hidden>
           <button class="btn btn-pequeno" type="button" id="meteo-play" aria-label="Animar o radar">▶</button>

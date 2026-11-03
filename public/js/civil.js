@@ -263,6 +263,7 @@
     $('btn-diag').hidden = !/(^|[&#?])diag=1(&|$)/.test(location.hash + '&' + location.search);
     $('btn-app').addEventListener('click', abrirBaixarApp);
     $('btn-app-inicio').addEventListener('click', abrirBaixarApp);
+    $('btn-app-abrir').addEventListener('click', abrirNoAplicativo);
     if (!NATIVO) oferecerApp();
 
     // Aberto pelo botão "Abrir no aplicativo": a participação do navegador passa para o aplicativo, sem cadastro novo
@@ -3011,6 +3012,14 @@
       $('ini-app').hidden = false;
       $('btn-app').hidden = false;
     }).catch(function () { /* sem o botão */ });
+  }
+
+  // Quem já tem o aplicativo: abre nele direto (sem o passo a passo). Sem o aplicativo, o Chrome cai no download.
+  function abrirNoAplicativo() {
+    var origem = location.origin;
+    var link = APP.linkApp(origem, estado.token, null);
+    try { if (navigator.clipboard) navigator.clipboard.writeText(link).catch(function () { /* sem permissão */ }); } catch (e) { /* segue */ }
+    location.href = APP.linkIntent(origem, estado.token, null, origem + (estado.appBaixar || '/api/app?baixar=1'));
   }
 
   // Passo a passo: baixar, instalar e abrir o aplicativo já nesta busca. Quem já está participando leva o cadastro

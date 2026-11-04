@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2124,12 +2124,15 @@ console.log('Dashboard em outra janela e por link público; várias vítimas (mi
   const f2 = await rpc(resp1, 'salvar_vitima', { p_operacao: opD.id, p_id: null, p_dados: J({ nome: 'Bruno Vítima', idade: 9, perfil: ['crianca'] }) });
   await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opD.id, p_dados: J({ condicao: 'viva', lat: -25.44, lng: -49.27, vitima_id: f2.id }) });
   await rpc(resp1, 'registrar_vitima_encontrada', { p_operacao: opD.id, p_dados: J({ condicao: 'obito', lat: -25.45, lng: -49.27 }) });
+  // o ULV é da vítima (ficha): a distância é medida a partir dele, não do local da operação
+  await rpc(resp1, 'definir_ulv_vitima', { p_vitima: f2.id, p_lat: -25.43, p_lng: -49.27, p_descricao: 'Visto no pasto' });
   const est = await rpc(resp1, 'estudo_operacao', { p_operacao: opD.id });
   chk(est.vitimas_total === 3 && est.vitimas_localizadas === 2 && est.fichas === 2, 'estudo: três vítimas (duas fichas e uma sem ficha), duas localizadas', { t: est.vitimas_total, l: est.vitimas_localizadas });
   const v1 = est.vitimas.find((x) => x.vitima_id === f1.id), v2 = est.vitimas.find((x) => x.vitima_id === f2.id), v3 = est.vitimas.find((x) => x.sem_ficha);
   chk(v1 && !v1.localizada && v1.rotulo === 'V-01' && v1.nome === null && v1.idade === 70 && v1.perfil[0] === 'idoso', 'ficha sem localização: V-01, não localizada, com idade e perfil (sem nome)', v1);
   chk(v2 && v2.localizada && v2.condicao === 'viva' && v2.distancia_km > 1 && v2.distancia_km < 1.2 && v2.minutos_ate >= 170, 'cada vítima com a própria condição, distância do ULV e tempo', v2);
-  chk(v3 && v3.condicao === 'obito' && v3.rotulo === 'V-03' && v3.distancia_km > 2, 'localização sem ficha vira uma vítima própria', v3);
+  chk(v3 && v3.condicao === 'obito' && v3.rotulo === 'V-03' && v3.distancia_km === null && v3.ulv === null, 'localização sem ficha vira uma vítima própria (sem ULV, sem distância)', v3);
+  chk(v2.ulv && v2.ulv.lat === -25.43, 'ULV da vítima aparece no estudo', v2.ulv);
   chk(est.localizacao && est.localizacao.condicao === 'viva', 'compatibilidade: "localizacao" continua sendo a primeira');
   const dd = await rpc(resp1, 'dashboard_operacao_dados', { p_operacao: opD.id });
   const pdd = dd.participantes.find((x) => x.id === pD.participante_id);
@@ -2785,5 +2788,21 @@ await rpc(resp1, 'encerrar_operacao', { p_operacao: opAP.id });
 chk(/./.test(await erroDe(rpc(resp1, 'salvar_area_proibida', { p_operacao: opAP.id, p_id: null, p_dados: JSON.stringify({ nome: 'Depois', pontos: quadrado }) }))), 'operação encerrada: não cria área');
 chk((await db.query(`select count(*)::int n from public.areas_proibidas where operacao_id = $1`, [opAP.id])).rows[0].n === 1, 'operação encerrada: a área continua no banco (só leitura)');
 
-console.log('\nMigrações 007–061 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Último local visto por vítima (migração 062) ---
+console.log('\nÚltimo local visto (ULV) na ficha da vítima');
+const opU = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ULV', p_retencao_horas: 0 });
+const vitU = await rpc(resp1, 'salvar_vitima', { p_operacao: opU.id, p_id: null, p_dados: JSON.stringify({ nome: 'Ana' }) });
+const ulvOk = await rpc(resp1, 'definir_ulv_vitima', { p_vitima: vitU.id, p_lat: -25.4281, p_lng: -49.3205, p_descricao: 'Visto saindo da casa' });
+chk(ulvOk.ulv_lat === -25.4281 && ulvOk.ulv_lng === -49.3205 && ulvOk.ulv_descricao === 'Visto saindo da casa' && ulvOk.ulv_em, 'responsável cadastra o último local visto na ficha', ulvOk);
+chk(/posicao_invalida/.test(await erroDe(rpc(resp1, 'definir_ulv_vitima', { p_vitima: vitU.id, p_lat: -25.4, p_lng: null, p_descricao: '' }))), 'só latitude (sem longitude) é recusado');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_ulv_vitima', { p_vitima: vitU.id, p_lat: -25.4, p_lng: -49.3, p_descricao: '' }))), 'responsável de outra operação não altera o ULV');
+const est1 = (await db.query(`select public.estudo_vitimas($1, true) as j`, [opU.id])).rows[0].j;
+chk(est1[0].ulv && est1[0].ulv.lat === -25.4281, 'estudo da operação mostra o ULV da vítima', est1[0]);
+chk(est1[0].distancia_km === null, 'sem localização da vítima, a distância não é calculada (ainda)', est1[0]);
+const tirado = await rpc(resp1, 'definir_ulv_vitima', { p_vitima: vitU.id, p_lat: null, p_lng: null, p_descricao: '' });
+chk(tirado.ulv_lat === null && tirado.ulv_em === null, 'tirar o último local visto zera os campos', tirado);
+await rpc(resp1, 'encerrar_operacao', { p_operacao: opU.id });
+chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'definir_ulv_vitima', { p_vitima: vitU.id, p_lat: -25.4, p_lng: -49.3, p_descricao: '' }))), 'operação encerrada: o ULV não muda');
+
+console.log('\nMigrações 007–062 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

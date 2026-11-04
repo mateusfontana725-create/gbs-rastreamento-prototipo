@@ -632,6 +632,7 @@
     linha('Características físicas', v.caracteristicas || '—');
     linha('Roupas', v.roupas || '—');
     linha('Observações', v.observacoes || '—');
+    linha('Último local visto', textoUlv(v) || 'não cadastrado');
     linha('Registrada', dataHora(v.criado_em) + ' por ' + v.criado_por_nome);
     if (v.atualizado_por_nome && v.atualizado_em !== v.criado_em) linha('Alterada', dataHora(v.atualizado_em) + ' por ' + v.atualizado_por_nome);
     var caixaFoto = UI.el('div', { classe: 'vitima-foto' }, [UI.el('span', { classe: 'muted', texto: v.foto_caminho ? 'Carregando a foto…' : 'Sem foto.' })]);
@@ -651,6 +652,7 @@
       dl,
       UI.rodape([
         editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { editarFicha(op, v, opcoes); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitima-ulv', texto: v.ulv_lat != null ? 'Alterar último local visto' : 'Cadastrar último local visto', onclick: function () { fechar(); abrirUlvVitima(op, v, { aoSalvar: function () { abrirFichaPorId(op, v.id, opcoes); } }); } }) : null,
         editavel ? rotFoto : null,
         editavel ? inFoto : null,
         editavel && v.foto_caminho ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Tirar foto', onclick: function () { fechar(); removerFoto(op, v, opcoes); } }) : null,
@@ -946,21 +948,31 @@
     if (aberta && aberta.op.id === operacaoId) aberta.render();
   }
 
-  /* Último local visto (ULV): só o ponto de referência da operação, sem o formulário inteiro.
-     Grava só local_lat/local_lng (não mexe em tipo, descrição nem IPO). */
-  function abrirLocalUltimo(op, opcoes) {
+  /* Último local visto (ULV) da vítima: o ponto em que a pessoa foi vista pela última vez.
+     Fica na ficha (não é o local da operação). Grava pela RPC definir_ulv_vitima. */
+  function textoUlv(v) {
+    if (v.ulv_lat == null || v.ulv_lng == null) return null;
+    var partes = [window.Coords.formatar(v.ulv_lat, v.ulv_lng, 'dec')];
+    if (v.ulv_descricao) partes.push(v.ulv_descricao);
+    if (v.ulv_em) partes.push(dataHora(v.ulv_em) + (v.ulv_por_nome ? ' por ' + v.ulv_por_nome : ''));
+    return partes.join(' · ');
+  }
+
+  function abrirUlvVitima(op, v, opcoes) {
     opcoes = opcoes || {};
-    var local = op.local_lat != null ? { lat: op.local_lat, lng: op.local_lng } : null;
+    var local = v.ulv_lat != null ? { lat: v.ulv_lat, lng: v.ulv_lng } : null;
     var info = UI.el('p', { classe: 'mono', id: 'ulv-info' });
     var aviso = UI.el('small', { classe: 'muted', id: 'ulv-aviso' });
     var txt = UI.el('input', { classe: 'campo mono', id: 'ulv-txt', placeholder: 'ou digite: -25.4281, -49.3205' });
+    var desc = UI.el('input', { classe: 'campo', id: 'ulv-descricao', maxlength: '300', autocomplete: 'off', placeholder: 'Onde e como foi visto (ex.: saindo de casa, portão do sítio)' });
+    desc.value = v.ulv_descricao || '';
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btnSalvar = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'ulv-salvar', texto: 'Salvar último local' });
+    var btnSalvar = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'ulv-salvar', texto: 'Salvar último local visto' });
     function mostrar() {
       info.textContent = local ? 'Atual: ' + window.Coords.formatar(local.lat, local.lng, 'dec') : 'Nenhum último local visto cadastrado.';
     }
     async function escolherMapa() {
-      var p = await escolherPontoNoMapa(local, 'Último local visto');
+      var p = await escolherPontoNoMapa(local, 'Último local visto de ' + v.nome);
       if (p) { local = p; txt.value = ''; aviso.textContent = ''; mostrar(); }
     }
     async function usarMinha() {
@@ -977,14 +989,16 @@
       else aviso.textContent = txt.value.trim() ? 'Formato não reconhecido' : '';
     });
     var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Último local visto' }),
-      UI.el('p', { classe: 'ajuda', texto: 'Ponto de referência da operação (ULV): a distância até a vítima, a previsão do tempo e o mapa usam este ponto. Pode ser o local onde a pessoa foi vista pela última vez.' }),
+      UI.el('h2', { id: 'modal-titulo', texto: 'Último local visto · ' + v.nome }),
+      UI.el('p', { classe: 'ajuda', texto: 'Onde a pessoa foi vista pela última vez. A distância até o local onde ela for localizada é medida a partir deste ponto.' }),
       info,
       UI.el('div', { classe: 'acoes-linha' }, [
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ulv-mapa', texto: '📍 Escolher no mapa', onclick: escolherMapa }),
         UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ulv-eu', texto: 'Usar minha posição', onclick: usarMinha }),
       ]),
-      txt, aviso, erro,
+      txt, aviso,
+      UI.campo('Descrição', desc, { para: 'ulv-descricao', largo: true }),
+      erro,
       UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
         UI.el('button', { classe: 'btn btn-link', type: 'button', id: 'ulv-tirar', texto: 'Tirar o último local', onclick: function () { local = null; txt.value = ''; aviso.textContent = ''; mostrar(); } }),
@@ -998,12 +1012,12 @@
       erro.hidden = true;
       btnSalvar.disabled = true;
       try {
-        var atual = await C.rpc('atualizar_operacao', { p_operacao: op.id, p_dados: { local_lat: local ? local.lat : null, local_lng: local ? local.lng : null } });
+        await C.rpc('definir_ulv_vitima', { p_vitima: v.id, p_lat: local ? local.lat : null, p_lng: local ? local.lng : null, p_descricao: local ? desc.value.trim() : '' });
         fechar(true);
         UI.aviso(local ? 'Último local visto salvo.' : 'Último local visto retirado.', 'ok');
-        if (opcoes.aoSalvar) opcoes.aoSalvar(atual);
+        if (opcoes.aoSalvar) opcoes.aoSalvar();
       } catch (e) {
-        erro.textContent = 'Não foi possível salvar: ' + e.message;
+        erro.textContent = 'Não foi possível salvar: ' + (e.message || e);
         erro.hidden = false;
         btnSalvar.disabled = false;
       }
@@ -1019,7 +1033,8 @@
     camposVitima: camposVitima,
     escolherPontoNoMapa: escolherPontoNoMapa,
     abrirDados: abrirDados,
-    abrirLocalUltimo: abrirLocalUltimo,
+    abrirUlvVitima: abrirUlvVitima,
+    textoUlv: textoUlv,
     secaoFichas: secaoFichas,
     abrirRapido: abrirRapido,
     abrirFichaPorId: abrirFichaPorId,

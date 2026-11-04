@@ -1607,8 +1607,9 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .btn-acao-topo .ico-acao { font-size: 1rem; line-height: 1; }
 .btn-acao-topo .ico-camera { flex: none; }
 .acoes-topo[hidden], .btn-acao-topo[hidden] { display: none !important; }
-/* Tablet e notebook (861–1280 px): a linha de ações desce para uma faixa cheia, com o nome sempre visível embaixo do ícone */
-@media (min-width: 861px) and (max-width: 1280px) {
+/* Tablet e notebook (861–1440 px): a linha de ações desce para uma faixa cheia, com o nome sempre visível embaixo do ícone.
+   Acima disso ela fica na mesma linha do título, mas só cabe com o botão de ajuda e Ferramentas (~1440 px). */
+@media (min-width: 861px) and (max-width: 1440px) {
   .acoes-topo { order: 10; width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: stretch; }
   .acoes-topo .btn-acao-topo { flex-direction: column; justify-content: center; gap: 3px; padding: 5px 2px; min-height: 50px; height: auto; min-width: 0; font-size: .72rem; line-height: 1.1; white-space: normal; text-align: center; letter-spacing: .02em; }
   .btn-acao-topo .ico-acao { font-size: 1.05rem; }

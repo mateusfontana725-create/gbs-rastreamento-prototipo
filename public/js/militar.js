@@ -5699,7 +5699,7 @@
     var d = p.d;
     // A sincronização redesenha a lista inteira: só refaz quando o ponto mudou (evita refazer o agrupamento)
     var cat = catDoPonto(d);
-    var assinatura = [d.lat, d.lng, d.categoria, d.titulo, d.raio_m, d.tipo_id, cat.letra, cat.cor, cat.rotulo].join('|');
+    var assinatura = [d.lat, d.lng, d.categoria, d.titulo, d.raio_m, d.tipo_id, cat.letra, cat.cor, cat.rotulo, d.concluido_em ? 'ok' : ''].join('|');
     if (p.marcador && p._assinatura === assinatura) return;
     tirarPontoInt(p);
     p._assinatura = assinatura;
@@ -5942,20 +5942,31 @@
   }
 
   // s: setor existente (edição) ou base de um novo (forma + geometria)
-  // Áreas de um arquivo importado viram setores da operação: vão para o servidor e aparecem em todos os aparelhos
-  // (a camada importada, em si, continua só neste aparelho). Uma a uma, sem formulário, em azul padrão.
+  // Áreas de um arquivo importado viram setores da operação: vão para o servidor e aparecem em todos os aparelhos.
+  // Sem formulário e sem pergunta; um setor com o mesmo nome já existente não é duplicado. Devolve { ok, pulados, falhas }.
   async function enviarAreasComoSetores(areas) {
-    if (!est.op || !podeAlterar() || !areas || !areas.length) return 0;
-    var ok = 0, falhas = 0;
+    var r = { ok: 0, pulados: 0, falhas: 0 };
+    if (!est.op || !podeAlterar() || !areas || !areas.length) return r;
+    var nomes = new Set(Array.from(est.setores.values()).map(function (x) { return String(x.d.nome || '').trim().toLowerCase(); }));
     for (var i = 0; i < areas.length; i++) {
       var a = areas[i];
+      var nome = String(a.nome || 'Área importada ' + (i + 1)).trim().slice(0, 60);
+      if (nomes.has(nome.toLowerCase())) { r.pulados++; continue; }
       try {
-        await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: null, p_dados: { nome: String(a.nome || 'Área importada ' + (i + 1)).slice(0, 60), forma: 'poligono', pontos: a.pontos } });
-        ok++;
-      } catch (e) { falhas++; }
+        await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: null, p_dados: { nome: nome, forma: 'poligono', pontos: a.pontos } });
+        nomes.add(nome.toLowerCase());
+        r.ok++;
+      } catch (e) { r.falhas++; }
     }
-    UI.aviso((ok ? ok + ' área(s) enviada(s) como setor.' : 'Nenhuma área enviada.') + (falhas ? ' ' + falhas + ' não couberam (nome repetido ou erro).' : ''), falhas ? 'erro' : 'ok', 9000);
-    return ok;
+    return r;
+  }
+
+  // Linha importada vira trilha da operação (planejada, ou percorrida se o arquivo traz horário final).
+  async function enviarTrilhaImportada(dados) {
+    if (!est.op || !podeAlterar() || est.semTrilhasManuais) throw new Error('Trilhas indisponíveis nesta operação.');
+    var r = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: null, p_dados: Object.assign({ client_id: C.uuid() }, dados) });
+    aplicarTrilhasManuais([r], false);
+    return r;
   }
 
   function abrirFormSetor(s) {
@@ -6594,6 +6605,18 @@
     ]), { empilhar: true, tamanho: 'largo' });
   }
 
+  // Baixa do ponto (migração 064): concluído ou reaberto. Quem administra a operação; operação ativa.
+  async function marcarPontoConcluido(d, concluido) {
+    if (!est.op) return;
+    try {
+      var r = await C.rpc('marcar_ponto_concluido', { p_operacao: est.op.id, p_id: d.id, p_concluido: concluido });
+      aplicarPontos([r]);
+      UI.aviso(concluido ? 'Ponto marcado como concluído.' : 'Ponto reaberto.', 'ok');
+    } catch (e) {
+      UI.aviso(e.codigo === 'sem_permissao' ? 'Só quem administra a operação pode mudar isto.' : (e.message || e), 'erro', 7000);
+    }
+  }
+
   function abrirPontoInt(id) {
     var p = est.pontosInt.get(id);
     if (!p) return;
@@ -6617,6 +6640,7 @@
         d.categoria === 'RISCO' ? ['Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m'] : null,
         d.categoria === 'BASE' ? ['Chegada à base', 'raio de ' + Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m'] : null,
         ['Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
+        d.concluido_em ? ['Concluído', C.hora(d.concluido_em) + ' por ' + (d.concluido_por_nome || '—')] : null,
         d.relatado_por_nome ? ['Relatado por', d.relatado_por_nome + ' (participante)'] : null,
         d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
       ]),
@@ -6627,6 +6651,8 @@
         ativa ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-destino', texto: '🧭 Enviar como destino', onclick: function () { abrirEnviarDestino({ nome: d.titulo, lat: d.lat, lng: d.lng, ponto_id: d.id }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { abrirFormPontoInt(d); } }) : null,
         ativa ? UI.el('button', { classe: 'btn', type: 'button', texto: foto ? 'Trocar foto' : 'Anexar foto', onclick: function () { fechar(); anexarFotoPonto(d); } }) : null,
+        editavel && ativa ? UI.el('button', { classe: 'btn ' + (d.concluido_em ? '' : 'btn-ok'), type: 'button', id: 'ponto-concluir', texto: d.concluido_em ? 'Reabrir' : '✔ Marcar como concluído',
+          onclick: function () { fechar(); marcarPontoConcluido(d, !d.concluido_em); } }) : null,
         window.Ferramentas ? UI.el('button', { classe: 'btn', type: 'button', id: 'ponto-aneis', texto: window.Ferramentas.temAneis(d.id) ? '◎ Tirar anéis de distância' : '◎ Anéis de distância',
           onclick: function () { fechar(); window.Ferramentas.alternarAneis({ id: d.id, lat: d.lat, lng: d.lng, nome: d.titulo }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'ponto-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirPontoInt(d); } }) : null,
@@ -11024,6 +11050,7 @@
     enviarDestino: function (lat, lng, nome) { abrirEnviarDestino({ nome: nome || 'Ponto marcado no mapa', lat: lat, lng: lng }); },
     criarSetor: function (pontos, nome) { abrirFormSetor(Object.assign({ forma: 'poligono', pontos: pontos }, nome ? { nome: nome.slice(0, 60) } : {})); },
     enviarAreasComoSetores: function (areas) { return enviarAreasComoSetores(areas); },
+    enviarTrilhaImportada: function (dados) { return enviarTrilhaImportada(dados); },
     salvarPonto: function (dados) { return C.rpc('salvar_ponto', { p_operacao: est.op.id, p_id: null, p_dados: dados }).then(function (r) { aplicarPontos([r]); return r; }); },
     blocoCoordenadas: blocoCoordenadas,
     copiar: copiarTexto,

@@ -94,6 +94,7 @@
     usuario: null,
     responsavel: null,
     op: null,
+    encerrarAoAbrir: null,   // id de operação que deve ser encerrada logo ao abrir o painel (menu da lista)
     mapa: null,
     participantes: new Map(),   // id → P
     pontosOrfaos: [],
@@ -940,6 +941,7 @@
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
       if (incompleta) funcoes.push({ texto: 'Completar cadastro', acao: function () { window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } }); } });
+      if (op.status === 'ativa') funcoes.push({ texto: 'Encerrar operação', perigo: true, acao: function () { encerrarPelaLista(op); } });
       if (podeArquivar(op)) funcoes.push({ texto: 'Arquivar agora (liberar espaço)', acao: function () { arquivarOperacao(op); } });
       if (podeExcluir(op)) funcoes.push({ texto: 'Excluir operação', perigo: true, acao: function () { excluirOperacao(op); } });
       var acoes = UI.el('div', { classe: 'op-acoes' }, funcoes.length ? [menuLinha(funcoes)] : []);
@@ -1455,6 +1457,8 @@
   }
 
   async function abrirPainel(id) {
+    var pedidoEncerrar = est.encerrarAoAbrir;
+    est.encerrarAoAbrir = null;
     fecharPainel();
     mostrarTela('painel');
     carregandoPainel(true);
@@ -1492,6 +1496,9 @@
     desenharLocalOp();
     aplicarIntervaloGpsMeu();
     await carregarTudo();
+    if (pedidoEncerrar === op.id && est.op && est.op.id === op.id && op.status === 'ativa') {
+      setTimeout(function () { encerrarOperacao(); }, 0);   // pedido do menu da lista: mesmo fluxo do botão Encerrar
+    }
     assinarTempoReal();
     assinarTempoRealExtras();
     assinarTrilhasManuais();
@@ -4201,6 +4208,14 @@
     if (!op || op.status !== 'ativa') return;
     if (jaOfereceu !== true && !(await oferecerRelatorio(op, 'Depois de encerrar o painel fica só para consulta.', function () { encerrarOperacao(true); }))) return;
     abrirEncerramento();
+  }
+
+  // "Encerrar operação" no menu da lista: abre o painel e segue o mesmo fluxo do botão Encerrar
+  // (relatório, resultado da busca e confirmação). O servidor confere se quem pede pode encerrar.
+  function encerrarPelaLista(op) {
+    if (location.hash === '#op=' + op.id && est.op && est.op.id === op.id) { encerrarOperacao(); return; }
+    est.encerrarAoAbrir = op.id;
+    abrirOperacao(op);
   }
 
   // Encerrar com o resultado da busca. "Vítima localizada" abre o mesmo formulário do botão

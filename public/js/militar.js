@@ -7965,6 +7965,11 @@
           title: catOff ? 'Categoria "' + e.rotulo.toLowerCase() + '" desligada nas camadas' : oculta ? 'Mostrar no mapa' : 'Ocultar no mapa',
           'aria-label': (oculta ? 'Mostrar ' : 'Ocultar ') + d.nome + ' no mapa', texto: oculta ? '◌' : '◉',
           onclick: function () { alternarTrilhaOculta(d.id); } }),
+        // Excluir direto da lista (a linha some do mapa de todos). Só para quem pode alterar a operação;
+        // o servidor confere quem desenhou, quem criou a operação ou o administrador.
+        podeAlterar() ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo btn-excluir-trilha', type: 'button', 'data-excluir-trilha': d.id,
+          title: 'Excluir esta trilha desenhada', 'aria-label': 'Excluir a trilha ' + d.nome, texto: '🗑',
+          onclick: function () { excluirTrilhaManual(d); } }) : null,
       ]));
     });
   }

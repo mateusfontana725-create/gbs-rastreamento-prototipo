@@ -90,6 +90,7 @@
     if (opId === atual.opId && mapa === atual.mapa) return;
     atual.opId = opId;
     atual.mapa = mapa;
+    if (mapa) ligarArrastarMapa();
     atual.estadoAlertas = {};
     atual.importados = [];
     atual.aneis = {};
@@ -348,6 +349,9 @@
     atual.importados.forEach(function (imp) {
       if (!imp.visivel) return;
       var d = imp.dados;
+      (d.imagens || []).forEach(function (im) {
+        L.imageOverlay(im.dataUrl, [[im.bounds.south, im.bounds.west], [im.bounds.north, im.bounds.east]], { opacity: 0.75, className: 'importado-imagem', interactive: false }).addTo(atual.camadaImport);
+      });
       d.areas.forEach(function (a) {
         if (a.oculto) return;
         L.polygon(a.pts, { color: corDe(imp, a), weight: a.espessura || 2, opacity: a.opacidade != null ? a.opacidade : 1, fillColor: a.preenchimento || corDe(imp, a),
@@ -404,8 +408,6 @@
     ];
     var botoes = UI.el('div', { classe: 'acoes-linha' }, [
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { P.mapa().closePopup(); editarImportado(imp, it); } }),
-      ativa && linha ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '〰 Registrar como trilha', title: 'Vira uma trilha da operação (equipe, drone…), vista por todos',
-        onclick: function () { P.mapa().closePopup(); registrarComoTrilha(imp, it); } }) : null,
       ativa && linha ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '➝ Enviar como trajeto', title: 'A equipe segue esta linha no celular',
         onclick: function () { P.mapa().closePopup(); P.enviarTrajeto(window.Rotas.simplificar(it.pts, 1, 2000), it.nome); } }) : null,
     ]);
@@ -414,12 +416,6 @@
   }
 
   // Linha importada → trilha da operação (no banco, para todos os responsáveis), com nome, cor e horário do arquivo.
-  function registrarComoTrilha(imp, it) {
-    var pts = window.Rotas.simplificar(it.pts, 1, 2000).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; });
-    var drone = /drone|dji|uav|vant|voo|flight/i.test((it.nome || '') + ' ' + (it.tipo || '') + ' ' + imp.nome);
-    P.registrarTrilha({ pontos: pts, nome: String(it.nome || 'Trilha importada').slice(0, 80), cor: it.cor || imp.cor || null,
-      meio: drone ? 'drone' : 'equipe', estado: it.fim ? 'percorrida' : null, percorrida_em: it.fim || null, arquivo: String(imp.nome || '').slice(0, 120) });
-  }
 
   // Edição da camada importada (fica neste aparelho): nome e cor da camada e, item a item,
   // nome, cor, espessura, opacidade, descrição e se aparece no mapa — conforme o que o formato tem.
@@ -498,72 +494,177 @@
   }
 
   function abrirImportar() {
-    var entrada = UI.el('input', { type: 'file', id: 'imp-arquivo', accept: '.gpx,.kml,.kmz,.geojson,.json,.csv,.txt', classe: 'campo' });
+    var entrada = UI.el('input', { type: 'file', id: 'imp-arquivo', multiple: true, accept: '.gpx,.kml,.kmz,.geojson,.json,.csv,.txt,.png,.jpg,.jpeg,.jgw,.pgw,.wld', classe: 'campo' });
     var lista = UI.el('ul', { classe: 'lista-importados' });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    function render() {
-      lista.innerHTML = '';
-      if (!atual.importados.length) { lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhuma camada importada.' })); return; }
-      atual.importados.forEach(function (imp) {
-        var d = imp.dados;
-        var resumo = [d.pontos.length + ' ponto(s)', d.linhas.length + ' trilha(s)/rota(s)', d.areas.length + ' área(s)', 'só neste aparelho'].join(' · ');
-        var ativa = P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em;
-        lista.appendChild(UI.el('li', { classe: 'item-importado' }, [
-          UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', checked: imp.visivel ? true : null, onchange: function () { imp.visivel = this.checked; salvarImportados(); desenharImportados(); } }),
-            UI.el('strong', { texto: ' ' + imp.nome })]),
-          UI.el('small', { classe: 'muted', texto: resumo }),
-          (P.compactarAcoes || function (x) { return x; })(UI.el('div', { classe: 'acoes-linha' }, [
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); enquadrar(imp); } }),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { editarImportado(imp); } }),
-            ativa && d.pontos.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Pontos → pontos de interesse', onclick: function () { fechar(); converterPontos(imp); } }) : null,
-            ativa && d.areas.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Área → setor', onclick: function () {
-              fechar(); var a = d.areas[0]; P.criarSetor(a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }), a.nome); } }) : null,
-            UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Remover', onclick: function () {
-              UI.confirmar({ titulo: 'Remover "' + (imp.nome || 'arquivo') + '" do mapa?', texto: 'Os elementos importados saem do mapa. O arquivo original não é apagado.', ok: 'Remover', perigo: true })
-                .then(function (ok) { if (!ok) return; atual.importados = atual.importados.filter(function (x) { return x !== imp; }); salvarImportados(); desenharImportados(); render(); }); } }),
-          ])),
-        ]));
-      });
-    }
+    atualizarListaImportados = function () { desenharListaImportados(lista); };
+    function render() { desenharListaImportados(lista); }
     entrada.addEventListener('change', async function () {
-      var f = entrada.files && entrada.files[0];
+      var arquivos = Array.prototype.slice.call(entrada.files || []);
       entrada.value = '';
-      if (!f) return;
+      if (!arquivos.length) return;
       erro.hidden = true;
-      try {
-        var d = await window.Arquivos.importar(f);
-        var imp = { id: C.uuid(), nome: f.name, dados: { formato: d.formato, pontos: d.pontos, linhas: d.linhas, areas: d.areas }, visivel: true, em: Date.now() };
-        atual.importados.push(imp);
-        salvarImportados();
-        desenharImportados();
-        render();
-        enquadrar(imp, true);
-        UI.aviso('Importado: ' + f.name + ' (' + d.pontos.length + ' pontos, ' + d.linhas.length + ' trilhas/rotas, ' + d.areas.length + ' áreas).', 'ok', 7000);
-        // Áreas importadas: a camada fica só neste aparelho. Como setores, elas aparecem para todos os responsáveis.
-        if (d.areas.length && P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em && P.enviarAreasComoSetores) {
-          var escolha = await UI.confirmar({
-            titulo: 'Enviar as áreas como setores?',
-            texto: d.areas.length + ' área(s) no arquivo. A camada fica só neste aparelho. Como setores, elas aparecem para todos os responsáveis desta operação.',
-            ok: 'Enviar como setores', cancelar: 'Só neste aparelho',
-          });
-          if (escolha) await P.enviarAreasComoSetores(d.areas.map(function (a) {
-            return { nome: a.nome, pontos: a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }) };
-          }));
-        }
-      } catch (e) {
-        erro.textContent = 'Não foi possível importar "' + f.name + '": ' + (e.message || e);
-        erro.hidden = false;
-      }
+      await importarArquivos(arquivos);
+      render();
     });
     render();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Importar mapa' },
-        [UI.dica('GPX, KML, KMZ, GeoJSON ou CSV com latitude e longitude. A camada fica só neste aparelho. Toque numa linha para editar, registrar como trilha da operação ou enviar como trajeto.')]),
-      UI.campo('Arquivo', entrada, { para: 'imp-arquivo', largo: true }),
+        [UI.dica('Arraste os arquivos para o mapa ou escolha aqui. GPX, KML, KMZ, GeoJSON e CSV entram sozinhos. Imagens (PNG ou JPG) precisam do arquivo de posição com o mesmo nome (.jgw, .pgw ou .wld), ou de um KMZ. Áreas viram setores da operação; pontos viram pontos de interesse; linhas viram trilhas. Todos os responsáveis veem.')]),
+      UI.campo('Arquivos', entrada, { para: 'imp-arquivo', largo: true }),
       erro,
-      UI.secao('Camadas importadas', [lista]),
-      UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      lista,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
+    atualizarListaImportados = function () { desenharListaImportados(lista); };
+    return fechar;
+  }
+
+  // Lista das camadas deste aparelho (cada uma: mostrar/ocultar, ver, editar, remover).
+  var atualizarListaImportados = function () {};
+  function desenharListaImportados(lista) {
+    lista.innerHTML = '';
+    if (!atual.importados.length) { lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhuma camada importada.' })); return; }
+    atual.importados.forEach(function (imp) {
+      var d = imp.dados;
+      var resumo = [d.pontos.length + ' ponto(s)', d.linhas.length + ' trilha(s)/rota(s)', d.areas.length + ' área(s)', (d.imagens || []).length + ' imagem(ns)', 'só neste aparelho'].join(' · ');
+      lista.appendChild(UI.el('li', { classe: 'item-importado' }, [
+        UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', checked: imp.visivel ? true : null, onchange: function () { imp.visivel = this.checked; salvarImportados(); desenharImportados(); } }),
+          UI.el('strong', { texto: ' ' + imp.nome })]),
+        UI.el('small', { classe: 'muted', texto: resumo }),
+        (P.compactarAcoes || function (x) { return x; })(UI.el('div', { classe: 'acoes-linha' }, [
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { enquadrar(imp, true); } }),
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { editarImportado(imp); } }),
+          UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Remover', onclick: function () {
+            UI.confirmar({ titulo: 'Remover "' + (imp.nome || 'arquivo') + '" do mapa?', texto: 'Os elementos importados saem do mapa. Os setores, pontos e trilhas que já foram enviados para a operação continuam. O arquivo original não é apagado.', ok: 'Remover', perigo: true })
+              .then(function (ok) { if (!ok) return; atual.importados = atual.importados.filter(function (x) { return x !== imp; }); salvarImportados(); desenharImportados(); desenharListaImportados(lista); }); } }),
+        ])),
+      ]));
+    });
+  }
+
+
+  /* ---------- Importação: o arquivo entra sozinho (arrastado para o mapa ou escolhido) ---------- */
+  var EXT_MUNDO = /\.(jgw|pgw|wld|jpgw|pngw|jpwx|pnwx)$/i;
+  var EXT_IMAGEM = /\.(png|jpe?g|gif|bmp|webp)$/i;
+  function baseNome(n) { return String(n || '').replace(/\.[^.]+$/, '').toLowerCase(); }
+  function temArquivos(ev) { return Boolean(ev.dataTransfer && Array.prototype.indexOf.call(ev.dataTransfer.types || [], 'Files') >= 0); }
+
+  // Lê os arquivos (uma imagem casa com o arquivo de posição de mesmo nome), guarda como camada deste aparelho
+  // e, com a operação ativa, manda o que é da operação para o servidor: áreas viram setores, pontos viram
+  // pontos de interesse e linhas viram trilhas. Todos os responsáveis veem.
+  async function importarArquivos(arquivos) {
+    var lista = Array.from(arquivos || []);
+    var mundos = {};
+    lista.forEach(function (f) { if (EXT_MUNDO.test(f.name)) mundos[baseNome(f.name)] = f; });
+    var novos = [], erros = [];
+    for (var i = 0; i < lista.length; i++) {
+      var f = lista[i];
+      if (EXT_MUNDO.test(f.name)) continue;
+      try {
+        var opcoes = {};
+        if (EXT_IMAGEM.test(f.name) && mundos[baseNome(f.name)]) opcoes.mundo = await mundos[baseNome(f.name)].text();
+        var d = await window.Arquivos.importar(f, opcoes);
+        var imp = { id: C.uuid(), nome: f.name, dados: { formato: d.formato, pontos: d.pontos, linhas: d.linhas, areas: d.areas, imagens: d.imagens || [] }, visivel: true, em: Date.now() };
+        atual.importados.push(imp);
+        novos.push(imp);
+        (d.avisos || []).forEach(function (a) { erros.push(f.name + ': ' + a); });
+      } catch (e) {
+        erros.push(f.name + ': ' + (e.message || e));
+      }
+    }
+    if (novos.length) {
+      salvarImportados();
+      desenharImportados();
+      enquadrarNovos(novos);
+      atualizarListaImportados();
+    }
+    if (novos.length) {
+      var r = await compartilharImportados(novos);
+      UI.aviso(r.texto, r.falhas || erros.length ? 'erro' : 'ok', 10000);
+    }
+    if (erros.length) UI.aviso(erros.join(' · '), 'erro', 12000);
+    return novos;
+  }
+
+  // Manda para o servidor o que é da operação. Devolve { texto, falhas }.
+  async function compartilharImportados(novos) {
+    var op = P.op();
+    if (!op || op.status !== 'ativa' || op.dados_apagados_em) {
+      return { texto: 'Importado neste aparelho. A operação está encerrada, então nada foi enviado para os outros responsáveis.', falhas: 0 };
+    }
+    var c = { setores: 0, setoresJa: 0, pontos: 0, pontosJa: 0, trilhas: 0, falhas: 0 };
+    for (var k = 0; k < novos.length; k++) {
+      var d = novos[k].dados;
+      if (d.areas.length) {
+        var rs = await P.enviarAreasComoSetores(d.areas.map(function (a) {
+          return { nome: a.nome, pontos: a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }) };
+        }));
+        c.setores += rs.ok; c.setoresJa += rs.pulados; c.falhas += rs.falhas;
+      }
+      if (d.pontos.length) {
+        var existentes = (P.pontosInteresse() || []).map(function (x) { return String(x.titulo || '').toLowerCase() + '|' + Number(x.lat).toFixed(5) + '|' + Number(x.lng).toFixed(5); });
+        for (var j = 0; j < d.pontos.length && j < 500; j++) {
+          var p = d.pontos[j];
+          var titulo = String(p.nome || 'Ponto importado').slice(0, 80);
+          if (existentes.indexOf(titulo.toLowerCase() + '|' + Number(p.lat).toFixed(5) + '|' + Number(p.lng).toFixed(5)) >= 0) { c.pontosJa++; continue; }
+          try {
+            await P.salvarPonto({ categoria: 'OUTRO', titulo: titulo, descricao: ('Importado de ' + novos[k].nome + (p.descricao ? ' — ' + p.descricao : '')).slice(0, 1000), lat: p.lat, lng: p.lng });
+            c.pontos++;
+          } catch (e) { c.falhas++; }
+        }
+      }
+      for (var m = 0; m < d.linhas.length && m < 200; m++) {
+        var l = d.linhas[m];
+        var pts = window.Rotas.simplificar(l.pts, 1, 2000).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; });
+        var drone = /drone|dji|uav|vant|voo|flight/i.test((l.nome || '') + ' ' + (l.tipo || '') + ' ' + novos[k].nome);
+        try {
+          await P.enviarTrilhaImportada({ nome: String(l.nome || 'Trilha importada').slice(0, 80), estado: l.fim ? 'percorrida' : 'planejada', percorrida_em: l.fim || null,
+            pontos: pts, meio: drone ? 'drone' : 'equipe', cor: l.cor || novos[k].dados.cor || null, observacoes: ('Importada de ' + novos[k].nome).slice(0, 1000) });
+          c.trilhas++;
+        } catch (e) { c.falhas++; }
+      }
+    }
+    var partes = [];
+    if (c.setores) partes.push(c.setores + ' setor(es)');
+    if (c.pontos) partes.push(c.pontos + ' ponto(s)');
+    if (c.trilhas) partes.push(c.trilhas + ' trilha(s)');
+    var ja = [];
+    if (c.setoresJa) ja.push(c.setoresJa + ' setor(es) já existiam');
+    if (c.pontosJa) ja.push(c.pontosJa + ' ponto(s) já existiam');
+    var texto = partes.length ? 'Enviado para a operação: ' + partes.join(', ') + '.' : 'Nada novo para enviar.';
+    if (ja.length) texto += ' (' + ja.join(', ') + ', não duplicados.)';
+    if (c.falhas) texto += ' ' + c.falhas + ' item(ns) não couberam.';
+    return { texto: texto, falhas: c.falhas };
+  }
+
+  // Arrastar um arquivo do computador para o mapa importa na hora.
+  function ligarArrastarMapa() {
+    var mapa = P.mapa();
+    if (!mapa || !mapa.getContainer) return;
+    var cont = mapa.getContainer();
+    if (cont._gbsArrastar) return;
+    cont._gbsArrastar = true;
+    cont.addEventListener('dragover', function (ev) { if (temArquivos(ev)) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; } });
+    cont.addEventListener('drop', function (ev) {
+      if (!temArquivos(ev)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      importarArquivos(ev.dataTransfer.files);
+    });
+  }
+
+  // Enquadra tudo o que acabou de entrar (pontos, linhas, áreas e imagens).
+  function enquadrarNovos(imps) {
+    var pts = [];
+    imps.forEach(function (imp) {
+      imp.dados.pontos.forEach(function (p) { pts.push([p.lat, p.lng]); });
+      imp.dados.linhas.forEach(function (l) { pts = pts.concat(l.pts); });
+      imp.dados.areas.forEach(function (a) { pts = pts.concat(a.pts); });
+      imp.dados.imagens.forEach(function (im) { pts.push([im.bounds.north, im.bounds.west], [im.bounds.south, im.bounds.east]); });
+    });
+    if (!pts.length || !P.mapa()) return;
+    P.mapa().fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 16 });
   }
 
   function enquadrar(imp, silencioso) {
@@ -571,6 +672,7 @@
     imp.dados.pontos.forEach(function (p) { pts.push([p.lat, p.lng]); });
     imp.dados.linhas.forEach(function (l) { pts = pts.concat(l.pts); });
     imp.dados.areas.forEach(function (a) { pts = pts.concat(a.pts); });
+    imp.dados.imagens.forEach(function (im) { pts.push([im.bounds.north, im.bounds.west], [im.bounds.south, im.bounds.east]); });
     if (!pts.length) return;
     imp.visivel = true;
     desenharImportados();
@@ -578,21 +680,6 @@
     void silencioso;
   }
 
-  async function converterPontos(imp) {
-    var pts = imp.dados.pontos.slice(0, 100);
-    var r = await UI.confirmar({ titulo: 'Criar ' + pts.length + ' ponto(s) de interesse?', ok: 'Criar pontos',
-      texto: 'Os pontos do arquivo "' + imp.nome + '" passam a ser vistos por todos os responsáveis da operação (categoria "Outro"; dá para editar depois).' +
-        (imp.dados.pontos.length > 100 ? ' Só os 100 primeiros serão criados.' : '') });
-    if (!r) return;
-    var ok = 0, falhas = 0;
-    for (var i = 0; i < pts.length; i++) {
-      try {
-        await P.salvarPonto({ categoria: 'OUTRO', titulo: String(pts[i].nome || 'Ponto importado').slice(0, 80), descricao: ('Importado de ' + imp.nome + (pts[i].descricao ? ' — ' + pts[i].descricao : '')).slice(0, 1000), lat: pts[i].lat, lng: pts[i].lng });
-        ok++;
-      } catch (e) { falhas++; }
-    }
-    UI.aviso(ok + ' ponto(s) criados' + (falhas ? '; ' + falhas + ' com erro' : '') + '.', falhas ? 'erro' : 'ok', 7000);
-  }
 
   /* ------------------------------------------------------------------ */
   /* Anéis de distância                                                   */
@@ -872,6 +959,7 @@
   window.Ferramentas = {
     infoPonto: infoPonto, irParaCoordenada: irParaCoordenada, medir: medir,
     abrirExportar: abrirExportar, abrirImportar: abrirImportar,
+    importarArquivos: importarArquivos,
     abrirEstatisticas: abrirEstatisticas, estatisticas: estatisticas,
     alternarAneis: alternarAneis, temAneis: temAneis,
     aoNovoPonto: aoNovoPonto, foraDoSetor: foraDoSetor, areaPoligono: areaPoligono,

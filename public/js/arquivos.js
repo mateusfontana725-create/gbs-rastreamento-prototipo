@@ -177,7 +177,7 @@
   //   espessura, opacidade, tipo, inicio, fim}], areas: [{nome, pts, descricao, cor, espessura, opacidade, preenchimento}], avisos }
   // As propriedades vêm do que cada formato traz: KML (estilo da linha e da área), GeoJSON ("simplestyle":
   // stroke, stroke-width, stroke-opacity, fill), GPX (descrição, tipo, horários e cor das extensões Garmin/OsmAnd).
-  function vazio() { return { pontos: [], linhas: [], areas: [], avisos: [] }; }
+  function vazio() { return { pontos: [], linhas: [], areas: [], avisos: [], imagens: [] }; }
 
   // Cores: KML usa aabbggrr (alfa, azul, verde, vermelho); Garmin usa nomes.
   function corKmlParaHex(t) {
@@ -323,6 +323,16 @@
           fim: tempos.length ? new Date(Math.max.apply(null, tempos)).toISOString() : null }, props)));
       });
     });
+    // Imagem sobreposta (GroundOverlay): limites em latitude/longitude. A imagem vem do KMZ (preencherImagensKmz).
+    filhos(doc, 'GroundOverlay').forEach(function (g, i) {
+      var href = filhos(g, 'href')[0], caixa = filhos(g, 'LatLonBox')[0];
+      if (!caixa) return;
+      var b = { north: Number(textoDe(caixa, 'north')), south: Number(textoDe(caixa, 'south')), east: Number(textoDe(caixa, 'east')), west: Number(textoDe(caixa, 'west')) };
+      if (![b.north, b.south, b.east, b.west].every(isFinite)) return;
+      var nomeImg = textoDe(g, 'name') || 'Imagem ' + (i + 1);
+      if (Math.abs(Number(textoDe(caixa, 'rotation')) || 0) > 0.0001) r.avisos.push('Imagem "' + nomeImg + '" girada: aparece sem a rotação.');
+      r.imagens.push({ nome: nomeImg, href: href ? href.textContent.trim() : '', bounds: b });
+    });
     return r;
   }
 
@@ -371,33 +381,93 @@
     return r;
   }
 
-  // KMZ = ZIP com um .kml dentro. Lê o diretório central e descompacta (DecompressionStream).
-  async function kmlDeKmz(buf) {
-    var dv = new DataView(buf);
-    var fim = -1;
+  // KMZ = ZIP. Lê o diretório central e descompacta (DecompressionStream) o .kml e as imagens.
+  async function entradasKmz(buf) {
+    var dv = new DataView(buf), fim = -1;
     for (var i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) {
       if (dv.getUint32(i, true) === 0x06054b50) { fim = i; break; }
     }
     if (fim < 0) throw new Error('KMZ inválido.');
     var total = dv.getUint16(fim + 10, true), off = dv.getUint32(fim + 16, true);
-    var dec = new TextDecoder();
+    var dec = new TextDecoder(), saida = [];
     for (var k = 0; k < total; k++) {
       if (dv.getUint32(off, true) !== 0x02014b50) break;
       var metodo = dv.getUint16(off + 10, true), tamC = dv.getUint32(off + 20, true);
       var nLen = dv.getUint16(off + 28, true), xLen = dv.getUint16(off + 30, true), cLen = dv.getUint16(off + 32, true);
       var local = dv.getUint32(off + 42, true);
       var nome = dec.decode(new Uint8Array(buf, off + 46, nLen));
-      if (/\.kml$/i.test(nome)) {
+      if (/\.(kml|png|jpe?g|gif)$/i.test(nome)) {
         var ini = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
-        var dados = new Uint8Array(buf, ini, tamC);
-        if (metodo === 0) return dec.decode(dados);
-        if (metodo !== 8 || typeof DecompressionStream === 'undefined') throw new Error('Este navegador não abre KMZ compactado. Extraia o .kml e importe-o.');
-        var ds = new Blob([dados]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-        return await new Response(ds).text();
+        var dados = new Uint8Array(buf, ini, tamC), bytes;
+        if (metodo === 0) bytes = dados;
+        else if (metodo === 8 && typeof DecompressionStream !== 'undefined') {
+          bytes = new Uint8Array(await new Response(new Blob([dados]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+        } else throw new Error('Este navegador não abre KMZ compactado. Extraia o .kml e importe-o.');
+        saida.push({ nome: nome, bytes: bytes });
       }
       off += 46 + nLen + xLen + cLen;
     }
-    throw new Error('O KMZ não contém um arquivo .kml.');
+    return saida;
+  }
+
+  async function kmlDeKmz(buf) {
+    var kml = (await entradasKmz(buf)).filter(function (e) { return /\.kml$/i.test(e.nome); })[0];
+    if (!kml) throw new Error('O KMZ não contém um arquivo .kml.');
+    return new TextDecoder().decode(kml.bytes);
+  }
+
+  function base64(bytes) {
+    var s = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function mimeImagem(nome) { return /\.png$/i.test(nome) ? 'image/png' : /\.gif$/i.test(nome) ? 'image/gif' : 'image/jpeg'; }
+
+  // Liga cada imagem do KML à imagem guardada dentro do KMZ (href = caminho relativo, ex.: files/mapa.png).
+  async function preencherImagensKmz(arquivo, r) {
+    var entradas = await entradasKmz(await arquivo.arrayBuffer());
+    r.imagens = r.imagens.filter(function (im) {
+      var href = String(im.href || '').replace(/\\/g, '/').replace(/^\.?\//, '');
+      try { href = decodeURIComponent(href); } catch (e) { /* mantém como está */ }
+      var e = entradas.filter(function (x) { return !/\.kml$/i.test(x.nome) && (x.nome === href || x.nome.slice(-(href.length + 1)) === '/' + href); })[0];
+      if (!e) { r.avisos.push('Imagem "' + im.nome + '" não está dentro do KMZ (link externo não é importado).'); return false; }
+      im.dataUrl = 'data:' + mimeImagem(e.nome) + ';base64,' + base64(e.bytes);
+      return true;
+    });
+  }
+
+  // Limites (norte, sul, leste, oeste) de uma imagem a partir do arquivo de posição (world file, 6 linhas):
+  // A, D, B, E, C, F. Coordenadas em UTM (metros) são convertidas; zona e hemisfério Sul por padrão (Brasil).
+  function limitesDeMundo(texto, w, h, zona) {
+    var v = String(texto).replace(/,/g, '.').trim().split(/\s+/).map(Number);
+    if (v.length < 6 || v.slice(0, 6).some(function (x) { return !isFinite(x); })) throw new Error('Arquivo de posição inválido (são 6 números).');
+    var A = v[0], D = v[1], B = v[2], E = v[3], C = v[4], F = v[5];
+    if (Math.abs(D) > 1e-12 || Math.abs(B) > 1e-12) throw new Error('Imagem girada no arquivo de posição: ainda não é suportado.');
+    var oeste = C - A / 2, norte = F - E / 2, leste = oeste + A * w, sul = norte + E * h;
+    var nw = [norte, oeste], se = [sul, leste];
+    if (Math.abs(C) > 360 || Math.abs(F) > 90) {   // projetado (UTM, em metros)
+      var a = window.Coords.deUtm(zona || 22, true, oeste, norte), b = window.Coords.deUtm(zona || 22, true, leste, sul);
+      nw = [a.lat, a.lng]; se = [b.lat, b.lng];
+    }
+    var lim = { north: Math.max(nw[0], se[0]), south: Math.min(nw[0], se[0]), west: Math.min(nw[1], se[1]), east: Math.max(nw[1], se[1]) };
+    if (![lim.north, lim.south, lim.east, lim.west].every(isFinite) || lim.north > 90 || lim.south < -90) throw new Error('Posição da imagem fora do mapa (confira o arquivo de posição e a zona UTM).');
+    return lim;
+  }
+
+  async function importarImagem(arquivo, opcoes) {
+    if (arquivo.size > LIMITE_BYTES) throw new Error('Imagem grande demais (máximo de 8 MB).');
+    if (!opcoes.mundo) throw new Error('Imagem sem posição: junte o arquivo de posição com o mesmo nome (.jgw, .pgw ou .wld), ou use um KMZ com a imagem.');
+    var bmp = await createImageBitmap(arquivo);
+    var w = bmp.width, h = bmp.height;
+    if (bmp.close) bmp.close();
+    var bounds = limitesDeMundo(opcoes.mundo, w, h, opcoes.zona);
+    var dataUrl = await new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { res(fr.result); };
+      fr.onerror = function () { rej(new Error('Não foi possível ler a imagem.')); };
+      fr.readAsDataURL(arquivo);
+    });
+    return { pontos: [], linhas: [], areas: [], avisos: [], formato: 'imagem', vertices: 0, imagens: [{ nome: arquivo.name, dataUrl: dataUrl, bounds: bounds }] };
   }
 
   // Quando nada é reconhecido, mostra quais elementos o arquivo tem (para diagnosticar o formato).
@@ -411,7 +481,7 @@
   }
 
   // Lê um File (ou { name, text }) e devolve os objetos encontrados.
-  async function importar(arquivo) {
+  async function importarVetor(arquivo) {
     if (arquivo.size > LIMITE_BYTES) throw new Error('Arquivo grande demais (máximo de 8 MB).');
     var nome = String(arquivo.name || '').toLowerCase();
     var texto, r;
@@ -435,14 +505,24 @@
     r.linhas.forEach(function (l) { vert += l.pts.length; });
     r.areas.forEach(function (a) { vert += a.pts.length; });
     if (vert > LIMITE_VERTICES) throw new Error('Arquivo com pontos demais (' + vert + '). O limite é ' + LIMITE_VERTICES + '.');
-    if (!r.pontos.length && !r.linhas.length && !r.areas.length) throw new Error('Nenhum ponto, trilha ou área encontrado no arquivo.' + resumoTags(texto));
+    if (!r.pontos.length && !r.linhas.length && !r.areas.length && !r.imagens.length) throw new Error('Nenhum ponto, trilha ou área encontrado no arquivo.' + resumoTags(texto));
     r.vertices = vert;
     r.formato = formato || (r.linhas[0] || r.areas[0] || {}).formato || (/\.(geo)?json$/.test(nome) ? 'geojson' : /\.csv$|\.txt$/.test(nome) ? 'csv' : /\.gpx$/.test(nome) ? 'gpx' : 'kml');
     return r;
   }
 
+  // Ponto de entrada: vetor (GPX, KML, KMZ, GeoJSON, CSV) ou imagem (PNG/JPG com o arquivo de posição em opcoes.mundo).
+  async function importar(arquivo, opcoes) {
+    opcoes = opcoes || {};
+    var nome = String(arquivo.name || '').toLowerCase();
+    if (/\.(png|jpe?g|gif|bmp|webp)$/.test(nome)) return importarImagem(arquivo, opcoes);
+    var r = await importarVetor(arquivo);
+    if (/\.kmz$/.test(nome) && r.imagens.length) await preencherImagensKmz(arquivo, r);
+    return r;
+  }
+
   global.Arquivos = {
-    exportar: exportar, baixar: baixar, importar: importar, circulo: circulo,
+    exportar: exportar, baixar: baixar, importar: importar, importarImagem: importarImagem, circulo: circulo,
     _ler: { gpx: function (t) { return lerGpx(new DOMParser().parseFromString(t, 'application/xml')); },
       kml: function (t) { return lerKml(new DOMParser().parseFromString(t, 'application/xml')); }, geojson: lerGeojson, csv: lerCsv },
   };

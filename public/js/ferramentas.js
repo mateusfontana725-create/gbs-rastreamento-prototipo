@@ -506,7 +506,7 @@
       if (!atual.importados.length) { lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhuma camada importada.' })); return; }
       atual.importados.forEach(function (imp) {
         var d = imp.dados;
-        var resumo = [d.pontos.length + ' ponto(s)', d.linhas.length + ' trilha(s)/rota(s)', d.areas.length + ' área(s)'].join(' · ');
+        var resumo = [d.pontos.length + ' ponto(s)', d.linhas.length + ' trilha(s)/rota(s)', d.areas.length + ' área(s)', 'só neste aparelho'].join(' · ');
         var ativa = P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em;
         lista.appendChild(UI.el('li', { classe: 'item-importado' }, [
           UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', checked: imp.visivel ? true : null, onchange: function () { imp.visivel = this.checked; salvarImportados(); desenharImportados(); } }),
@@ -539,6 +539,17 @@
         render();
         enquadrar(imp, true);
         UI.aviso('Importado: ' + f.name + ' (' + d.pontos.length + ' pontos, ' + d.linhas.length + ' trilhas/rotas, ' + d.areas.length + ' áreas).', 'ok', 7000);
+        // Áreas importadas: a camada fica só neste aparelho. Como setores, elas aparecem para todos os responsáveis.
+        if (d.areas.length && P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em && P.enviarAreasComoSetores) {
+          var escolha = await UI.confirmar({
+            titulo: 'Enviar as áreas como setores?',
+            texto: d.areas.length + ' área(s) no arquivo. A camada fica só neste aparelho. Como setores, elas aparecem para todos os responsáveis desta operação.',
+            ok: 'Enviar como setores', cancelar: 'Só neste aparelho',
+          });
+          if (escolha) await P.enviarAreasComoSetores(d.areas.map(function (a) {
+            return { nome: a.nome, pontos: a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }) };
+          }));
+        }
       } catch (e) {
         erro.textContent = 'Não foi possível importar "' + f.name + '": ' + (e.message || e);
         erro.hidden = false;

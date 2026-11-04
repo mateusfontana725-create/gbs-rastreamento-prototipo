@@ -5942,6 +5942,22 @@
   }
 
   // s: setor existente (edição) ou base de um novo (forma + geometria)
+  // Áreas de um arquivo importado viram setores da operação: vão para o servidor e aparecem em todos os aparelhos
+  // (a camada importada, em si, continua só neste aparelho). Uma a uma, sem formulário, em azul padrão.
+  async function enviarAreasComoSetores(areas) {
+    if (!est.op || !podeAlterar() || !areas || !areas.length) return 0;
+    var ok = 0, falhas = 0;
+    for (var i = 0; i < areas.length; i++) {
+      var a = areas[i];
+      try {
+        await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: null, p_dados: { nome: String(a.nome || 'Área importada ' + (i + 1)).slice(0, 60), forma: 'poligono', pontos: a.pontos } });
+        ok++;
+      } catch (e) { falhas++; }
+    }
+    UI.aviso((ok ? ok + ' área(s) enviada(s) como setor.' : 'Nenhuma área enviada.') + (falhas ? ' ' + falhas + ' não couberam (nome repetido ou erro).' : ''), falhas ? 'erro' : 'ok', 9000);
+    return ok;
+  }
+
   function abrirFormSetor(s) {
     var novo = !s.id;
     var d = Object.assign({ nome: 'Setor ' + (est.setores.size + 1), cor: corLivre(), status: 'pendente', equipe: '', observacoes: '', participante_id: null }, s);
@@ -11007,6 +11023,7 @@
     setorDesenhoDesde: function (lat, lng) { iniciarDesenho('poligono'); if (est.desenho) aoClicarNoMapa({ latlng: { lat: lat, lng: lng } }); },
     enviarDestino: function (lat, lng, nome) { abrirEnviarDestino({ nome: nome || 'Ponto marcado no mapa', lat: lat, lng: lng }); },
     criarSetor: function (pontos, nome) { abrirFormSetor(Object.assign({ forma: 'poligono', pontos: pontos }, nome ? { nome: nome.slice(0, 60) } : {})); },
+    enviarAreasComoSetores: function (areas) { return enviarAreasComoSetores(areas); },
     salvarPonto: function (dados) { return C.rpc('salvar_ponto', { p_operacao: est.op.id, p_id: null, p_dados: dados }).then(function (r) { aplicarPontos([r]); return r; }); },
     blocoCoordenadas: blocoCoordenadas,
     copiar: copiarTexto,

@@ -946,6 +946,70 @@
     if (aberta && aberta.op.id === operacaoId) aberta.render();
   }
 
+  /* Último local visto (ULV): só o ponto de referência da operação, sem o formulário inteiro.
+     Grava só local_lat/local_lng (não mexe em tipo, descrição nem IPO). */
+  function abrirLocalUltimo(op, opcoes) {
+    opcoes = opcoes || {};
+    var local = op.local_lat != null ? { lat: op.local_lat, lng: op.local_lng } : null;
+    var info = UI.el('p', { classe: 'mono', id: 'ulv-info' });
+    var aviso = UI.el('small', { classe: 'muted', id: 'ulv-aviso' });
+    var txt = UI.el('input', { classe: 'campo mono', id: 'ulv-txt', placeholder: 'ou digite: -25.4281, -49.3205' });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btnSalvar = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'ulv-salvar', texto: 'Salvar último local' });
+    function mostrar() {
+      info.textContent = local ? 'Atual: ' + window.Coords.formatar(local.lat, local.lng, 'dec') : 'Nenhum último local visto cadastrado.';
+    }
+    async function escolherMapa() {
+      var p = await escolherPontoNoMapa(local, 'Último local visto');
+      if (p) { local = p; txt.value = ''; aviso.textContent = ''; mostrar(); }
+    }
+    async function usarMinha() {
+      var p = await minhaPosicao();
+      if (!p) { aviso.textContent = 'Sem a sua localização agora. Escolha no mapa ou digite as coordenadas.'; return; }
+      local = { lat: p.lat, lng: p.lng };
+      txt.value = '';
+      aviso.textContent = p.prec ? 'Sua posição (± ' + Math.round(p.prec) + ' m)' : '';
+      mostrar();
+    }
+    txt.addEventListener('input', function () {
+      var c = window.Coords.interpretar(txt.value);
+      if (c) { local = { lat: Math.round(c.lat * 1e7) / 1e7, lng: Math.round(c.lng * 1e7) / 1e7 }; aviso.textContent = '✓ coordenada reconhecida'; mostrar(); }
+      else aviso.textContent = txt.value.trim() ? 'Formato não reconhecido' : '';
+    });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Último local visto' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Ponto de referência da operação (ULV): a distância até a vítima, a previsão do tempo e o mapa usam este ponto. Pode ser o local onde a pessoa foi vista pela última vez.' }),
+      info,
+      UI.el('div', { classe: 'acoes-linha' }, [
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ulv-mapa', texto: '📍 Escolher no mapa', onclick: escolherMapa }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ulv-eu', texto: 'Usar minha posição', onclick: usarMinha }),
+      ]),
+      txt, aviso, erro,
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-link', type: 'button', id: 'ulv-tirar', texto: 'Tirar o último local', onclick: function () { local = null; txt.value = ''; aviso.textContent = ''; mostrar(); } }),
+        btnSalvar,
+      ]),
+    ]);
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    mostrar();
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      btnSalvar.disabled = true;
+      try {
+        var atual = await C.rpc('atualizar_operacao', { p_operacao: op.id, p_dados: { local_lat: local ? local.lat : null, local_lng: local ? local.lng : null } });
+        fechar(true);
+        UI.aviso(local ? 'Último local visto salvo.' : 'Último local visto retirado.', 'ok');
+        if (opcoes.aoSalvar) opcoes.aoSalvar(atual);
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btnSalvar.disabled = false;
+      }
+    });
+  }
+
   window.Cadastro = {
     TIPOS: TIPOS,
     textoTipo: textoTipo,
@@ -955,6 +1019,7 @@
     camposVitima: camposVitima,
     escolherPontoNoMapa: escolherPontoNoMapa,
     abrirDados: abrirDados,
+    abrirLocalUltimo: abrirLocalUltimo,
     secaoFichas: secaoFichas,
     abrirRapido: abrirRapido,
     abrirFichaPorId: abrirFichaPorId,

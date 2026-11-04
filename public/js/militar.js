@@ -195,6 +195,7 @@
     marcaLocal: null,           // marcador do local da operação no mapa
     // trilhas desenhadas à mão (migração 028)
     trilhasManuais: new Map(),  // id → { d: dados, camada }
+    areasProibidas: new Map(),  // id → { d: dados, camada } (migração 061)
     camadaTrilhasManuais: null,
     canalTrilhas: null,
     timerTrilhas: null,
@@ -1502,6 +1503,7 @@
     assinarTempoReal();
     assinarTempoRealExtras();
     assinarTrilhasManuais();
+    assinarAreasProibidas();
     var cargasModulos = [];
     ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing', 'RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) {
       if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
@@ -1867,6 +1869,7 @@
     // Trilhas desenhadas à mão: acima dos setores e abaixo dos rastros de GPS e dos marcadores.
     mapa.createPane('trilhasDesenhadas').style.zIndex = 390;
     est.camadaTrilhasManuais = L.layerGroup().addTo(mapa);
+    est.camadaAreasProibidas = L.layerGroup().addTo(mapa);
     if (est.prefsMapa.setores) est.camadaSetores.addTo(mapa);
     if (est.prefsMapa.pontos) est.camadaPontosInt.addTo(mapa);
     mapa.on('click', aoClicarNoMapa);
@@ -2210,7 +2213,7 @@
     if (!podeAlterar()) return;
     fecharMenu(false);
     var fechar = UI.abrirModal(UI.el('div', { classe: 'escolha-setor' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Novo setor de busca' }),
+      UI.el('h2', { id: 'modal-titulo', texto: 'Novo desenho no mapa' }),
       UI.el('div', { classe: 'opcoes-setor' }, [
         UI.el('button', { classe: 'opcao-setor', type: 'button', id: 'setor-tipo-poligono', onclick: function () { fechar(true); iniciarDesenho('poligono'); } }, [
           UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '⬠' }),
@@ -2218,6 +2221,9 @@
         UI.el('button', { classe: 'opcao-setor', type: 'button', id: 'setor-tipo-raio', onclick: function () { fechar(true); iniciarDesenho('raio'); } }, [
           UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '◯' }),
           UI.el('strong', { texto: 'Por raio' }), UI.el('small', { texto: 'toque no centro e informe o raio em metros' })]),
+        UI.el('button', { classe: 'opcao-setor', type: 'button', id: 'area-tipo-proibida', onclick: function () { fechar(true); iniciarDesenho('poligono', { proibida: true }); } }, [
+          UI.el('span', { classe: 'opcao-setor-ico', 'aria-hidden': 'true', texto: '⛔' }),
+          UI.el('strong', { texto: 'Área proibida' }), UI.el('small', { texto: 'marca um lugar que a equipe não pode entrar' })]),
       ]),
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
     ]));
@@ -5391,6 +5397,7 @@
       est.erroAreas = true;
     }
     await carregarTrilhasManuais();   // trata os próprios erros (banco sem a migração 028 não derruba setores)
+    await carregarAreasProibidas();   // migração 061 (erros tratados lá dentro)
   }
 
   // Tipos de ponto criados pelos responsáveis (valem para todas as operações). Banco sem a migração 047: só as categorias fixas.
@@ -5466,6 +5473,8 @@
     est.pontosInt = new Map();
     est.destinos = new Map();
     est.trilhasManuais = new Map();
+    est.areasProibidas.forEach(function (a) { if (a.camada) a.camada.remove(); });
+    est.areasProibidas = new Map();
     renderizarAreas();
   }
 
@@ -5764,7 +5773,8 @@
 
   function atualizarBarraPoligono() {
     var n = est.desenho.pontos.length;
-    mostrarBarraDesenho(n < 3 ? 'Toque nos cantos da área (' + n + ' de no mínimo 3).' : n + ' cantos. Toque em mais pontos ou em Concluir.', null, [
+    var quem = est.desenho.proibida ? 'da área proibida' : 'da área';
+    mostrarBarraDesenho(n < 3 ? 'Toque nos cantos ' + quem + ' (' + n + ' de no mínimo 3).' : n + ' cantos. Toque em mais pontos ou em Concluir.', null, [
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Desfazer', disabled: n ? null : true, onclick: function () { est.desenho.pontos.pop(); redesenharTemp(); atualizarBarraPoligono(); } }),
       UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'desenho-concluir', texto: 'Concluir', disabled: n >= 3 ? null : true, onclick: concluirPoligono }),
       UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'desenho-cancelar', texto: 'Cancelar', onclick: cancelarDesenho }),
@@ -5857,6 +5867,7 @@
     var dz = est.desenho;
     if (!dz || dz.pontos.length < 3) return;
     $('barra-desenho').hidden = true;
+    if (dz.proibida) { var pts = dz.pontos.slice(); cancelarDesenho(); abrirFormAreaProibida(pts); return; }
     abrirFormSetor({ forma: 'poligono', pontos: dz.pontos.slice() });
   }
 
@@ -7351,6 +7362,10 @@
     est.canalTrilhas = null;
     est.trilhasManuais.forEach(function (t) { if (t.camada) t.camada.remove(); });
     est.trilhasManuais = new Map();
+    if (est.canalAreasProibidas) { try { C.cliente.removeChannel(est.canalAreasProibidas); } catch (e) { /* ignora */ } }
+    est.canalAreasProibidas = null;
+    est.areasProibidas.forEach(function (a) { if (a.camada) a.camada.remove(); });
+    est.areasProibidas = new Map();
     est.semTrilhasManuais = false;
     est.erroTrilhasManuais = null;
   }
@@ -7918,6 +7933,137 @@
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]));
+  }
+
+  /* ---------- Áreas proibidas (migração 061) ---------- */
+  // Polígono que a equipe NÃO deve entrar. Não é setor de busca: não entra em POA, POD nem missões.
+  var ESTILO_PROIBIDA = { color: '#dc2626', weight: 2, opacity: 0.9, fillColor: '#dc2626', fillOpacity: 0.18, dashArray: '6 4' };
+  function desenharAreaProibida(a) {
+    if (a.camada) { a.camada.remove(); a.camada = null; }
+    if (!est.mapa || !est.camadaAreasProibidas || !Array.isArray(a.d.pontos) || a.d.pontos.length < 3) return;
+    var pol = L.polygon(a.d.pontos, Object.assign({ pane: 'trilhasDesenhadas', className: 'area-proibida' }, ESTILO_PROIBIDA));
+    ligarCliquesMapa(pol, {
+      noDesenho: function (ev) { aoClicarNoMapa(ev); },
+      info: function () { return { titulo: '⛔ ' + a.d.nome, sub: 'Área proibida' + (a.d.motivo ? ' · ' + a.d.motivo : '') }; },
+      detalhes: function () { abrirAreaProibida(a.d.id); },
+    });
+    pol.addTo(est.camadaAreasProibidas);
+    a.camada = pol;
+  }
+
+  function aplicarAreasProibidas(lista, completa) {
+    var vistos = new Set();
+    lista.forEach(function (d) {
+      vistos.add(d.id);
+      var a = est.areasProibidas.get(d.id);
+      if (!a) { a = { d: d, camada: null }; est.areasProibidas.set(d.id, a); }
+      else a.d = d;
+      desenharAreaProibida(a);
+    });
+    if (completa) {
+      est.areasProibidas.forEach(function (a, id) {
+        if (!vistos.has(id)) { if (a.camada) a.camada.remove(); est.areasProibidas.delete(id); }
+      });
+    }
+  }
+
+  async function carregarAreasProibidas() {
+    if (!est.op) return;
+    var opId = est.op.id;
+    try {
+      var lista = await C.consultar(C.cliente.from('areas_proibidas').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true }));
+      if (!est.op || est.op.id !== opId) return;
+      aplicarAreasProibidas(lista || [], true);
+    } catch (e) {
+      // banco sem a migração 061: o resto do painel segue
+      console.warn('Áreas proibidas indisponíveis:', e.message);
+    }
+  }
+
+  function assinarAreasProibidas() {
+    if (!est.op) return;
+    var opId = est.op.id;
+    if (est.canalAreasProibidas) { try { C.cliente.removeChannel(est.canalAreasProibidas); } catch (e) { /* ignora */ } }
+    try {
+      est.canalAreasProibidas = C.cliente.channel('op-areas-proibidas-' + opId + '-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'areas_proibidas', filter: 'operacao_id=eq.' + opId }, function () { carregarAreasProibidas(); })
+        .subscribe(function (status) {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            setTimeout(function () { if (est.op && est.op.id === opId) { carregarAreasProibidas(); assinarAreasProibidas(); } }, 60000);
+          }
+        });
+    } catch (e) { /* sem tempo real: recarrega ao abrir a operação e ao salvar */ }
+  }
+
+  function abrirFormAreaProibida(pontos) {
+    if (!podeAlterar()) return;
+    var nome = UI.el('input', { classe: 'campo', id: 'area-proibida-nome', maxlength: '80', autocomplete: 'off', placeholder: 'Ex.: Mina desativada' });
+    var motivo = UI.el('textarea', { classe: 'campo', id: 'area-proibida-motivo', rows: '3', maxlength: '500', placeholder: 'Por que a equipe não pode entrar aqui' });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-primario', type: 'submit', id: 'area-proibida-salvar', texto: 'Marcar área proibida' });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Área proibida' }),
+      UI.el('p', { classe: 'ajuda', texto: 'Marca no mapa um lugar que a equipe não deve entrar. Aparece para todos os responsáveis desta operação.' }),
+      UI.campo('Nome', nome, { para: 'area-proibida-nome' }),
+      UI.campo('Motivo', motivo, { para: 'area-proibida-motivo', largo: true }),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var n = nome.value.replace(/\s+/g, ' ').trim();
+      if (!n) { erro.textContent = 'Dê um nome para a área.'; erro.hidden = false; nome.focus(); return; }
+      btn.disabled = true;
+      try {
+        var criada = await C.rpc('salvar_area_proibida', { p_operacao: est.op.id, p_id: null, p_dados: { nome: n, pontos: pontos, motivo: motivo.value.trim() } });
+        fechar(true);
+        var a = { d: criada, camada: null };
+        est.areasProibidas.set(criada.id, a);
+        desenharAreaProibida(a);
+        UI.aviso('Área proibida marcada.', 'ok');
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function abrirAreaProibida(id) {
+    var a = est.areasProibidas.get(id);
+    if (!a) return;
+    var d = a.d;
+    var editavel = podeAlterar();
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-trilha' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: '⛔ ' + d.nome }),
+      UI.el('p', { classe: 'detalhe-texto', texto: d.motivo || 'Sem motivo informado.' }),
+      UI.el('p', { classe: 'muted', texto: d.pontos.length + ' cantos · criada por ' + d.criado_por_nome + ' em ' + C.hora(d.criado_em) }),
+      rodapeDetalhe([
+        editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'area-proibida-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirAreaProibida(d); } }) : null,
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ].filter(Boolean)),
+    ]));
+  }
+
+  async function excluirAreaProibida(d) {
+    var r = await UI.confirmar({
+      titulo: 'Excluir a área proibida "' + d.nome + '"?',
+      texto: 'A área some do mapa de todos os responsáveis. Setores, participantes e trilhas não são afetados.',
+      ok: 'Excluir área',
+      perigo: true,
+    });
+    if (!r) return;
+    try {
+      await C.rpc('excluir_area_proibida', { p_id: d.id });
+      var a = est.areasProibidas.get(d.id);
+      if (a && a.camada) a.camada.remove();
+      est.areasProibidas.delete(d.id);
+      UI.aviso('Área excluída.', 'ok');
+    } catch (e) {
+      UI.aviso(e.codigo === 'sem_permissao' ? 'Só quem desenhou a área, quem criou a operação ou um administrador pode excluí-la.' : e.message, 'erro', 7000);
+    }
   }
 
  async function excluirTrilhaManual(d) {

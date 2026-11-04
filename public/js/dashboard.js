@@ -799,6 +799,26 @@
     return m < 1 ? 'agora' : 'há ' + duracao(agora - ms);
   }
   function coordenadas(p) { return p.lat.toFixed(5) + ', ' + p.lng.toFixed(5); }
+  // Tempo real das vítimas (ULV, localização): recarrega o dashboard da operação quando uma ficha muda.
+  // O link público (sem login) não tem tempo real: a conferência periódica cobre.
+  var canalVitimasDash = null, atrasoVitimasDash = null;
+  function assinarVitimasDash(op, elemento, opcoes) {
+    if (canalVitimasDash) { try { C.cliente.removeChannel(canalVitimasDash); } catch (e) { /* ignora */ } canalVitimasDash = null; }
+    if (opcoes.publico || !C.cliente || !C.cliente.channel) return;
+    try {
+      canalVitimasDash = C.cliente.channel('dash-vitimas-' + op.id + '-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'vitimas', filter: 'operacao_id=eq.' + op.id }, function () {
+          clearTimeout(atrasoVitimasDash);
+          atrasoVitimasDash = setTimeout(function () { if (document.body.contains(elemento)) raiz.Dashboard.operacao(op, elemento, opcoes, true); }, 600);
+        })
+        .subscribe();
+    } catch (e) { canalVitimasDash = null; }
+  }
+  // ULV das vítimas (é da ficha, não do local da operação): lista "V-01 Nome: lat, lng · …", ou null
+  function textoUlvs(d) {
+    var com = ((d && d.vitimas) || []).filter(function (v) { return v.ulv; });
+    return com.length ? com.map(function (v) { return v.rotulo + (v.nome ? ' ' + v.nome : '') + ': ' + coordenadas(v.ulv); }).join(' · ') : null;
+  }
   function pct(x) { return Math.round(x * 100) + '%'; }
 
   // Pessoas em campo ao longo do tempo (uma coluna por intervalo) com marcas (ex.: vítima localizada).
@@ -935,7 +955,7 @@
           ['Situação', v.localizada ? 'localizada · ' + (CONDICOES[v.condicao] || v.condicao || '—').toLowerCase() : 'ainda não localizada'],
           ['Hora', v.em ? diaMes(Date.parse(v.em)) + ' ' + hora(Date.parse(v.em)) : '—'],
           ['Tempo após o início', v.minutos_ate != null ? minutos(v.minutos_ate) : '—'],
-          ['Distância do ULV', v.distancia_km != null ? km(v.distancia_km) : (d && d.ulv ? '—' : 'sem ULV')],
+          ['Distância do ULV', v.distancia_km != null ? km(v.distancia_km) : (textoUlvs(d) ? '—' : 'sem ULV')],
         ],
       });
     }
@@ -958,11 +978,11 @@
           ['Localizada', loc ? 'sim · ' + (CONDICOES[loc.condicao] || loc.condicao).toLowerCase() : 'não'],
           ['Hora', loc ? diaMes(Date.parse(loc.em)) + ' ' + hora(Date.parse(loc.em)) : '—'],
           ['Tempo após o início', loc && loc.minutos_ate != null ? minutos(loc.minutos_ate) : '—'],
-          ['Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : (d.ulv ? '—' : 'sem ULV')],
+          ['Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : (textoUlvs(d) ? '—' : 'sem ULV')],
           ['Fichas de vítima', String(d.fichas)],
           ['Localizações registradas', String(d.localizacoes)],
         ],
-        nota: d && d.ulv ? 'ULV (último local visto): ' + coordenadas(d.ulv) : null,
+        nota: textoUlvs(d) ? 'ULV (último local visto, da ficha): ' + textoUlvs(d) : null,
       });
     }
 
@@ -1038,7 +1058,7 @@
           }), function (j) { detalheUmaVitima(vitimas[j]); }),
         perfis.length ? el('div', { classe: 'dash-sub' }, [el('h4', { texto: 'Perfis' }), barrasHorizontais(perfis, d.fichas)]) : null,
       ],
-      nota: d.ulv ? 'ULV: ' + coordenadas(d.ulv) + '. Toque numa vítima para ver os dados dela.' : 'Sem ponto no cadastro: a distância não é calculada.',
+      nota: textoUlvs(d) ? 'ULV (da ficha): ' + textoUlvs(d) + '. Toque numa vítima para ver os dados dela.' : 'Nenhuma vítima com último local visto cadastrado: a distância não é calculada.',
     }) : cartao({
       span: 4, titulo: 'Vítima', n: d ? d.fichas : undefined,
       pergunta: 'Onde e quando foi localizada, a partir do último local visto (ULV).',
@@ -1047,12 +1067,12 @@
           ['Localizada', loc ? 'sim · ' + (CONDICOES[loc.condicao] || loc.condicao).toLowerCase() : 'não'],
           ['Hora', loc ? diaMes(Date.parse(loc.em)) + ' ' + hora(Date.parse(loc.em)) : '—'],
           ['Tempo após o início', loc && loc.minutos_ate != null ? minutos(loc.minutos_ate) : '—'],
-          ['Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : (d.ulv ? '—' : 'sem ULV')],
+          ['Distância do ULV', loc && loc.distancia_km != null ? km(loc.distancia_km) : (textoUlvs(d) ? '—' : 'sem ULV')],
         ]),
         perfis.length ? el('div', { classe: 'dash-sub' }, [el('h4', { texto: 'Perfis' }), barrasHorizontais(perfis, d.fichas)])
           : el('p', { classe: 'muted dash-sub', texto: d.fichas ? 'Fichas sem perfil marcado.' : 'Nenhuma ficha de vítima.' }),
       ],
-      nota: d && d.ulv ? 'ULV: ' + coordenadas(d.ulv) : 'Sem ponto no cadastro: a distância não é calculada.',
+      nota: textoUlvs(d) ? 'ULV (da ficha): ' + textoUlvs(d) : 'Nenhuma vítima com último local visto cadastrado: a distância não é calculada.',
     });
 
     // esforço por grupo
@@ -1548,6 +1568,7 @@
     operacao: function (op, elemento, opcoes, silencioso) {
       opcoes = opcoes || {};
       if (!silencioso) atualizarSozinho(elemento, ATUALIZAR_OPERACAO_MS, function () { return raiz.Dashboard.operacao(op, elemento, opcoes, true); });
+      if (!silencioso) assinarVitimasDash(op, elemento, opcoes);   // ULV e fichas: atualiza na hora quando alguém muda
       var fonte = opcoes.resumo;
       return carregar(elemento, async function () {
         var d = null, r = null;

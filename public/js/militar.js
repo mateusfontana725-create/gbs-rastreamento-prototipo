@@ -274,7 +274,6 @@
     $('btn-nova-op').addEventListener('click', abrirNovaOperacao);
     // Cadastro completo da operação nova: tipo, acionamento, local e descrição
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
-    $('menu-ulv').addEventListener('click', abrirLocalUltimoOperacao);
     $('menu-dashboard').addEventListener('click', abrirDashboardOperacao);
     // menu do cabeçalho: um botão abre a lista de ações
     $('btn-menu-topo').addEventListener('click', function (ev) {
@@ -1313,20 +1312,6 @@
     return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: o, relatos: relatos };
   }
 
-  // Último local visto (ULV): ponto de referência da operação. Só o local, sem o cadastro inteiro.
-  function abrirLocalUltimoOperacao() {
-    if (!est.op || !podeAlterar()) return;
-    fecharMenu(false);
-    window.Cadastro.abrirLocalUltimo(est.op, {
-      aoSalvar: function (atual) {
-        if (!est.op || !atual || atual.id !== est.op.id) return;
-        est.op = Object.assign(est.op, atual);
-        renderizarCabecalho();
-        desenharLocalOp();
-      },
-    });
-  }
-
   function abrirDadosOperacao() {
     if (!est.op) return;
     window.Cadastro.abrirDados(est.op, {
@@ -1717,7 +1702,6 @@
     $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
     $('menu-destino').hidden = op.status !== 'ativa';
-    $('menu-ulv').hidden = op.status !== 'ativa';
     $('btn-encerrar').hidden = op.status !== 'ativa';
     $('btn-convite').hidden = op.status !== 'ativa';
     $('btn-registrar-foto').hidden = op.status !== 'ativa';

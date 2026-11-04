@@ -5450,10 +5450,50 @@
     });
     if (completa) {
       est.pontosInt.forEach(function (p, id) {
-        if (!vistos.has(id)) { tirarPontoInt(p); est.pontosInt.delete(id); }
+        if (!vistos.has(id) && id.indexOf('ulv:') !== 0) { tirarPontoInt(p); est.pontosInt.delete(id); }   // ULV das vítimas: outra fonte
       });
     }
     renderizarAreas();
+  }
+
+  // Último local visto de cada vítima (migração 062): aparece no mapa como "Última localização", com o mesmo
+  // ícone e resumo dos pontos. Vem da ficha (tabela vitimas), não da lista de pontos: id "ulv:<vítima>".
+  function ulvDaVitima(v) {
+    return { id: 'ulv:' + v.id, ulv: true, vitima_id: v.id, categoria: 'ULTIMA_LOCALIZACAO',
+      titulo: 'ULV · ' + (v.nome || 'vítima'),
+      descricao: [v.ulv_descricao, v.ulv_em ? 'em ' + C.hora(v.ulv_em) : '', v.ulv_por_nome ? 'por ' + v.ulv_por_nome : ''].filter(Boolean).join(' · '),
+      lat: v.ulv_lat, lng: v.ulv_lng, criado_em: v.ulv_em || null, criado_por_nome: v.ulv_por_nome || '' };
+  }
+
+  function aplicarUlvVitimas(lista) {
+    var vistos = new Set();
+    lista.forEach(function (v) {
+      if (v.ulv_lat == null || v.ulv_lng == null) return;
+      var d = ulvDaVitima(v);
+      vistos.add(d.id);
+      var p = est.pontosInt.get(d.id);
+      if (!p) { p = { d: d, marcador: null }; est.pontosInt.set(d.id, p); }
+      else p.d = d;
+      desenharPontoInt(p);
+    });
+    est.pontosInt.forEach(function (p, id) {
+      if (id.indexOf('ulv:') === 0 && !vistos.has(id)) { tirarPontoInt(p); est.pontosInt.delete(id); }
+    });
+    renderizarAreas();
+  }
+
+  async function carregarUlvVitimas() {
+    if (!est.op) return;
+    var opId = est.op.id;
+    try {
+      var r = await C.consultar(C.cliente.from('vitimas').select('id,nome,ulv_lat,ulv_lng,ulv_descricao,ulv_em,ulv_por_nome').eq('operacao_id', opId));
+      if (!est.op || est.op.id !== opId) return;
+      aplicarUlvVitimas(r || []);
+    } catch (e) { /* banco sem a migração 062: o painel segue sem o ULV no mapa */ }
+  }
+
+  function abrirFichaDoUlv(vitimaId) {
+    if (window.Cadastro && est.op) window.Cadastro.abrirFichaPorId(est.op, vitimaId, { editavel: podeAlterar(), limparArquivos: limparArquivosPendentes, aoMudar: carregarFichas });
   }
 
   function aplicarDestinos(lista) {
@@ -6541,6 +6581,7 @@
   function abrirPontoInt(id) {
     var p = est.pontosInt.get(id);
     if (!p) return;
+    if (p.d.ulv) { abrirFichaDoUlv(p.d.vitima_id); return; }   // ULV de vítima: abre a ficha
     var d = p.d;
     var cat = catDoPonto(d);
     var alt = UI.el('span', { classe: 'muted', texto: 'consultando o modelo de terreno…' });
@@ -10315,6 +10356,7 @@
       var r = await C.consultar(C.cliente.from('vitimas').select('id,nome,idade,idade_qualidade,sexo,cadastro_rapido').eq('operacao_id', opId).limit(200));
       if (!est.op || est.op.id !== opId) return;
       est.fichas = new Map((r || []).map(function (v) { return [v.id, v]; }));
+      carregarUlvVitimas();   // o ULV de cada vítima aparece no mapa (muda junto com a ficha)
     } catch (e) { /* sem fichas (migração antiga): o marcador mostra "Vítima localizada" */ }
   }
 

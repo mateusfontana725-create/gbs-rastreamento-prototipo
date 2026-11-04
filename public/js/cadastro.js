@@ -333,9 +333,14 @@
       var ms = new Date(acion.value).getTime();
       if (!isFinite(ms)) { acion.focus(); throw new Error('Data e hora do início das operações inválidas.'); }
       if (ms > Date.now() + 5 * 60000) { acion.focus(); throw new Error('A data e a hora do início das operações não podem estar no futuro.'); }
-      var tip = window.Ipo.tipoDaNatureza(naturezaValor());
-      dados.tipo = tip.tipo;
-      dados.tipo_outro = tip.tipo_outro;
+      // Sem natureza escolhida (operações antigas ou criadas sem ela), o tipo atual é mantido:
+      // não mandar tipo evita que o salvamento apague o tipo da operação.
+      var nat = naturezaValor();
+      if (nat) {
+        var tip = window.Ipo.tipoDaNatureza(nat);
+        dados.tipo = tip.tipo;
+        dados.tipo_outro = tip.tipo_outro;
+      }
       dados.acionado_em = new Date(ms).toISOString();
       dados.ipo = window.Ipo.normalizarIpo({
         natureza: naturezaValor(), solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,

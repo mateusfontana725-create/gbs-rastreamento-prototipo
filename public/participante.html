@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="256x256" href="img/brasao-cbmpr.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="css/estilos.css">
-  <link rel="stylesheet" href="css/tema-claro-civil.css">
+  <link rel="stylesheet" href="css/tema-claro-participante.css">
 </head>
 <body>
   <div class="pagina-civil">
@@ -164,7 +164,7 @@
           <button class="btn btn-pequeno btn-fechar-mapa" type="button" id="btn-fechar-mapa" hidden>✕ Fechar mapa</button>
           <button class="btn btn-pequeno btn-camadas" type="button" id="btn-camadas" aria-haspopup="true" aria-expanded="false" aria-controls="camadas-civil" title="Camadas do mapa" aria-label="Camadas do mapa">🗺</button>
           <div class="camadas-civil" id="camadas-civil" hidden role="group" aria-label="Camadas do mapa"></div>
-          <!-- Bússola: para onde o aparelho está apontado (sensor do celular; ver js/civil.js) -->
+          <!-- Bússola: para onde o aparelho está apontado (sensor do celular; ver js/participante.js) -->
           <div class="bussola-civil" id="bussola-civil" hidden role="status" aria-live="off">
             <div class="bussola-disco">
               <div class="bussola-rosa" id="bussola-rosa" aria-hidden="true"><span class="bussola-n">N</span></div>
@@ -283,6 +283,6 @@
   <script src="js/coords.js"></script>
   <script src="js/mapa-offline.js"></script>
   <script src="js/app-nativo.js"></script>
-  <script src="js/civil.js"></script>
+  <script src="js/participante.js"></script>
 </body>
 </html>

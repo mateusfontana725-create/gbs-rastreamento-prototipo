@@ -213,7 +213,7 @@ module.exports = async (req, res) => {
     }
 
     // 5. E-mail (com login e senha provisória quando a conta é nova)
-    const link = `${site}/militar.html`;
+    const link = `${site}/comando.html`;
     const m = montarMensagem({ nome, email, codigo: dc.codigo, convidado_por: dc.convidado_por, senha }, link);
     let ok = false, erro = null;
     try {

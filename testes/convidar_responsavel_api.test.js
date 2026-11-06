@@ -129,7 +129,7 @@ const chamadas = (c, parte) => c.filter((x) => x.url.includes(parte));
     assert.ok(envio.text.includes('Senha provisória: ' + senha), 'a senha provisória vai no e-mail');
     assert.ok(envio.html.includes(senha));
     assert.ok(!JSON.stringify(r.body).includes(senha), 'a senha não volta ao navegador');
-    assert.ok(envio.text.includes('https://app.exemplo.com/militar.html'), 'link do painel montado no servidor');
+    assert.ok(envio.text.includes('https://app.exemplo.com/comando.html'), 'link do painel montado no servidor');
   });
   await teste('e-mail de responsável que já tem login: só inclui na operação e envia o link (sem senha)', async () => {
     ambiente(); const c = []; rede({ situacao: () => json({ user_id: EXISTENTE, responsavel: true, ativo: true }) }, c);

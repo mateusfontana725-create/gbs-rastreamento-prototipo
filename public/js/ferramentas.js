@@ -8,7 +8,7 @@
  *   - alarmes de proximidade: saiu do setor / entrou em área de risco
  *   - anéis de distância em torno de um ponto
  *   - nascer/pôr do sol e aviso de que vai escurecer
- * Usa a interface window.Painel (militar.js). Nada aqui grava posições.
+ * Usa a interface window.Painel (comando.js). Nada aqui grava posições.
  * ===================================================================== */
 (function () {
   'use strict';

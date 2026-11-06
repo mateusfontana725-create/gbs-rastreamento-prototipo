@@ -548,5 +548,5 @@
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
-  window.MeteoPainel = { consultar: consultar, estado: function () { return est; }, alternar: function () { ligar(!est.ligada); } };   // o botão fica no mapa (militar.js)
+  window.MeteoPainel = { consultar: consultar, estado: function () { return est; }, alternar: function () { ligar(!est.ligada); } };   // o botão fica no mapa (comando.js)
 })();

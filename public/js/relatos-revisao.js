@@ -5,7 +5,7 @@
  *   - Confirmar, descartar, contestar e "inconclusivo" exigem justificativa (como foi verificado).
  *   - Três horários separados: quando o FATO aconteceu (informado, estimado ou desconhecido), quando o relato
  *     foi RECEBIDO e quando foi REVISADO. A hora da posição GPS é só da posição.
- *   Usa a interface window.Painel (militar.js).
+ *   Usa a interface window.Painel (comando.js).
  * ===================================================================== */
 (function () {
   'use strict';

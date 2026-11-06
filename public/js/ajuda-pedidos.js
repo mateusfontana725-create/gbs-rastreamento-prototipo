@@ -5,7 +5,7 @@
  *   - Mostra o tempo sem atendimento (desde que chegou até alguém assumir) e as escalações do servidor.
  *   - Prioridade (baixar exige justificativa), assumir/reassumir, enviar equipe, iniciar atendimento,
  *     anotar, resolver e reabrir; o histórico de cada pedido nunca é apagado.
- *   O estado é do servidor: todos os responsáveis veem o mesmo. Usa a interface window.Painel (militar.js).
+ *   O estado é do servidor: todos os responsáveis veem o mesmo. Usa a interface window.Painel (comando.js).
  * ===================================================================== */
 (function () {
   'use strict';

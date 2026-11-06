@@ -1,5 +1,5 @@
 /* =====================================================================
- * militar.js — painel do bombeiro responsável
+ * comando.js — painel do bombeiro responsável
  *   - login (e-mail/senha) + verificação na lista de responsáveis
  *   - criação, listagem, encerramento e limpeza de operações
  *   - mapa em tempo real (Leaflet), lista de participantes, trilhas
@@ -4325,7 +4325,7 @@
   /* Convite: links e QR Code                                             */
   /* ------------------------------------------------------------------ */
   function linkPara(token) {
-    var u = new URL('civil.html', location.href);
+    var u = new URL('participante.html', location.href);
     u.search = '';
     u.hash = 't=' + token;
     return u.href;
@@ -9501,7 +9501,7 @@
     btn.disabled = true;
     try {
       var r = await chamarApiResponsaveis({ acao: 'criar', nome: nome, email: email, senha: senha, admin: admin });
-      var painel = new URL('militar.html', location.href);
+      var painel = new URL('comando.html', location.href);
       painel.hash = '';
       $('resp-cred-texto').textContent = r.ja_existia
         ? 'Painel: ' + painel.href + '\nE-mail: ' + email + '\nSenha: a mesma que essa pessoa já usava (o login já existia).'
@@ -11084,12 +11084,12 @@
     irPara: function (lat, lng) { if (est.mapa && lat != null && lng != null) est.mapa.setView([lat, lng], Math.max(est.mapa.getZoom(), 17)); },
     recarregarGrupos: function () { return carregarGrupos().then(function () { if (est.renderGruposAberto) est.renderGruposAberto(); }); },
     abrirCentral: function (aba) { abrirCentral(aba); },
-    // link do civil.html da operação (com o código de um convite por e-mail, quando houver)
+    // link do participante.html da operação (com o código de um convite por e-mail, quando houver)
     linkCivil: function (codigo) { return est.op ? linkPara(est.op.token_civil) + (codigo ? '&c=' + codigo : '') : ''; },
     // link de cada categoria de convite: civil e bombeiro (com o código do convite) ou o painel da operação (responsável)
     linkConvite: function (tipo, codigo) {
       if (!est.op) return '';
-      if (tipo === 'responsavel') { var u = new URL('militar.html', location.href); u.search = ''; u.hash = 'op=' + est.op.id; return u.href; }
+      if (tipo === 'responsavel') { var u = new URL('comando.html', location.href); u.search = ''; u.hash = 'op=' + est.op.id; return u.href; }
       return linkPara(tipo === 'militar' ? est.op.token_militar : est.op.token_civil) + (codigo ? '&c=' + codigo : '');
     },
     atualizarCentral: function () { if (est.op) agendarCentral(); },

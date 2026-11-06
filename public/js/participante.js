@@ -1,5 +1,5 @@
 /* =====================================================================
- * civil.js — página do participante (civil ou militar de campo)
+ * participante.js — página do participante (civil ou militar de campo)
  *   1. Lê o token do link (#t=...), mostra a operação.
  *   2. Só depois do toque em INICIAR: pede a permissão de localização,
  *      cria uma sessão anônima e ingressa na operação.

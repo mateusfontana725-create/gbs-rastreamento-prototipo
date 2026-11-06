@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#06080a">
   <meta name="robots" content="noindex, nofollow">
   <meta name="gbs-versao" content="2026-10-13.1">
-  <title>Rastreamento GBS — Painel do Responsável</title>
+  <title>Rastreamento GBS — Comando</title>
   <link rel="icon" type="image/png" sizes="256x256" href="img/brasao-cbmpr.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
   <link rel="stylesheet" href="css/estilos.css">
-  <link rel="stylesheet" href="css/militar.css">
+  <link rel="stylesheet" href="css/comando.css">
   <script src="js/tema.js"></script>
 </head>
 <body>
@@ -27,7 +27,7 @@
       <div class="marca">
         <img class="marca-icone marca-brasao" src="img/brasao-cbmpr.png" alt="Corpo de Bombeiros Militar do Paraná" width="44" height="44">
         <div>
-          <h1>Painel do Responsável</h1>
+          <h1>Comando</h1>
           <small>Rastreamento GBS · Acesso restrito</small>
         </div>
       </div>
@@ -116,7 +116,7 @@
       <div class="cartao secao" id="vista-lista" hidden>
         <div class="ops-topo">
           <h2 id="ops-titulo">Minhas operações</h2>
-          <!-- o cadastro abre num modal (militar.js: abrirNovaOperacao) -->
+          <!-- o cadastro abre num modal (comando.js: abrirNovaOperacao) -->
           <button class="btn btn-primario" type="button" id="btn-nova-op">+ Nova operação</button>
         </div>
         <div class="filtros" role="search" aria-label="Filtrar operações">
@@ -200,7 +200,7 @@
       <div class="cartao secao">
         <div class="ops-topo">
           <h2>Responsáveis cadastrados</h2>
-          <!-- o cadastro abre num modal (militar.js: abrirCadastroResponsavel) -->
+          <!-- o cadastro abre num modal (comando.js: abrirCadastroResponsavel) -->
           <button class="btn btn-primario" type="button" id="btn-novo-resp">+ Cadastrar responsável</button>
         </div>
         <div class="filtros" role="search" aria-label="Filtrar responsáveis">
@@ -755,7 +755,7 @@
   <script src="js/mapa-resumo.js"></script>
   <script src="js/regua.js"></script>
   <script src="js/pod.js"></script>
-  <script src="js/militar.js"></script>
+  <script src="js/comando.js"></script>
   <script src="js/ferramentas.js"></script>
   <script src="js/busca-cenario.js"></script>
   <script src="js/ajuda-pedidos.js"></script>

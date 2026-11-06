@@ -4,10 +4,10 @@ Aplicativo web para o Corpo de Bombeiros Militar acompanhar, em tempo real, a po
 civis voluntários e militares durante operações de busca e salvamento, e enviar orientações direto
 ao celular de cada participante.
 
-- **`/militar.html`**: painel do bombeiro responsável (login obrigatório). Mapa, lista, trilhas, fichas,
+- **`/comando.html`**: **Comando**, o painel do bombeiro responsável (login obrigatório; era `/militar.html`, que redireciona). Mapa, lista, trilhas, fichas,
   mensagens nos dois sentidos, relatos de campo, fotos georreferenciadas, equipe de responsáveis e a
   posição de cada responsável. Funciona no computador, no tablet e no celular.
-- **`/civil.html#t=…`**: página do participante. Só abre com o link (ou QR Code) gerado pelo painel.
+- **`/participante.html#t=…`**: página do participante (era `/civil.html`, que redireciona e mantém o `#t=…`). Só abre com o link (ou QR Code) gerado pelo painel.
   O participante informa nome, celular e (opcionalmente) CPF, conversa com a equipe, relata pistas e envia fotos;
   o encerramento do rastreamento é feito pelo responsável.
 
@@ -523,7 +523,7 @@ obrigatório, porque é o login. O servidor cria o acesso e inclui a pessoa na o
 - Trocar a senha (no primeiro acesso ou em **Minha conta**) tira a marca de senha provisória.
 
 **Convidar → ✉ Convidar por e-mail**: o responsável digita o **nome** e o **e-mail** do participante e toca **Enviar convite**. O
-participante recebe um e-mail com o botão **Abrir e começar** (o link do `civil.html` da operação). Ao abrir no celular, o
+participante recebe um e-mail com o botão **Abrir e começar** (o link do `participante.html` da operação). Ao abrir no celular, o
 **nome já vem preenchido** e basta tocar em COMEÇAR e permitir a localização.
 
 - A lista **Convidados** mostra a situação de cada convite: **Não enviado**, **Enviado** (hora e número de envios), **Falha no envio**
@@ -1021,7 +1021,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 
 ### Organização do painel
 
-- **Identidade visual** do painel do responsável (`public/css/militar.css`, só na página militar):
+- **Identidade visual** do Comando (`public/css/comando.css`, só na página `comando.html`):
   tipografia **Barlow** (estilo DIN, de sinalização; Barlow no texto, Barlow Condensed nos títulos) e **IBM Plex Mono** nos
   números — arquivos locais em `public/vendor/fontes`, licença OFL, sem CDN de fontes —, cantos retos, sombras discretas,
   vermelho só para o crítico e âmbar para o que está selecionado/ligado. Em **Personalizar tela → Letra** dá para trocar
@@ -1103,7 +1103,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Resumo clicável**: as bolinhas com o número de conectados, instáveis e sem atualização filtram a lista (tocar
     de novo mostra todos); ao lado, o total de militares (M) e civis (C). O botão "Ocultar trilhas" saiu da lista
     (fica em **Camadas → Trilhas**).
-  - **Letras e botões menores** no painel do responsável (a página do participante continua com botões grandes);
+  - **Letras e botões menores** no Comando (a página do participante continua com botões grandes);
     em telas de toque os botões mantêm pelo menos 36–40 px.
   - **Cabeçalho mais baixo**: "Tempo real ativo" virou **Ao vivo** (no tablet, só a bolinha; o texto completo
     aparece ao passar o mouse).
@@ -1552,8 +1552,8 @@ aguarda, a localização continua sendo enviada. Quem teve a saída liberada pod
 ```
 rastreamento-sar/
 ├── public/                     ← site publicado pelo Vercel
-│   ├── militar.html            painel do responsável
-│   ├── civil.html              página do participante
+│   ├── comando.html            Comando (painel dos responsáveis)
+│   ├── participante.html       página do participante
 │   ├── sw.js                   service worker: notificações no Android, página e mapa guardados para abrir sem internet
 │   ├── versao.json             versão publicada (páginas abertas há muito tempo avisam que há versão nova)
 │   ├── css/estilos.css         estilos (alto contraste, botões grandes, responsivo)
@@ -1583,8 +1583,8 @@ rastreamento-sar/
 │       ├── observacoes-campo.js drone (plano, telemetria, área observada, foco térmico) e indicação na água
 │       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
 │       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM, limite da política)
-│       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
-│       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
+│       ├── comando.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
+│       └── participante.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 │   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
 ├── api/
 │   ├── config.js               entrega ao navegador só a URL e a chave PÚBLICA (de variáveis de ambiente)
@@ -1853,10 +1853,10 @@ vercel --prod
 
 Depois do deploy, o Vercel mostra o domínio do projeto, por exemplo `https://rastreamento-sar.vercel.app`.
 
-1. **Painel do militar**: `https://rastreamento-sar.vercel.app/militar.html`
+1. **Comando**: `https://rastreamento-sar.vercel.app/comando.html`
    (o endereço raiz `/` também redireciona para ele). Faça login e crie a operação.
 2. **Link do participante**: é gerado **por operação**, no botão **Convidar** do cabeçalho da operação. Há duas abas:
-   - **Link para CIVIS** — `https://rastreamento-sar.vercel.app/civil.html#t=<token de 64 caracteres>`
+   - **Link para CIVIS** — `https://rastreamento-sar.vercel.app/participante.html#t=<token de 64 caracteres>`
      Quem entra por ele sempre aparece como **civil**.
    - **Link para BOMBEIROS** — outro token; permite escolher **militar** (ou civil). Compartilhe só com bombeiros.
 
@@ -2010,7 +2010,7 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 7. **Altitude** (pontos e 3D): é a do **modelo de terreno** (≈ 30 m de resolução), não a medida pelo
    GPS; em encostas e vales estreitos pode diferir dezenas de metros.
 6. **Fotos e mensagens com a página fechada**: na página do participante, ficam guardadas no aparelho e
-   são enviadas quando ele voltar à página. No painel do responsável, a fila de fotos fica só na memória:
+   são enviadas quando ele voltar à página. No Comando, a fila de fotos fica só na memória:
    o painel avisa antes de ser fechado com foto pendente.
 7. **Câmera**: "TIRAR FOTO" abre o aplicativo de câmera do próprio celular. No computador, o botão abre
    a escolha de arquivo. Fotos HEIC muito grandes podem não abrir em navegadores antigos (a pessoa é avisada).
@@ -2041,7 +2041,7 @@ da lista de recentes, e sem internet.
 
 **Arquitetura**
 
-- **Página**: o aplicativo carrega `https://servidor/civil.html#t=…&app=1`. Atualizações do site chegam sem reinstalar; o
+- **Página**: o aplicativo carrega `https://servidor/participante.html#t=…&app=1`. Atualizações do site chegam sem reinstalar; o
   service worker guarda a página e o mapa para abrir sem internet. A página fala com o aplicativo pelo objeto `GBSNativo`
   (`js/app-nativo.js`), criado com `addWebMessageListener` **só para a origem do servidor**; links para outros sites abrem
   fora do aplicativo. Fora do aplicativo `window.GBSApp.disponivel` é falso e a página funciona exatamente como antes.
@@ -2146,7 +2146,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 9 | No celular do civil | alerta em tela cheia com vibração; ao tocar **CONFIRMAR**, o painel mostra "Recebida pelo aparelho" e depois "Confirmada às …" |
 | 10 | Pôr o celular do civil em modo avião por 1–2 min, andando | o civil vê "Sem internet · N posições guardadas"; o painel passa a "Sinal instável" e depois "Sem atualização", com o marcador desbotado |
 | 11 | Desligar o modo avião | os pontos guardados chegam, a trilha é completada sem duplicar e o estado volta a "Conectado" |
-| 12 | No celular do civil, abrir `/militar.html` | pede login; com a sessão do civil não há acesso ao painel nem às posições |
+| 12 | No celular do civil, abrir `/comando.html` | pede login; com a sessão do civil não há acesso ao painel nem às posições |
 | 13 | Encerrar a operação | o celular mostra "Operação encerrada"; no painel a operação abre só para consulta e todos os dados continuam (só saem ao excluir) |
 | 14 | No celular do civil, tocar em **Solicitar encerramento** | o painel toca alarme e mostra "Pediu para sair"; o rastreamento continua; ao **Liberar saída**, o celular mostra "Saída liberada" |
 | 15 | Adicionar um segundo responsável em **Equipe** e abrir a operação nos dois painéis (**Minha posição** liga sozinha) | cada um vê o outro no mapa (losango vermelho com R); mensagem de um para o outro chega como alerta |
@@ -2428,7 +2428,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
     5 min ou 100 m). Para operações grandes ou críticas, use um plano maior ou instale o openrouteservice
     num servidor próprio (`ORS_URL`).
   Para uso intenso ou institucional, contrate um provedor de mapas (ex.: MapTiler, Stadia, Esri) e troque
-  as URLs em `public/js/militar.js` (`criarMapa` e `BASES_3D`) e na CSP do `vercel.json`. Nenhuma chave
+  as URLs em `public/js/comando.js` (`criarMapa` e `BASES_3D`) e na CSP do `vercel.json`. Nenhuma chave
   ou cadastro é necessário para o que foi implementado.
 - Sem sinal de celular não há rastreamento ao vivo, e nenhuma tecnologia web contorna isso. Em áreas
   remotas, a fila offline completa a trilha quando o participante volta a ter sinal.

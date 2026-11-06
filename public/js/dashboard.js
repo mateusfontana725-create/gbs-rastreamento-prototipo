@@ -625,7 +625,7 @@
 
   // Dados do banco (janela própria do dashboard ou link público: dashboard_operacao_dados / dashboard_publico)
   // no mesmo formato do resumo do painel, para os números serem os mesmos nas duas telas.
-  var PRECISAO_TRILHA_M = 150;   // a mesma do painel (militar.js, LIM.precisaoTrilhaM)
+  var PRECISAO_TRILHA_M = 150;   // a mesma do painel (comando.js, LIM.precisaoTrilhaM)
   function verticesSetor(s) {
     if (s.forma === 'poligono') return s.pontos || [];
     var v = [], c = Math.cos(s.centro_lat * RAD);
@@ -904,7 +904,7 @@
     var e = r ? calcularEsforco(r, inicio, fim) : null;
     var loc = d && d.localizacao;
     var encerrada = Boolean(fim);
-    // ações no painel (militar.js): ver pessoa / setor no mapa, abrir a central e o diário
+    // ações no painel (comando.js): ver pessoa / setor no mapa, abrir a central e o diário
     var acoes = (r && r.acoes) || {};
     var porId = new Map((e ? e.pessoas : []).map(function (p) { return [p.id, p]; }));
     var TIPO_PESSOA = { militar: 'militar', civil: 'civil', responsavel: 'responsável' };

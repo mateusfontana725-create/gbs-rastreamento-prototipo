@@ -46,7 +46,7 @@ import java.util.List;
 import org.json.JSONObject;
 
 /**
- * Tela do aplicativo: a própria página do participante (civil.html) do servidor da operação, numa WebView presa a
+ * Tela do aplicativo: a própria página do participante (participante.html) do servidor da operação, numa WebView presa a
  * esse servidor. A página fala com o aplicativo pelo objeto GBSNativo, que só existe para a origem do servidor
  * (addWebMessageListener com a regra de origem). O registro do GPS fica no RastreioService, fora da página.
  */
@@ -217,7 +217,7 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
     }
     String v = cfg.vinculoPendente();
     String hash = "t=" + token + "&app=1" + (Config.codigoValido(v) ? "&v=" + v : "");
-    web.loadUrl(origem + "/civil.html#" + hash);
+    web.loadUrl(origem + "/participante.html#" + hash);
   }
 
   private void recriarWebView() {
@@ -244,7 +244,7 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
       token = u.getQueryParameter("t");
       v = u.getQueryParameter("v");
     } else if ("https".equals(u.getScheme())) {
-      // link da operação colado: https://servidor/civil.html#t=…
+      // link da operação colado: https://servidor/participante.html#t=…
       origem = Config.origemValida(u.getScheme() + "://" + u.getAuthority());
       String frag = u.getFragment();
       if (frag != null) for (String par : frag.split("&")) if (par.startsWith("t=")) token = par.substring(2);

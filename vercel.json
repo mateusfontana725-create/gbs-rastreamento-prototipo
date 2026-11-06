@@ -3,7 +3,9 @@
   "outputDirectory": "public",
   "cleanUrls": false,
   "redirects": [
-    { "source": "/", "destination": "/militar.html", "permanent": false }
+    { "source": "/", "destination": "/comando.html", "permanent": false },
+    { "source": "/militar.html", "destination": "/comando.html", "permanent": false },
+    { "source": "/civil.html", "destination": "/participante.html", "permanent": false }
   ],
   "functions": {
     "api/poa-ia.js": { "maxDuration": 60 },

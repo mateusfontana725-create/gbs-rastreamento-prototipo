@@ -49,9 +49,9 @@ function enderecoSite(req) {
 // Link de cada categoria: civil e bombeiro entram pela página do participante (com o código do convite, que
 // preenche o nome); responsável entra pelo painel da operação (pede o login de responsável).
 function linkDoConvite(site, d) {
-  if (d.tipo === 'responsavel') return `${site}/militar.html#op=${d.operacao_id}`;
+  if (d.tipo === 'responsavel') return `${site}/comando.html#op=${d.operacao_id}`;
   const token = d.tipo === 'militar' ? d.token_militar : d.token_civil;
-  return `${site}/civil.html#t=${token}&c=${d.codigo}`;
+  return `${site}/participante.html#t=${token}&c=${d.codigo}`;
 }
 
 function montarMensagem(d, link) {

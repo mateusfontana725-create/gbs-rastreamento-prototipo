@@ -1,4 +1,4 @@
-// Tema do painel do responsável (escuro ou claro). Roda no <head>, antes da pintura, para a
+// Tema do Comando (escuro ou claro). Roda no <head>, antes da pintura, para a
 // tela não piscar. O padrão é o escuro; a escolha fica no aparelho (Ferramentas → Configurações).
 (function () {
   var valor = 'escuro';

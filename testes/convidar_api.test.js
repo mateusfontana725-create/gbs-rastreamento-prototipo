@@ -68,7 +68,7 @@ function rede(rotas, chamadas) {
     assert.strictEqual(r.code, 200); assert.strictEqual(r.body.ok, true);
     const envio = c.find((x) => x.url.includes('resend')).corpo;
     assert.deepStrictEqual(envio.to, ['ana@exemplo.com']);
-    assert.ok(envio.text.includes('https://app.exemplo.com/civil.html#t=' + TOKEN + '&c=' + CODIGO), envio.text);
+    assert.ok(envio.text.includes('https://app.exemplo.com/participante.html#t=' + TOKEN + '&c=' + CODIGO), envio.text);
     assert.ok(!envio.html.includes('mal.com') && !envio.text.includes('mal.com'));
     assert.strictEqual(envio.from, 'Rastreamento <convite@exemplo.com>');
     const dados = c.find((x) => x.url.includes('convite_dados_envio'));
@@ -80,14 +80,14 @@ function rede(rotas, chamadas) {
     ambiente(); const c = []; rede({ dados: () => json(Object.assign({}, DADOS, { tipo: 'militar', token_militar: 'c'.repeat(64) })), email: () => json({}) }, c);
     const r = resposta(); await carregar()(req({ convite: UUID }, 't'), r);
     assert.strictEqual(r.code, 200);
-    assert.ok(c.find((x) => x.url.includes('resend')).corpo.text.includes('/civil.html#t=' + 'c'.repeat(64) + '&c=' + CODIGO));
+    assert.ok(c.find((x) => x.url.includes('resend')).corpo.text.includes('/participante.html#t=' + 'c'.repeat(64) + '&c=' + CODIGO));
   });
   await teste('responsável: link do painel da operação (pede login)', async () => {
     ambiente(); const c = []; rede({ dados: () => json(Object.assign({}, DADOS, { tipo: 'responsavel', operacao_id: UUID })), email: () => json({}) }, c);
     const r = resposta(); await carregar()(req({ convite: UUID }, 't'), r);
     const e = c.find((x) => x.url.includes('resend')).corpo;
-    assert.strictEqual(r.code, 200); assert.ok(e.text.includes('/militar.html#op=' + UUID) && /responsável/.test(e.subject + e.text), e.text);
-    assert.ok(!e.text.includes('civil.html'));
+    assert.strictEqual(r.code, 200); assert.ok(e.text.includes('/comando.html#op=' + UUID) && /responsável/.test(e.subject + e.text), e.text);
+    assert.ok(!e.text.includes('participante.html'));
   });
   await teste('nome e operação com HTML são escapados na mensagem', async () => {
     ambiente(); const c = []; rede({ dados: () => json(DADOS), email: () => json({}) }, c);
@@ -98,7 +98,7 @@ function rede(rotas, chamadas) {
   await teste('SITE_URL fixo vale mais que o endereço da requisição', async () => {
     ambiente({ SITE_URL: 'https://busca.bombeiros.exemplo/' }); const c = []; rede({ dados: () => json(DADOS), email: () => json({}) }, c);
     const r = resposta(); await carregar()(req({ convite: UUID }, 't'), r);
-    assert.ok(c.find((x) => x.url.includes('resend')).corpo.text.includes('https://busca.bombeiros.exemplo/civil.html#t='));
+    assert.ok(c.find((x) => x.url.includes('resend')).corpo.text.includes('https://busca.bombeiros.exemplo/participante.html#t='));
   });
   await teste('provedor recusa: 502, e o motivo é gravado no convite', async () => {
     ambiente(); const c = []; rede({ dados: () => json(DADOS), email: () => json({ message: 'domínio não verificado' }, 403) }, c);

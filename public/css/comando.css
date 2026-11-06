@@ -1,7 +1,7 @@
 /* =====================================================================
- * Rastreamento GBS — identidade do painel do responsável (comando)
- * Carregado só por militar.html, DEPOIS de estilos.css: ajusta os tokens e
- * a composição sem mexer na página do participante (civil.html).
+ * Rastreamento GBS — identidade do Comando (painel dos responsáveis)
+ * Carregado só por comando.html, DEPOIS de estilos.css: ajusta os tokens e
+ * a composição sem mexer na página do participante (participante.html).
  * Linguagem: técnica e sóbria — tipografia Barlow (estilo DIN, de sinalização; local, sem CDN;
  * IBM Plex e a letra do aparelho continuam como opção em Personalizar tela),
  * cantos retos, sombras discretas, vermelho só para o que é crítico e
@@ -434,7 +434,7 @@ body.gaveta.info-ponto-aberto #mapa .leaflet-bottom { visibility: hidden; }
 .btn.btn-ativo:hover { background: #fbbf24; border-color: #fbbf24; color: #0a0d10; }
 
 /* =====================================================================
- * TEMA CLARO (painel do responsável; Ferramentas → Configurações → Tema)
+ * TEMA CLARO (Comando; Ferramentas → Configurações → Tema)
  * Só vale com html[data-tema="claro"]. O escuro segue como está, e a página
  * do participante não usa este bloco. A barra do topo segue o tema (clara aqui).
  * ===================================================================== */
@@ -1094,7 +1094,7 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { border-color: v
 
 /* =====================================================================
  * Painel enxuto: letras e botões menores, lista em uma linha, faixas compactas
- * (só no painel do responsável; a página do participante continua com alvos grandes)
+ * (só no Comando; a página do participante continua com alvos grandes)
  * ===================================================================== */
 html { --texto-base: 93.75%; }   /* 15 px; o tamanho escolhido em Personalizar tela escala a partir daqui */
 body { font-size: 0.9375rem; }
@@ -1250,7 +1250,7 @@ body { font-size: 0.9375rem; }
 #mapa.ocultar-pessoas .mk-wrap, #mapa.ocultar-pessoas .cluster-pessoas-wrap { display: none; }
 
 /* Mensagem de outro responsável: cartão compacto como uma notificação (nunca tela cheia), com × para responder depois.
-   A altura (top) é definida em posicionarAlerta (militar.js): logo abaixo da etiqueta do cabeçalho. */
+   A altura (top) é definida em posicionarAlerta (comando.js): logo abaixo da etiqueta do cabeçalho. */
 #alerta-cmd.alerta-painel {
   position: fixed; inset: auto; z-index: 2800; top: 150px; right: 12px; width: min(300px, calc(100vw - 24px));
   max-height: calc(100vh - 170px); border-radius: 8px; border: 1.5px solid var(--responsavel); box-shadow: 0 6px 22px rgba(0, 0, 0, .6);
@@ -1806,7 +1806,7 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
 }
 .janela-dash-corpo { max-width: 1280px; margin: 0 auto; padding: 16px 20px 40px; }
 
-/* Deslocamentos de grupos: um cartão por deslocamento (militar.js → abrirMissoes) */
+/* Deslocamentos de grupos: um cartão por deslocamento (comando.js → abrirMissoes) */
 .modal:has(.modal-missoes) { width: min(880px, calc(100vw - 24px)); }
 .cartao-missao { border: 1px solid var(--borda); border-left: 5px solid var(--neutro); border-radius: var(--raio); background: var(--superficie-2); padding: 12px 14px; display: grid; gap: 12px; margin: 0 0 12px; }
 .cartao-missao.status-em_deslocamento, .cartao-missao.status-busca_finalizada { border-left-color: var(--alerta); }

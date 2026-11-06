@@ -3,7 +3,7 @@
  *   Recursos: embarcação, viatura, drone, cão de busca, equipamento de comunicação, primeiros socorros (e outro).
  *   Disponibilidade: informada (disponível, em descanso, indisponível); "em missão" é deduzida do deslocamento ativo.
  *   Avisos de segurança: equipe sem equipamento de comunicação ou sem primeiros socorros (só quando há recursos
- *   registrados: sem informação não se acusa falta). Usa a interface window.Painel (militar.js).
+ *   registrados: sem informação não se acusa falta). Usa a interface window.Painel (comando.js).
  * ===================================================================== */
 (function () {
   'use strict';

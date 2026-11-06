@@ -1332,7 +1332,7 @@ body.conversa-aberta { overflow: hidden; }
   box-shadow: none; padding: 1px 6px; font-size: 0.7188rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap;
 }
 .leaflet-tooltip.rotulo-setor::before { display: none; }
-.setor-legenda { display: inline-block; width: 18px; height: 12px; border: 2px dashed #3b82f6; background: rgba(59, 130, 246, .15); border-radius: 2px; }
+.setor-legenda { display: inline-block; width: 18px; height: 12px; border: 2px solid #3b82f6; background: rgba(59, 130, 246, .3); border-radius: 2px; }
 
 /* Ponto de interesse: placa com letra da categoria e ponta embaixo */
 .mk-poi-wrap { background: none; border: 0; }

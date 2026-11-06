@@ -2689,3 +2689,27 @@ button.sci2-kpi:hover { border-color: var(--borda-forte); background: var(--supe
   .painel-topo > .modo-seletor button { padding: 0 8px; font-size: .64rem; letter-spacing: .03em; }
 }
 
+
+/* Setores: o contorno é contínuo e forte (a situação aparece no preenchimento); o filete escuro separa a área do fundo */
+.setor-filete { pointer-events: none; }
+
+/* Vários elementos no mesmo ponto: lista para escolher qual abrir */
+.balao-sobrepostos { display: grid; gap: 6px; min-width: 180px; }
+.balao-item-sobreposto {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  padding: 7px 9px; border: 1px solid var(--borda, #334155); border-radius: 8px; background: transparent; color: inherit; font: inherit;
+}
+.balao-item-sobreposto:hover, .balao-item-sobreposto:focus-visible { background: rgba(148, 163, 184, .18); outline: 2px solid var(--acento, #f59e0b); outline-offset: 1px; }
+.balao-item-sobreposto .chip-cor { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, .5); }
+.balao-item-txt { display: grid; min-width: 0; }
+.balao-item-txt small { opacity: .75; }
+
+/* Em deslocamento até o local: o mapa fica no endereço da operação */
+.chip-deslocamento {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 850;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 120px);
+  padding: 6px 10px; border-radius: 12px; background: rgba(15, 23, 42, .92); color: #f8fafc; border: 1px solid #f59e0b; box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
+  font-size: .85rem;
+}
+.chip-deslocamento[hidden] { display: none; }
+html[data-tema="claro"] .chip-deslocamento { background: rgba(255, 255, 255, .96); color: #0f172a; }

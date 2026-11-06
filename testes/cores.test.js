@@ -46,5 +46,19 @@ teste('texto legível sobre o fundo', () => {
   assert.strictEqual(C.textoSobre('#ffff00'), '#000000');
   assert.strictEqual(C.textoSobre('#000080'), '#ffffff');
 });
+teste('paleta forte: cores válidas, sem repetição, maior que antes e com todas as do setor/grupo dentro dela', () => {
+  assert.ok(C.PALETA.length >= 20, 'pelo menos 20 cores padrão');
+  [C.PALETA, C.PALETA_SETOR, C.PALETA_GRUPO].forEach((l) => {
+    assert.strictEqual(new Set(l).size, l.length, 'sem repetição');
+    l.forEach((c) => assert.strictEqual(C.normalizar(c), c, c));
+  });
+  C.PALETA_SETOR.concat(C.PALETA_GRUPO).forEach((c) => assert.ok(C.PALETA.indexOf(c) !== -1, c + ' fora da paleta'));
+});
+teste('as cores padrão são saturadas (nada desbotado)', () => {
+  C.PALETA_SETOR.concat(C.PALETA_GRUPO).forEach((c) => { const h = C.hexParaHsl(c); assert.ok(h.s >= 70 || h.l <= 30, c + ' ' + JSON.stringify(h)); });
+});
+teste('grupos não usam vermelho nem roxo/magenta (reservados no mapa)', () => {
+  C.PALETA_GRUPO.forEach((c) => { const h = C.hexParaHsl(c).h; assert.ok(!(h >= 255 && h <= 340) && !(h <= 8 || h >= 352), c + ' tom ' + h); });
+});
 console.log(falhas ? falhas + ' falha(s)' : 'tudo certo');
 process.exit(falhas ? 1 : 0);

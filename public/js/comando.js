@@ -50,7 +50,7 @@
   // (militar, civil, responsável, ajuda, seleção, trilhas), com o fundo do mapa
   // (vegetação e água) nem entre si. Com mais grupos do que cores, a cor se repete
   // e o nome do grupo aparece na legenda e no marcador.
-  var GRUPO_CORES = ['#ec4899', '#fb923c', '#6366f1', '#a3e635', '#f8fafc', '#a16207'];
+  var GRUPO_CORES = window.Cores.PALETA_GRUPO;   // cores fortes (js/cores.js)
 
   // Tipos exibidos no painel. "responsavel" = militar responsável com o painel aberto
   // (só os responsáveis da operação veem esses marcadores).
@@ -781,12 +781,19 @@
 
   function ligarCliquesMapa(camada, o) {
     var segurou = false;
-    function abrirDetalhes(ev) { cancelarSegurar(); fecharBalao(); o.detalhes(ev); }
+    function abrirDetalhes(ev) {
+      cancelarSegurar(); fecharBalao();
+      var itens = o.sobrepostos ? o.sobrepostos(ev.latlng) : null;
+      if (itens && itens.length > 1) { abrirEscolhaSobrepostos(ev.latlng, itens); return; }
+      o.detalhes(ev);
+    }
     function marcarSegurou() { segurou = true; setTimeout(function () { segurou = false; }, 1200); }
     camada.on('click', function (ev) {
       L.DomEvent.stopPropagation(ev);
       if (est.desenho) { if (o.noDesenho) o.noDesenho(ev); return; }
       if (segurou) { segurou = false; return; }   // o clique que termina o "segurar"
+      var itens = o.sobrepostos ? o.sobrepostos(ev.latlng) : null;
+      if (itens && itens.length > 1) { abrirEscolhaSobrepostos(ev.latlng, itens); return; }   // vários elementos no mesmo ponto: escolher
       var info = o.info(ev);
       abrirBalao(info.latlng || ev.latlng, info, function () { o.detalhes(ev); });
     });
@@ -1497,6 +1504,7 @@
     renderizarCabecalho();
     criarMapa();
     desenharLocalOp();
+    atualizarChipDeslocamento();
     aplicarIntervaloGpsMeu();
     await carregarTudo();
     if (pedidoEncerrar === op.id && est.op && est.op.id === op.id && op.status === 'ativa') {
@@ -1639,6 +1647,7 @@
     }
     est.resumo = null;
     est.op = null;
+    atualizarChipDeslocamento();
     est.participantes = new Map();
     est.pontosOrfaos = [];
     est.posIds = new Set();
@@ -2512,7 +2521,7 @@
     atualizarPilula();
     if (!est.jaEnquadrou && temAlgumaPosicao()) {
       est.jaEnquadrou = true;
-      enquadrarTodos();
+      enquadrarAutomatico();
     }
   }
 
@@ -2762,7 +2771,7 @@
     if (est.selecionado === p.id) atualizarFicha();
     if (!est.jaEnquadrou && posicaoAtual(p)) {
       est.jaEnquadrou = true;
-      setTimeout(enquadrarTodos, 100);
+      setTimeout(enquadrarAutomatico, 100);
     }
   }
 
@@ -3217,7 +3226,7 @@
       est.listaSuja = true;
       if (!est.jaEnquadrou) {
         est.jaEnquadrou = true;
-        setTimeout(enquadrarTodos, 100);
+        setTimeout(enquadrarAutomatico, 100);
       }
     }
     sujarTrilha(p);
@@ -5398,7 +5407,7 @@
   /* ------------------------------------------------------------------ */
   /* Setores de busca, pontos de interesse e destinos                     */
   /* ------------------------------------------------------------------ */
-  var CORES_SETOR = ['#3b82f6', '#f59e0b', '#14b8a6', '#ec4899', '#84cc16', '#0ea5e9', '#f43f5e', '#eab308'];
+  var CORES_SETOR = window.Cores.PALETA_SETOR;   // cores fortes (js/cores.js)
   var STATUS_SETOR = {
     pendente: { rotulo: 'Pendente', selo: 'selo-neutro' },
     andamento: { rotulo: 'Em andamento', selo: 'selo-alerta' },
@@ -5478,7 +5487,7 @@
     });
     if (completa) {
       est.setores.forEach(function (s, id) {
-        if (!vistos.has(id)) { if (s.camada) s.camada.remove(); est.setores.delete(id); }
+        if (!vistos.has(id)) { tirarSetorDoMapa(s); est.setores.delete(id); }
       });
     }
     renderizarAreas();
@@ -5549,7 +5558,7 @@
   }
 
   function limparAreasDoMapa() {
-    est.setores.forEach(function (s) { if (s.camada) s.camada.remove(); });
+    est.setores.forEach(tirarSetorDoMapa);
     est.pontosInt.forEach(tirarPontoInt);
     if (est.linhaDestino) { est.linhaDestino.remove(); est.linhaDestino = null; }
     if (est.marcaDestino) { est.marcaDestino.remove(); est.marcaDestino = null; }
@@ -5659,14 +5668,16 @@
 
   /* ---------- Desenho dos setores ----------------------------------- */
   function estiloSetor(d) {
+    // Contorno contínuo e forte (com um filete escuro por baixo, em desenharSetor) e preenchimento bem visível:
+    // a situação aparece no preenchimento e no rótulo, não mais num tracejado (que parecia uma trilha).
     return {
       pane: 'setores',
       color: d.cor,
-      weight: 1.5,
-      opacity: 0.75,
+      weight: 3,
+      opacity: 1,
+      lineJoin: 'round',
       fillColor: d.cor,
-      fillOpacity: d.status === 'concluido' ? 0.04 : d.status === 'andamento' ? 0.1 : 0.06,
-      dashArray: d.status === 'pendente' ? '8 6' : null,
+      fillOpacity: d.status === 'concluido' ? 0.12 : d.status === 'andamento' ? 0.32 : 0.2,
       className: 'setor setor-' + d.status,
     };
   }
@@ -5676,11 +5687,20 @@
     return '<span class="rs-nome">' + C.esc(d.nome) + '</span><span class="rs-status"> · ' + C.esc(STATUS_SETOR[d.status].rotulo) + '</span>';
   }
 
+  function tirarSetorDoMapa(s) {
+    if (s.camada) { s.camada.remove(); s.camada = null; }
+    if (s.filete) { s.filete.remove(); s.filete = null; }
+  }
+
   function desenharSetor(s) {
     if (!est.mapa || !est.camadaSetores) return;
     var d = s.d;
     if (s.camada) { s.camada.remove(); s.camada = null; }
+    if (s.filete) { s.filete.remove(); s.filete = null; }
     if (est.desenho && est.desenho.tipo === 'ajuste' && est.desenho.id === d.id) return;   // sendo ajustado
+    // filete escuro por baixo do contorno colorido: separa a área do fundo do mapa e de outras áreas
+    var forma = { pane: 'setores', color: '#0b1220', weight: 6, opacity: 0.45, fill: false, interactive: false, lineJoin: 'round', className: 'setor-filete' };
+    s.filete = (d.forma === 'circulo' ? L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, forma)) : L.polygon(d.pontos, forma)).addTo(est.camadaSetores);
     var camada = d.forma === 'circulo'
       ? L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, estiloSetor(d)))
       : L.polygon(d.pontos, estiloSetor(d));
@@ -5689,6 +5709,7 @@
       noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante o desenho o clique é do mapa
       info: function () { return { titulo: 'Setor ' + d.nome, sub: STATUS_SETOR[d.status].rotulo }; },
       detalhes: function () { abrirSetor(d.id); },
+      sobrepostos: itensSobrepostosEm,
     });
     camada.addTo(est.camadaSetores);
     s.camada = camada;
@@ -6046,7 +6067,7 @@
       if (raio && r >= 5 && r <= 50000) desenharPrevia(r);
     }
     if (raio) raio.addEventListener('input', atualizarArea);
-    var cores = UI.seletorCor({ rotulo: 'Cor do setor', valor: d.cor, padroes: CORES_SETOR });
+    var cores = UI.seletorCor({ rotulo: 'Cor do setor', valor: d.cor, padroes: window.Cores.PALETA });
     var part = opcoesParticipantes(d.participante_id, true);
     var equipe = UI.el('input', { classe: 'campo', id: 'setor-equipe', maxlength: '60', value: d.equipe || '', placeholder: 'Ex.: Equipe Alfa' });
     var status = UI.el('select', { classe: 'campo', id: 'setor-status' }, Object.keys(STATUS_SETOR).map(function (k) {
@@ -6132,6 +6153,225 @@
     if (telaPequena()) { fecharAreas(); }
     UI.fecharModal();
     est.mapa.fitBounds(L.latLngBounds(verticesSetor(d)), { padding: [40, 40], maxZoom: 17 });
+  }
+
+  /* ---------- Elementos sobrepostos: escolher qual abrir ---------- */
+  // Setores e áreas proibidas que cobrem o ponto tocado. Com mais de um, o toque abre uma lista para escolher
+  // (antes só abria o de cima e o de baixo só dava para alcançar excluindo o outro).
+  function itensSobrepostosEm(ll) {
+    var G = window.TrilhaGeo, itens = [];
+    if (!G) return itens;
+    est.setores.forEach(function (s) {
+      var d = s.d;
+      var dentro = d.forma === 'circulo' ? G.pontoNoCirculo(ll.lat, ll.lng, d.centro_lat, d.centro_lng, d.raio_m)
+        : Array.isArray(d.pontos) && d.pontos.length >= 3 && G.pontoNoPoligono(ll.lat, ll.lng, d.pontos);
+      if (!dentro) return;
+      var a = areaSetorM2(d);
+      itens.push({ cor: d.cor, area: a, titulo: 'Setor ' + d.nome, sub: STATUS_SETOR[d.status].rotulo + ' · ' + formatarArea(a), abrir: function () { abrirSetor(d.id); } });
+    });
+    est.areasProibidas.forEach(function (x) {
+      var d = x.d;
+      if (!Array.isArray(d.pontos) || d.pontos.length < 3 || !G.pontoNoPoligono(ll.lat, ll.lng, d.pontos)) return;
+      itens.push({ cor: '#dc2626', area: G.areaPoligonoM2(d.pontos), titulo: '⛔ ' + d.nome, sub: 'Área proibida', abrir: function () { abrirAreaProibida(d.id); } });
+    });
+    return itens.sort(function (a, b) { return a.area - b.area; });   // o menor (mais específico) primeiro
+  }
+
+  function abrirEscolhaSobrepostos(latlng, itens) {
+    if (!est.mapa) return;
+    var corpo = UI.el('div', { classe: 'balao-corpo balao-sobrepostos' }, [
+      UI.el('strong', { classe: 'balao-titulo', texto: itens.length + ' elementos neste ponto' }),
+      UI.el('small', { classe: 'balao-sub', texto: 'Escolha qual abrir:' }),
+    ].concat(itens.map(function (it) {
+      return UI.el('button', { classe: 'balao-item-sobreposto', type: 'button', onclick: function () { fecharBalao(); it.abrir(); } }, [
+        UI.el('span', { classe: 'chip-cor', style: 'background:' + it.cor }),
+        UI.el('span', { classe: 'balao-item-txt' }, [UI.el('strong', { texto: it.titulo }), UI.el('small', { texto: it.sub })]),
+      ]);
+    })));
+    if (!est.balao) {
+      est.balao = L.popup({ className: 'balao-mapa', closeButton: true, autoPan: true, autoPanPadding: [30, 30], maxWidth: 260, minWidth: 160, offset: [0, -8] });
+    }
+    est.balao.setLatLng(latlng).setContent(corpo);
+    est.balao.options.offset = L.point(0, -8);
+    est.balao.openOn(est.mapa);
+  }
+
+  /* ---------- Primeira área de busca: setor de 200 m em volta do ULV ---------- */
+  var RAIO_ULV_M = 200;
+  async function criarSetorUlv(v, local) {
+    if (!est.op || !podeAlterar() || !local || !v) return null;
+    var nome = ('ULV · ' + (v.nome || 'vítima')).slice(0, 60);
+    var jaTem = Array.from(est.setores.values()).some(function (s) { return String(s.d.nome).trim().toLowerCase() === nome.toLowerCase(); });
+    if (jaTem) return null;   // já criado (o setor não acompanha mudanças do ULV: pode ter sido dividido)
+    try {
+      var res = await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: null, p_dados: {
+        nome: nome, forma: 'circulo', centro_lat: local.lat, centro_lng: local.lng, raio_m: RAIO_ULV_M, cor: corLivre(), status: 'pendente',
+        observacoes: 'Primeira área de busca: ' + RAIO_ULV_M + ' m em volta do último local visto. Use "Dividir" para repartir entre as equipes.',
+      } });
+      aplicarSetores([res]);
+      UI.aviso('Setor "' + res.nome + '" criado com raio de ' + RAIO_ULV_M + ' m. Abra-o e use "Dividir" para repartir a área entre as equipes.', 'ok', 9000);
+      return res;
+    } catch (e) {
+      UI.aviso('O último local visto foi salvo, mas o setor de ' + RAIO_ULV_M + ' m não pôde ser criado: ' + e.message, 'erro', 9000);
+      return null;
+    }
+  }
+
+  /* ---------- Dividir um setor (faixas, fatias ou uma linha de corte) ---------- */
+  var LETRAS_DIVISAO = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  function iniciarDivisao(id) {
+    var s = est.setores.get(id);
+    var G = window.TrilhaGeo;
+    if (!s || !est.mapa || !podeAlterar() || !G) return;
+    var d = s.d;
+    var base = d.forma === 'circulo' ? G.circuloParaPoligono(d.centro_lat, d.centro_lng, d.raio_m, 48) : d.pontos.map(function (p) { return [p[0], p[1]]; });
+    var modo = null, n = 2, ang = 0, linha = [], partes = [], ocupado = false;
+    var h = iniciarDesenhoExterno({
+      aoClicar: function (ll) {
+        if (modo !== 'linha' || ocupado) return;
+        if (linha.length >= 2) linha = [];
+        linha.push(ll);
+        calcular(); desenhar(); barra();
+      },
+    });
+    if (!h) return;
+    var dz = est.desenho;
+    function calcular() {
+      if (modo === 'faixas') partes = G.dividirEmFaixas(base, n, ang);
+      else if (modo === 'fatias') partes = G.dividirEmFatias(base, n, ang);
+      else if (modo === 'linha' && linha.length === 2) partes = G.dividirPorLinha(base, linha[0], linha[1]);
+      else partes = [];
+    }
+    function desenhar() {
+      h.camada.clearLayers();
+      L.polygon(base, { color: '#ffffff', weight: 2, fill: false, interactive: false, dashArray: '2 5' }).addTo(h.camada);
+      partes.forEach(function (p, i) {
+        var cor = i === 0 ? d.cor : window.Cores.PALETA_SETOR[(i + 1) % window.Cores.PALETA_SETOR.length];
+        L.polygon(p, { color: cor, weight: 3, opacity: 1, fillColor: cor, fillOpacity: 0.3, interactive: false })
+          .bindTooltip(LETRAS_DIVISAO[i] || String(i + 1), { permanent: true, direction: 'center', className: 'rotulo-setor' }).addTo(h.camada);
+      });
+      if (modo === 'linha') {
+        linha.forEach(function (p) { L.circleMarker(p, { radius: 5, color: '#0b1220', weight: 1.5, fillColor: '#facc15', fillOpacity: 1, interactive: false }).addTo(h.camada); });
+        if (linha.length === 2) L.polyline(linha, { color: '#facc15', weight: 3, interactive: false }).addTo(h.camada);
+      }
+    }
+    function botao(texto, idb, onclick, extra) {
+      // data-fixo: os botões da divisão ficam todos à vista na barra (não vão para o menu ⋯)
+      return UI.el('button', { classe: 'btn btn-pequeno' + (extra ? ' ' + extra : ''), type: 'button', id: idb, texto: texto, 'data-fixo': true, onclick: onclick });
+    }
+    function escolher(m) { modo = m; if (m !== 'linha') { n = Math.max(2, n); calcular(); } desenhar(); barra(); }
+    function voltar() { modo = null; partes = []; linha = []; desenhar(); barra(); }
+    function barra() {
+      var cancelar = botao('Cancelar', 'divisao-cancelar', function () { h.encerrar(); });
+      if (!modo) {
+        h.barra('Dividir "' + d.nome + '": como?', null, [
+          botao('▥ Faixas', 'divisao-faixas', function () { escolher('faixas'); }),
+          botao('◔ Fatias', 'divisao-fatias', function () { escolher('fatias'); }),
+          botao('╱ Linha de corte', 'divisao-linha', function () { escolher('linha'); }),
+          cancelar]);
+        return;
+      }
+      var confirmar = botao('✔ Dividir', 'divisao-confirmar', confirmarDivisao, 'btn-ok');
+      confirmar.disabled = partes.length < 2;
+      if (modo === 'linha') {
+        h.barra(linha.length < 2 ? 'Toque em 2 pontos para traçar a linha de corte (' + linha.length + ' de 2).' : 'Linha traçada: ' + partes.length + ' partes. Toque de novo para refazer.', null,
+          [botao('Voltar', 'divisao-voltar', voltar), confirmar, cancelar]);
+        return;
+      }
+      h.barra((modo === 'faixas' ? 'Faixas' : 'Fatias') + ': ' + partes.length + ' partes · ' + (modo === 'faixas' ? 'rumo ' : 'início ') + ang + '°', null, [
+        botao('−', 'divisao-menos', function () { if (n > 2) { n--; calcular(); desenhar(); barra(); } }),
+        botao('+', 'divisao-mais', function () { if (n < 12) { n++; calcular(); desenhar(); barra(); } }),
+        botao('↻ 15°', 'divisao-girar', function () { ang = (ang + 15) % (modo === 'faixas' ? 180 : 360); calcular(); desenhar(); barra(); }),
+        botao('Voltar', 'divisao-voltar', voltar), confirmar, cancelar]);
+    }
+    async function confirmarDivisao() {
+      if (partes.length < 2 || ocupado) return;
+      var ok = await UI.confirmar({
+        titulo: 'Dividir o setor "' + d.nome + '" em ' + partes.length + ' partes?',
+        texto: 'A parte A continua sendo este setor (com o responsável, as missões e o histórico); as outras viram setores novos, com a mesma situação. As trilhas GPS não são afetadas.',
+        ok: 'Dividir setor',
+      });
+      if (!ok || est.desenho !== dz) return;
+      ocupado = true;
+      var feitos = 0, falhas = 0;
+      var nomeBase = String(d.nome).slice(0, 56);
+      try {
+        var r0 = await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: d.id, p_dados: { nome: nomeBase + ' ' + LETRAS_DIVISAO[0], forma: 'poligono', pontos: partes[0] } });
+        aplicarSetores([r0]);
+        feitos++;
+      } catch (e) {
+        ocupado = false;
+        UI.aviso('Não foi possível dividir: ' + (e.codigo === 'area_invalida' ? 'a área ficou com vértices demais (máximo 300).' : e.message), 'erro', 9000);
+        return;
+      }
+      for (var i = 1; i < partes.length; i++) {
+        try {
+          var r = await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: null, p_dados: { nome: nomeBase + ' ' + (LETRAS_DIVISAO[i] || i + 1), forma: 'poligono', pontos: partes[i],
+            cor: corLivre(), status: d.status, visibilidade: d.visibilidade || undefined } });
+          aplicarSetores([r]);
+          feitos++;
+        } catch (e2) { falhas++; }
+      }
+      h.encerrar();
+      UI.aviso('Setor "' + d.nome + '" dividido em ' + feitos + ' partes (' + nomeBase + ' ' + LETRAS_DIVISAO[0] + '…).' + (falhas ? ' ' + falhas + ' parte(s) não puderam ser criadas.' : ''), falhas ? 'erro' : 'ok', 9000);
+    }
+    barra();
+  }
+
+  /* ---------- Deslocamento até o local da ocorrência: o mapa não segue a viatura ---------- */
+  // Enquanto este aparelho compartilha a posição (tablet na viatura) e ainda não chegou ao endereço da operação,
+  // o mapa NÃO é levado para a posição dele: o foco fica no endereço, para planejar a busca. Chegou a menos de
+  // RAIO_CHEGADA_LOCAL_M do local (ou tocou "Cheguei ao local"): volta ao normal e enquadra todos uma vez.
+  var RAIO_CHEGADA_LOCAL_M = 300;
+  function chaveChegouLocal() { return 'gbs-chegou-local-' + (est.op ? est.op.id : ''); }
+  function emDeslocamento() {
+    var op = est.op;
+    if (!op || op.status !== 'ativa' || op.dados_apagados_em || op.local_lat == null || op.local_lng == null) return false;
+    if (!est.compartilhando) return false;
+    if (est.chegouLocal === op.id || C.local.ler(chaveChegouLocal(), 0)) return false;
+    return true;
+  }
+  function focarNoLocalDaOperacao() {
+    var op = est.op;
+    if (est.mapa && op && op.local_lat != null) est.mapa.setView([op.local_lat, op.local_lng], Math.max(est.mapa.getZoom(), 15));
+  }
+  // Enquadramento automático (primeira posição recebida): no deslocamento, fica no endereço da operação.
+  function enquadrarAutomatico() {
+    if (emDeslocamento()) { focarNoLocalDaOperacao(); return; }
+    enquadrarTodos();
+  }
+  function marcarChegadaAoLocal(motivo) {
+    if (!est.op) return;
+    est.chegouLocal = est.op.id;
+    C.local.gravar(chaveChegouLocal(), 1);
+    atualizarChipDeslocamento();
+    est.jaEnquadrou = false;   // o próximo ponto recebido enquadra todos (já no local)
+    if (temAlgumaPosicao()) { est.jaEnquadrou = true; enquadrarTodos(); }
+    UI.aviso(motivo === 'auto' ? 'Você chegou ao local da operação: o mapa volta a acompanhar normalmente.' : 'Chegada ao local registrada neste aparelho: o mapa volta ao normal.', 'ok', 7000);
+  }
+  function verificarChegadaAoLocal(lat, lng) {
+    if (!emDeslocamento()) return;
+    if (C.distancia(lat, lng, est.op.local_lat, est.op.local_lng) <= RAIO_CHEGADA_LOCAL_M) marcarChegadaAoLocal('auto');
+  }
+  function atualizarChipDeslocamento() {
+    var mapaEl = $('mapa');
+    var chip = $('chip-deslocamento');
+    var mostrar = Boolean(est.mapa && mapaEl && emDeslocamento());
+    if (!mostrar) { if (chip) chip.hidden = true; return; }
+    if (!chip) {
+      chip = UI.el('div', { id: 'chip-deslocamento', classe: 'chip-deslocamento', role: 'status' }, [
+        UI.el('span', { classe: 'chip-deslocamento-txt', texto: '🚗 Em deslocamento: o mapa fica no endereço da operação' }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'deslocamento-onde', texto: 'Ver minha posição', onclick: function () {
+          var a = est.ultimoAceitoMeu;
+          if (a && est.mapa) est.mapa.setView([a.lat, a.lng], Math.max(est.mapa.getZoom(), 16));
+          else UI.aviso('Sem a sua posição ainda.', 'erro');
+        } }),
+        UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'deslocamento-cheguei', texto: 'Cheguei ao local', onclick: function () { marcarChegadaAoLocal('manual'); } }),
+      ]);
+      mapaEl.appendChild(chip);
+      if (window.L && L.DomEvent) { L.DomEvent.disableClickPropagation(chip); L.DomEvent.disableScrollPropagation(chip); }
+    }
+    chip.hidden = false;
   }
 
   /* ---------- Camada de POA no mapa (js/busca-cenario.js) ---------- */
@@ -6220,6 +6460,7 @@
             var res = await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: d.id, p_dados: { status: k } });
             aplicarSetores([res]);
             UI.aviso('Setor "' + res.nome + '": ' + STATUS_SETOR[k].rotulo + '.', 'ok');
+            fechar();   // fecha este detalhe antes de abrir o atualizado (senão o antigo, ainda "Pendente", fica por baixo e volta ao tocar no X)
             abrirSetor(id);
           } catch (e) { UI.aviso(e.message, 'erro'); }
         },
@@ -6246,6 +6487,7 @@
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verSetorNoMapa(d); } }),
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Editar', onclick: function () { abrirFormSetor(d); } }) : null,
         podeEditar ? UI.el('button', { classe: 'btn', type: 'button', id: 'setor-ajustar', texto: 'Ajustar limites', onclick: function () { fechar(); ajustarLimites(d.id); } }) : null,
+        podeEditar && est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-ok', type: 'button', id: 'setor-dividir', texto: '✂ Dividir', title: 'Divide o setor em partes (faixas, fatias ou uma linha de corte)', onclick: function () { fechar(); iniciarDivisao(d.id); } }) : null,
         podeEditar && est.op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', texto: '🧭 Enviar o centro como destino', onclick: function () {
           var c = centroSetor(d);
           fechar();
@@ -6268,7 +6510,7 @@
     try {
       await C.rpc('excluir_setor', { p_id: d.id });
       var s = est.setores.get(d.id);
-      if (s && s.camada) s.camada.remove();
+      if (s) tirarSetorDoMapa(s);
       est.setores.delete(d.id);
       renderizarAreas();
       UI.aviso('Setor excluído.', 'ok');
@@ -6286,7 +6528,7 @@
     if (telaPequena()) { fecharAreas(); }
     est.desenho = { tipo: 'ajuste', id: id, camadaTemp: L.layerGroup().addTo(est.mapa), aoCancelar: function () { desenharSetor(s); } };
     var dz = est.desenho;
-    if (s.camada) { s.camada.remove(); s.camada = null; }
+    tirarSetorDoMapa(s);
     var cor = d.cor;
     var botoes = [
       UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'ajuste-salvar', texto: 'Salvar limites', onclick: salvarAjuste }),
@@ -6543,7 +6785,7 @@
   }
 
   /* ---------- Tipos de ponto criados pelos responsáveis ------------- */
-  var CORES_TIPO = ['#64748b', '#2563eb', '#16a34a', '#f59e0b', '#7c3aed', '#0891b2', '#db2777', '#92400e'];
+  var CORES_TIPO = window.Cores.PALETA;   // cores fortes (js/cores.js)
 
   // Criar ou editar um tipo (nome, ícone, cor). Abre por cima do formulário do ponto. aoSalvar(tipo)
   function abrirTipoPonto(t, aoSalvar) {
@@ -7913,9 +8155,10 @@
       return UI.el('option', { value: k, selected: (base.meio || 'equipe') === k ? true : null, texto: MEIO_TRILHA[k].ico + ' ' + MEIO_TRILHA[k].rotulo });
     }));
     var corPropria = UI.el('input', { type: 'checkbox', id: 'trilha-cor-propria', checked: base.cor ? true : null });
-    var cor = UI.el('input', { type: 'color', classe: 'campo-cor', id: 'trilha-cor', value: base.cor || '#22d3ee', 'aria-label': 'Cor da trilha' });
-    cor.disabled = !base.cor;
-    corPropria.addEventListener('change', function () { cor.disabled = !corPropria.checked; });
+    // cores fortes prontas + cor personalizada (js/cores.js)
+    var cor = UI.seletorCor({ rotulo: 'Cor da trilha', valor: base.cor || '#00bcd4', padroes: window.Cores.PALETA });
+    cor.hidden = !base.cor;
+    corPropria.addEventListener('change', function () { cor.hidden = !corPropria.checked; });
     var estados = UI.el('div', { classe: 'opcoes-estado-trilha', role: 'radiogroup', 'aria-label': 'Situação da trilha' }, Object.keys(ESTADO_TRILHA).map(function (k) {
       var e = ESTADO_TRILHA[k];
       return UI.el('label', { classe: 'opcao-estado-trilha' }, [
@@ -7980,7 +8223,7 @@
         equipe: equipe.value.trim(),
         observacoes: obs.value.trim(),
         meio: meio.value,
-        cor: corPropria.checked ? cor.value : '',
+        cor: corPropria.checked ? cor.valor() : '',
       };
       if (!dados.nome) { mostrarErro('Informe o nome da trilha.'); nome.focus(); return; }
       var repetido = Array.from(est.trilhasManuais.values()).some(function (t) {
@@ -8523,6 +8766,7 @@
       noDesenho: function (ev) { aoClicarNoMapa(ev); },
       info: function () { return { titulo: '⛔ ' + a.d.nome, sub: 'Área proibida' + (a.d.motivo ? ' · ' + a.d.motivo : '') }; },
       detalhes: function () { abrirAreaProibida(a.d.id); },
+      sobrepostos: itensSobrepostosEm,
     });
     pol.addTo(est.camadaAreasProibidas);
     a.camada = pol;
@@ -9180,6 +9424,7 @@
         return;
       }
       est.compartilhando = true;
+      atualizarChipDeslocamento();
       est.filtroMeu.reiniciar();
       est.ultimoAceitoMeu = null;
       if (teste.ok) {
@@ -9229,11 +9474,14 @@
       est.ultimoAceitoMeu = { lat: a.lat, lng: a.lng, prec: a.prec, t: a.t, recebidaEm: a.recebidaEm };
       est.gpsMeu = a.prec != null && a.prec > 50 ? 'fraco' : 'ok';
       est.minhaPosEstado = 'ativa';
-      // ao iniciar a operação, o mapa vai para a sua localização (uma vez por operação)
+      verificarChegadaAoLocal(a.lat, a.lng);
+      // ao iniciar a operação, o mapa vai para a sua localização (uma vez por operação) — menos no deslocamento até o local
       if (est.mapa && est.op && est.centradoNoInicio !== est.op.id) {
         est.centradoNoInicio = est.op.id;
-        est.mapa.setView([a.lat, a.lng], Math.max(est.mapa.getZoom(), 16));
+        if (emDeslocamento()) focarNoLocalDaOperacao();
+        else est.mapa.setView([a.lat, a.lng], Math.max(est.mapa.getZoom(), 16));
       }
+      atualizarChipDeslocamento();
     }
     if (r.atual && !est.gravandoTrilha) enviarPosicaoAtual();
     if (r.pontos.length && est.gravandoTrilha) {
@@ -9409,6 +9657,7 @@
   function pararMinhaPosicao(silencioso) {
     var estava = est.compartilhando;
     est.compartilhando = false;
+    atualizarChipDeslocamento();
     est.gravandoTrilha = false;
     if (est.watchId != null) {
       navigator.geolocation.clearWatch(est.watchId);
@@ -10469,7 +10718,7 @@
     var corPadrao = g ? g.cor : window.Cores.livre(GRUPO_CORES, Array.from(est.grupos.values()).map(function (x) { return x.cor; }));
     var nome = UI.el('input', { classe: 'campo', id: 'grupo-nome', maxlength: '60', value: g ? g.nome : '', placeholder: 'Ex.: Polícia Civil' });
     var icone = UI.seletorIcone({ id: 'grupo-icone', rotulo: 'Ícone do grupo', valor: g ? g.icone : null, cor: corPadrao, vazio: true });
-    var cores = UI.seletorCor({ rotulo: 'Cor do grupo', valor: corPadrao, padroes: GRUPO_CORES, aoMudar: function (c) { icone.definirCor(c); } });
+    var cores = UI.seletorCor({ rotulo: 'Cor do grupo', valor: corPadrao, padroes: window.Cores.PALETA, aoMudar: function (c) { icone.definirCor(c); } });
     var mil = UI.el('input', { type: 'checkbox', id: 'grupo-militar', checked: g && g.permite_militar ? true : null });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'grupo-salvar', texto: novo ? 'Criar grupo' : 'Salvar' });
@@ -11545,6 +11794,7 @@
     criarSetor: function (pontos, nome) { abrirFormSetor(Object.assign({ forma: 'poligono', pontos: pontos }, nome ? { nome: nome.slice(0, 60) } : {})); },
     enviarAreasComoSetores: function (areas) { return enviarAreasComoSetores(areas); },
     enviarTrilhaImportada: function (dados) { return enviarTrilhaImportada(dados); },
+    criarSetorUlv: function (v, local) { return criarSetorUlv(v, local); },
     // Quem pode receber o vínculo de uma trilha importada: [{ grupo, itens: [{ valor: 'p:<id>' | 'g:<id>', texto }] }]
     opcoesVinculoTrilha: function () {
       var vivos = Array.from(est.participantes.values()).filter(function (p) { return !p.dados.removido && !p.dados.liberado_em; })

@@ -48,5 +48,36 @@ chk(G.dividirNaBase([]).length === 0 && G.dividirNaBase([{ id: 1 }])[0].length =
 console.log('Pertinência');
 chk(G.dentroDeAlgum(...ponto(10, 0), [circ(0, 50)]) && !G.dentroDeAlgum(...ponto(80, 0), [circ(0, 50)]), 'dentro e fora do círculo');
 
+console.log('Áreas: pertinência e divisão de setores');
+const sq = [ponto(-100, -100), ponto(-100, 100), ponto(100, 100), ponto(100, -100)];   // quadrado de 200 m de lado
+const areaT = G.areaPoligonoM2(sq);
+chk(Math.abs(areaT - 40000) < 50, 'área do quadrado de 200 m ≈ 40.000 m²', areaT);
+chk(G.pontoNoPoligono(...ponto(10, 10), sq) && !G.pontoNoPoligono(...ponto(150, 10), sq), 'ponto dentro e fora do polígono');
+chk(G.pontoNoCirculo(...ponto(30, 0), L0, G0, 50) && !G.pontoNoCirculo(...ponto(80, 0), L0, G0, 50), 'ponto dentro e fora do círculo (centro = origem)');
+const disco = G.circuloParaPoligono(L0, G0, 200, 48);
+const areaDisco = G.areaPoligonoM2(disco);
+chk(disco.length === 48 && Math.abs(areaDisco - Math.PI * 200 * 200) / (Math.PI * 200 * 200) < 0.01, 'círculo de 200 m vira 48 vértices (área a menos de 1% da exata)', areaDisco);
+let dv2 = G.dividirPorLinha(sq, ponto(0, -300), ponto(0, 300));
+chk(dv2.length === 2 && Math.abs(G.areaPoligonoM2(dv2[0]) - 20000) < 50 && Math.abs(G.areaPoligonoM2(dv2[1]) - 20000) < 50, 'uma linha no meio divide o quadrado em duas metades iguais', dv2.map(G.areaPoligonoM2));
+chk(G.dividirPorLinha(sq, ponto(500, -300), ponto(500, 300)).length === 1, 'linha que não cruza o setor não divide');
+dv2 = G.dividirPorLinha(disco, ponto(-300, 0), ponto(300, 40));
+chk(dv2.length === 2 && Math.abs(G.areaPoligonoM2(dv2[0]) + G.areaPoligonoM2(dv2[1]) - areaDisco) < 5, 'a soma das partes é a área do setor (sem perda nem sobreposição)', dv2.map(G.areaPoligonoM2));
+let fatias = G.dividirEmFatias(disco, 4, 0);
+chk(fatias.length === 4 && fatias.every((f) => Math.abs(G.areaPoligonoM2(f) - areaDisco / 4) / (areaDisco / 4) < 0.02), 'círculo em 4 fatias de áreas iguais', fatias.map(G.areaPoligonoM2));
+chk(Math.abs(fatias.reduce((a, f) => a + G.areaPoligonoM2(f), 0) - areaDisco) < 5, 'as fatias cobrem o círculo inteiro');
+fatias = G.dividirEmFatias(disco, 3, 20);
+chk(fatias.length === 3 && fatias.every((f) => Math.abs(G.areaPoligonoM2(f) - areaDisco / 3) / (areaDisco / 3) < 0.03), 'círculo em 3 fatias com rumo inicial de 20°', fatias.map(G.areaPoligonoM2));
+fatias = G.dividirEmFatias(disco, 2, 0);
+chk(fatias.length === 2 && G.pontoNoPoligono(...ponto(50, 0), fatias[0]) !== G.pontoNoPoligono(...ponto(-50, 0), fatias[0]), 'duas fatias são as duas metades (leste e oeste)');
+let faixas = G.dividirEmFaixas(sq, 4, 0);
+chk(faixas.length === 4 && faixas.every((f) => Math.abs(G.areaPoligonoM2(f) - 10000) < 50), 'quadrado em 4 faixas de 50 m (norte–sul)', faixas.map(G.areaPoligonoM2));
+chk(G.pontoNoPoligono(...ponto(-75, 0), faixas[0]) || G.pontoNoPoligono(...ponto(-75, 0), faixas[3]), 'as faixas ficam lado a lado (de oeste para leste)');
+faixas = G.dividirEmFaixas(disco, 5, 45);
+chk(faixas.length === 5 && Math.abs(faixas.reduce((a, f) => a + G.areaPoligonoM2(f), 0) - areaDisco) < 5, 'faixas inclinadas a 45° também cobrem o setor');
+chk(G.dividirEmFaixas(sq, 1, 0).length === 0 && G.dividirEmFatias([[0, 0], [1, 1]], 3, 0).length === 0, 'pedidos inválidos devolvem vazio');
+const concavo = [ponto(-100, -100), ponto(-100, 100), ponto(0, 20), ponto(100, 100), ponto(100, -100)];   // "M" côncavo
+const aC = G.areaPoligonoM2(concavo);
+chk(Math.abs(G.dividirEmFatias(concavo, 4, 10).reduce((a, f) => a + G.areaPoligonoM2(f), 0) - aC) < 30, 'polígono côncavo: a soma das fatias confere com a área (sem perda)');
+
 console.log('\nGeometria das trilhas: ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

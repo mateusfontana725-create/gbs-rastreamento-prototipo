@@ -1016,6 +1016,8 @@
         fechar(true);
         UI.aviso(local ? 'Último local visto salvo.' : 'Último local visto retirado.', 'ok');
         if (opcoes.aoSalvar) opcoes.aoSalvar();
+        // o ULV ganha, automaticamente, o setor de 200 m (primeira área de busca; dá para dividi-lo depois)
+        if (local && window.Painel && window.Painel.criarSetorUlv) window.Painel.criarSetorUlv(v, local);
       } catch (e) {
         erro.textContent = 'Não foi possível salvar: ' + (e.message || e);
         erro.hidden = false;

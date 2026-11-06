@@ -560,7 +560,7 @@ participante recebe um e-mail com o botão **Abrir e começar** (o link do `part
     **Concluir**; o contorno é fechado e preenchido com cor semitransparente.
 - Cada setor tem **nome/número/código**, **cor** (8 opções bem distintas entre si e das trilhas),
   **responsável** (um participante da operação) e/ou **equipe** (texto livre, ex.: "Equipe Alfa"),
-  **situação** (**Pendente** — contorno tracejado, **Em andamento**, **Concluído** — preenchimento mais
+  **situação** (**Pendente**, **Em andamento**, **Concluído** — preenchimento mais
   claro), observações, **área aproximada** (m², hectares ou km²), quem criou e quando, quem alterou e quando.
 - **Editar**: tocar no setor (ou em **Lista de setores, trilhas e pontos**) abre os detalhes: botões de situação,
   **Editar** (nome, cor, responsável, equipe, observações, raio), **Ajustar limites** (arrastar os cantos;
@@ -695,6 +695,30 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   com o nome do arquivo). O voo de um drone ou o GPS de outra equipe entra por **Importar arquivo** → tocar na
   linha → **Registrar como trilha**: o formulário já vem com o nome, a cor e o horário do arquivo, e "drone"
   quando o nome ou o tipo indicam voo. O diário registra o meio no percurso percorrido.
+
+### Setores: cores fortes, ULV de 200 m, dividir, sobreposição e deslocamento
+
+- **Cores padrão mais fortes e mais numerosas**: o seletor de cor (setores, grupos, trilhas e tipos de ponto) traz **25 cores
+  saturadas** (como no AlpineQuest), além de **Minhas cores** e da **cor personalizada** (tom, intensidade, claridade, código
+  `#rrggbb`). A sugestão automática de cor segue uma ordem de cores bem diferentes entre si e pula as já usadas. Os grupos não usam
+  vermelho, roxo nem magenta (reservados a militar, civil e responsável). A cor da trilha agora também usa o seletor completo.
+- **Contorno e opacidade dos setores**: o contorno é **contínuo**, mais grosso e com um filete escuro por baixo (antes o tracejado
+  parecia uma trilha); a **situação** aparece no preenchimento (Pendente mais leve, Em andamento mais forte, Concluído discreto) e no
+  rótulo. O mesmo vale no mapa do celular do participante.
+- **ULV com 200 m**: ao salvar o **último local visto** de uma vítima, o painel cria sozinho o setor circular **"ULV · nome"** de
+  **200 m** (primeira área de busca). O setor não acompanha mudanças posteriores do ULV (pode já ter sido dividido) e não duplica.
+- **✂ Dividir** (detalhes do setor): **▥ Faixas** (paralelas, com o rumo), **◔ Fatias** (a partir do centro, com o início) ou
+  **╱ Linha de corte** (dois toques). Com − / + escolhe-se de 2 a 12 partes e ↻ 15° gira; a prévia aparece no mapa. **A** continua sendo o
+  setor original (responsável, missões e histórico); as outras partes viram setores novos ("… B", "… C"), com cor diferente e a mesma
+  situação. Setor circular vira polígono (48 lados). Limite de 300 vértices por setor.
+- **Concluído e o ×**: depois de marcar o setor como Concluído, o detalhe antigo (ainda "Pendente") ficava por baixo do novo e voltava
+  a aparecer ao tocar no ×; agora o antigo é fechado antes.
+- **Elementos sobrepostos**: tocar (ou segurar / dar duplo toque) num ponto coberto por mais de um **setor ou área proibida** abre uma
+  lista **"N elementos neste ponto"** para escolher qual abrir (o menor primeiro). Onde há um só, abre direto, como antes.
+- **Deslocamento até o local**: enquanto este aparelho compartilha a posição e ainda não chegou ao endereço da operação, o mapa **não
+  é levado para a posição da viatura**: o foco fica no endereço (aviso "🚗 Em deslocamento" com **Ver minha posição** e **Cheguei ao
+  local**). A menos de **300 m** do local (ou ao tocar em "Cheguei"), tudo volta ao normal e o mapa enquadra todos uma vez. A chegada
+  fica guardada neste aparelho. Operação sem endereço cadastrado não tem esse comportamento.
 
 ### Trilhas: de quem é, borracha, áreas sem trilha, gravação e base (migração 066)
 
@@ -2276,6 +2300,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 44g | Marcar um ponto **Base** (raio 50 m) e andar de dentro dele para fora e de volta | sem trilha dentro do raio (só o ponto de entrada); fora dele a trilha é normal; o grupo que volta é dado como "na base" |
 | 44h | No aplicativo Android registrando, **arrastar o aplicativo da lista de recentes** e olhar o painel | o registro para (a pessoa aparece sem sinal/parada); ao abrir o aplicativo de novo, retoma sozinho |
 | 44i | No aplicativo, **apagar a tela** e **minimizar** por 10 min | o registro **continua** (a trilha segue crescendo no painel) |
+| 45a | Registrar o último local visto de uma vítima | cria o setor "ULV · nome" de 200 m em volta do ponto, sem duplicar se salvar de novo |
+| 45b | Abrir esse setor → **✂ Dividir** → Fatias, 4 partes, ✔ Dividir | o setor vira A (original) e B, C, D novos, com cores diferentes; o mapa mostra as 4 partes |
+| 45c | Dividir outro setor com **╱ Linha de corte** (dois toques) e com **▥ Faixas** | duas partes pela linha; faixas paralelas de largura igual |
+| 45d | Marcar um setor como **Concluído** e tocar no × | fecha e o setor segue Concluído (não volta a "Pendente") |
+| 45e | Criar um setor grande e outro menor por cima; tocar na parte comum | lista "2 elementos neste ponto"; dá para abrir cada um sem excluir o de cima |
+| 45f | No tablet na viatura, com o endereço cadastrado a alguns km, abrir a operação e deixar andar | o mapa fica no endereço e não segue a posição; ao chegar a 300 m (ou em "Cheguei ao local") volta ao normal |
+| 45g | Criar setor, grupo e trilha e olhar as cores sugeridas e o seletor | cores fortes e variadas; a cor personalizada continua disponível |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

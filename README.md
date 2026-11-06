@@ -2340,6 +2340,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 46e | Em **Grupos**, tocar em **✉ Mensagem ao grupo** e enviar uma mensagem livre e uma orientação (RETORNE) | todos os integrantes de campo do grupo recebem; o painel diz quantos; quem está sem conexão recebe ao reconectar |
 | 46f | Tentar colocar em outro grupo alguém que já está num grupo (Membros e ficha) | aparece desativado/sem o botão; se for forçado, o servidor recusa com "já está em outro grupo" |
 | 46g | Abrir o link do grupo B num celular cuja pessoa já está no grupo A | continua na operação e no grupo A, sem entrar no B |
+| 47a | Abrir uma operação grande (100 pessoas ou mais, dezenas de milhares de posições) com o celular em 4G | a lista de participantes aparece em poucos segundos, antes das trilhas; os setores aparecem logo em seguida e o spinner sai sem esperar o restante |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

@@ -321,6 +321,31 @@
     return todas;
   }
 
+  // Como consultarTudo, mas pede várias páginas ao mesmo tempo (a ordem é mantida; a fabrica precisa ordenar
+  // por uma chave única, como o id). Uma operação grande tem dezenas de milhares de posições: em fila, cada
+  // página esperava a anterior.
+  async function consultarTudoParalelo(fabrica, tamanho, simultaneas) {
+    tamanho = tamanho || 1000;
+    simultaneas = simultaneas || 4;
+    var todas = [];
+    for (var inicio = 0; inicio <= 500000; inicio += simultaneas * tamanho) {
+      var lote = [];
+      for (var k = 0; k < simultaneas; k++) {
+        var de = inicio + k * tamanho;
+        lote.push(consultar(fabrica().range(de, de + tamanho - 1)));
+      }
+      var paginas = await Promise.all(lote);
+      var acabou = false;
+      for (var j = 0; j < paginas.length; j++) {
+        var pg = paginas[j] || [];
+        for (var x = 0; x < pg.length; x++) todas.push(pg[x]);
+        if (pg.length < tamanho) { acabou = true; break; }   // página curta: o resto não existe
+      }
+      if (acabou) break;
+    }
+    return todas;
+  }
+
   /* ---------- Relógio do servidor --------------------------------------- */
   // Diferença entre o relógio do servidor e o do aparelho. Evita que um
   // celular com hora errada mostre "há 3 horas" para uma posição recente.
@@ -440,6 +465,7 @@
     rpc: rpc,
     consultar: consultar,
     consultarTudo: consultarTudo,
+    consultarTudoParalelo: consultarTudoParalelo,
     traduzirErro: traduzirErro,
     criarErro: criarErro,
     ehErroDeRede: ehErroDeRede,

@@ -2465,7 +2465,7 @@
   async function consultarPosicoes(montar) {
     var cols = 'id,participante_id,lat,lng,precisao,registrado_em,recebido_em' + (est.semNaBase ? '' : ',na_base');
     try {
-      return await C.consultarTudo(function () { return montar(cols); });
+      return await C.consultarTudoParalelo(function () { return montar(cols); }, 1000, 4);
     } catch (e) {
       if (!est.semNaBase && /na_base/.test(String(e.original && (e.original.message || e.original.details) || e.message))) {
         est.semNaBase = true;
@@ -2475,45 +2475,49 @@
     }
   }
 
+  // Carga inicial. Primeiro os participantes (uma consulta pequena): a lista aparece logo. Depois, em paralelo,
+  // posições (várias páginas ao mesmo tempo), mensagens, fotos, áreas, grupos, vítimas, permanências e missões.
+  // Antes era tudo em fila: a lista e os setores só apareciam depois que todas as posições tinham chegado.
   async function carregarTudo() {
     var opId = est.op.id;
+    function ainda() { return Boolean(est.op && est.op.id === opId); }
+    var falhas = [];
+    function falhou(e) { falhas.push(e); }
     try {
       var parts = await C.consultarTudo(function () {
         return C.cliente.from('participantes').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true });
       });
-      if (!est.op || est.op.id !== opId) return;
+      if (!ainda()) return;
       parts.forEach(upsertParticipante);
+      renderizarLista();
+    } catch (e) { falhou(e); }
+    if (!ainda()) return;
 
-      var pontos = await consultarPosicoes(function (cols) {
+    await emLoteLista(Promise.all([
+      consultarPosicoes(function (cols) {
         return C.cliente.from('posicoes').select(cols).eq('operacao_id', opId).order('id', { ascending: true });
-      });
-      if (!est.op || est.op.id !== opId) return;
-      pontos.forEach(adicionarPonto);
-
-      var msgs = await C.consultarTudo(function () {
+      }).then(function (pontos) {
+        if (ainda()) adicionarPontosLote(pontos);
+      }).catch(falhou),
+      C.consultarTudoParalelo(function () {
         return C.cliente.from('mensagens').select('*').eq('operacao_id', opId).order('criada_em', { ascending: true });
-      });
-      if (!est.op || est.op.id !== opId) return;
-      msgs.forEach(function (m) { receberMensagem(m, true); });
-
-      await carregarFotos(true);
-      if (!est.op || est.op.id !== opId) return;
-      await carregarAreas();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarGrupos();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarVitimasLoc();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarPermanencias();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarMissoes(true);
-      if (!est.op || est.op.id !== opId) return;
-
+      }, 1000, 2).then(function (msgs) {
+        if (ainda()) msgs.forEach(function (m) { receberMensagem(m, true); });
+      }).catch(falhou),
+      carregarFotos(true).catch(falhou),
+      carregarAreas().catch(falhou),
+      carregarGrupos().catch(falhou),
+      carregarVitimasLoc().catch(falhou),
+      carregarPermanencias().catch(falhou),
+      carregarMissoes(true).catch(falhou),
+    ]));
+    if (!ainda()) return;
+    if (falhas.length) {
+      est.syncFalhou = true;
+      UI.aviso('Falha ao carregar dados: ' + (falhas[0].message || falhas[0]), 'erro');
+    } else {
       est.ultimoSyncOk = Date.now();
       est.syncFalhou = false;
-    } catch (e) {
-      est.syncFalhou = true;
-      UI.aviso('Falha ao carregar dados: ' + e.message, 'erro');
     }
     renderizarLista();
     renderizarCentral();
@@ -2555,30 +2559,22 @@
       if (!est.op || est.op.id !== opId) return;
       parts.forEach(upsertParticipante);
 
-      var novos = await consultarPosicoes(function (cols) {
-        return C.cliente.from('posicoes').select(cols).eq('operacao_id', opId).gt('id', est.maxPosId).order('id', { ascending: true });
-      });
-      if (!est.op || est.op.id !== opId) return;
-      novos.forEach(adicionarPonto);
-
-      var msgs = await C.consultar(
-        C.cliente.from('mensagens').select('*').eq('operacao_id', opId).order('criada_em', { ascending: false }).limit(500)
-      );
-      if (!est.op || est.op.id !== opId) return;
-      msgs.forEach(function (m) { receberMensagem(m, false); });
-
-      await carregarFotos(false);
-      if (!est.op || est.op.id !== opId) return;
-      await carregarAreas();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarGrupos();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarVitimasLoc();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarPermanencias();
-      if (!est.op || est.op.id !== opId) return;
-      await carregarMissoes(false);
-      if (!est.op || est.op.id !== opId) return;
+      // Em paralelo (cada um trata a própria falha e confere se ainda é a mesma operação)
+      var mesmaOp = function () { return Boolean(est.op && est.op.id === opId); };
+      await emLoteLista(Promise.all([
+        consultarPosicoes(function (cols) {
+          return C.cliente.from('posicoes').select(cols).eq('operacao_id', opId).gt('id', est.maxPosId).order('id', { ascending: true });
+        }).then(function (novos) { if (mesmaOp()) adicionarPontosLote(novos); }),
+        C.consultar(C.cliente.from('mensagens').select('*').eq('operacao_id', opId).order('criada_em', { ascending: false }).limit(500))
+          .then(function (msgs) { if (mesmaOp()) msgs.forEach(function (m) { receberMensagem(m, false); }); }),
+        carregarFotos(false),
+        carregarAreas(),
+        carregarGrupos(),
+        carregarVitimasLoc(),
+        carregarPermanencias(),
+        carregarMissoes(false),
+      ]));
+      if (!mesmaOp()) return;
 
       est.ultimoSyncOk = Date.now();
       est.syncFalhou = false;
@@ -3235,6 +3231,43 @@
     if (window.Ferramentas && pt.t > C.agora() - 180000 && (pt.prec == null || pt.prec <= LIM.precisaoTrilhaM)) window.Ferramentas.aoNovoPonto(p, pt);
   }
 
+  // Várias posições de uma vez (carga inicial e conferência): o mesmo resultado que adicionarPonto para cada uma,
+  // mas o marcador, a trilha e a ficha são atualizados UMA vez por participante. Por ponto, a carga de uma operação
+  // grande travava o navegador por vários segundos.
+  function adicionarPontosLote(rows) {
+    var tocados = new Map();
+    var recentes = [];
+    var agora = C.agora();
+    rows.forEach(function (row) {
+      if (est.posIds.has(row.id)) return;
+      est.posIds.add(row.id);
+      if (row.id > est.maxPosId) est.maxPosId = row.id;
+      var p = est.participantes.get(row.participante_id);
+      if (!p) { est.pontosOrfaos.push(row); return; }
+      var pt = { id: row.id, t: C.paraMs(row.registrado_em), lat: row.lat, lng: row.lng, prec: row.precisao,
+        rec: C.paraMs(row.recebido_em), exib: agora, na_base: Boolean(row.na_base) };
+      p.pontos.push(pt);
+      tocados.set(p.id, p);
+      if (window.Ferramentas && pt.t > agora - 180000 && (pt.prec == null || pt.prec <= LIM.precisaoTrilhaM)) recentes.push([p, pt]);
+    });
+    tocados.forEach(function (p) {
+      p.pontos.sort(function (a, b) { return (a.t - b.t) || (a.id - b.id); });
+      var d = p.dados;
+      var ult = p.pontos[p.pontos.length - 1];
+      if (ult && (!d.ultima_posicao_em || ult.t > C.paraMs(d.ultima_posicao_em))) {
+        d.ultima_lat = ult.lat;
+        d.ultima_lng = ult.lng;
+        d.ultima_precisao = ult.prec;
+        d.ultima_posicao_em = new Date(ult.t).toISOString();
+        atualizarMarcador(p);
+        est.listaSuja = true;
+      }
+      sujarTrilha(p);
+      if (est.selecionado === p.id) atualizarFicha();
+    });
+    recentes.forEach(function (x) { window.Ferramentas.aoNovoPonto(x[0], x[1]); });
+  }
+
   function sujarTrilha(p) {
     est.trilhasSujas.add(p.id);
     if (est.rafTrilhas) return;
@@ -3671,7 +3704,19 @@
 
   // Duas listas: quem está na operação e quem está fora (removido ou com saída
   // liberada), que pode ser reincluído. O cadastro e a trilha dos dois continuam.
+  // Durante uma carga em lote (mensagens, fotos, posições), a lista de participantes não é redesenhada a cada item:
+  // acumula e desenha uma vez no fim (antes, cada mensagem reordenava e recalculava a lista inteira).
+  async function emLoteLista(promessa) {
+    est.listaAdiada = (est.listaAdiada || 0) + 1;
+    try { return await promessa; }
+    finally {
+      est.listaAdiada--;
+      if (!est.listaAdiada && est.listaPendente) { est.listaPendente = false; renderizarLista(); }
+    }
+  }
+
   function renderizarLista() {
+    if (est.listaAdiada) { est.listaPendente = true; return; }
     est.listaSuja = false;
     var lista = Array.from(est.participantes.values()).sort(ordemLista);
     var ativos = lista.filter(function (p) { return !p.dados.removido; });
@@ -5449,9 +5494,8 @@
       if (!est.erroAreas) console.warn('Setores/pontos indisponíveis:', e.message);
       est.erroAreas = true;
     }
-    await carregarTrilhasManuais();   // trata os próprios erros (banco sem a migração 028 não derruba setores)
-    await carregarAreasProibidas();   // migração 061 (erros tratados lá dentro)
-    await carregarAreasSemTrilha();   // migração 066 (erros tratados lá dentro)
+    // trilhas (028), áreas proibidas (061) e áreas sem trilha (066): tratam os próprios erros e não dependem umas das outras
+    await Promise.all([carregarTrilhasManuais(), carregarAreasProibidas(), carregarAreasSemTrilha()]);
   }
 
   // Tipos de ponto criados pelos responsáveis (valem para todas as operações). Banco sem a migração 047: só as categorias fixas.

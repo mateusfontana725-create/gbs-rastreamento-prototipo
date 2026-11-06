@@ -235,6 +235,7 @@
     $('btn-ampliar-mapa').addEventListener('click', function () { alternarMapaAmpliado(true); });
     $('btn-fechar-mapa').addEventListener('click', function () { alternarMapaAmpliado(false); });
     $('bussola-ativar').addEventListener('click', pedirBussola);
+    $('btn-sos').addEventListener('click', pedirSocorro);
     $('conversa-fechar').addEventListener('click', fecharConversa);
     $('btn-onde-estou').addEventListener('click', function () { estado.seguindo = true; centralizarEmMim(true); mostrarMinhasCoordenadas(); });
     $('nav-encerrar').addEventListener('click', encerrarNavegacao);
@@ -1277,14 +1278,14 @@
     if (estado.mapa) { setTimeout(function () { estado.mapa.invalidateSize(); }, 50); return; }
     if (!window.L) { document.querySelector('.mapa-civil-caixa').hidden = true; return; }
     var mapa = L.map('mapa-civil', { zoomControl: true, attributionControl: true }).setView([-15.79, -47.88], 4);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      crossOrigin: true,   // resposta CORS: pode ser guardada para o mapa funcionar sem internet (sw.js)
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(mapa);
+    estado.prefs = lerPrefsMapa();
+    estado.bases = criarBasesMapa();
+    estado.baseAtual = estado.bases[estado.prefs.base] ? estado.prefs.base : 'osm';
+    estado.bases[estado.baseAtual].addTo(mapa);
     // Se a pessoa arrastar o mapa, ele para de seguir a posição (até tocar em "Onde estou").
     mapa.on('dragstart', function () { estado.seguindo = false; });
     estado.mapa = mapa;
+    montarCamadasCivil();
     setTimeout(function () { mapa.invalidateSize(); }, 80);
     atualizarMeuMarcador();
   }
@@ -1417,9 +1418,10 @@
     }
     if (!estado.mapa || !dados) return;
     desenharEquipe(dados.equipe || []);
-    desenharExtras(dados.setores || [], dados.pontos || []);
+    desenharExtras(dados.setores || [], dados.pontos || [], dados.areas_proibidas || []);
+    if (Date.now() - (estado.trilhasEquipeEm || 0) > 60000) { estado.trilhasEquipeEm = Date.now(); carregarTrilhasEquipe(); }
     if (NATIVO) guardarMapaDaOperacao(dados.setores || [], dados.pontos || []);
-    if (estado.destinoSemFuncao) definirDestino(dados.destino || null);   // servidor sem a migração 004
+    if (estado.destinoSemFuncao) definirDestinoServidor(dados.destino || null);   // servidor sem a migração 004
   }
 
   // Destino ativo: não depende do mapa (funciona mesmo se o mapa não carregar).
@@ -1438,7 +1440,7 @@
       }
       estado.falhasDestino = 0;
       mostrarAvisoDestino('');
-      definirDestino(d || null);
+      definirDestinoServidor(d);
       if (d && d.id && estado.destinoConfirmado !== d.id && !estado.destinoSemFuncao) confirmarDestino(d.id);
     } catch (e) {
       if (tratarErroFatal(e)) return;
@@ -1530,21 +1532,27 @@
     }
   }
 
-  var LETRA_PONTO = { ENCONTRO: 'E', RISCO: '!', BASE: 'B' };
+  var LETRA_PONTO = { ENCONTRO: 'E', RISCO: '!', BASE: 'B', ULTIMA_LOCALIZACAO: 'U', POSSIVEL_LOCALIZACAO: '?', VESTIGIO: 'V', VITIMA_ENCONTRADA: '✚', OUTRO: '•' };
   var RAIO_ALERTA_PADRAO = 100;   // m — área de risco sem raio definido pelos bombeiros
 
-  // Alarme de proximidade: entrou numa área de risco marcada pelos bombeiros.
+  // Alarme de proximidade: entrou numa área de risco ou numa área proibida marcada pelos bombeiros.
   function verificarRisco(l) {
     var caixa = $('alerta-risco');
-    var dentro = null;
+    var dentro = null, proibida = null;
     (estado.pontosRisco || []).forEach(function (pt) {
       if (!dentro && C.distancia(l.lat, l.lng, pt.lat, pt.lng) <= (pt.raio_m || RAIO_ALERTA_PADRAO)) dentro = pt;
     });
-    if (dentro) {
-      caixa.textContent = '⚠ Você está numa ÁREA DE RISCO: ' + dentro.titulo + '. Tenha muito cuidado e siga as orientações dos bombeiros.';
+    (estado.areasProibidas || []).forEach(function (a) {
+      if (!proibida && a.pontos && a.pontos.length >= 3 && dentroDoPoligono(l.lat, l.lng, a.pontos)) proibida = a;
+    });
+    var alvo = proibida
+      ? { id: 'proibida:' + proibida.id, texto: '⛔ Você está numa ÁREA PROIBIDA: ' + proibida.nome + (proibida.motivo ? ' (' + proibida.motivo + ')' : '') + '. Saia daqui e siga as orientações dos bombeiros.' }
+      : dentro ? { id: dentro.id, texto: '⚠ Você está numa ÁREA DE RISCO: ' + dentro.titulo + '. Tenha muito cuidado e siga as orientações dos bombeiros.' } : null;
+    if (alvo) {
+      caixa.textContent = alvo.texto;
       caixa.hidden = false;
-      if (estado.riscoAtual !== dentro.id) {
-        estado.riscoAtual = dentro.id;
+      if (estado.riscoAtual !== alvo.id) {
+        estado.riscoAtual = alvo.id;
         try { if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]); } catch (e) { /* ignora */ }
         bipe();
         try { caixa.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { /* ignora */ }
@@ -1555,31 +1563,232 @@
       UI.aviso('Você saiu da área de risco.', 'ok');
     }
   }
-  var NOME_PONTO = { ENCONTRO: 'Ponto de encontro', RISCO: 'Área de risco — cuidado', BASE: 'Base da operação' };
+  var NOME_PONTO = { ENCONTRO: 'Ponto de encontro', RISCO: 'Área de risco — cuidado', BASE: 'Base da operação', ULTIMA_LOCALIZACAO: 'Última localização conhecida',
+    POSSIVEL_LOCALIZACAO: 'Possível localização', VESTIGIO: 'Vestígio', VITIMA_ENCONTRADA: 'Vítima encontrada', OUTRO: 'Ponto de interesse' };
 
-  // Setores atribuídos a mim (contorno) e pontos de encontro / risco.
-  function desenharExtras(setores, pontos) {
-    if (!estado.camadaExtras) estado.camadaExtras = L.layerGroup().addTo(estado.mapa);
-    var assinatura = JSON.stringify([setores, pontos]);
-    if (estado.camadaExtras._assinatura === assinatura) return;
-    estado.camadaExtras._assinatura = assinatura;
-    estado.camadaExtras.clearLayers();
+  // Setores (o seu em destaque; os públicos mais leves), áreas proibidas e pontos de interesse (os públicos ganham "Rota até aqui").
+  function desenharExtras(setores, pontos, proibidas) {
+    if (!estado.camSetores) {
+      estado.camSetores = L.layerGroup();
+      estado.camPontos = L.layerGroup();
+      estado.camProibidas = L.layerGroup();
+      aplicarCamadasVisiveis();
+    }
+    var assinatura = JSON.stringify([setores, pontos, proibidas]);
+    if (estado.assinaturaExtras === assinatura) return;
+    estado.assinaturaExtras = assinatura;
+    estado.camSetores.clearLayers();
+    estado.camPontos.clearLayers();
+    estado.camProibidas.clearLayers();
     setores.forEach(function (st) {
-      var estilo = { color: st.cor, weight: 3, fillColor: st.cor, fillOpacity: 0.1, dashArray: st.status === 'concluido' ? null : '8 6', interactive: false };
+      var meu = st.meu === undefined ? true : st.meu;   // servidor antigo: só vinham os atribuídos a mim
+      var estilo = meu
+        ? { color: st.cor, weight: 3, fillColor: st.cor, fillOpacity: 0.1, dashArray: st.status === 'concluido' ? null : '8 6' }
+        : { color: st.cor, weight: 2, opacity: 0.8, fillColor: st.cor, fillOpacity: 0.05, dashArray: '2 6' };
       var camada = st.forma === 'circulo' ? L.circle([st.centro_lat, st.centro_lng], Object.assign({ radius: st.raio_m }, estilo)) : L.polygon(st.pontos || [], estilo);
-      camada.bindTooltip('Seu setor: ' + C.esc(st.nome), { permanent: true, direction: 'center', className: 'rotulo-setor' });
-      camada.addTo(estado.camadaExtras);
+      if (meu) {
+        camada.options.interactive = false;
+        camada.bindTooltip('Seu setor: ' + C.esc(st.nome), { permanent: true, direction: 'center', className: 'rotulo-setor' });
+      } else {
+        camada.bindPopup('Setor: ' + C.esc(st.nome) + (st.status === 'concluido' ? ' · concluído' : ''));
+      }
+      camada.addTo(estado.camSetores);
+    });
+    estado.areasProibidas = proibidas || [];
+    estado.areasProibidas.forEach(function (a) {
+      if (!a.pontos || a.pontos.length < 3) return;
+      var pol = L.polygon(a.pontos, { color: '#dc2626', weight: 3, fillColor: '#dc2626', fillOpacity: 0.22, dashArray: '4 6', className: 'area-proibida-civil' });
+      pol.bindTooltip('⛔ Proibido: ' + C.esc(a.nome), { permanent: true, direction: 'center', className: 'rotulo-proibida' });
+      pol.bindPopup('<strong>⛔ Área proibida: ' + C.esc(a.nome) + '</strong>' + (a.motivo ? '<br>' + C.esc(a.motivo) : '') + '<br>Não entre nesta área.');
+      pol.addTo(estado.camProibidas);
     });
     estado.pontosRisco = pontos.filter(function (pt) { return pt.categoria === 'RISCO'; });
     estado.pontosRisco.forEach(function (pt) {
-      L.circle([pt.lat, pt.lng], { radius: pt.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 2, dashArray: '6 6', fillColor: '#ef4444', fillOpacity: 0.1, interactive: false, className: 'circulo-risco' }).addTo(estado.camadaExtras);
+      L.circle([pt.lat, pt.lng], { radius: pt.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 2, dashArray: '6 6', fillColor: '#ef4444', fillOpacity: 0.1, interactive: false, className: 'circulo-risco' }).addTo(estado.camPontos);
     });
     pontos.forEach(function (pt) {
+      var nomeCat = NOME_PONTO[pt.categoria] || 'Ponto de interesse';
+      var corpo = UI.el('div', { classe: 'popup-ponto' }, [
+        UI.el('strong', { texto: nomeCat + ': ' + pt.titulo }),
+        pt.descricao ? UI.el('p', { texto: pt.descricao }) : null,
+        pt.publico !== false ? UI.el('button', { classe: 'btn btn-pequeno btn-primario', type: 'button', texto: '🧭 Rota até aqui', onclick: function () { estado.mapa.closePopup(); rotaAtePonto(pt); } }) : null,
+      ]);
       L.marker([pt.lat, pt.lng], {
         icon: L.divIcon({ className: 'mk-poi-wrap', html: '<div class="mk-poi poi-' + C.esc(pt.categoria) + '"><span>' + (LETRA_PONTO[pt.categoria] || '•') + '</span></div><div class="mk-poi-rotulo">' + C.esc(pt.titulo) + '</div>', iconSize: [0, 0] }),
-        title: (NOME_PONTO[pt.categoria] || 'Ponto') + ': ' + pt.titulo, keyboard: false,
-      }).bindPopup((NOME_PONTO[pt.categoria] || 'Ponto') + ': ' + C.esc(pt.titulo)).addTo(estado.camadaExtras);
+        title: nomeCat + ': ' + pt.titulo, keyboard: false,
+      }).bindPopup(corpo).addTo(estado.camPontos);
     });
+    var lgP = $('lg-proibida');
+    if (lgP) lgP.hidden = !estado.areasProibidas.length || !estado.prefs.proibidas;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Camadas do mapa, tema, trilhas da equipe, rota até um ponto e SOS    */
+  /* ------------------------------------------------------------------ */
+  var CHAVE_PREFS_CIVIL = 'gbs-civil-mapa';
+  var CHAVE_TEMA_CIVIL = 'gbs-civil-tema';
+  var PADRAO_PREFS = { base: 'osm', setores: true, pontos: true, proibidas: true, trilhas: true };
+  var COR_TRILHA_EQUIPE = '#8aa0b8';   // única cor para as trilhas dos outros; a sua usa a cor do grupo (ou azul)
+
+  function lerPrefsMapa() {
+    try { return Object.assign({}, PADRAO_PREFS, JSON.parse(localStorage.getItem(CHAVE_PREFS_CIVIL) || 'null') || {}); }
+    catch (e) { return Object.assign({}, PADRAO_PREFS); }
+  }
+  function gravarPrefsMapa() {
+    try { localStorage.setItem(CHAVE_PREFS_CIVIL, JSON.stringify(estado.prefs)); } catch (e) { /* sem armazenamento: vale nesta tela */ }
+  }
+  function temaCivil() { return document.documentElement.getAttribute('data-tema') === 'claro' ? 'claro' : 'escuro'; }
+  function aplicarTemaCivil(valor) {
+    document.documentElement.setAttribute('data-tema', valor === 'claro' ? 'claro' : 'escuro');
+    try { localStorage.setItem(CHAVE_TEMA_CIVIL, valor === 'claro' ? 'claro' : 'escuro'); } catch (e) { /* sem armazenamento */ }
+  }
+
+  // Fundo do mapa (mapa, relevo ou satélite): o mesmo conjunto do painel dos bombeiros.
+  function criarBasesMapa() {
+    return {
+      osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxNativeZoom: 19, maxZoom: 22,
+        crossOrigin: true,   // resposta CORS: pode ser guardada para o mapa funcionar sem internet (sw.js)
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }),
+      topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxNativeZoom: 17, maxZoom: 19, subdomains: 'abc',
+        attribution: '&copy; OpenStreetMap, SRTM | &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
+      }),
+      satelite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxNativeZoom: 18, maxZoom: 22, attribution: 'Imagens &copy; Esri, Maxar, Earthstar Geographics',
+      }),
+    };
+  }
+
+  function trocarBaseMapa(nome) {
+    if (!estado.mapa || !estado.bases || !estado.bases[nome]) return;
+    if (estado.baseAtual && estado.bases[estado.baseAtual]) estado.bases[estado.baseAtual].remove();
+    estado.bases[nome].addTo(estado.mapa).bringToBack();
+    estado.baseAtual = nome;
+    estado.prefs.base = nome;
+    gravarPrefsMapa();
+  }
+
+  // Liga e desliga o que aparece no mapa (setores, pontos, áreas proibidas, trilhas da equipe).
+  function aplicarCamadasVisiveis() {
+    if (!estado.mapa) return;
+    var p = estado.prefs;
+    [['setores', estado.camSetores], ['pontos', estado.camPontos], ['proibidas', estado.camProibidas], ['trilhas', estado.camTrilhasEquipe]].forEach(function (x) {
+      var g = x[1];
+      if (!g) return;
+      if (p[x[0]]) { if (!estado.mapa.hasLayer(g)) g.addTo(estado.mapa); } else if (estado.mapa.hasLayer(g)) g.remove();
+    });
+    if (estado.linhaMinha) estado.linhaMinha.bringToFront();
+  }
+
+  // Painel "Camadas" sobre o mapa: fundo, o que mostrar e o tema (escuro ou claro).
+  function montarCamadasCivil() {
+    var botao = $('btn-camadas'), painel = $('camadas-civil');
+    if (!botao || !painel || painel._pronto) return;
+    painel._pronto = true;
+    function fechar() { painel.hidden = true; botao.setAttribute('aria-expanded', 'false'); }
+    function seg(grupo, valorAtual, opcoes, aoEscolher) {
+      var caixa = UI.el('div', { classe: 'camadas-seg', role: 'radiogroup', 'aria-label': grupo });
+      opcoes.forEach(function (o) {
+        var b = UI.el('button', { classe: 'camadas-opcao', type: 'button', role: 'radio', 'data-valor': o[0], 'aria-checked': String(o[0] === valorAtual), texto: o[1],
+          onclick: function () {
+            caixa.querySelectorAll('.camadas-opcao').forEach(function (x) { x.setAttribute('aria-checked', String(x === b)); });
+            aoEscolher(o[0]);
+          } });
+        caixa.appendChild(b);
+      });
+      return caixa;
+    }
+    function chave(rotulo, campo, aoMudar) {
+      var inp = UI.el('input', { type: 'checkbox', checked: estado.prefs[campo] ? true : null });
+      inp.addEventListener('change', function () { estado.prefs[campo] = inp.checked; gravarPrefsMapa(); aplicarCamadasVisiveis(); if (aoMudar) aoMudar(inp.checked); });
+      return UI.el('label', { classe: 'camadas-chave' }, [inp, ' ' + rotulo]);
+    }
+    painel.appendChild(UI.el('div', { classe: 'camadas-cabeca' }, [
+      UI.el('strong', { texto: 'Camadas' }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'camadas-fechar', 'aria-label': 'Fechar as camadas', texto: '✕', onclick: fechar }),
+    ]));
+    painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Fundo do mapa' }),
+      seg('Fundo do mapa', estado.prefs.base, [['osm', 'Mapa'], ['topo', 'Relevo'], ['satelite', 'Satélite']], trocarBaseMapa)]));
+    painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Mostrar no mapa' }),
+      chave('Setores', 'setores'), chave('Pontos de interesse', 'pontos'), chave('Áreas proibidas', 'proibidas'),
+      chave('Trilhas da equipe', 'trilhas', function (ligou) { if (ligou) { estado.trilhasEquipeEm = 0; carregarTrilhasEquipe(); } })]));
+    painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Tema' }),
+      seg('Tema', temaCivil(), [['escuro', 'Escuro'], ['claro', 'Claro']], aplicarTemaCivil)]));
+    botao.addEventListener('click', function () {
+      var abrir = painel.hidden;
+      painel.hidden = !abrir;
+      botao.setAttribute('aria-expanded', String(abrir));
+    });
+  }
+
+  // Ponto dentro de um polígono ([[lat, lng], …]): algoritmo do raio.
+  function dentroDoPoligono(lat, lng, pts) {
+    var dentro = false;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var yi = pts[i][0], xi = pts[i][1], yj = pts[j][0], xj = pts[j][1];
+      if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) dentro = !dentro;
+    }
+    return dentro;
+  }
+
+  // Rota até um ponto de interesse público: o mesmo painel de navegação dos destinos, só neste aparelho
+  // (não avisa o servidor). Um destino enviado pelos bombeiros tem prioridade e não é trocado.
+  function rotaAtePonto(pt) {
+    if (!estado.mapa) return;
+    if (estado.destino && !estado.destino.local) {
+      UI.aviso('Os bombeiros já enviaram um destino para você. Termine ou encerre essa navegação antes.', 'erro', 7000);
+      return;
+    }
+    definirDestino({ id: 'local-' + pt.id, local: true, nome: pt.titulo, lat: pt.lat, lng: pt.lng, modo: 'a_pe' });
+  }
+
+  // Um destino escolhido pelo próprio participante (local) só sai quando ele encerra ou chega um do servidor.
+  function definirDestinoServidor(d) {
+    if (!d && estado.destino && estado.destino.local) return;
+    definirDestino(d || null);
+  }
+
+  // Trilhas dos outros participantes (sem nome), numa cor só; a sua fica na cor do grupo e por cima.
+  async function carregarTrilhasEquipe() {
+    if (!estado.part || estado.finalizado || !estado.mapa || estado.semTrilhasEquipe || !estado.prefs.trilhas) return;
+    var lista;
+    try {
+      lista = await C.rpc('trilhas_da_equipe', { p_participante: estado.part.participante_id }, 15000);
+    } catch (e) {
+      if (e.codigo === 'funcao_ausente') estado.semTrilhasEquipe = true;   // servidor sem a migração 065
+      else tratarErroFatal(e);
+      return;
+    }
+    desenharTrilhasEquipe(lista || []);
+  }
+
+  function desenharTrilhasEquipe(lista) {
+    if (!estado.mapa) return;
+    if (!estado.camTrilhasEquipe) { estado.camTrilhasEquipe = L.layerGroup(); aplicarCamadasVisiveis(); }
+    estado.camTrilhasEquipe.clearLayers();
+    var ft = Math.max(0.6, Math.min(1, 0.6 + 0.4 * ((window.innerWidth || 1280) - 360) / (1280 - 360)));
+    lista.forEach(function (t) {
+      if (!t.pontos || t.pontos.length < 2) return;
+      L.polyline(t.pontos, { color: COR_TRILHA_EQUIPE, weight: Math.max(2, 3 * ft), opacity: 0.75, interactive: false, lineJoin: 'round' }).addTo(estado.camTrilhasEquipe);
+    });
+    var lg = $('lg-trilhas-equipe');
+    if (lg) lg.hidden = !lista.length || !estado.prefs.trilhas;
+    if (estado.linhaMinha) estado.linhaMinha.bringToFront();
+  }
+
+  // SOS: pedido de ajuda com a localização. Entra na mesma fila dos relatos (vai quando o sinal voltar).
+  async function pedirSocorro() {
+    if (!estado.part || estado.finalizado) return;
+    var r = await UI.confirmar({ titulo: 'Pedir ajuda aos bombeiros?', ok: 'ENVIAR PEDIDO DE AJUDA', cancelar: 'Voltar', perigo: true,
+      texto: 'Os bombeiros recebem um alarme com a sua localização. Use só se você ou alguém precisa de ajuda agora.' });
+    if (!r) return;
+    // Pedido de ajuda não espera o GPS: usa a última leitura (até 2 min) e só procura uma nova se não houver.
+    var pos = posicaoRecente() || await obterPosicaoAgora();
+    var env = await enviarAosBombeiros('AJUDA', 'Preciso de ajuda', pos);
+    if (env.ok) UI.aviso('Pedido de ajuda enviado aos bombeiros.', 'ok', 9000);
+    else if (!env.item.erro) UI.aviso('Sem internet: o pedido de ajuda vai ser enviado assim que o sinal voltar.', 'erro', 12000);
   }
 
   /* ------------------------------------------------------------------ */
@@ -1625,9 +1834,11 @@
     $('nav-rota').href = window.Rotas.linkGoogle([d.lat, d.lng], estado.modoNav);
     if (novo) {
       ligarBussola();
-      try { if (navigator.vibrate) navigator.vibrate([300, 120, 300]); } catch (e) { /* ignora */ }
-      bipe();
-      UI.aviso(window.Rotas.temTrajeto(d) ? 'Os bombeiros enviaram um trajeto para você seguir: ' + d.nome + '.' : 'Os bombeiros enviaram um destino: ' + d.nome + '.', 'ok', 8000);
+      if (!d.local) {
+        try { if (navigator.vibrate) navigator.vibrate([300, 120, 300]); } catch (e) { /* ignora */ }
+        bipe();
+      }
+      UI.aviso(d.local ? 'Rota até "' + d.nome + '".' : window.Rotas.temTrajeto(d) ? 'Os bombeiros enviaram um trajeto para você seguir: ' + d.nome + '.' : 'Os bombeiros enviaram um destino: ' + d.nome + '.', 'ok', 8000);
       if (!$('painel-conversa').hidden) fecharConversa();
       try { $('navegacao').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* ignora */ }
       if (estado.mapa) {
@@ -1961,6 +2172,12 @@
   async function encerrarNavegacao() {
     var d = estado.destino;
     if (!d) return;
+    if (d.local) {   // escolhido por mim: só sai da minha tela
+      estado.encerrandoNav = true;
+      definirDestino(null);
+      estado.encerrandoNav = false;
+      return;
+    }
     var r = await UI.confirmar({ titulo: 'Encerrar a navegação?', texto: 'O destino "' + d.nome + '" some da sua tela. Os bombeiros podem enviar outro.', ok: 'Encerrar', cancelar: 'Voltar' });
     if (!r) return;
     try {

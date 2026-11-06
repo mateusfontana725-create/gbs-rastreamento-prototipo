@@ -109,6 +109,26 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   "✓ Enviada" ou "Esperando internet".
 - Sair: o link discreto **Quero sair da busca** (os bombeiros liberam a saída pelo painel).
 
+### Mapa do participante: setores, pontos, camadas, tema e trilhas (migração 065)
+
+O mapa da página do participante mostra, além dos bombeiros:
+
+- **Setores e pontos de interesse com visibilidade** (campo **Quem vê** no cadastro de setor e de ponto):
+  **Público** = todos os participantes da operação veem; **Privado** = responsáveis e administradores veem sempre, e o
+  participante só vê se o setor foi **atribuído** a ele (ou ao grupo/missão dele) ou se o ponto foi **enviado** a ele como
+  destino. Sem escolha, setores são privados e pontos de encontro, risco e base são públicos (como já eram).
+  O servidor só entrega ao participante o que ele pode ver (`mapa_do_participante`); o campo **Visível para** aparece na ficha do ponto.
+- **Áreas proibidas** aparecem para todos os participantes (tracejado vermelho, "⛔ Proibido") e o alerta de risco avisa
+  quando a pessoa entra em uma.
+- **Camadas** (botão 🗺 no mapa): fundo **Mapa / Relevo / Satélite**; ligar e desligar **Setores, Pontos de interesse,
+  Áreas proibidas e Trilhas da equipe**; e o **Tema** (escuro ou claro). A escolha fica guardada no aparelho.
+- **Rota até um ponto público**: o balão do ponto tem **🧭 Rota até aqui**, que abre o mesmo painel de navegação dos
+  destinos, só neste aparelho (não avisa o servidor). Um destino enviado pelos bombeiros tem prioridade.
+- **Trilhas dos outros** (`trilhas_da_equipe`): linhas de uma **cor só** (cinza-azulado), **sem nome**, das últimas 4 horas;
+  a trilha da própria pessoa continua na cor do grupo e por cima. Sem a migração 065, essas camadas simplesmente não aparecem.
+- **SOS**: botão vermelho **PRECISO DE AJUDA** abaixo do mapa (pede confirmação e envia o pedido com a última localização;
+  sem internet, fica guardado e vai quando o sinal voltar). Vira um pedido de ajuda no painel (ver "Pedidos de ajuda").
+
 ### Comunicação com os participantes (no painel)
 
 - No painel, o botão **Mensagens** mostra quantas não foram lidas; a aba do navegador mostra o número
@@ -2208,6 +2228,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 42g | No aplicativo registrando, **fechar o aplicativo** (tirar da lista de recentes) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
 | 42h | Com o aplicativo registrando, puxar a barra de notificações e a tela bloqueada | o aviso fixo verde "Busca …" mostra "Enviando sua localização aos bombeiros", o tempo de busca correndo e os pontos enviados; no Android 14, arrastar o aviso para fora: ele volta |
 | 42i | No Chrome do Android, tocar em **Baixar aplicativo**, esperar alguns minutos com o download pausado e continuar | o arquivo baixa de `/api/app?baixar=1` como `gbs-busca.apk` e instala (sem erro de link expirado) |
+| 43a | No painel, criar um setor e um ponto de interesse **públicos** e outros **privados** (campo **Quem vê**); abrir a página do participante de um celular sem nada atribuído | só o setor e o ponto públicos aparecem no mapa |
+| 43b | Atribuir o setor privado a esse participante (ou enviar o ponto privado como destino) | o setor/ponto passa a aparecer só para ele; outro participante continua sem ver |
+| 43c | Criar uma área proibida e caminhar até ela com o celular do participante | a área aparece em vermelho para todos e o alerta de risco avisa ao entrar |
+| 43d | No botão 🗺, trocar o fundo (Mapa/Relevo/Satélite), desligar cada camada e escolher o tema claro; recarregar a página | tudo muda na hora e a escolha continua depois de recarregar |
+| 43e | Tocar num ponto público → **Rota até aqui** | o painel de navegação abre com a distância e a linha até o ponto; sem enviar nada aos bombeiros; **Encerrar** limpa |
+| 43f | Com dois celulares andando na mesma operação, olhar o mapa de um deles | a trilha do outro aparece numa cor só, sem nome; a própria fica na cor do grupo |
+| 43g | Tocar em **PRECISO DE AJUDA** e confirmar (e também sem internet) | o painel recebe o pedido de ajuda com a localização; sem internet, chega quando o sinal volta |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

@@ -5969,6 +5969,16 @@
     return r;
   }
 
+  // Quem vê (migração 065): público = todos os participantes da operação; privado = responsáveis e quem receber
+  // (setor atribuído ao participante ou à missão dele; ponto enviado como destino).
+  function campoVisibilidade(id, valor) {
+    return UI.el('select', { classe: 'campo', id: id }, [
+      UI.el('option', { value: 'privado', selected: valor !== 'publico' ? true : null, texto: 'Privado: responsáveis e quem receber' }),
+      UI.el('option', { value: 'publico', selected: valor === 'publico' ? true : null, texto: 'Público: todos os participantes' }),
+    ]);
+  }
+  function visibilidadePadraoPonto(cat) { return cat === 'ENCONTRO' || cat === 'RISCO' || cat === 'BASE' ? 'publico' : 'privado'; }
+
   function abrirFormSetor(s) {
     var novo = !s.id;
     var d = Object.assign({ nome: 'Setor ' + (est.setores.size + 1), cor: corLivre(), status: 'pendente', equipe: '', observacoes: '', participante_id: null }, s);
@@ -5995,6 +6005,7 @@
     var status = UI.el('select', { classe: 'campo', id: 'setor-status' }, Object.keys(STATUS_SETOR).map(function (k) {
       return UI.el('option', { value: k, selected: k === d.status ? true : null, texto: STATUS_SETOR[k].rotulo });
     }));
+    var visSetor = campoVisibilidade('setor-visibilidade', d.visibilidade);
     var obs = UI.el('textarea', { classe: 'campo', id: 'setor-obs', maxlength: '500', rows: '2' });
     obs.value = d.observacoes || '';
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
@@ -6009,6 +6020,7 @@
           UI.campo('Situação', status, { para: 'setor-status' }),
           UI.campo('Responsável', part, { para: 'setor-participante' }),
           UI.campo('Equipe', equipe, { para: 'setor-equipe', opcional: true }),
+          UI.campo('Quem vê', visSetor, { para: 'setor-visibilidade', dica: 'Público: todos os participantes veem o setor no mapa do celular. Privado: só os responsáveis e quem recebeu o setor (atribuído ao participante ou à missão dele).' }),
           raio ? null : area,
         ], { tres: true }),
         raio ? area : null,
@@ -6028,6 +6040,7 @@
         equipe: equipe.value.trim(),
         status: status.value,
         observacoes: obs.value.trim(),
+        visibilidade: visSetor.value,
       };
       if (!dados.nome) { erro.textContent = 'Informe o nome do setor.'; erro.hidden = false; return; }
       if (novo || raio) {
@@ -6342,6 +6355,9 @@
     desenharGrade();
     var titulo = UI.el('input', { classe: 'campo', id: 'ponto-titulo', maxlength: '80', value: d.titulo, placeholder: 'Ex.: Última vez vista na trilha da cachoeira' });
     var desc = UI.el('textarea', { classe: 'campo', id: 'ponto-desc', maxlength: '1000', rows: '3', placeholder: 'Opcional' });
+    var visPonto = campoVisibilidade('ponto-visibilidade', d.visibilidade || visibilidadePadraoPonto(d.categoria));
+    var visTocada = Boolean(d.visibilidade) || !novo;   // enquanto não mexer, acompanha a categoria
+    visPonto.addEventListener('change', function () { visTocada = true; });
     desc.value = d.descricao || '';
     var lat = UI.el('input', { classe: 'campo mono', id: 'ponto-lat', type: 'number', step: 'any', inputmode: 'decimal', value: String(d.lat) });
     var lng = UI.el('input', { classe: 'campo mono', id: 'ponto-lng', type: 'number', step: 'any', inputmode: 'decimal', value: String(d.lng) });
@@ -6374,6 +6390,7 @@
       var k = (grade.querySelector('input:checked') || {}).value;
       if (k === 'BASE' && !d.raio_m && Number(raio.value) === RAIO_ALERTA_PADRAO) raio.value = String(RAIO_BASE_PADRAO);
       ajustarRaio(k);
+      if (!visTocada) visPonto.value = visibilidadePadraoPonto(k && k.indexOf('tipo:') === 0 ? 'OUTRO' : k);
       // nome ainda é o rótulo de uma categoria (ou vazio): acompanha a escolha
       var atual = titulo.value.trim();
       if (k && (!atual || atual === rotuloAnterior || rotulosConhecidos().indexOf(atual) !== -1)) titulo.value = rotuloDaOpcao(k);
@@ -6391,6 +6408,7 @@
         UI.secao('Identificação', [
           UI.campo('Nome', titulo, { para: 'ponto-titulo' }),
           grupoRaio,
+          UI.campo('Quem vê', visPonto, { para: 'ponto-visibilidade', dica: 'Público: todos os participantes veem o ponto no mapa e podem pedir a rota até ele. Privado: só os responsáveis e quem receber o ponto (como destino).' }),
           UI.campo('Observações', desc, { para: 'ponto-desc' }),
         ]),
         UI.secao('Local', [
@@ -6415,6 +6433,7 @@
         descricao: desc.value.trim(),
         lat: Number(lat.value),
         lng: Number(lng.value),
+        visibilidade: visPonto.value,
       };
       if (!dados.categoria) { erro.textContent = 'Escolha a categoria.'; erro.hidden = false; return; }
       if (!dados.titulo) { erro.textContent = 'Informe o nome do ponto.'; erro.hidden = false; return; }
@@ -6639,6 +6658,7 @@
         ['Altitude', alt],
         d.categoria === 'RISCO' ? ['Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m'] : null,
         d.categoria === 'BASE' ? ['Chegada à base', 'raio de ' + Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m'] : null,
+        ['Visível para', (d.visibilidade || visibilidadePadraoPonto(d.categoria)) === 'publico' ? 'Todos os participantes' : 'Responsáveis e quem receber'],
         ['Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
         d.concluido_em ? ['Concluído', C.hora(d.concluido_em) + ' por ' + (d.concluido_por_nome || '—')] : null,
         d.relatado_por_nome ? ['Relatado por', d.relatado_por_nome + ' (participante)'] : null,

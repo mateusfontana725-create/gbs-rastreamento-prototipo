@@ -2448,3 +2448,41 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
   #tela-rastreio .acao-registrar { font-size: .9rem; }
   .opcao-registro { min-height: 58px; }
 }
+
+
+/* =====================================================================
+ * Página do participante: camadas do mapa, áreas proibidas, trilhas da equipe, popup de ponto
+ * ===================================================================== */
+.btn-camadas {
+  position: absolute; z-index: 1000; top: 96px; right: 8px; min-width: 36px; min-height: 36px; padding: 0 8px;
+  font-size: 1rem; background: rgba(18, 23, 28, .94);
+}
+.mapa-civil-caixa.mapa-ampliado .btn-camadas { top: 52px; }
+.camadas-civil {
+  position: absolute; z-index: 1050; top: 52px; right: 52px; width: min(250px, calc(100% - 64px)); max-height: calc(100% - 64px); overflow: auto;
+  padding: 8px 10px; border-radius: 10px; background: rgba(18, 23, 28, .97); border: 1.5px solid var(--borda-forte); color: var(--texto); box-shadow: var(--sombra);
+}
+.camadas-civil[hidden] { display: none; }
+.mapa-civil-caixa.mapa-ampliado .camadas-civil { top: 8px; }
+.camadas-cabeca { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.camadas-grupo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.camadas-rotulo { font: 700 .66rem var(--fonte); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-3); }
+.camadas-seg { display: flex; gap: 4px; }
+.camadas-opcao {
+  flex: 1; min-height: 40px; border-radius: 8px; border: 1.5px solid var(--borda-forte); background: var(--superficie-2, #1f2933);
+  color: var(--texto); font: 700 .78rem var(--fonte); cursor: pointer;
+}
+.camadas-opcao[aria-checked="true"] { background: var(--acento); border-color: var(--acento); color: #0a0d10; }
+.camadas-chave { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: .88rem; cursor: pointer; }
+.camadas-chave input { width: 20px; height: 20px; accent-color: var(--acento); }
+.lg-trilha-eq { display: inline-block; width: 16px; height: 0; border-top: 3px solid #8aa0b8; }
+.lg-proibida-cor { display: inline-block; width: 12px; height: 12px; border: 2px dashed #dc2626; background: rgba(220, 38, 38, .25); }
+#tela-rastreio .legenda-civil .lg-proibida, #tela-rastreio .legenda-civil .lg-trilhas-equipe { font-size: .66rem; }
+.leaflet-tooltip.rotulo-proibida {
+  background: rgba(127, 29, 29, .92); color: #fff; border: 1px solid #fca5a5; font-weight: 800; font-size: .72rem; box-shadow: none; white-space: nowrap;
+}
+.leaflet-tooltip.rotulo-proibida::before { display: none; }
+.popup-ponto strong { display: block; margin-bottom: 4px; }
+.popup-ponto p { margin: 4px 0 8px; }
+.popup-ponto .btn { width: 100%; }
+.acao-sos { background: #b91c1c; border-color: #ef4444; color: #fff; }

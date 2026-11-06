@@ -353,18 +353,18 @@
         L.imageOverlay(im.dataUrl, [[im.bounds.south, im.bounds.west], [im.bounds.north, im.bounds.east]], { opacity: 0.75, className: 'importado-imagem', interactive: false }).addTo(atual.camadaImport);
       });
       d.areas.forEach(function (a) {
-        if (a.oculto) return;
+        if (a.oculto || a.enviado) return;
         L.polygon(a.pts, { color: corDe(imp, a), weight: a.espessura || 2, opacity: a.opacidade != null ? a.opacidade : 1, fillColor: a.preenchimento || corDe(imp, a),
           fillOpacity: 0.08, dashArray: '4 4', className: 'importado' })
           .bindTooltip(C.esc(a.nome)).on('click', function (ev) { abrirItemImportado(ev, imp, 'areas', a); }).addTo(atual.camadaImport);
       });
       d.linhas.forEach(function (l) {
-        if (l.oculto) return;
+        if (l.oculto || l.enviado) return;
         L.polyline(l.pts, { color: corDe(imp, l), weight: l.espessura || 3, opacity: l.opacidade != null ? l.opacidade : 0.9, className: 'importado' })
           .bindTooltip(C.esc(l.nome)).on('click', function (ev) { abrirItemImportado(ev, imp, 'linhas', l); }).addTo(atual.camadaImport);
       });
       d.pontos.forEach(function (p) {
-        if (p.oculto) return;
+        if (p.oculto || p.enviado) return;
         var mkImp = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'mk-import-wrap', html: '<div class="mk-import" style="background:' + C.esc(corDe(imp, p)) + '"></div><div class="mk-import-rotulo">' + C.esc(p.nome) + '</div>', iconSize: [0, 0] }), title: p.nome })
           .bindPopup(function () { return infoImportado(p, imp); });
         atual.marcadoresImport.push(mkImp);
@@ -512,6 +512,10 @@
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Importar mapa' },
         [UI.dica('Arraste os arquivos para o mapa ou escolha aqui. GPX, KML, KMZ, GeoJSON e CSV entram sozinhos. Imagens (PNG ou JPG) precisam do arquivo de posição com o mesmo nome (.jgw, .pgw ou .wld), ou de um KMZ. Áreas viram setores da operação; pontos viram pontos de interesse; linhas viram trilhas. Todos os responsáveis veem.')]),
       UI.campo('Arquivos', entrada, { para: 'imp-arquivo', largo: true }),
+      UI.el('label', { classe: 'linha-opcao' }, [
+        UI.el('input', { type: 'checkbox', id: 'imp-concluidos', checked: importarComoConcluidos() ? true : null, onchange: function () { C.local.gravar(CHAVE_IMP_CONCLUIDOS, this.checked); } }),
+        ' Marcar o que for importado como concluído']),
+      UI.dica('Cada coisa entra como o que é: áreas viram setores (com a cor do arquivo), pontos viram pontos de interesse, linhas viram trilhas e imagens ficam como imagens neste aparelho. Com esta opção, os setores entram como Concluídos, os pontos baixados e as trilhas como percorridas. Vale também para arquivos arrastados para o mapa.'),
       erro,
       lista,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
@@ -527,7 +531,9 @@
     if (!atual.importados.length) { lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhuma camada importada.' })); return; }
     atual.importados.forEach(function (imp) {
       var d = imp.dados;
-      var resumo = [d.pontos.length + ' ponto(s)', d.linhas.length + ' trilha(s)/rota(s)', d.areas.length + ' área(s)', (d.imagens || []).length + ' imagem(ns)', 'só neste aparelho'].join(' · ');
+      var nEnv = d.pontos.concat(d.linhas, d.areas).filter(function (x) { return x.enviado; }).length;
+      var resumo = [d.pontos.length + ' ponto(s)', d.linhas.length + ' trilha(s)/rota(s)', d.areas.length + ' área(s)', (d.imagens || []).length + ' imagem(ns)',
+        nEnv ? nEnv + ' enviado(s) à operação' : 'só neste aparelho'].join(' · ');
       lista.appendChild(UI.el('li', { classe: 'item-importado' }, [
         UI.el('label', { classe: 'linha-opcao' }, [UI.el('input', { type: 'checkbox', checked: imp.visivel ? true : null, onchange: function () { imp.visivel = this.checked; salvarImportados(); desenharImportados(); } }),
           UI.el('strong', { texto: ' ' + imp.nome })]),
@@ -535,6 +541,12 @@
         (P.compactarAcoes || function (x) { return x; })(UI.el('div', { classe: 'acoes-linha' }, [
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { enquadrar(imp, true); } }),
           UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar', onclick: function () { editarImportado(imp); } }),
+          pendentes(imp) && P.op() && P.op().status === 'ativa' && !P.op().dados_apagados_em
+            ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: '⇪ Enviar à operação', title: 'Manda para a operação o que ainda está só neste aparelho (setores, pontos e trilhas): todos os responsáveis passam a ver',
+              onclick: async function () { var r = await compartilharImportados([imp]); UI.aviso(r.texto, r.falhas ? 'erro' : 'ok', 9000); } }) : null,
+          imp.ids && (imp.ids.setores.length || imp.ids.pontos.length || imp.ids.trilhas.length) && P.op() && P.op().status === 'ativa'
+            ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✔ Marcar como concluídos', title: 'Setores concluídos, pontos baixados e trilhas percorridas, do que esta camada mandou para a operação',
+              onclick: function () { marcarCamadaConcluida(imp); } }) : null,
           UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Remover', onclick: function () {
             UI.confirmar({ titulo: 'Remover "' + (imp.nome || 'arquivo') + '" do mapa?', texto: 'Os elementos importados saem do mapa. Os setores, pontos e trilhas que já foram enviados para a operação continuam. O arquivo original não é apagado.', ok: 'Remover', perigo: true })
               .then(function (ok) { if (!ok) return; atual.importados = atual.importados.filter(function (x) { return x !== imp; }); salvarImportados(); desenharImportados(); desenharListaImportados(lista); }); } }),
@@ -587,48 +599,81 @@
     return novos;
   }
 
-  // Manda para o servidor o que é da operação. Devolve { texto, falhas }.
+  // Preferência (neste aparelho): marcar como concluído o que for importado (setores concluídos, pontos baixados, trilhas percorridas).
+  var CHAVE_IMP_CONCLUIDOS = 'gbs-import-concluidos';
+  function importarComoConcluidos() { return Boolean(C.local.ler(CHAVE_IMP_CONCLUIDOS, false)); }
+  // Há áreas, pontos ou linhas desta camada que ainda estão só neste aparelho?
+  function pendentes(imp) { var d = imp.dados; return d.areas.concat(d.pontos, d.linhas).some(function (x) { return !x.enviado; }); }
+  function marcarItensEnviados(d, quais, indices) { (indices || []).forEach(function (i) { if (d[quais][i]) d[quais][i].enviado = true; }); }
+
+  // Manda para o servidor o que é da operação, cada coisa como o que ela é: áreas viram setores (com a cor do arquivo),
+  // pontos viram pontos de interesse e linhas viram trilhas. Imagens ficam só neste aparelho (não há onde guardá-las na operação).
+  // O que foi enviado sai da camada local (senão aparecia duas vezes aqui e só neste aparelho com a cor do arquivo).
+  // Devolve { texto, falhas }.
   async function compartilharImportados(novos) {
     var op = P.op();
+    var concluidos = importarComoConcluidos();
     if (!op || op.status !== 'ativa' || op.dados_apagados_em) {
       return { texto: 'Importado neste aparelho. A operação está encerrada, então nada foi enviado para os outros responsáveis.', falhas: 0 };
     }
-    var c = { setores: 0, setoresJa: 0, pontos: 0, pontosJa: 0, trilhas: 0, falhas: 0 };
+    var c = { setores: 0, setoresJa: 0, pontos: 0, pontosJa: 0, trilhas: 0, imagens: 0, falhas: 0, motivo: null };
     for (var k = 0; k < novos.length; k++) {
-      var d = novos[k].dados;
-      if (d.areas.length) {
-        var rs = await P.enviarAreasComoSetores(d.areas.map(function (a) {
-          return { nome: a.nome, pontos: a.pts.slice(0, 300).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }) };
-        }));
-        c.setores += rs.ok; c.setoresJa += rs.pulados; c.falhas += rs.falhas;
+      var imp = novos[k], d = imp.dados;
+      imp.ids = imp.ids || { setores: [], pontos: [], trilhas: [] };
+      c.imagens += (d.imagens || []).length;
+      var areasPend = d.areas.map(function (a, i) { return { a: a, i: i }; }).filter(function (x) { return !x.a.enviado; });   // o que já foi enviado não vai de novo
+      if (areasPend.length) {
+        var rs = await P.enviarAreasComoSetores(areasPend.map(function (x) {
+          var a = x.a;
+          return { nome: a.nome, cor: a.cor || a.preenchimento || null, pontos: a.pts.map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }) };
+        }), { concluido: concluidos });
+        c.setores += rs.ok; c.setoresJa += rs.pulados; c.falhas += rs.falhas; if (rs.erro) c.motivo = rs.erro;
+        marcarItensEnviados(d, 'areas', rs.enviados.map(function (n) { return areasPend[n].i; }));
+        imp.ids.setores = (imp.ids.setores || []).concat(rs.ids);
       }
-      if (d.pontos.length) {
-        var existentes = (P.pontosInteresse() || []).map(function (x) { return String(x.titulo || '').toLowerCase() + '|' + Number(x.lat).toFixed(5) + '|' + Number(x.lng).toFixed(5); });
+      if (d.pontos.some(function (x) { return !x.enviado; })) {
+        var existentes = {};
+        (P.pontosInteresse() || []).forEach(function (x) { existentes[String(x.titulo || '').toLowerCase() + '|' + Number(x.lat).toFixed(5) + '|' + Number(x.lng).toFixed(5)] = x; });
         for (var j = 0; j < d.pontos.length && j < 500; j++) {
           var p = d.pontos[j];
+          if (p.enviado) continue;
           var titulo = String(p.nome || 'Ponto importado').slice(0, 80);
-          if (existentes.indexOf(titulo.toLowerCase() + '|' + Number(p.lat).toFixed(5) + '|' + Number(p.lng).toFixed(5)) >= 0) { c.pontosJa++; continue; }
+          var jaTem = existentes[titulo.toLowerCase() + '|' + Number(p.lat).toFixed(5) + '|' + Number(p.lng).toFixed(5)];
+          if (jaTem) {
+            c.pontosJa++; p.enviado = true;
+            if (concluidos && !jaTem.concluido_em && jaTem.id && P.marcarPontoConcluidoId) { try { await P.marcarPontoConcluidoId(jaTem.id); } catch (e3) { /* segue */ } }
+            continue;
+          }
           try {
-            await P.salvarPonto({ categoria: 'OUTRO', titulo: titulo, descricao: ('Importado de ' + novos[k].nome + (p.descricao ? ' — ' + p.descricao : '')).slice(0, 1000), lat: p.lat, lng: p.lng });
-            c.pontos++;
-          } catch (e) { c.falhas++; }
+            var pr = await P.salvarPonto({ categoria: 'OUTRO', titulo: titulo, descricao: ('Importado de ' + imp.nome + (p.descricao ? ' — ' + p.descricao : '')).slice(0, 1000), lat: p.lat, lng: p.lng });
+            p.enviado = true; c.pontos++; imp.ids.pontos.push(pr.id);
+            if (concluidos && P.marcarPontoConcluidoId) { try { await P.marcarPontoConcluidoId(pr.id); } catch (e2) { /* fica só criado */ } }
+          } catch (e) { c.falhas++; c.motivo = e.message || String(e); }
         }
       }
       // Cada linha pode ser vinculada a uma pessoa (ou ao grupo dela): a trilha passa a ser "dessa pessoa" na operação.
-      var vinculos = d.linhas.length ? await escolherVinculoTrilhas(novos[k].nome, d.linhas) : {};
+      var linhasPend = d.linhas.filter(function (x) { return !x.enviado; });
+      var vinculos = linhasPend.length ? await escolherVinculoTrilhas(imp.nome, d.linhas.map(function (x) { return x.enviado ? null : x; }).filter(Boolean)) : {};
+      var posPend = 0;
       for (var m = 0; m < d.linhas.length && m < 200; m++) {
         var l = d.linhas[m];
+        if (l.enviado) continue;
+        var vm = vinculos[posPend++];
         var pts = window.Rotas.simplificar(l.pts, 1, 2000).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; });
-        var drone = /drone|dji|uav|vant|voo|flight/i.test((l.nome || '') + ' ' + (l.tipo || '') + ' ' + novos[k].nome);
+        var drone = /drone|dji|uav|vant|voo|flight/i.test((l.nome || '') + ' ' + (l.tipo || '') + ' ' + imp.nome);
         try {
-          await P.enviarTrilhaImportada({ nome: String(l.nome || 'Trilha importada').slice(0, 80), estado: l.fim ? 'percorrida' : 'planejada', percorrida_em: l.fim || null,
-            pontos: pts, meio: drone ? 'drone' : 'equipe', cor: l.cor || novos[k].dados.cor || null, observacoes: ('Importada de ' + novos[k].nome).slice(0, 1000),
-            participante_id: vinculos[m] && vinculos[m].indexOf('p:') === 0 ? vinculos[m].slice(2) : null,
-            grupo_id: vinculos[m] && vinculos[m].indexOf('g:') === 0 ? vinculos[m].slice(2) : null });
-          c.trilhas++;
-        } catch (e) { c.falhas++; }
+          var tr = await P.enviarTrilhaImportada({ nome: String(l.nome || 'Trilha importada').slice(0, 80),
+            estado: l.fim || concluidos ? 'percorrida' : 'planejada', percorrida_em: l.fim || (concluidos ? new Date().toISOString() : null),
+            pontos: pts, meio: drone ? 'drone' : 'equipe', cor: l.cor || imp.dados.cor || null, observacoes: ('Importada de ' + imp.nome).slice(0, 1000),
+            participante_id: vm && vm.indexOf('p:') === 0 ? vm.slice(2) : null,
+            grupo_id: vm && vm.indexOf('g:') === 0 ? vm.slice(2) : null });
+          l.enviado = true; c.trilhas++; imp.ids.trilhas.push(tr.id);
+        } catch (e) { c.falhas++; c.motivo = e.message || String(e); }
       }
     }
+    salvarImportados();
+    desenharImportados();
+    atualizarListaImportados();
     var partes = [];
     if (c.setores) partes.push(c.setores + ' setor(es)');
     if (c.pontos) partes.push(c.pontos + ' ponto(s)');
@@ -636,10 +681,23 @@
     var ja = [];
     if (c.setoresJa) ja.push(c.setoresJa + ' setor(es) já existiam');
     if (c.pontosJa) ja.push(c.pontosJa + ' ponto(s) já existiam');
-    var texto = partes.length ? 'Enviado para a operação: ' + partes.join(', ') + '.' : 'Nada novo para enviar.';
+    var texto = partes.length ? 'Enviado para a operação' + (concluidos ? ' (como concluído)' : '') + ': ' + partes.join(', ') + '.' : 'Nada novo para enviar.';
     if (ja.length) texto += ' (' + ja.join(', ') + ', não duplicados.)';
-    if (c.falhas) texto += ' ' + c.falhas + ' item(ns) não couberam.';
+    if (c.imagens) texto += ' ' + c.imagens + ' imagem(ns) ficam só neste aparelho.';
+    if (c.falhas) texto += ' ' + c.falhas + ' item(ns) NÃO foram enviados' + (c.motivo ? ' (' + c.motivo + ')' : '') + ': continuam só neste aparelho.';
     return { texto: texto, falhas: c.falhas };
+  }
+
+  // Marca como concluído o que esta camada mandou para a operação (setores, pontos e trilhas).
+  async function marcarCamadaConcluida(imp) {
+    if (!imp.ids || !P.marcarImportadosConcluidos) return;
+    var r = await P.marcarImportadosConcluidos(imp.ids);
+    var partes = [];
+    if (r.setores) partes.push(r.setores + ' setor(es)');
+    if (r.pontos) partes.push(r.pontos + ' ponto(s)');
+    if (r.trilhas) partes.push(r.trilhas + ' trilha(s)');
+    UI.aviso(partes.length ? 'Marcado como concluído: ' + partes.join(', ') + '.' + (r.falhas ? ' ' + r.falhas + ' não puderam ser marcados.' : '') : 'Nada desta camada foi enviado à operação.',
+      r.falhas || !partes.length ? 'erro' : 'ok', 8000);
   }
 
   // Antes de enviar as linhas do arquivo para a operação: vincular cada trilha a um participante (ou ao grupo dele).

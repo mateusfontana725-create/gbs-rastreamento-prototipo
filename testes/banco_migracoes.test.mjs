@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2917,5 +2917,50 @@ await rpc(resp1, 'excluir_area_sem_trilha', { p_id: aT.id });
 chk((await db.query(`select count(*)::int n from public.areas_sem_trilha where operacao_id = $1`, [opT.id])).rows[0].n === 0, 'excluir remove a área');
 
 
-console.log('\nMigrações 007–066 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Grupos: uma pessoa em um grupo só e mensagem para o grupo inteiro (migração 067) ---
+console.log('\nGrupos: um grupo por pessoa e mensagem para todos');
+const opG = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP GRUPOS UNICO', p_retencao_horas: 0 });
+const anG = [await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+const pG = [];
+for (let i = 0; i < 4; i++) pG.push(await rpc(anG[i], 'ingressar', { p_token: opG.token_civil, p_nome: 'Pessoa ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+const gA = await rpc(resp1, 'salvar_grupo', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo A', cor: '#ff6a00' }) });
+const gB = await rpc(resp1, 'salvar_grupo', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo B', cor: '#0055ff' }) });
+await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[0].participante_id, p_papel: 'membro' });
+await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[1].participante_id, p_papel: 'membro' });
+await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[2].participante_id, p_papel: 'membro' });
+chk(/participante_em_outro_grupo/.test(await erroDe(rpc(resp1, 'definir_membro', { p_grupo: gB.id, p_participante: pG[0].participante_id, p_papel: 'membro' }))), 'quem já está num grupo não entra em outro pelo painel');
+const mudaPapel = await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[0].participante_id, p_papel: 'responsavel' });
+chk(mudaPapel.papel === 'responsavel', 'mudar o papel no mesmo grupo continua valendo', mudaPapel);
+await rpc(resp1, 'remover_membro', { p_grupo: gA.id, p_participante: pG[2].participante_id });
+const trocou = await rpc(resp1, 'definir_membro', { p_grupo: gB.id, p_participante: pG[2].participante_id, p_papel: 'membro' });
+chk(trocou.grupo_id === gB.id, 'depois de tirar do grupo, a pessoa pode entrar em outro');
+// link do grupo: quem já está em outro grupo segue na operação, sem entrar no segundo
+const linkB = await rpc(resp1, 'gerar_novo_link_grupo', { p_grupo: gB.id });
+const reingresso = await rpc(anG[0], 'ingressar', { p_token: linkB.token, p_nome: 'Pessoa 1', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+chk(reingresso.participante_id === pG[0].participante_id && reingresso.grupo === 'Grupo A', 'pelo link do grupo B, quem está no A continua no A e segue na operação', reingresso);
+chk((await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1`, [pG[0].participante_id])).rows[0].n === 1, 'continua em um grupo só');
+const novoNoLink = await rpc(anG[3], 'ingressar', { p_token: linkB.token, p_nome: 'Pessoa 4', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+chk(novoNoLink.grupo === 'Grupo B' && (await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1 and grupo_id = $2`, [pG[3].participante_id, gB.id])).rows[0].n === 1, 'quem não estava em grupo entra normalmente pelo link');
+// dados antigos: quem já estava em dois grupos não é mexido, mas não entra em um terceiro
+await db.query(`alter table public.grupo_membros disable trigger grupo_membros_um_grupo_ins`);
+await db.query(`insert into public.grupo_membros (grupo_id, participante_id, operacao_id) values ($1, $2, $3)`, [gB.id, pG[1].participante_id, opG.id]);
+await db.query(`alter table public.grupo_membros enable trigger grupo_membros_um_grupo_ins`);
+chk((await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1`, [pG[1].participante_id])).rows[0].n === 2, 'quem já estava em dois grupos antes continua como está (nada é apagado)');
+// mensagem para o grupo
+const msgA = await rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: 'Voltem para a base' });
+chk(msgA.total === 2 && msgA.enviadas === 2 && msgA.falhas === 0 && msgA.mensagens.length === 2, 'a mensagem vai de uma vez para todos os integrantes do grupo', msgA);
+const linhasA = (await db.query(`select participante_id, texto, tipo, direcao from public.mensagens where operacao_id = $1 and texto = 'Voltem para a base'`, [opG.id])).rows;
+chk(linhasA.length === 2 && linhasA.every((r) => r.direcao === 'saida' && r.tipo === 'PERSONALIZADA') && new Set(linhasA.map((r) => r.participante_id)).size === 2 &&
+  [pG[0].participante_id, pG[1].participante_id].every((id) => linhasA.some((r) => r.participante_id === id)), 'uma mensagem por integrante, cada uma com o próprio destinatário');
+const ordem = await rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'RETORNE', p_texto: '' });
+chk(ordem.enviadas === 2, 'orientação rápida (RETORNE) também vai para o grupo todo');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: 'x' }))), 'responsável de outra operação não manda ao grupo');
+chk(/sem_permissao/.test(await erroDe(rpc(anG[0], 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: 'x' }))), 'participante não manda ao grupo');
+chk(/texto_obrigatorio/.test(await erroDe(rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: '  ' }))), 'mensagem livre vazia é recusada');
+chk(/tipo_invalido/.test(await erroDe(rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'XPTO', p_texto: 'a' }))), 'tipo inválido é recusado');
+const gVazio = await rpc(resp1, 'salvar_grupo', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo vazio', cor: '#00d84a' }) });
+chk(/grupo_sem_integrantes/.test(await erroDe(rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gVazio.id, p_tipo: 'PERSONALIZADA', p_texto: 'a' }))), 'grupo sem integrantes: avisa, não envia');
+
+
+console.log('\nMigrações 007–067 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

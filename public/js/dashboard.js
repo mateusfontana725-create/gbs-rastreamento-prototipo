@@ -381,7 +381,7 @@
   // Lista de medidas alinhada: rótulo à esquerda, valor à direita.
   function medidas(linhas) {
     var nodos = [];
-    linhas.forEach(function (l) {
+    linhas.filter(Boolean).forEach(function (l) {
       nodos.push(el('dt', { texto: l[0] }), el('dd', null, [l[1] == null ? oculto() : l[1]]));
     });
     return el('dl', { classe: 'dash-medidas' }, nodos);
@@ -644,6 +644,7 @@
     for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) a += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
     return Math.abs(a / 2);
   }
+  var SITUACAO_SETOR = { pendente: 'pendente', andamento: 'em andamento', concluido: 'concluído' };
   function resumoDoServidor(dd) {
     var G = raiz.GPS;
     var lacuna = dd.operacao && dd.operacao.gps_lacuna_s ? dd.operacao.gps_lacuna_s * 1000 : undefined;
@@ -655,7 +656,7 @@
     });
     var setores = (dd.setores || []).map(function (s) {
       var v = verticesSetor(s);
-      return { id: s.id, nome: s.nome, areaM2: areaSetorM2(s, v), vertices: v };
+      return { id: s.id, nome: s.nome, areaM2: areaSetorM2(s, v), vertices: v, status: s.status, cor: s.cor };
     });
     return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: dd.ocorrencias || {}, relatos: dd.relatos || [], publico: Boolean(dd.publico) };
   }
@@ -766,7 +767,7 @@
     var campo = pessoas.filter(function (p) { return p.tipo !== 'responsavel' || p.pontos; });
     var porTipo = { militar: 0, civil: 0, responsavel: 0 };
     campo.forEach(function (p) { porTipo[p.tipo] = (porTipo[p.tipo] || 0) + 1; });
-    var setores = r.setores.map(function (s) { return coberturaSetor(s, r); });
+    var setores = r.setores.map(function (s) { var o = coberturaSetor(s, r); o.status = s.status; o.cor = s.cor; return o; });
     var areaTotal = 0, areaCoberta = 0;
     setores.forEach(function (s) { if (s.cobertura != null) { areaTotal += s.areaKm2; areaCoberta += s.areaKm2 * s.cobertura; } });
     return {
@@ -925,6 +926,7 @@
       abrirDetalhe({
         titulo: st.nome || 'Setor',
         medidas: [
+          st.status ? ['Situação', SITUACAO_SETOR[st.status] || st.status] : null,
           ['Área', st.areaKm2 < 1 ? num(st.areaKm2 * 100, 1) + ' ha' : num(st.areaKm2, 2) + ' km²'],
           ['Coberto (aproximado)', st.cobertura == null ? '—' : pct(st.cobertura)],
           ['Última passagem', st.ultimaPassagem ? haQuanto(st.ultimaPassagem, agora) + ' (' + hora(st.ultimaPassagem) + ')' : 'ninguém passou'],
@@ -1100,7 +1102,7 @@
       corpo: [e && e.setores.length ? tabela('dash-tab-setores', [
         { titulo: 'Setor' }, { titulo: 'Área', num: true, classe: 'dash-so-largo' }, { titulo: '', barra: true, classe: 'dash-so-largo' }, { titulo: 'Coberto', num: true }, { titulo: 'Última passagem', num: true },
       ], e.setores.map(function (s) {
-        return [s.nome || 'Setor', s.areaKm2 < 1 ? num(s.areaKm2 * 100, 1) + ' ha' : num(s.areaKm2, 2) + ' km²', s.cobertura,
+        return [(s.nome || 'Setor') + (SITUACAO_SETOR[s.status] ? ' · ' + SITUACAO_SETOR[s.status] : ''), s.areaKm2 < 1 ? num(s.areaKm2 * 100, 1) + ' ha' : num(s.areaKm2, 2) + ' km²', s.cobertura,
           s.cobertura == null ? null : pct(s.cobertura), s.ultimaPassagem ? haQuanto(s.ultimaPassagem, agora) : 'ninguém passou'];
       }), function (j) { detalheSetor(e.setores[j]); }) : el('p', { classe: 'muted', texto: 'Nenhum setor desenhado.' })],
       nota: e && e.setores.length ? 'Aproximado: o setor é dividido em quadrados de ~' + (e.setores[0].celulaM || 30) + ' m; conta como coberto o quadrado por onde passou alguma trilha. Os menos cobertos aparecem primeiro.' : null,

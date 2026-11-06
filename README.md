@@ -312,6 +312,21 @@ O mapa da página do participante mostra, além dos bombeiros:
   **somente os grupos de que faz parte** e o próprio papel (no celular: "Grupo X (responsável)"). Ninguém
   em campo lê os links nem a lista de membros.
 
+### Grupos: uma pessoa em um grupo só e mensagem ao grupo (migração 067)
+
+- **Um grupo por pessoa**: quem já está num grupo da operação **não entra em outro** ao mesmo tempo (o servidor recusa com
+  "Esta pessoa já está em outro grupo"). Em **Grupos → Membros**, quem já está em outro grupo aparece desativado ("já em: Grupo A —
+  tire de lá antes"); na **ficha**, quem já está em um grupo não tem o botão "Adicionar a um grupo" (há a orientação de tirar do
+  grupo atual). Pelo **link do grupo**, quem já está em outro grupo continua na operação normalmente, só **não entra** no segundo.
+  Mudar o papel (membro / ★ responsável) no mesmo grupo continua valendo. Quem já estava em mais de um grupo antes da migração
+  **não é mexido** (nada é apagado); basta tirar das sobras.
+- **✉ Mensagem ao grupo** (Ferramentas → Grupos): a **mesma mensagem ou orientação** (livre, ATENÇÃO, RETORNE, MUDE A ROTA, PARE ou
+  CONFIRME, com o texto padrão editável) vai **de uma vez** para todos os integrantes de campo do grupo (ativos, sem os
+  responsáveis do painel). Cada pessoa recebe a sua, com a própria confirmação de entrega e resposta, como numa mensagem
+  individual; o painel mostra quantos receberam e avisa quem está sem conexão (a mensagem fica aguardando). Orientações críticas
+  pedem confirmação. O limite de 60 mensagens por minuto da operação continua valendo (quem passar do limite não recebe e o
+  painel avisa para reenviar). **Antes de usar, rode `067_grupos_mensagem_e_unico.sql` no Supabase.**
+
 ### Deslocamento de grupos, alertas e controle de retorno
 
 - **Enviar destino → Grupo** (Ferramentas → Enviar destino, "Enviar o centro como destino" num setor, ou
@@ -1270,6 +1285,17 @@ Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na 
   vista). Cada item pode virar **ponto de interesse**, **setor de busca**, **trilha da operação** (equipe, drone…)
   ou **trajeto enviado** (aí sim, visível a todos); "Transformar pontos" converte até 100 de uma vez. Nada é
   enviado ao servidor sem essa escolha.
+- **Importação por tipo, com a mesma cor em todos os aparelhos** (a camada de referência acima é o ponto de partida): ao importar, cada
+  coisa entra **como o que é** — **áreas viram setores** (com a **cor do arquivo**, a mesma em todos os dispositivos; sem cor, uma
+  cor forte livre), **pontos viram pontos de interesse**, **linhas viram trilhas** (com a cor do arquivo e, se quiser, o participante
+  vinculado) e **imagens ficam como imagens** neste aparelho (não há onde guardá-las na operação). O que foi enviado à operação **sai da
+  camada local** (antes aparecia duas vezes e só neste aparelho com a cor do arquivo; nos outros, o setor aparecia com o azul padrão
+  porque a cor não era enviada). Setor com mais de 300 vértices é **simplificado** (antes era cortado). Mesmo nome e mesmo desenho:
+  não duplica; mesmo nome com **outro desenho**: entra como "Nome (2)". O resultado diz o que foi enviado e o que **não** foi (com o
+  motivo). Em **Importar mapa**, a caixa **Marcar o que for importado como concluído** faz os setores entrarem **Concluídos**, os pontos
+  **baixados** e as trilhas **percorridas** (vale também para arquivos arrastados); e, em cada camada, **✔ Marcar como concluídos**
+  faz o mesmo depois, e **⇪ Enviar à operação** manda o que ainda estiver só neste aparelho (camadas de antes da correção). O
+  **dashboard** mostra os setores importados (com a situação: pendente, em andamento ou concluído).
 - **Estatísticas da trilha** (ficha → Estatísticas): distância, período, **tempo em movimento**, velocidade
   média e máxima (sem contar picos isolados), **subida e descida acumuladas**, altitude mínima/máxima e o
   **perfil de altitude** — passar o dedo/mouse no gráfico mostra a distância, a altitude e o ponto no mapa.
@@ -2307,6 +2333,13 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 45e | Criar um setor grande e outro menor por cima; tocar na parte comum | lista "2 elementos neste ponto"; dá para abrir cada um sem excluir o de cima |
 | 45f | No tablet na viatura, com o endereço cadastrado a alguns km, abrir a operação e deixar andar | o mapa fica no endereço e não segue a posição; ao chegar a 300 m (ou em "Cheguei ao local") volta ao normal |
 | 45g | Criar setor, grupo e trilha e olhar as cores sugeridas e o seletor | cores fortes e variadas; a cor personalizada continua disponível |
+| 46a | Importar um KML com uma área colorida (vermelha) e olhar o painel em dois aparelhos | o setor aparece nos dois com a **mesma cor** do arquivo (não azul) e não aparece de novo como camada local no aparelho que importou |
+| 46b | Importar o mesmo arquivo de novo, e depois outro com o mesmo nome e desenho diferente | o igual não duplica; o diferente entra como "Nome (2)" |
+| 46c | **Importar mapa**, marcar "Marcar o que for importado como concluído" e importar | setores Concluídos, pontos baixados, trilhas percorridas; o dashboard mostra os setores com a situação |
+| 46d | Em uma camada importada antes, tocar em **⇪ Enviar à operação** e depois em **✔ Marcar como concluídos** | o que estava só no aparelho passa a aparecer para todos e fica concluído |
+| 46e | Em **Grupos**, tocar em **✉ Mensagem ao grupo** e enviar uma mensagem livre e uma orientação (RETORNE) | todos os integrantes de campo do grupo recebem; o painel diz quantos; quem está sem conexão recebe ao reconectar |
+| 46f | Tentar colocar em outro grupo alguém que já está num grupo (Membros e ficha) | aparece desativado/sem o botão; se for forçado, o servidor recusa com "já está em outro grupo" |
+| 46g | Abrir o link do grupo B num celular cuja pessoa já está no grupo A | continua na operação e no grupo A, sem entrar no B |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

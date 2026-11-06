@@ -1301,7 +1301,7 @@
       };
     });
     var setores = Array.from(est.setores.values()).map(function (x) {
-      return { id: x.d.id, nome: x.d.nome, areaM2: areaSetorM2(x.d), vertices: verticesSetor(x.d) };
+      return { id: x.d.id, nome: x.d.nome, areaM2: areaSetorM2(x.d), vertices: verticesSetor(x.d), status: x.d.status, cor: x.d.cor };
     });
     var o = { ajuda: 0, PISTA: 0, VESTIGIO: 0, OBJETO: 0, OBSTACULO: 0, ordens: 0, fotos: est.fotos.size, pontos: est.pontosInt.size, retornosAtrasados: 0 };
     est.mensagens.forEach(function (m) {
@@ -6012,18 +6012,70 @@
   // s: setor existente (edição) ou base de um novo (forma + geometria)
   // Áreas de um arquivo importado viram setores da operação: vão para o servidor e aparecem em todos os aparelhos.
   // Sem formulário e sem pergunta; um setor com o mesmo nome já existente não é duplicado. Devolve { ok, pulados, falhas }.
-  async function enviarAreasComoSetores(areas) {
-    var r = { ok: 0, pulados: 0, falhas: 0 };
+  async function enviarAreasComoSetores(areas, opcoes) {
+    opcoes = opcoes || {};
+    // enviados: índices das áreas que já estão na operação (criadas agora ou já existentes iguais); ids: setores criados agora
+    var r = { ok: 0, pulados: 0, falhas: 0, enviados: [], ids: [], erro: null };
     if (!est.op || !podeAlterar() || !areas || !areas.length) return r;
     var nomes = new Set(Array.from(est.setores.values()).map(function (x) { return String(x.d.nome || '').trim().toLowerCase(); }));
     for (var i = 0; i < areas.length; i++) {
       var a = areas[i];
       var nome = String(a.nome || 'Área importada ' + (i + 1)).trim().slice(0, 60);
-      if (nomes.has(nome.toLowerCase())) { r.pulados++; continue; }
+      var pts = a.pontos || [];
+      if (pts.length > 300) pts = window.Rotas.simplificar(pts, 1, 300);   // o banco aceita até 300 vértices: simplifica, em vez de cortar a forma
+      // mesmo nome e mesmo desenho: já está na operação (não duplica); mesmo nome com outro desenho: entra com nome novo
+      var igual = Array.from(est.setores.values()).find(function (x) {
+        return String(x.d.nome || '').trim().toLowerCase() === nome.toLowerCase() && x.d.forma === 'poligono' && Array.isArray(x.d.pontos) &&
+          x.d.pontos.length && C.distancia(x.d.pontos[0][0], x.d.pontos[0][1], pts[0][0], pts[0][1]) < 3 && Math.abs(x.d.pontos.length - pts.length) <= 1;
+      });
+      if (igual) {
+        r.pulados++; r.enviados.push(i);
+        if (opcoes.concluido && igual.d.status !== 'concluido') {
+          try { aplicarSetores([await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: igual.d.id, p_dados: { status: 'concluido' } })]); } catch (e0) { /* segue */ }
+        }
+        continue;
+      }
+      if (nomes.has(nome.toLowerCase())) {
+        var n = 2, base = nome.slice(0, 54);
+        while (nomes.has((base + ' (' + n + ')').toLowerCase())) n++;
+        nome = base + ' (' + n + ')';
+      }
       try {
-        await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: null, p_dados: { nome: nome, forma: 'poligono', pontos: a.pontos } });
+        // a cor vem do arquivo (a mesma em todos os aparelhos); sem cor no arquivo, uma cor forte ainda livre
+        var cor = window.Cores.normalizar(a.cor) || corLivre();
+        var res = await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: null, p_dados: { nome: nome, forma: 'poligono', pontos: pts, cor: cor,
+          status: opcoes.concluido ? 'concluido' : 'pendente' } });
+        aplicarSetores([res]);
         nomes.add(nome.toLowerCase());
-        r.ok++;
+        r.ok++; r.enviados.push(i); r.ids.push(res.id);
+      } catch (e) { r.falhas++; r.erro = e.message || String(e); }
+    }
+    return r;
+  }
+
+  // Marca como concluídos o que veio de uma importação: setores (situação Concluído), pontos (baixa) e trilhas (percorridas).
+  async function marcarImportadosConcluidos(ids) {
+    var r = { setores: 0, pontos: 0, trilhas: 0, falhas: 0 };
+    if (!est.op || !podeAlterar() || !ids) return r;
+    for (var i = 0; i < (ids.setores || []).length; i++) {
+      var s = est.setores.get(ids.setores[i]);
+      if (!s) continue;
+      if (s.d.status === 'concluido') { r.setores++; continue; }
+      try { aplicarSetores([await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: s.d.id, p_dados: { status: 'concluido' } })]); r.setores++; } catch (e) { r.falhas++; }
+    }
+    for (var j = 0; j < (ids.pontos || []).length; j++) {
+      var p = est.pontosInt.get(ids.pontos[j]);
+      if (!p) continue;
+      if (p.d.concluido_em) { r.pontos++; continue; }
+      try { aplicarPontos([await C.rpc('marcar_ponto_concluido', { p_operacao: est.op.id, p_id: p.d.id, p_concluido: true })]); r.pontos++; } catch (e) { r.falhas++; }
+    }
+    for (var k = 0; k < (ids.trilhas || []).length; k++) {
+      var t = est.trilhasManuais.get(ids.trilhas[k]);
+      if (!t) continue;
+      if (t.d.estado === 'percorrida') { r.trilhas++; continue; }
+      try {
+        aplicarTrilhasManuais([await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: t.d.id, p_dados: { estado: 'percorrida', percorrida_em: new Date().toISOString() } })], false);
+        r.trilhas++;
       } catch (e) { r.falhas++; }
     }
     return r;
@@ -10586,7 +10638,11 @@
       return UI.el('li', null, [chipGrupo(g), UI.el('strong', { texto: g.nome }),
         UI.el('small', { classe: 'muted', texto: (g.papel === 'responsavel' ? '★ responsável' : 'membro') + (g.origem === 'link' ? ' · entrou pelo link' : '') })]);
     })));
-    if (editavel && outros.length && !p.dados.removido) {
+    if (editavel && meus.length && !p.dados.removido) {
+      // uma pessoa fica em um grupo só: para trocar, tira-se do atual (Ferramentas → Grupos → Membros)
+      caixa.appendChild(UI.el('small', { classe: 'muted ficha-um-grupo', texto: 'Cada pessoa fica em um grupo só. Para mudar, tire-a deste grupo em Ferramentas → Grupos → Membros.' }));
+    }
+    if (editavel && !meus.length && outros.length && !p.dados.removido) {
       caixa.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ficha-add-grupo', texto: '＋ Adicionar a um grupo', onclick: function () { abrirAdicionarAoGrupo(p); } }));
     }
   }
@@ -10689,6 +10745,8 @@
             UI.el('button', { classe: 'btn btn-pequeno' + (ativo ? ' btn-ativo' : ''), type: 'button', 'aria-pressed': String(ativo), texto: ativo ? '👁 Mostrando no mapa' : '👁 Mostrar no mapa',
               onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { abrirMembrosGrupo(g.id); } }),
+            est.op.status === 'ativa' && editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'grupo-mensagem-' + g.id, texto: '✉ Mensagem ao grupo', title: 'Envia a mesma mensagem ou orientação, de uma vez, a todos os integrantes de campo',
+              onclick: function () { abrirMensagemAoGrupo(g.id); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { abrirLinkGrupo(g.id); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: async function () {
               if (window.RecursosEquipe && !(await window.RecursosEquipe.confirmarEnvio(g))) return;
@@ -10792,10 +10850,11 @@
       if (!naoMembros.length) { adicionar.appendChild(UI.el('p', { classe: 'muted', texto: 'Todos os participantes ativos já estão no grupo.' })); return; }
       var caixas = UI.el('div', { classe: 'lista-destino' }, naoMembros.map(function (p) {
         var outros = gruposDe(p.id).map(function (x) { return x.nome; });
-        return UI.el('label', { classe: 'linha-opcao' }, [
-          UI.el('input', { type: 'checkbox', value: p.id }),
+        // uma pessoa fica em um grupo só: quem já está em outro não pode ser marcado (o servidor também recusa)
+        return UI.el('label', { classe: 'linha-opcao' + (outros.length ? ' linha-desativada' : '') }, [
+          UI.el('input', { type: 'checkbox', value: p.id, disabled: outros.length ? true : null }),
           ' ' + nomeExibido(p) + ' (' + TIPOS[tipoDe(p.dados)].rotulo.toLowerCase() + ')',
-          outros.length ? UI.el('small', { classe: 'muted', texto: ' — já em: ' + outros.join(', ') }) : null,
+          outros.length ? UI.el('small', { classe: 'muted', texto: ' — já em: ' + outros.join(', ') + ' (tire de lá antes)' }) : null,
         ]);
       }));
       var pap = UI.el('select', { classe: 'campo campo-pequeno', 'aria-label': 'Papel de quem será adicionado' }, [
@@ -10821,6 +10880,63 @@
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { tamanho: 'largo', aoFechar: function () { if (est.renderGruposAberto === render) est.renderGruposAberto = null; } });
+  }
+
+
+  // Mesma mensagem ou orientação, de uma vez, para todos os integrantes de campo do grupo (migração 067).
+  function abrirMensagemAoGrupo(gid) {
+    var g = est.grupos.get(gid);
+    if (!g || !podeAlterar()) return;
+    var alvos = membrosDe(gid).filter(function (x) { return !x.p.dados.removido && !x.p.dados.liberado_em && tipoDe(x.p.dados) !== 'responsavel' && !ehEu(x.p); });
+    if (!alvos.length) { UI.aviso(C.traduzirErro({ message: 'grupo_sem_integrantes' }), 'erro', 7000); return; }
+    var tipo = UI.el('select', { classe: 'campo', id: 'msg-grupo-tipo' }, ['PERSONALIZADA', 'ATENCAO', 'RETORNE', 'MUDE_ROTA', 'PARE', 'CONFIRME'].map(function (k) {
+      return UI.el('option', { value: k, texto: k === 'PERSONALIZADA' ? 'Mensagem livre' : 'Orientação: ' + C.TIPOS_MENSAGEM[k].rotulo });
+    }));
+    var texto = UI.el('textarea', { classe: 'campo', id: 'msg-grupo-texto', rows: '4', maxlength: '500', placeholder: 'Escreva a mensagem para o grupo' });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'msg-grupo-enviar' });
+    var comFalha = alvos.filter(function (x) { var e = estadoDe(x.p); return !(e.cod === 'conectado' || e.cod === 'instavel' || e.cod === 'parado'); });
+    function ehPadrao(v) { return Object.keys(C.TIPOS_MENSAGEM).some(function (j) { return C.TIPOS_MENSAGEM[j].padrao && C.TIPOS_MENSAGEM[j].padrao === v; }); }
+    function ajustar() {
+      var k = tipo.value, atual = texto.value;
+      if (k === 'PERSONALIZADA') { if (ehPadrao(atual)) texto.value = ''; }
+      else if (!atual.trim() || ehPadrao(atual)) texto.value = C.TIPOS_MENSAGEM[k].padrao;   // o texto padrão da orientação (dá para complementar)
+      btn.textContent = 'ENVIAR A ' + alvos.length + ' INTEGRANTE' + (alvos.length === 1 ? '' : 'S');
+      btn.className = 'btn ' + (C.TIPOS_MENSAGEM[k].critico ? 'btn-perigo' : 'btn-escuro');
+    }
+    tipo.addEventListener('change', ajustar);
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Mensagem ao grupo' }, [UI.dica('A mesma mensagem vai de uma vez para cada integrante de campo do grupo. Cada um recebe a sua, com a própria confirmação de entrega.')]),
+      UI.el('p', null, [chipGrupo(g), ' ', UI.el('strong', { texto: g.nome }), ' · ' + alvos.length + ' integrante(s): ' + alvos.map(function (x) { return x.p.dados.nome; }).slice(0, 8).join(', ') + (alvos.length > 8 ? '…' : '')]),
+      comFalha.length ? UI.el('p', { classe: 'nota', texto: comFalha.length + ' integrante(s) estão sem conexão agora (' + comFalha.map(function (x) { return x.p.dados.nome; }).slice(0, 4).join(', ') + (comFalha.length > 4 ? '…' : '') + '): a mensagem fica aguardando e só chega quando o celular reconectar.' }) : null,
+      UI.campo('Tipo', tipo, { para: 'msg-grupo-tipo' }),
+      UI.campo('Texto', texto, { para: 'msg-grupo-texto', largo: true }),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    ajustar();
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var k = tipo.value, t = texto.value.trim();
+      if (k === 'PERSONALIZADA' && !t) { erro.textContent = 'Escreva a mensagem.'; erro.hidden = false; texto.focus(); return; }
+      if (C.TIPOS_MENSAGEM[k].critico) {
+        var sim = await UI.confirmar({ titulo: 'Confirmar envio: ' + C.TIPOS_MENSAGEM[k].rotulo, texto: 'A orientação vai agora para ' + alvos.length + ' integrante(s) de ' + g.nome + '.', ok: 'ENVIAR AO GRUPO', perigo: true });
+        if (!sim) return;
+      }
+      btn.disabled = true;
+      try {
+        var r = await C.rpc('enviar_mensagem_grupo', { p_grupo: gid, p_tipo: k, p_texto: t }, 30000);
+        (r.mensagens || []).forEach(function (m) { receberMensagem(m, true); });
+        fechar(true);
+        UI.aviso('Mensagem enviada a ' + r.enviadas + ' integrante(s) de ' + g.nome + '.' + (r.falhas ? ' ' + r.falhas + ' não receberam (limite de mensagens por minuto): envie de novo em instantes.' : ''), r.falhas ? 'erro' : 'ok', 8000);
+      } catch (e) {
+        erro.textContent = e.codigo === 'funcao_ausente' ? 'O banco ainda não tem a migração 067 (mensagem ao grupo).' : 'Não foi possível enviar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false });
   }
 
   // QR Code de um link (mesma biblioteca do convite da operação).
@@ -11792,7 +11908,10 @@
     setorDesenhoDesde: function (lat, lng) { iniciarDesenho('poligono'); if (est.desenho) aoClicarNoMapa({ latlng: { lat: lat, lng: lng } }); },
     enviarDestino: function (lat, lng, nome) { abrirEnviarDestino({ nome: nome || 'Ponto marcado no mapa', lat: lat, lng: lng }); },
     criarSetor: function (pontos, nome) { abrirFormSetor(Object.assign({ forma: 'poligono', pontos: pontos }, nome ? { nome: nome.slice(0, 60) } : {})); },
-    enviarAreasComoSetores: function (areas) { return enviarAreasComoSetores(areas); },
+    enviarAreasComoSetores: function (areas, opcoes) { return enviarAreasComoSetores(areas, opcoes); },
+    marcarImportadosConcluidos: function (ids) { return marcarImportadosConcluidos(ids); },
+    resumoOperacao: function () { return resumoOperacao(); },
+    marcarPontoConcluidoId: function (id) { return C.rpc('marcar_ponto_concluido', { p_operacao: est.op.id, p_id: id, p_concluido: true }).then(function (r) { aplicarPontos([r]); return r; }); },
     enviarTrilhaImportada: function (dados) { return enviarTrilhaImportada(dados); },
     criarSetorUlv: function (v, local) { return criarSetorUlv(v, local); },
     // Quem pode receber o vínculo de uma trilha importada: [{ grupo, itens: [{ valor: 'p:<id>' | 'g:<id>', texto }] }]

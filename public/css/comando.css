@@ -2713,3 +2713,7 @@ button.sci2-kpi:hover { border-color: var(--borda-forte); background: var(--supe
 }
 .chip-deslocamento[hidden] { display: none; }
 html[data-tema="claro"] .chip-deslocamento { background: rgba(255, 255, 255, .96); color: #0f172a; }
+
+/* Grupos: quem já está em outro grupo não pode ser marcado */
+.linha-desativada { opacity: .6; cursor: not-allowed; }
+.ficha-um-grupo { display: block; margin-top: 6px; }

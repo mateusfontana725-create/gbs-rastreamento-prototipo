@@ -170,6 +170,8 @@
     nome_repetido: 'Já existe uma trilha com esse nome nesta operação.',
     responsavel_trajeto_invalido: 'O responsável escolhido não participa desta operação.',
     grupo_invalido: 'O grupo escolhido não pertence a esta operação (pode ter sido excluído).',
+    participante_em_outro_grupo: 'Esta pessoa já está em outro grupo. Tire-a do grupo atual (Ferramentas → Grupos → Membros) antes de colocá-la neste.',
+    grupo_sem_integrantes: 'Este grupo não tem integrantes de campo ativos para receber a mensagem.',
     // depois de responsavel_trajeto_invalido (a busca pelo código é por trecho do texto)
     trajeto_invalido: 'Trajeto inválido: desenhe uma linha com pelo menos 2 pontos.',
     cenario_imutavel_aprovado: 'Esta versão do cenário já foi aprovada e não pode mais ser alterada. Crie uma nova versão.',

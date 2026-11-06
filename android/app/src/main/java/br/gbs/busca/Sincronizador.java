@@ -148,6 +148,22 @@ public final class Sincronizador {
     return new Resultado(Tipo.OK, null, conf.size(), rec.size(), intervalo);
   }
 
+  /** O aplicativo foi fechado de vez: avisa que o registro parou (a participação continua; ao abrir de novo, retoma). */
+  public boolean parar() {
+    JSONObject args = new JSONObject();
+    try {
+      args.put("p_dispositivo", dispositivo).put("p_segredo", segredo);
+    } catch (JSONException e) {
+      return false;
+    }
+    try {
+      Resposta r = chamar("app_parar_rastreio", args, 4000);
+      return r.status >= 200 && r.status < 300;
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
   /** "Estou conectado" (o painel mostra o participante como ativo mesmo parado). */
   public Resultado sinal(String gps) {
     JSONObject args = new JSONObject();

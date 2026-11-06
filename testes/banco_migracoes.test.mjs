@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2277,6 +2277,11 @@ console.log('Aplicativo Android: passagem do navegador para o app e aparelho com
   chk(sv.status === 'ativa' && sv.gps_intervalo_s === 15, 'sinal de vida pelo app', sv);
   chk((await db.query(`select gps_estado from public.participantes where id = $1`, [pid])).rows[0].gps_estado === 'fraco', 'sinal pelo app grava o estado do GPS');
   chk(/permission denied/.test(await erroDe(como(null, `select public.app_dono_do_dispositivo($1, $2)`, [d1.dispositivo_id, d1.segredo], 'anon'))), 'função interna não é chamável de fora');
+  const pr = (await como(null, `select public.app_parar_rastreio($1, $2) r`, [d1.dispositivo_id, d1.segredo], 'anon')).rows[0].r;
+  chk(pr.status === 'ativa' && (await db.query(`select rastreando from public.participantes where id = $1`, [pid])).rows[0].rastreando === false, 'app fechado de vez: o painel vê que o registro parou, sem encerrar a participação', pr);
+  chk(/aparelho_app_invalido/.test(await erroDe(como(null, `select public.app_parar_rastreio($1, $2)`, [d1.dispositivo_id, 'a'.repeat(64)], 'anon'))), 'parar o registro exige o segredo do aparelho');
+  await como(null, `select public.app_sinal_vida($1, $2, 'fraco')`, [d1.dispositivo_id, d1.segredo], 'anon');
+  chk((await db.query(`select rastreando from public.participantes where id = $1`, [pid])).rows[0].rastreando === true, 'ao abrir o aplicativo de novo, o sinal de vida volta a marcar que está registrando');
   chk((await como(null, `select auth.uid() u`, [], 'anon')).rows[0].u === null, 'a identidade usada pelo serviço não sobra para a próxima chamada');
 
   const d2 = await rpc(app, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Moto G (reinstalado)' });
@@ -2856,5 +2861,61 @@ chk(tr1.length === 1 && tr1[0].pontos.length === 10 && tr1[0].tipo === 'civil', 
 chk(!JSON.stringify(tr1).includes('Rita') && !JSON.stringify(tr1).includes(pm2.participante_id), 'a trilha da equipe não traz nome nem identificador');
 chk(/participante_invalido/.test(await erroDe(rpc(anM2, 'trilhas_da_equipe', { p_participante: pm1.participante_id }))), 'não dá para pedir as trilhas como se fosse outro participante');
 
-console.log('\nMigrações 007–065 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Trilhas: gravação por participante, raio da base e áreas sem trilha (migração 066) ---
+console.log('\nTrilhas: base sem gravação, gravação por participante e áreas sem trilha');
+const opT = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TRILHAS BASE', p_retencao_horas: 0 });
+const anT1 = await usuario(null, true), anT2 = await usuario(null, true);
+const pT1 = await rpc(anT1, 'ingressar', { p_token: opT.token_civil, p_nome: 'Tiago', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+const pT2 = await rpc(anT2, 'ingressar', { p_token: opT.token_civil, p_nome: 'Vera', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+await rpc(resp1, 'salvar_ponto', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ categoria: 'BASE', titulo: 'Base T', lat: -25.5, lng: -49.3, raio_m: 50 }) });
+const tT = (k) => Date.now() - 120000 + k * 1000;
+const mT = 1 / 111320;
+const enviaT = (an, pid, pts) => rpc(an, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: JSON.stringify(pts) });
+const rT = await enviaT(anT1, pT1.participante_id, [
+  pt(9001, -25.5 + 120 * mT, -49.3, tT(1)),   // fora (120 m)
+  pt(9002, -25.5 + 10 * mT, -49.3, tT(2)),    // dentro: ponto de entrada (guardado)
+  pt(9003, -25.5 + 5 * mT, -49.3, tT(3)),     // dentro: descartado
+  pt(9004, -25.5 + 8 * mT, -49.3, tT(4)),     // dentro: descartado
+  pt(9005, -25.5 + 90 * mT, -49.3, tT(5)),    // fora: guardado
+]);
+const gravT = (await db.query(`select client_id, na_base from public.posicoes where participante_id = $1 order by registrado_em`, [pT1.participante_id])).rows;
+chk(gravT.map((r) => r.client_id).join() === [9001, 9002, 9005].map(uid).join(), 'dentro do raio da base só o ponto de entrada fica gravado', gravT.map((r) => r.client_id.slice(-4)));
+chk(gravT.map((r) => r.na_base).join() === 'false,true,false', 'o ponto de entrada fica marcado na_base', gravT);
+chk(rT.confirmados.length === 5 && [9001, 9002, 9003, 9004, 9005].every((n) => rT.confirmados.includes(uid(n))), 'todos os pontos são confirmados ao aparelho (inclusive os descartados)', rT.confirmados.length);
+chk(rT.inseridos === 3, 'inseridos conta só os gravados', rT.inseridos);
+const rT2 = await enviaT(anT1, pT1.participante_id, [pt(9006, -25.5 + 3 * mT, -49.3, tT(10)), pt(9007, -25.5 + 2 * mT, -49.3, tT(11))]);
+chk(rT2.inseridos === 1 && rT2.confirmados.length === 2, 'voltou à base: um novo ponto de entrada; o resto é descartado', rT2);
+const upT = (await db.query(`select ultima_lat, rastreando, gps_estado from public.participantes where id = $1`, [pT1.participante_id])).rows[0];
+chk(Math.abs(upT.ultima_lat - (-25.5 + 2 * mT)) < 1e-9 && upT.gps_estado === 'ok', 'a posição atual segue o último ponto, mesmo o descartado', upT);
+// gravação desligada para uma pessoa
+chk(/sem_permissao/.test(await erroDe(rpc(anT2, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false }))), 'participante não liga nem desliga a gravação');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false }))), 'responsável de outra operação não mexe na gravação');
+const dg = await rpc(resp1, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false });
+chk(dg.gravar_trilha === false, 'responsável desliga a gravação da trilha de uma pessoa', dg);
+const rT3 = await enviaT(anT2, pT2.participante_id, [pt(9011, -25.45, -49.3, tT(20)), pt(9012, -25.449, -49.3, tT(21))]);
+chk(rT3.inseridos === 0 && rT3.confirmados.length === 2 && rT3.gravar_trilha === false, 'com a gravação desligada nada entra na trilha, mas os pontos são confirmados', rT3);
+chk((await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [pT2.participante_id])).rows[0].n === 0, 'nenhuma posição gravada para quem está com a gravação desligada');
+chk((await db.query(`select ultima_lat from public.participantes where id = $1`, [pT2.participante_id])).rows[0].ultima_lat === -25.449, 'a posição atual dela continua aparecendo');
+const svT = await rpc(anT2, 'sinal_vida', { p_participante: pT2.participante_id, p_rastreando: true, p_gps: 'ok' });
+chk(svT.gravar_trilha === false, 'o sinal de vida avisa o aparelho que a gravação está desligada', svT);
+await rpc(resp1, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: true });
+const rT4 = await enviaT(anT2, pT2.participante_id, [pt(9013, -25.44, -49.3, tT(30))]);
+chk(rT4.inseridos === 1 && rT4.gravar_trilha === true, 'religada, a trilha volta a ser gravada', rT4);
+// trilha da equipe não traz o ponto de entrada na base
+const trT = await rpc(anT2, 'trilhas_da_equipe', { p_participante: pT2.participante_id });
+chk(trT.length === 1 && trT[0].pontos.length === 2, 'a trilha da equipe só traz os pontos fora da base', trT.map((x) => x.pontos.length));
+// áreas sem trilha
+const aT = await rpc(resp1, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ nome: 'Estacionamento', lat: -25.5, lng: -49.3 }) });
+chk(aT.raio_m === 50 && aT.ativa === true, 'área sem trilha começa com 50 m e ativa', aT);
+chk(/raio_m|check/i.test(await erroDe(rpc(resp1, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ lat: -25.5, lng: -49.3, raio_m: 2 }) }))), 'raio fora de 5 a 5000 m é recusado');
+const aT2 = await rpc(resp1, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: aT.id, p_dados: JSON.stringify({ raio_m: 120, ativa: false }) });
+chk(aT2.raio_m === 120 && aT2.ativa === false && aT2.nome === 'Estacionamento', 'altera o raio e desativa sem perder o resto', aT2);
+chk((await como(anT1, `select count(*)::int n from public.areas_sem_trilha`)).rows[0].n === 0, 'participante não lê as áreas sem trilha (RLS)');
+chk((await como(resp1, `select count(*)::int n from public.areas_sem_trilha where operacao_id = $1`, [opT.id])).rows[0].n === 1, 'responsável da operação lê');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ lat: -25.5, lng: -49.3 }) }))), 'responsável de outra operação não cria');
+await rpc(resp1, 'excluir_area_sem_trilha', { p_id: aT.id });
+chk((await db.query(`select count(*)::int n from public.areas_sem_trilha where operacao_id = $1`, [opT.id])).rows[0].n === 0, 'excluir remove a área');
+
+
+console.log('\nMigrações 007–066 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

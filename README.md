@@ -696,6 +696,37 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   linha → **Registrar como trilha**: o formulário já vem com o nome, a cor e o horário do arquivo, e "drone"
   quando o nome ou o tipo indicam voo. O diário registra o meio no percurso percorrido.
 
+### Trilhas: de quem é, borracha, áreas sem trilha, gravação e base (migração 066)
+
+- **Tocar numa trilha de GPS** (a linha de uma pessoa no mapa) abre um balão com **de quem é** ("Trilha de Ana"), o tipo, o grupo, a
+  distância percorrida e o horário; **Ficha ›** abre a ficha da pessoa. Tocar numa trilha desenhada ou importada mostra também a
+  equipe/pessoa a quem ela está vinculada.
+- **Importar trilha e vincular**: ao importar um arquivo com trilhas, o painel pergunta **De quem é a trilha?** — um participante
+  específico ou **alguém de um grupo** (as pessoas aparecem agrupadas pelo grupo, que também pode ser escolhido inteiro, para o caso
+  de um grupo que se dividiu). Dá para vincular todas de uma vez ou uma a uma; **Importar sem vincular** mantém o comportamento
+  anterior. O vínculo pode ser mudado depois em **Editar dados** da trilha.
+- **Borracha**: nos detalhes de uma trilha desenhada ou importada, **✂ Apagar trechos** abre o modo borracha: arraste o dedo ou o
+  mouse sobre o trecho a apagar (como numa lousa); **Desfazer**, **✋ Mover mapa** (para dar zoom e arrastar o mapa) e **✔ Concluir**.
+  Se a linha ficar em várias partes, a primeira continua na trilha e as outras viram trilhas novas com o nome "… (parte 2)", com os
+  mesmos dados. Apagar tudo oferece excluir a trilha. A borracha **não apaga rastros de GPS** gravados pelos aparelhos (para
+  limpar o mapa deles, use as áreas sem trilha abaixo).
+- **Enviar a participante**: nos detalhes de **qualquer** trilha salva (desenhada, importada ou planejada) há **➝ Enviar a participante**:
+  a pessoa ou o grupo segue a linha no celular. (Antes só dava para enviar durante o desenho; a trilha já salva não tinha como ser enviada.)
+- **Desativar a gravação da trilha de uma pessoa**: na ficha, **⋮ Mais → ⏹ Desativar a gravação da trilha** (e **⏺ Ligar** para voltar).
+  Com ela desligada, a posição atual continua aparecendo, mas o caminho não é gravado (o que já foi gravado fica); o celular da pessoa
+  avisa "O seu caminho não está sendo gravado". Sem trilha, os alertas de deslocamento e retorno à base dessa pessoa não funcionam.
+- **Área sem trilha** (**Ferramentas → Setor → ◌ Ocultar trilhas numa área**): toque no centro e a área nasce com **50 m** de raio (editável
+  de 5 m a 5.000 m, com nome opcional e liga/desliga). Dentro do círculo (contorno discreto) o painel **não desenha** as trilhas, nem
+  as de GPS nem as desenhadas; nada é apagado e é só o desenho. Vale para todos os responsáveis da operação.
+- **Base com raio de 50 m** (ponto de interesse **Base**; raio editável, 10 m a 5 km): o círculo aparece bem discreto (no painel e
+  no celular do participante) e **dentro dele a trilha não é gravada**. Para o controle de retorno continuar funcionando, o servidor
+  guarda só o **ponto de entrada** (marcado `na_base`, que não entra na linha desenhada); os demais pontos dentro do raio são
+  confirmados ao aparelho e descartados, e a posição atual da pessoa continua aparecendo. Fora do raio tudo funciona normalmente.
+- **Fechar o aplicativo** (Android): arrastar da lista de recentes **para o registro**; tela apagada, aplicativo minimizado ou botão
+  voltar **não** (ver "Aplicativo Android do participante").
+- Banco: `participantes.gravar_trilha`, `posicoes.na_base`, tabela `areas_sem_trilha`, funções `definir_gravacao_trilha`,
+  `salvar_area_sem_trilha`, `excluir_area_sem_trilha` e `app_parar_rastreio`. **Antes de usar, rode `066_trilhas_gravacao_base.sql` no Supabase.**
+
 ### Trajeto desenhado enviado como destino
 
 - **Ferramentas → Desenhar trilha / trajeto** → **Concluir…** → **Enviar para alguém percorrer** (ou **🧭 Enviar
@@ -2022,8 +2053,9 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 A página do participante tem o botão **📱 Baixar aplicativo** (só aparece no Android, fora do aplicativo) e, na tela
 inicial, **Já tenho o aplicativo: abrir nele** (abre direto no aplicativo instalado; sem ele, cai no download). O aplicativo
 **GBS Busca** (pasta `android/`) é a própria página do participante, aberta numa WebView presa ao servidor da operação,
-com o GPS lido e enviado por um serviço do Android. Funciona com a tela apagada, com o aplicativo minimizado ou fechado
-da lista de recentes, e sem internet.
+com o GPS lido e enviado por um serviço do Android. Funciona com a tela apagada, com o aplicativo minimizado (inclusive pelo botão
+voltar) e sem internet. **Se o participante fechar o aplicativo de vez** (arrastar da lista de recentes), o registro **para** e o
+painel é avisado; a participação continua valendo e o registro **retoma sozinho** quando o aplicativo for aberto de novo.
 
 **Como o participante instala e entra sem novo cadastro**
 
@@ -2062,7 +2094,7 @@ da lista de recentes, e sem internet.
   obrigatório. A página não guarda o segredo.
 - **Mapa sem internet**: ao entrar, o aplicativo guarda o mapa da **região da operação** (setores e pontos, raio de até
   15 km, dentro do limite do OpenStreetMap), além da área em volta da posição que a página já guarda.
-- **Mensagens com o aplicativo fechado ou a tela apagada** (migração 056): a cada sinal de vida (15 s) o serviço pergunta
+- **Mensagens com o aplicativo minimizado ou a tela apagada** (migração 056): a cada sinal de vida (15 s) o serviço pergunta
   ao servidor (`app_mensagens_pendentes`, com o segredo do aparelho) se há mensagem dos bombeiros ainda não confirmada e
   mostra a notificação como num aplicativo de conversa: **som, vibração, aparece por cima dos outros aplicativos e na tela
   bloqueada**, juntando as mensagens numa conversa "Bombeiros" (tocar abre o aplicativo). Cada mensagem avisa uma vez só
@@ -2225,7 +2257,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 42d | No modo avião, abrir o aplicativo | a página abre (guardada) e o mapa mostra a região da operação |
 | 42e | Liberar a saída do participante no painel | o aplicativo para de registrar, o aviso fixo some e a tela mostra "Saída liberada" |
 | 42f | Abrir **📱 Baixar aplicativo** de novo em outro celular e abrir no aplicativo de lá | o primeiro aplicativo para ("Participação encerrada neste celular"); o segundo continua a mesma trilha |
-| 42g | No aplicativo registrando, **fechar o aplicativo** (tirar da lista de recentes) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
+| 42g | No aplicativo registrando, **minimizar o aplicativo** (voltar para a tela inicial do celular) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
 | 42h | Com o aplicativo registrando, puxar a barra de notificações e a tela bloqueada | o aviso fixo verde "Busca …" mostra "Enviando sua localização aos bombeiros", o tempo de busca correndo e os pontos enviados; no Android 14, arrastar o aviso para fora: ele volta |
 | 42i | No Chrome do Android, tocar em **Baixar aplicativo**, esperar alguns minutos com o download pausado e continuar | o arquivo baixa de `/api/app?baixar=1` como `gbs-busca.apk` e instala (sem erro de link expirado) |
 | 43a | No painel, criar um setor e um ponto de interesse **públicos** e outros **privados** (campo **Quem vê**); abrir a página do participante de um celular sem nada atribuído | só o setor e o ponto públicos aparecem no mapa |
@@ -2235,6 +2267,15 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 43e | Tocar num ponto público → **Rota até aqui** | o painel de navegação abre com a distância e a linha até o ponto; sem enviar nada aos bombeiros; **Encerrar** limpa |
 | 43f | Com dois celulares andando na mesma operação, olhar o mapa de um deles | a trilha do outro aparece numa cor só, sem nome; a própria fica na cor do grupo |
 | 43g | Tocar em **PRECISO DE AJUDA** e confirmar (e também sem internet) | o painel recebe o pedido de ajuda com a localização; sem internet, chega quando o sinal volta |
+| 44a | Tocar numa trilha de GPS no mapa do Comando | balão "Trilha de …" com tipo, grupo, distância e horário; **Ficha ›** abre a pessoa |
+| 44b | Importar um GPX com uma trilha e escolher um participante em "De quem é a trilha?" | a trilha entra vinculada a essa pessoa (balão e detalhes mostram o nome) |
+| 44c | Detalhes de uma trilha desenhada → **✂ Apagar trechos**, passar o dedo no meio, **Concluir** | a linha se divide; a segunda parte vira "… (parte 2)"; Desfazer devolve o trecho |
+| 44d | Desenhar uma trilha com ✔ Concluir e depois abrir os detalhes → **➝ Enviar a participante** | o celular da pessoa recebe a linha como trajeto e a segue |
+| 44e | Na ficha → **⋮ Mais → ⏹ Desativar a gravação da trilha** e a pessoa andar 5 min | a posição segue no mapa, mas a trilha dela não cresce; o celular mostra "O seu caminho não está sendo gravado"; **Ligar** volta a gravar |
+| 44f | **Ferramentas → Setor → ◌ Ocultar trilhas numa área**, tocar no mapa, mudar o raio e salvar | as trilhas somem dentro do círculo (50 m padrão); desativar ou excluir a área traz as trilhas de volta |
+| 44g | Marcar um ponto **Base** (raio 50 m) e andar de dentro dele para fora e de volta | sem trilha dentro do raio (só o ponto de entrada); fora dele a trilha é normal; o grupo que volta é dado como "na base" |
+| 44h | No aplicativo Android registrando, **arrastar o aplicativo da lista de recentes** e olhar o painel | o registro para (a pessoa aparece sem sinal/parada); ao abrir o aplicativo de novo, retoma sozinho |
+| 44i | No aplicativo, **apagar a tela** e **minimizar** por 10 min | o registro **continua** (a trilha segue crescendo no painel) |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

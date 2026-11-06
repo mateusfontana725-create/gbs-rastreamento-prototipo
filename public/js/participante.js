@@ -968,6 +968,7 @@
         chamarAtencao();
       }
       estado.saidaSolicitadaEm = r.saida_solicitada_em || null;
+      estado.gravarTrilha = r.gravar_trilha !== false;   // os bombeiros podem desligar a gravação do caminho desta pessoa
       if (r.gps_intervalo_s) aplicarIntervaloGps(r.gps_intervalo_s);
       marcarSucesso();
       if (qtdParaEnviar()) agendarEnvio(0);
@@ -1605,6 +1606,10 @@
     estado.pontosRisco = pontos.filter(function (pt) { return pt.categoria === 'RISCO'; });
     estado.pontosRisco.forEach(function (pt) {
       L.circle([pt.lat, pt.lng], { radius: pt.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 2, dashArray: '6 6', fillColor: '#ef4444', fillOpacity: 0.1, interactive: false, className: 'circulo-risco' }).addTo(estado.camPontos);
+    });
+    // Base: o raio (padrão 50 m) aparece bem discreto; dentro dele o caminho não é gravado.
+    pontos.filter(function (pt) { return pt.categoria === 'BASE'; }).forEach(function (pt) {
+      L.circle([pt.lat, pt.lng], { radius: pt.raio_m || 50, color: '#0ea5e9', weight: 1, opacity: 0.35, dashArray: '2 6', fill: false, interactive: false, className: 'circulo-base-participante' }).addTo(estado.camPontos);
     });
     pontos.forEach(function (pt) {
       var nomeCat = NOME_PONTO[pt.categoria] || 'Ponto de interesse';
@@ -3328,7 +3333,7 @@
       cod = 'sem-gps'; titulo = 'Conectando com os bombeiros…'; sub = 'Só um instante.';
     } else {
       cod = 'ok'; titulo = 'Os bombeiros estão vendo você';
-      sub = NATIVO ? 'Pode bloquear a tela.' : 'Deixe esta tela aberta.';
+      sub = (NATIVO ? 'Pode bloquear a tela.' : 'Deixe esta tela aberta.') + (estado.gravarTrilha === false ? ' O seu caminho não está sendo gravado.' : '');
     }
     var acao = $('status-acao');
     var precisaAjuda = estado.rastreando && (estado.gps === 'negado' || estado.gps === 'indisponivel' ||

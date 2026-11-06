@@ -73,6 +73,12 @@ final class Config {
 
   void definirIntervalo(long ms) { p.edit().putLong("intervalo_ms", ms).apply(); }
 
+  /**
+   * Aplicativo fechado de vez (arrastado da lista de recentes): o registro para, mas a participação e o aparelho
+   * continuam valendo. Ao abrir o aplicativo de novo, a página retoma o registro sozinha.
+   */
+  void suspender() { p.edit().putBoolean("rastreando", false).commit(); }
+
   /** Fim da participação: o segredo é apagado (o servidor também não o aceita mais). */
   void encerrar(String motivo) {
     p.edit().putBoolean("rastreando", false).remove("segredo").remove("dispositivo").putString("fim", motivo).commit();

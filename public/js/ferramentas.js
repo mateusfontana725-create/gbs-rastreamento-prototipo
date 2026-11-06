@@ -614,13 +614,17 @@
           } catch (e) { c.falhas++; }
         }
       }
+      // Cada linha pode ser vinculada a uma pessoa (ou ao grupo dela): a trilha passa a ser "dessa pessoa" na operação.
+      var vinculos = d.linhas.length ? await escolherVinculoTrilhas(novos[k].nome, d.linhas) : {};
       for (var m = 0; m < d.linhas.length && m < 200; m++) {
         var l = d.linhas[m];
         var pts = window.Rotas.simplificar(l.pts, 1, 2000).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; });
         var drone = /drone|dji|uav|vant|voo|flight/i.test((l.nome || '') + ' ' + (l.tipo || '') + ' ' + novos[k].nome);
         try {
           await P.enviarTrilhaImportada({ nome: String(l.nome || 'Trilha importada').slice(0, 80), estado: l.fim ? 'percorrida' : 'planejada', percorrida_em: l.fim || null,
-            pontos: pts, meio: drone ? 'drone' : 'equipe', cor: l.cor || novos[k].dados.cor || null, observacoes: ('Importada de ' + novos[k].nome).slice(0, 1000) });
+            pontos: pts, meio: drone ? 'drone' : 'equipe', cor: l.cor || novos[k].dados.cor || null, observacoes: ('Importada de ' + novos[k].nome).slice(0, 1000),
+            participante_id: vinculos[m] && vinculos[m].indexOf('p:') === 0 ? vinculos[m].slice(2) : null,
+            grupo_id: vinculos[m] && vinculos[m].indexOf('g:') === 0 ? vinculos[m].slice(2) : null });
           c.trilhas++;
         } catch (e) { c.falhas++; }
       }
@@ -636,6 +640,55 @@
     if (ja.length) texto += ' (' + ja.join(', ') + ', não duplicados.)';
     if (c.falhas) texto += ' ' + c.falhas + ' item(ns) não couberam.';
     return { texto: texto, falhas: c.falhas };
+  }
+
+  // Antes de enviar as linhas do arquivo para a operação: vincular cada trilha a um participante (ou ao grupo dele).
+  // Devolve { índice da linha: 'p:<id>' | 'g:<id>' }; sem vínculo (ou sem ninguém na operação) devolve {}.
+  function escolherVinculoTrilhas(nomeArquivo, linhas) {
+    var opcoes = P.opcoesVinculoTrilha ? P.opcoesVinculoTrilha() : [];
+    if (!opcoes.length) return Promise.resolve({});
+    return new Promise(function (resolve) {
+      function seletor(id) {
+        var sel = UI.el('select', { classe: 'campo', id: id }, [UI.el('option', { value: '', texto: '— sem vínculo —' })]);
+        opcoes.forEach(function (g) {
+          sel.appendChild(UI.el('optgroup', { label: g.grupo }, g.itens.map(function (it) { return UI.el('option', { value: it.valor, texto: it.texto }); })));
+        });
+        return sel;
+      }
+      var mostradas = linhas.slice(0, 30);
+      var geral = seletor('vinculo-geral');
+      var seletores = mostradas.map(function (l, i) { return seletor('vinculo-' + i); });
+      geral.addEventListener('change', function () { seletores.forEach(function (s) { s.value = geral.value; }); });
+      var feito = false;
+      function concluir(vincular) {
+        if (feito) return;
+        feito = true;
+        var r = {};
+        if (vincular) {
+          linhas.forEach(function (l, i) {
+            var v = i < seletores.length ? seletores[i].value : geral.value;
+            if (v) r[i] = v;
+          });
+        }
+        fechar(true);
+        resolve(r);
+      }
+      var corpo = UI.el('div', { classe: 'form-padrao' }, [
+        UI.el('h2', { id: 'modal-titulo', texto: 'De quem é a trilha?' }),
+        UI.dica('Vincule a trilha importada a um participante, ou a alguém de um grupo que se dividiu. Ela aparece na ficha e no mapa como dessa pessoa. Dá para mudar depois em "Editar dados".'),
+        UI.el('p', { classe: 'muted', texto: nomeArquivo + ' · ' + linhas.length + ' trilha(s)' }),
+        UI.campo(linhas.length > 1 ? 'Vincular todas a' : 'Vincular a', geral, { para: 'vinculo-geral' }),
+        linhas.length > 1 ? UI.secao('Ou escolha uma a uma', mostradas.map(function (l, i) {
+          return UI.campo(String(l.nome || 'Trilha ' + (i + 1)).slice(0, 60) + ' (' + window.Rotas.formatarDistancia(comprimento(l.pts)) + ')', seletores[i], { para: 'vinculo-' + i });
+        })) : null,
+        linhas.length > mostradas.length ? UI.el('small', { classe: 'muted', texto: 'As demais ' + (linhas.length - mostradas.length) + ' trilhas seguem a escolha de "Vincular todas a".' }) : null,
+        UI.rodape([
+          UI.el('button', { classe: 'btn', type: 'button', id: 'vinculo-sem', texto: 'Importar sem vincular', onclick: function () { concluir(false); } }),
+          UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'vinculo-ok', texto: 'Importar e vincular', onclick: function () { concluir(true); } }),
+        ]),
+      ]);
+      var fechar = UI.abrirModal(corpo, { fecharNoFundo: false, aoFechar: function () { if (!feito) { feito = true; resolve({}); } } });
+    });
   }
 
   // Arrastar um arquivo do computador para o mapa importa na hora.

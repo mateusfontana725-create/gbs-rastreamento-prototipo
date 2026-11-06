@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -2818,5 +2818,43 @@ chk(reaberto.concluido_em === null && reaberto.concluido_por_nome === null, 'rea
 await rpc(resp1, 'encerrar_operacao', { p_operacao: opPC.id });
 chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'marcar_ponto_concluido', { p_operacao: opPC.id, p_id: pontoPC.id, p_concluido: true }))), 'operação encerrada: o concluído não muda');
 
-console.log('\nMigrações 007–064 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Mapa do participante (migração 065) ---
+console.log('\nMapa do participante: público e privado, áreas proibidas e trilhas da equipe');
+const opM = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP MAPA PARTICIPANTE', p_retencao_horas: 0 });
+const anM1 = await usuario(null, true), anM2 = await usuario(null, true);
+const pm1 = await rpc(anM1, 'ingressar', { p_token: opM.token_civil, p_nome: 'Paulo', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+const pm2 = await rpc(anM2, 'ingressar', { p_token: opM.token_civil, p_nome: 'Rita', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+const mkSetor = (d) => rpc(resp1, 'salvar_setor', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify(Object.assign({ forma: 'circulo', centro_lat: -25.43, centro_lng: -49.27, raio_m: 200 }, d)) });
+const sPub = await mkSetor({ nome: 'Público', visibilidade: 'publico' });
+const sPriv = await mkSetor({ nome: 'Privado de ninguém' });
+const sDele = await mkSetor({ nome: 'Atribuído ao Paulo', participante_id: pm1.participante_id });
+chk(sPub.visibilidade === 'publico' && sPriv.visibilidade === null, 'setor guarda a visibilidade (vazio = privado)', [sPub.visibilidade, sPriv.visibilidade]);
+chk(/dados_invalidos/.test(await erroDe(mkSetor({ nome: 'X', visibilidade: 'talvez' }))), 'visibilidade inválida é recusada');
+const m1 = await rpc(anM1, 'mapa_do_participante', { p_participante: pm1.participante_id });
+const m2 = await rpc(anM2, 'mapa_do_participante', { p_participante: pm2.participante_id });
+chk(m1.setores.map((x) => x.nome).sort().join() === 'Atribuído ao Paulo,Público', 'participante vê o setor público e o atribuído a ele (não o privado dos outros)', m1.setores.map((x) => x.nome));
+chk(m1.setores.find((x) => x.nome === 'Atribuído ao Paulo').meu === true && m1.setores.find((x) => x.nome === 'Público').meu === false, 'só o atribuído é "meu"');
+chk(m2.setores.length === 1 && m2.setores[0].nome === 'Público', 'outro participante vê só o público', m2.setores.map((x) => x.nome));
+const mkPonto = (d) => rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify(Object.assign({ lat: -25.43, lng: -49.27 }, d)) });
+const ptRisco = await mkPonto({ categoria: 'RISCO', titulo: 'Risco (padrão público)' });
+const ptPriv = await mkPonto({ categoria: 'VESTIGIO', titulo: 'Vestígio privado' });
+const ptPub = await mkPonto({ categoria: 'VESTIGIO', titulo: 'Vestígio público', visibilidade: 'publico' });
+const ptEnv = await mkPonto({ categoria: 'VESTIGIO', titulo: 'Vestígio enviado ao Paulo' });
+await db.query(`insert into public.destinos (operacao_id, participante_id, nome, lat, lng, ponto_id, enviado_por_nome) values ($1, $2, 'Vestígio enviado ao Paulo', -25.43, -49.27, $3, 'Sgt Um')`, [opM.id, pm1.participante_id, ptEnv.id]);
+const m1b = await rpc(anM1, 'mapa_do_participante', { p_participante: pm1.participante_id });
+const m2b = await rpc(anM2, 'mapa_do_participante', { p_participante: pm2.participante_id });
+chk(m1b.pontos.map((x) => x.titulo).sort().join('|') === 'Risco (padrão público)|Vestígio enviado ao Paulo|Vestígio público', 'participante vê pontos públicos, o risco padrão e o que recebeu', m1b.pontos.map((x) => x.titulo));
+chk(m2b.pontos.map((x) => x.titulo).sort().join('|') === 'Risco (padrão público)|Vestígio público', 'outro participante não vê o ponto privado enviado ao Paulo', m2b.pontos.map((x) => x.titulo));
+await rpc(resp1, 'salvar_area_proibida', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: 'Pedreira', pontos: [[-25.40, -49.30], [-25.40, -49.28], [-25.42, -49.28]], motivo: 'Desabamento' }) });
+const m1c = await rpc(anM1, 'mapa_do_participante', { p_participante: pm1.participante_id });
+chk(m1c.areas_proibidas.length === 1 && m1c.areas_proibidas[0].nome === 'Pedreira', 'todos os participantes veem as áreas proibidas', m1c.areas_proibidas);
+const vez = (n) => Array.from({ length: n }, (_, i) => `('${opM.id}', '${pm2.participante_id}', gen_random_uuid(), ${-25.43 + i * 0.0002}, -49.27, 8, now() - interval '${60 - i} minutes', now())`).join(',');
+await db.query(`insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em, recebido_em) values ${vez(10)}`);
+await db.query(`insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em, recebido_em) values ('${opM.id}', '${pm1.participante_id}', gen_random_uuid(), -25.5, -49.2, 8, now(), now()), ('${opM.id}', '${pm1.participante_id}', gen_random_uuid(), -25.51, -49.2, 8, now(), now())`);
+const tr1 = await rpc(anM1, 'trilhas_da_equipe', { p_participante: pm1.participante_id });
+chk(tr1.length === 1 && tr1[0].pontos.length === 10 && tr1[0].tipo === 'civil', 'participante vê a trilha dos outros, sem a própria', tr1.map((x) => x.pontos.length));
+chk(!JSON.stringify(tr1).includes('Rita') && !JSON.stringify(tr1).includes(pm2.participante_id), 'a trilha da equipe não traz nome nem identificador');
+chk(/participante_invalido/.test(await erroDe(rpc(anM2, 'trilhas_da_equipe', { p_participante: pm1.participante_id }))), 'não dá para pedir as trilhas como se fosse outro participante');
+
+console.log('\nMigrações 007–065 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -132,10 +132,25 @@
     return null;
   }
 
+  // Link público do painel do comando (migração 069): o servidor entrega um "documento" no mesmo formato, só com o
+  // que o mapa precisa (doc.publico = true). Nele, o que NÃO veio (mensagens, fotos, diário...) responde vazio em vez
+  // de ir ao servidor (quem abre o link não tem login), e os catálogos sem operacao_id (tipos de ponto) vêm do documento.
+  function documentoPublico(reg) {
+    var ids = Object.keys(reg);
+    for (var i = 0; i < ids.length; i++) if (reg[ids[i]].doc.publico) return reg[ids[i]];
+    return null;
+  }
+  var ESCRITAS = ['insert', 'update', 'upsert', 'delete'];
+
   // Consulta: resultado do arquivo, ou null (vai ao servidor)
   function resolver(reg, tabela, passos) {
+    var pub = documentoPublico(reg);
+    if (pub && passos.some(function (p) { return ESCRITAS.indexOf(p[0]) !== -1; })) {
+      return { data: null, count: null, status: 403, statusText: 'Forbidden', error: { message: 'somente_leitura', code: 'somente_leitura' } };
+    }
     var e = escolher(reg, tabela, passos);
-    return e ? aplicar(e.doc.tabelas[tabela], passos) : null;
+    if (e) return aplicar(e.doc.tabelas[tabela], passos);
+    return pub ? aplicar(pub.doc.tabelas[tabela] || [], passos) : null;
   }
 
   function clonar(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
@@ -179,6 +194,33 @@
     ids.slice(MAXIMO).forEach(function (k) { delete registro[k]; });
     return doc;
   }
+  // Atualização do documento público (a cada poucos segundos): posições novas entram no fim (sem repetir ids) e as
+  // demais tabelas são trocadas pelas atuais. A operação mantém o status local (somente leitura) e guarda o real.
+  function mesclarPublico(opId, novo) {
+    var e = registro[String(opId)];
+    if (!e || !e.doc.publico) throw new Error('não há documento público desta operação');
+    if (!novo || !novo.tabelas || !novo.operacao || String(novo.operacao.id) !== String(opId)) throw new Error('documento público inválido');
+    var tab = e.doc.tabelas;
+    Object.keys(novo.tabelas).forEach(function (k) {
+      if (k === 'operacoes') return;
+      if (k === 'posicoes' && novo.incremental) {
+        var vistos = {};
+        (tab.posicoes || []).forEach(function (r) { vistos[r.id] = true; });
+        tab.posicoes = tab.posicoes || [];
+        novo.tabelas.posicoes.forEach(function (r) { if (!vistos[r.id]) { vistos[r.id] = true; tab.posicoes.push(r); } });
+      } else {
+        tab[k] = novo.tabelas[k];
+      }
+    });
+    e.doc.agora = novo.agora;
+    e.doc.nomes = novo.nomes;
+    if (novo.posicoes_ate != null) e.doc.posicoes_ate = novo.posicoes_ate;
+    var op = (tab.operacoes && tab.operacoes[0]) || {};
+    Object.assign(op, novo.operacao, { _statusReal: novo.operacao.status, status: 'encerrada' });
+    tab.operacoes = [op];
+    return e.doc;
+  }
+
   function atualizarExtras(opId, extras) { var e = registro[String(opId)]; if (e) Object.assign(e.extras, extras || {}); }
 
   async function hexSha256(buf) {
@@ -225,6 +267,8 @@
     consulta: function (tabela, passos) { return resolver(registro, tabela, passos); },
     rpc: function (nome, args) { return resolverRpc(registro, nome, args); },
     registrar: registrar,
+    mesclarPublico: mesclarPublico,
+    documentoPublico: function () { var e = documentoPublico(registro); return e ? e.doc : null; },
     carregar: carregar,
     ativo: function (opId) { return Boolean(registro[String(opId)]); },
     esquecer: function (opId) { delete registro[String(opId)]; },

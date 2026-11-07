@@ -15,7 +15,7 @@
   var C = window.Comunicacao;
   var UI = window.UI;
 
-  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', outras: 'Outras' };
+  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', sarp: 'SARP', brec: 'BREC', outras: 'Outras' };
   var BUCKET = 'vitimas';
 
   // Data e hora do formulário (datetime-local) → ISO; vazio ou inválido → ''

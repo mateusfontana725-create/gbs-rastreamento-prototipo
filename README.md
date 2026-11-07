@@ -352,6 +352,44 @@ O mapa da página do participante mostra, além dos bombeiros:
   a operação aberta** (o link público e a operação arquivada não têm o descanso). **Antes de usar, rode `068_zonas_perigo_descanso.sql`
   no Supabase** (sem ela os alertas de zona e o descanso não existem; a fadiga aparece, mas sem zerar nos descansos).
 
+
+### Aplicativos e acesso: código da operação, pedidos de acesso, tela do participante e link público do painel (migração 069)
+
+- **Código da operação**: toda operação ativa ganha sozinha um código de 6 letras e números, sem os parecidos (0/O, 1/I), por exemplo
+  `K7M 2PQ`. Fica em **Convidar → 🔑 Código** (em letras grandes, para ditar pelo rádio), com **Copiar**, **Trocar código** (o anterior
+  para de valer) e **Desligar/Ligar entrada por código**. O link e o QR Code continuam entrando direto, como antes; o código é o
+  caminho **com aprovação**. Quem erra o código 8 vezes em 10 minutos fica barrado por 10 minutos.
+- **Entrar com o código** (participante que já tem o aplicativo, ou a página aberta sem link): a tela pede o código, o nome, o celular e
+  o CPF (opcional) e envia o **pedido**. A tela fica "Aguardando os bombeiros" (pode fechar e abrir de novo: o pedido continua) e segue
+  sozinha quando o responsável responder. Aceito: abre a tela de sempre da operação, já com os dados preenchidos, e a localização só
+  começa depois do toque em **COMEÇAR**. Recusado: volta à tela do código com a explicação. Dá para **cancelar** o pedido.
+  No aplicativo Android com o servidor fixado na compilação (variável `GBS_ORIGEM`), abrir o aplicativo sem operação já mostra essa tela
+  (antes mostrava "Abra pela página da busca"); a operação aceita fica guardada no aplicativo.
+- **Pedidos de acesso no painel**: quando alguém pede, aparece o aviso e o botão **🔑 N pedido(s) de acesso** no topo (e o item
+  **Ferramentas → Código e pedidos de acesso**). Cada pedido mostra nome, celular (toque para ligar) e CPF, com **Aceitar como civil**,
+  **Aceitar como bombeiro** e **Recusar**. Aceito não volta atrás (para tirar a pessoa, remova o participante); recusado pode ser aceito
+  depois. Cada decisão entra no **diário**.
+- **Download do aplicativo**: no Android, logo depois do cadastro pelo link (ao entrar na operação), o passo a passo **"Baixe o aplicativo
+  para ajudar melhor"** abre sozinho, uma vez por participação, com **Agora não**. O botão **📱 Baixar aplicativo** continua no **MENU**.
+- **Tela do participante voltada para o mapa** (navegador e aplicativo): durante a busca o **mapa ocupa a tela inteira**. Em cima, o estado
+  ("Os bombeiros estão vendo você", sem internet etc.) e os avisos (área de risco, destino). À direita, **📍 onde estou**, **🗺 camadas** e a
+  bússola. Embaixo, uma barra com **SOS** (vermelho, grande, pede confirmação), **📷 FOTO** (grande, abre a câmera direto; a prévia e a
+  localização seguem como antes), **＋ REGISTRAR** (mensagem, algo encontrado, foto da galeria) e **☰ MENU** (quem é você, suas fotos,
+  legenda do mapa, aplicativo, avisos, "Quero sair da busca"). A navegação até um destino vira um cartão sobre o mapa: fechado mostra a
+  distância e a direção (e "Busca no setor concluída"); tocar no título abre a rota, os modos e "Encerrar navegação".
+- **Tipos de operação SARP e BREC**: na **Natureza** do cadastro, além de busca aquática e terrestre, **SARP – Aeronave remotamente
+  pilotada** e **BREC – Busca e resgate em estruturas colapsadas** (tipos `sarp` e `brec`). Para acrescentar outro tipo: `NATUREZAS` e
+  `tipoDaNatureza` em `public/js/ipo.js`, o banco (`operacoes_tipo_check` e `aplicar_cadastro_operacao`) e os rótulos de `cadastro.js`,
+  `dashboard.js`, `sci-modo.js` e `relatorio-pdf.js`.
+- **Link público do painel do comando**: **Ferramentas → 🔗 Link público do painel** cria um link (`comando.html?p=…`) para outras pessoas
+  acompanharem o mapa **ao vivo, sem login e sem poder alterar nada**: pessoas e estados, trilhas, setores, pontos, grupos, áreas, fadiga,
+  régua, medir, ir para coordenada, camadas e o dashboard. Atualiza sozinho a cada 10 s (só o que é novo). **Nunca** aparecem CPF,
+  celular, mensagens, fotos, diário, vítimas (nem o ponto "vítima encontrada"), a descrição, o endereço nem quem registrou. Os **nomes das
+  pessoas** só aparecem se o responsável marcar "Mostrar os nomes" (senão "Participante 1", "Participante 2"…). **Trocar link** invalida o
+  anterior; **Desligar** tira o acesso; tudo entra no diário. A proteção está no servidor (o link só lê, por `comando_publico`) e também
+  no navegador (nenhuma escrita sai da página aberta pelo link).
+- **Antes de usar, rode `069_codigo_acesso_pedidos_publico_comando.sql` no Supabase.**
+
 ### Deslocamento de grupos, alertas e controle de retorno
 
 - **Enviar destino → Grupo** (Ferramentas → Enviar destino, "Enviar o centro como destino" num setor, ou
@@ -2372,6 +2410,15 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 48d | Ficar mais de 30 min na base e voltar a campo | a fadiga volta a verde e o tempo de busca recomeça do fim do descanso |
 | 48e | Equipe andando 2 h, 4 h e 8 km, 15 km (ou grupo com média alta) | o ponto da lista passa de verde a amarelo e a vermelho; ficha e dashboard mostram o motivo (tempo, km, grupo) |
 | 48f | Abrir o **Dashboard** da operação ativa | indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso" com pessoas e grupos |
+| 49a | No Android, abrir o link de civis, preencher e tocar em COMEÇAR | depois de permitir a localização, abre sozinho "Baixe o aplicativo para ajudar melhor"; "Agora não" fecha; o botão "Baixar aplicativo" continua no MENU; ao recarregar não abre de novo |
+| 49b | No aplicativo instalado e sem operação, abrir o aplicativo | aparece "Entrar na busca com o código" (servidor fixado na compilação) |
+| 49c | Digitar o código (minúsculas ou com espaço), nome e celular e pedir | tela "Aguardando os bombeiros"; no painel aparece o aviso e o botão 🔑 1 |
+| 49d | No painel, **Aceitar como civil** (ou bombeiro); em outro pedido, **Recusar** | o celular aceito segue sozinho para a tela da operação já preenchida; o recusado volta ao código com a explicação; as decisões vão ao diário |
+| 49e | Fechar o aplicativo com o pedido esperando e abrir de novo | continua esperando o mesmo pedido |
+| 49f | **Trocar código** e **Desligar entrada por código**; tentar o código antigo e o desligado | os dois são recusados ("não existe ou está desligado"); errar 8 vezes barra por 10 minutos |
+| 49g | Durante a busca, olhar a tela do participante | mapa em tela cheia; SOS e FOTO grandes embaixo; FOTO abre a câmera; MENU tem fotos, legenda, aplicativo e "Quero sair da busca" |
+| 49h | Criar operação com natureza SARP e outra BREC | o cabeçalho, a lista e os relatórios mostram o tipo |
+| 49i | **Ferramentas → Link público do painel**, criar e abrir o link numa janela anônima (sem login) | mapa ao vivo, nomes como "Participante N", sem botões de edição, mensagens, convite, Ferramentas só com visualização; marcar "Mostrar os nomes" mostra os nomes; trocar/desligar faz o link antigo mostrar "não funciona mais" |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

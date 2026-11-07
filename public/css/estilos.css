@@ -2486,3 +2486,139 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 .popup-ponto p { margin: 4px 0 8px; }
 .popup-ponto .btn { width: 100%; }
 .acao-sos { background: #b91c1c; border-color: #ef4444; color: #fff; }
+
+/* =====================================================================
+ * PARTICIPANTE — O MAPA É A TELA (revisão de novembro/2026)
+ * Durante a busca o mapa ocupa a tela inteira, como nos aplicativos de trilha. Sobre ele: o estado (em cima), os
+ * botões de mapa (à direita) e a barra de baixo com SOS e FOTO grandes, REGISTRAR e MENU. O resto (fotos enviadas,
+ * legenda, sair da busca, aplicativo) fica na folha do MENU. Vale para o navegador e para o aplicativo Android.
+ * ===================================================================== */
+.civil-em-rastreio { overflow: hidden; }
+.civil-em-rastreio .pagina-civil { height: 100vh; height: 100dvh; min-height: 0; }
+.civil-em-rastreio .civil-topo { display: none; }
+.civil-em-rastreio .civil-conteudo { width: 100%; max-width: none; margin: 0; padding: 0; }
+.civil-em-rastreio #tela-rastreio {
+  --barra-h: 96px;
+  position: fixed; inset: 0; z-index: 1; background: #0e1318; overflow: hidden;
+}
+.civil-em-rastreio #tela-rastreio .mapa-civil-caixa { position: absolute; inset: 0; margin: 0; border: 0; border-radius: 0; }
+.civil-em-rastreio #tela-rastreio #mapa-civil { position: absolute; inset: 0; height: auto !important; min-height: 0 !important; max-height: none !important; }
+/* o mapa já ocupa tudo: ampliar e fechar mapa não fazem falta */
+.civil-em-rastreio #tela-rastreio .btn-ampliar-mapa, .civil-em-rastreio #tela-rastreio .btn-fechar-mapa { display: none !important; }
+/* o zoom por botões só no computador (no celular é com os dedos); a atribuição do mapa fica acima da barra */
+.civil-em-rastreio #mapa-civil .leaflet-bottom.leaflet-right { bottom: calc(var(--barra-h) + env(safe-area-inset-bottom)); }
+.civil-em-rastreio #mapa-civil .leaflet-top.leaflet-left { top: auto; bottom: calc(var(--barra-h) + 30px + env(safe-area-inset-bottom)); }
+@media (pointer: coarse) { .civil-em-rastreio #mapa-civil .leaflet-control-zoom { display: none; } }
+
+/* faixa de cima: estado e avisos */
+.civil-em-rastreio .rastreio-topo {
+  position: absolute; z-index: 1200; top: calc(8px + env(safe-area-inset-top)); left: 8px; right: 66px;
+  display: flex; flex-direction: column; gap: 6px; max-height: 46%; overflow: hidden; pointer-events: none;
+}
+.civil-em-rastreio .rastreio-topo > * { pointer-events: auto; margin: 0; }
+.civil-em-rastreio .rastreio-topo .status-civil { margin: 0; padding: 7px 12px; border-radius: 14px; box-shadow: 0 3px 12px rgba(0, 0, 0, .45); backdrop-filter: blur(4px); }
+.civil-em-rastreio .rastreio-topo .status-civil[data-estado="ok"] #status-sub { display: none; }
+.civil-em-rastreio .rastreio-topo .status-textos strong { font-size: .92rem; }
+.civil-em-rastreio .rastreio-topo .status-textos span { font-size: .78rem; }
+.civil-em-rastreio .rastreio-topo .aviso-destino,
+.civil-em-rastreio .rastreio-topo .aviso-fundo { padding: 7px 10px; font-size: .84rem; box-shadow: 0 3px 12px rgba(0, 0, 0, .4); }
+.civil-em-rastreio .rastreio-topo .alerta-risco { padding: 10px 12px; font-size: .95rem; box-shadow: 0 3px 14px rgba(0, 0, 0, .55); }
+.civil-em-rastreio .rastreio-topo .fila-estado { padding: 6px 10px; border-radius: 10px; background: rgba(6, 8, 10, .85); font-size: .76rem; }
+.civil-em-rastreio .rastreio-topo .mapa-offline-estado { padding: 3px 9px; border-radius: 8px; background: rgba(6, 8, 10, .75); font-size: .72rem; align-self: flex-start; }
+
+/* botões de mapa, à direita: onde estou, camadas, bússola */
+.civil-em-rastreio #tela-rastreio .btn-onde-estou,
+.civil-em-rastreio #tela-rastreio .btn-camadas {
+  right: 8px; width: 50px; height: 50px; min-height: 50px; padding: 0; border-radius: 50%; font-size: 0; display: grid; place-items: center;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .5);
+}
+.civil-em-rastreio #tela-rastreio .btn-onde-estou { top: calc(8px + env(safe-area-inset-top)); }
+.civil-em-rastreio #tela-rastreio .btn-onde-estou::before { content: "📍"; font-size: 1.5rem; line-height: 1; }
+.civil-em-rastreio #tela-rastreio .btn-camadas { top: calc(66px + env(safe-area-inset-top)); }
+.civil-em-rastreio #tela-rastreio .btn-camadas::before { content: "🗺"; font-size: 1.4rem; line-height: 1; }
+.civil-em-rastreio #tela-rastreio .camadas-civil { z-index: 1350; top: calc(66px + env(safe-area-inset-top)); right: 66px; max-height: calc(100% - var(--barra-h) - 90px); }
+/* os botões de mapa ficam acima da faixa de avisos (que pode crescer com um alerta) */
+.civil-em-rastreio #tela-rastreio .btn-onde-estou, .civil-em-rastreio #tela-rastreio .btn-camadas, .civil-em-rastreio #tela-rastreio .bussola-civil { z-index: 1210; }
+/* bússola: só o disco e a direção, em coluna estreita, para não cobrir o estado nem o mapa */
+.civil-em-rastreio #tela-rastreio .bussola-civil {
+  top: calc(124px + env(safe-area-inset-top)); bottom: auto; right: 8px; flex-direction: column; gap: 2px; width: 74px; padding: 2px 4px 6px;
+  border-radius: 16px; box-shadow: 0 3px 12px rgba(0, 0, 0, .5);
+}
+.civil-em-rastreio #tela-rastreio .bussola-info { align-items: center; text-align: center; }
+.civil-em-rastreio #tela-rastreio .bussola-info strong { font-size: .68rem; white-space: normal; line-height: 1.15; }
+.civil-em-rastreio #tela-rastreio .bussola-info .btn { min-height: 26px; padding: 0 6px; font-size: .62rem; white-space: normal; line-height: 1.1; }
+
+/* barra de baixo */
+.civil-em-rastreio #tela-rastreio .acoes-civil {
+  position: absolute; z-index: 1300; left: 0; right: 0; bottom: 0;
+  display: grid; grid-template-columns: 1.2fr 1.2fr 1fr .85fr; gap: 8px; align-items: end;
+  padding: 18px 10px calc(10px + env(safe-area-inset-bottom)); pointer-events: none;
+  background: linear-gradient(to top, rgba(6, 8, 10, .78), rgba(6, 8, 10, 0));
+}
+.civil-em-rastreio #tela-rastreio .acao {
+  pointer-events: auto; position: relative; min-height: 68px; padding: 6px 4px; gap: 2px; flex-direction: column; border-radius: 16px;
+  font-size: .72rem; font-weight: 800; letter-spacing: .06em; border-width: 2px; box-shadow: 0 4px 14px rgba(0, 0, 0, .55);
+  background: #1f2832; border-color: #3d4a57; color: #e8edf2;
+}
+.civil-em-rastreio #tela-rastreio .acao-icone { font-size: 1.4rem; font-weight: 900; }
+.civil-em-rastreio #tela-rastreio .acao-sos {
+  grid-column: auto; min-height: 78px; background: #d62828; border-color: #ff8a8a; color: #fff; font-size: 1rem; letter-spacing: .1em;
+  animation: sos-anel 2.6s ease-in-out infinite;
+}
+.civil-em-rastreio #tela-rastreio .acao-sos .acao-icone { font-size: 1.9rem; }
+.civil-em-rastreio #tela-rastreio .acao-foto {
+  min-height: 78px; background: #f8fafc; border-color: #ffffff; color: #0a0d10; font-size: .95rem; letter-spacing: .1em;
+}
+.civil-em-rastreio #tela-rastreio .acao-foto .acao-icone { font-size: 1.9rem; }
+.civil-em-rastreio #tela-rastreio .acao-registrar { flex-direction: column; }
+.civil-em-rastreio #tela-rastreio .acao-registrar.tem-novas { box-shadow: 0 0 0 3px rgba(6, 182, 212, .6), 0 4px 14px rgba(0, 0, 0, .55); }
+.civil-em-rastreio #tela-rastreio .acao-contador { top: -6px; right: -4px; min-width: 22px; height: 22px; font-size: .75rem; border-radius: 11px; }
+.civil-em-rastreio #tela-rastreio .acao-menu.tem-aviso::after { content: ""; position: absolute; top: 6px; right: 8px; width: 11px; height: 11px; border-radius: 50%; background: var(--alerta); border: 2px solid #1f2832; }
+@keyframes sos-anel { 50% { box-shadow: 0 0 0 7px rgba(214, 40, 40, .28), 0 4px 14px rgba(0, 0, 0, .55); } }
+@media (prefers-reduced-motion: reduce) { .civil-em-rastreio #tela-rastreio .acao-sos { animation: none; } }
+@media (max-width: 340px) { .civil-em-rastreio #tela-rastreio .acoes-civil { gap: 5px; padding-left: 6px; padding-right: 6px; } .civil-em-rastreio #tela-rastreio .acao { font-size: .62rem; } }
+@media (min-width: 700px) {
+  .civil-em-rastreio #tela-rastreio .acoes-civil { left: 50%; right: auto; width: min(560px, 100%); transform: translateX(-50%); }
+}
+
+/* navegação até o destino: cartão sobre o mapa, fechado por padrão (toque no título para ver tudo) */
+.civil-em-rastreio #tela-rastreio .navegacao {
+  position: absolute; z-index: 1250; left: 8px; right: 8px; bottom: calc(var(--barra-h) + env(safe-area-inset-bottom) + 8px);
+  margin: 0; max-height: 52%; overflow: auto; border-radius: 16px; background: rgba(18, 23, 28, .96); box-shadow: 0 6px 22px rgba(0, 0, 0, .6);
+}
+.civil-em-rastreio #tela-rastreio .navegacao[hidden] { display: none; }
+.civil-em-rastreio #tela-rastreio .navegacao .nav-topo { cursor: pointer; justify-content: space-between; }
+.civil-em-rastreio #tela-rastreio .navegacao .nav-topo::after { content: "▾"; margin-left: auto; padding-left: 8px; color: var(--texto-3); }
+.civil-em-rastreio #tela-rastreio .navegacao.nav-aberta .nav-topo::after { content: "▴"; }
+.civil-em-rastreio #tela-rastreio .navegacao:not(.nav-aberta) .nav-missao,
+.civil-em-rastreio #tela-rastreio .navegacao:not(.nav-aberta) .nav-modos,
+.civil-em-rastreio #tela-rastreio .navegacao:not(.nav-aberta) .nav-rota-info,
+.civil-em-rastreio #tela-rastreio .navegacao:not(.nav-aberta) .nav-aviso,
+.civil-em-rastreio #tela-rastreio .navegacao:not(.nav-aberta) #nav-rota,
+.civil-em-rastreio #tela-rastreio .navegacao:not(.nav-aberta) #nav-encerrar { display: none; }
+@media (min-width: 700px) {
+  .civil-em-rastreio #tela-rastreio .navegacao { left: 50%; right: auto; width: min(560px, calc(100% - 16px)); transform: translateX(-50%); }
+}
+
+/* menu (folha de baixo) */
+.folha-menu { position: fixed; inset: 0; z-index: 2600; display: flex; align-items: flex-end; justify-content: center; }
+.folha-menu[hidden] { display: none; }
+.folha-fundo { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); }
+.folha-corpo {
+  position: relative; width: min(560px, 100%); max-height: 84%; overflow: auto; padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+  background: var(--superficie); color: var(--texto); border: 2px solid var(--borda-forte); border-bottom: 0; border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, .55);
+}
+.folha-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.folha-cabeca h2 { margin: 0; font-size: 1.1rem; }
+.folha-corpo .quem-sou { margin: 0 0 10px; }
+.folha-legenda { margin: 10px 0; }
+.folha-legenda .legenda-civil { position: static; pointer-events: auto; padding: 8px 10px; border-radius: 10px; background: var(--superficie-2); font-size: .8rem; gap: 6px 14px; }
+.folha-corpo .fotos-civil { margin-top: 8px; }
+.folha-corpo .rodape-civil { margin-top: 12px; padding-top: 10px; }
+
+/* entrar com o código e esperar a resposta */
+.campo-codigo { font-size: 1.9rem; letter-spacing: .24em; text-align: center; text-transform: uppercase; padding: 12px 8px; }
+.espera-acesso { text-align: center; }
+.espera-icone { font-size: 2.6rem; line-height: 1; margin-bottom: 4px; }
+.espera-acesso .btn { margin-top: 8px; }

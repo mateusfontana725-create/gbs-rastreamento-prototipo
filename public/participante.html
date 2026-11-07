@@ -40,6 +40,46 @@
         </div>
       </section>
 
+      <!-- Entrar com o código da operação (quem já tem o aplicativo e abriu sem link) -->
+      <section id="tela-codigo" hidden>
+        <form id="form-codigo" class="cartao secao" novalidate>
+          <h2>Entrar na busca com o código</h2>
+          <p class="muted">Peça aos bombeiros o código da operação (6 letras e números). Eles vão ver o seu pedido e liberar a sua entrada.</p>
+          <div class="grupo">
+            <label class="rotulo" for="cod-codigo">Código da operação</label>
+            <input id="cod-codigo" class="campo campo-codigo mono" type="text" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC 123" aria-describedby="cod-ajuda">
+          </div>
+          <div class="grupo">
+            <label class="rotulo" for="cod-nome">Seu nome ou indicativo</label>
+            <input id="cod-nome" class="campo" type="text" maxlength="40" autocomplete="name" autocapitalize="words" placeholder="Ex.: João Silva">
+          </div>
+          <div class="grupo-duplo">
+            <div class="grupo">
+              <label class="rotulo" for="cod-cpf">CPF <span class="opcional">(opcional)</span></label>
+              <input id="cod-cpf" class="campo mono" type="text" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="000.000.000-00">
+            </div>
+            <div class="grupo">
+              <label class="rotulo" for="cod-tel">Celular com DDD</label>
+              <input id="cod-tel" class="campo mono" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="15" placeholder="(00) 00000-0000">
+            </div>
+          </div>
+          <button class="btn btn-primario btn-gigante" type="submit" id="btn-pedir">PEDIR PARA ENTRAR</button>
+          <p class="erro-form" id="cod-erro" role="alert" hidden></p>
+          <p class="ajuda" id="cod-ajuda">Tem o link ou o QR Code da busca? Abra-o direto: não precisa de código.</p>
+        </form>
+      </section>
+
+      <!-- Pedido enviado: espera a resposta dos bombeiros -->
+      <section id="tela-espera" hidden>
+        <div class="cartao secao espera-acesso" role="status" aria-live="polite">
+          <div class="espera-icone" aria-hidden="true">⏳</div>
+          <h2>Aguardando os bombeiros</h2>
+          <p>Seu pedido para entrar em <strong id="esp-operacao"></strong> foi enviado. Assim que o responsável aceitar, esta tela segue sozinha.</p>
+          <p class="muted" id="esp-estado">Conferindo a resposta…</p>
+          <button class="btn" type="button" id="btn-cancelar-pedido">Cancelar o pedido</button>
+        </div>
+      </section>
+
       <!-- Tela inicial -->
       <section id="tela-inicio" hidden>
         <div class="cartao op-destaque">
@@ -100,8 +140,41 @@
         </section>
       </section>
 
-      <!-- Rastreamento: tela simples, com o essencial -->
+      <!-- Rastreamento: o mapa é a tela. As outras funções ficam nos botões de baixo e no menu. -->
       <section id="tela-rastreio" hidden>
+        <!-- Mapa em tela cheia: você, a equipe, setores, pontos e o destino -->
+        <div class="mapa-civil-caixa">
+          <div id="mapa-civil" role="region" aria-label="Mapa com a sua posição e a dos bombeiros"></div>
+          <button class="btn btn-pequeno btn-onde-estou" type="button" id="btn-onde-estou" aria-label="Mostrar onde estou no mapa">📍 Onde estou</button>
+          <button class="btn btn-pequeno btn-ampliar-mapa" type="button" id="btn-ampliar-mapa" aria-label="Ampliar o mapa" aria-expanded="false" aria-controls="mapa-civil" title="Ampliar o mapa">⛶</button>
+          <button class="btn btn-pequeno btn-fechar-mapa" type="button" id="btn-fechar-mapa" hidden>✕ Fechar mapa</button>
+          <button class="btn btn-pequeno btn-camadas" type="button" id="btn-camadas" aria-haspopup="true" aria-expanded="false" aria-controls="camadas-civil" title="Camadas do mapa" aria-label="Camadas do mapa">🗺</button>
+          <div class="camadas-civil" id="camadas-civil" hidden role="group" aria-label="Camadas do mapa"></div>
+          <!-- Bússola: para onde o aparelho está apontado (sensor do celular; ver js/participante.js) -->
+          <div class="bussola-civil" id="bussola-civil" hidden role="status" aria-live="off">
+            <div class="bussola-disco">
+              <div class="bussola-rosa" id="bussola-rosa" aria-hidden="true"><span class="bussola-n">N</span></div>
+              <i class="bussola-ponteiro" aria-hidden="true"></i>
+            </div>
+            <div class="bussola-info">
+              <strong id="bussola-direcao">—</strong>
+              <button class="btn btn-pequeno" type="button" id="bussola-ativar" hidden>Ativar bússola</button>
+            </div>
+          </div>
+          <div class="legenda-civil" aria-hidden="true">
+            <span><i class="lg-eu"></i> Você</span>
+            <span><i class="simbolo simbolo-militar"><span>M</span></i> Bombeiro</span>
+            <span><i class="simbolo simbolo-responsavel"><span>R</span></i> Responsável</span>
+            <span class="lg-grupo" hidden id="lg-grupo"><i class="lg-grupo-cor"></i> Seu grupo</span>
+            <span class="lg-destino" hidden id="lg-destino"><i>🧭</i> Destino</span>
+            <span class="lg-rota" hidden id="lg-rota"><i class="lg-linha-rota"></i> Rota</span>
+            <span class="lg-proibida" hidden id="lg-proibida"><i class="lg-proibida-cor"></i> Proibido</span>
+            <span class="lg-trilhas-equipe" hidden id="lg-trilhas-equipe"><i class="lg-trilha-eq"></i> Trilhas da equipe</span>
+          </div>
+        </div>
+
+        <!-- Faixa de cima, sobre o mapa: o estado e os avisos -->
+        <div class="rastreio-topo">
         <div class="status-civil" id="status-civil" data-estado="aguardando" role="status" aria-live="polite">
           <span class="status-icone" aria-hidden="true"></span>
           <div class="status-textos">
@@ -110,13 +183,15 @@
           </div>
           <button class="btn btn-pequeno status-acao" type="button" id="status-acao" hidden>Como resolver</button>
         </div>
-        <p class="quem-sou" id="st-nome"></p>
-        <!-- Pontos pendentes, gravação no aparelho, última sincronização confirmada e falhas (js/fila-estado.js) -->
-        <div class="fila-estado" id="fila-estado" hidden></div>
+          <!-- Pontos pendentes, gravação no aparelho, última sincronização confirmada e falhas (js/fila-estado.js) -->
+          <div class="fila-estado" id="fila-estado" hidden></div>
+          <div class="aviso-fundo" id="aviso-fundo" hidden></div>
+          <p class="aviso-destino" id="aviso-destino" role="status" hidden></p>
+          <p class="alerta-risco" id="alerta-risco" role="alert" hidden></p>
+          <p class="mapa-offline-estado" id="mapa-offline" role="status" hidden></p>
+        </div>
 
-        <div class="aviso-fundo" id="aviso-fundo" hidden></div>
-
-        <!-- Navegação até o destino enviado pelos bombeiros -->
+        <!-- Navegação até o destino enviado pelos bombeiros (cartão sobre o mapa; toque no título para abrir ou fechar os detalhes) -->
         <section class="navegacao" id="navegacao" hidden aria-labelledby="nav-nome">
           <div class="nav-topo"><span class="nav-rotulo">🧭 Ir até</span><strong id="nav-nome"></strong></div>
           <p class="nav-missao" id="nav-missao" hidden></p>
@@ -153,72 +228,59 @@
             <button class="btn btn-saida-nav" type="button" id="nav-encerrar">Encerrar navegação</button>
           </div>
         </section>
-        <p class="aviso-destino" id="aviso-destino" role="status" hidden></p>
-        <p class="alerta-risco" id="alerta-risco" role="alert" hidden></p>
 
-        <!-- Mapa: você e a equipe de bombeiros -->
-        <div class="mapa-civil-caixa">
-          <div id="mapa-civil" role="region" aria-label="Mapa com a sua posição e a dos bombeiros"></div>
-          <button class="btn btn-pequeno btn-onde-estou" type="button" id="btn-onde-estou" aria-label="Mostrar onde estou no mapa">📍 Onde estou</button>
-          <button class="btn btn-pequeno btn-ampliar-mapa" type="button" id="btn-ampliar-mapa" aria-label="Ampliar o mapa" aria-expanded="false" aria-controls="mapa-civil" title="Ampliar o mapa">⛶</button>
-          <button class="btn btn-pequeno btn-fechar-mapa" type="button" id="btn-fechar-mapa" hidden>✕ Fechar mapa</button>
-          <button class="btn btn-pequeno btn-camadas" type="button" id="btn-camadas" aria-haspopup="true" aria-expanded="false" aria-controls="camadas-civil" title="Camadas do mapa" aria-label="Camadas do mapa">🗺</button>
-          <div class="camadas-civil" id="camadas-civil" hidden role="group" aria-label="Camadas do mapa"></div>
-          <!-- Bússola: para onde o aparelho está apontado (sensor do celular; ver js/participante.js) -->
-          <div class="bussola-civil" id="bussola-civil" hidden role="status" aria-live="off">
-            <div class="bussola-disco">
-              <div class="bussola-rosa" id="bussola-rosa" aria-hidden="true"><span class="bussola-n">N</span></div>
-              <i class="bussola-ponteiro" aria-hidden="true"></i>
-            </div>
-            <div class="bussola-info">
-              <strong id="bussola-direcao">—</strong>
-              <button class="btn btn-pequeno" type="button" id="bussola-ativar" hidden>Ativar bússola</button>
-            </div>
-          </div>
-          <div class="legenda-civil" aria-hidden="true">
-            <span><i class="lg-eu"></i> Você</span>
-            <span><i class="simbolo simbolo-militar"><span>M</span></i> Bombeiro</span>
-            <span><i class="simbolo simbolo-responsavel"><span>R</span></i> Responsável</span>
-            <span class="lg-grupo" hidden id="lg-grupo"><i class="lg-grupo-cor"></i> Seu grupo</span>
-            <span class="lg-destino" hidden id="lg-destino"><i>🧭</i> Destino</span>
-            <span class="lg-rota" hidden id="lg-rota"><i class="lg-linha-rota"></i> Rota</span>
-            <span class="lg-proibida" hidden id="lg-proibida"><i class="lg-proibida-cor"></i> Proibido</span>
-            <span class="lg-trilhas-equipe" hidden id="lg-trilhas-equipe"><i class="lg-trilha-eq"></i> Trilhas da equipe</span>
-          </div>
-        </div>
-        <p class="mapa-offline-estado" id="mapa-offline" role="status" hidden></p>
-
-        <!-- Ações principais -->
-        <!-- Um botão só: mensagem, algo encontrado ou foto (as opções abrem em "Registrar informação") -->
-        <div class="acoes-civil">
+        <!-- Barra de baixo: ajuda (SOS), foto, registrar e menu -->
+        <div class="acoes-civil" role="toolbar" aria-label="Ações">
+          <button class="acao acao-sos" type="button" id="btn-sos" aria-haspopup="dialog" aria-label="SOS: preciso de ajuda">
+            <span class="acao-icone" aria-hidden="true">🆘</span>
+            <span class="acao-texto">SOS</span>
+          </button>
+          <!-- Foto direto: abre a câmera; a prévia e a localização seguem o fluxo de sempre -->
+          <label class="acao acao-foto" for="foto-rapida" id="btn-foto" aria-label="Tirar uma foto">
+            <span class="acao-icone" aria-hidden="true">📷</span>
+            <span class="acao-texto">FOTO</span>
+            <input id="foto-rapida" class="sr-only" type="file" accept="image/*" capture="environment">
+          </label>
+          <!-- Mensagem, algo encontrado ou foto da galeria (as opções abrem em "Registrar informação") -->
           <button class="acao acao-registrar" type="button" id="btn-registrar" aria-haspopup="dialog" aria-controls="painel-conversa">
             <span class="acao-icone" aria-hidden="true">＋</span>
-            <span class="acao-texto">REGISTRAR INFORMAÇÃO</span>
+            <span class="acao-texto">REGISTRAR</span>
             <span class="contador acao-contador" id="falar-contador" hidden>0</span>
           </button>
-          <button class="acao acao-sos" type="button" id="btn-sos" aria-haspopup="dialog">
-            <span class="acao-icone" aria-hidden="true">🆘</span>
-            <span class="acao-texto">PRECISO DE AJUDA</span>
+          <button class="acao acao-menu" type="button" id="btn-menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="folha-menu">
+            <span class="acao-icone" aria-hidden="true">☰</span>
+            <span class="acao-texto">MENU</span>
           </button>
         </div>
 
-        <!-- Fotos enviadas (aparece só quando houver) -->
+        <!-- Menu: o que não precisa ficar na frente do mapa -->
+        <div class="folha-menu" id="folha-menu" hidden>
+          <div class="folha-fundo" id="folha-fundo"></div>
+          <div class="folha-corpo" role="dialog" aria-modal="true" aria-labelledby="folha-titulo">
+            <header class="folha-cabeca">
+              <h2 id="folha-titulo">Menu</h2>
+              <button class="btn btn-pequeno" type="button" id="folha-fechar" aria-label="Fechar o menu">✕ Fechar</button>
+            </header>
+            <p class="quem-sou" id="st-nome"></p>
         <section class="fotos-civil" id="fotos-civil" hidden aria-labelledby="tit-fotos">
           <h2 class="titulo-secao" id="tit-fotos">Suas fotos</h2>
           <ul class="fotos-minhas" id="fotos-minhas"></ul>
         </section>
 
-        <button class="btn btn-notif" type="button" id="btn-notif" hidden>🔔 Avisar quando os bombeiros mandarem mensagem</button>
-        <label class="linha-opcao" hidden><input type="checkbox" id="opt-tela" checked> Manter a tela ligada</label>
+            <div class="folha-legenda" id="folha-legenda"></div>
+            <button class="btn btn-notif" type="button" id="btn-notif" hidden>🔔 Avisar quando os bombeiros mandarem mensagem</button>
+            <label class="linha-opcao" hidden><input type="checkbox" id="opt-tela" checked> Manter a tela ligada</label>
 
-        <div class="rodape-civil">
-          <div class="saida-pendente" id="saida-pendente" role="status" hidden>
-            <strong>Pedido para sair enviado às <span id="saida-hora"></span>.</strong>
-            Aguarde os bombeiros liberarem. Até lá, deixe esta tela aberta.
+            <div class="rodape-civil">
+              <div class="saida-pendente" id="saida-pendente" role="status" hidden>
+                <strong>Pedido para sair enviado às <span id="saida-hora"></span>.</strong>
+                Aguarde os bombeiros liberarem. Até lá, deixe esta tela aberta.
+              </div>
+              <button class="btn btn-app" type="button" id="btn-app" hidden>📱 Baixar aplicativo</button>
+              <button class="btn btn-saida" type="button" id="btn-saida">Quero sair da busca</button>
+              <button class="btn btn-pequeno btn-link" type="button" id="btn-diag" hidden>Diagnóstico do GPS</button>
+            </div>
           </div>
-          <button class="btn btn-app" type="button" id="btn-app" hidden>📱 Baixar aplicativo</button>
-          <button class="btn btn-saida" type="button" id="btn-saida">Quero sair da busca</button>
-          <button class="btn btn-pequeno btn-link" type="button" id="btn-diag" hidden>Diagnóstico do GPS</button>
         </div>
       </section>
 

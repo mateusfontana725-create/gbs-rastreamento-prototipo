@@ -16,9 +16,11 @@
     ['scuba', 'Mergulho com equipamento SCUBA'], ['livre', 'Mergulho livre'], ['rede', 'Rede de busca/garatéia'],
     ['superficie', 'Busca de superfície com embarcações'], ['margens', 'Busca terrestre nas margens/areia'], ['aeronave', 'Busca com aeronave'],
   ];
-  // Natureza da ocorrência: só busca aquática ou terrestre; "Outro" abre um campo para descrever.
+  // Natureza da ocorrência: busca aquática, terrestre, SARP ou BREC; "Outro" abre um campo para descrever.
   // (Operações antigas com outra natureza continuam com o texto gravado, como "Outro".)
-  var NATUREZAS = ['BUSCA AQUÁTICA – PESSOA', 'BUSCA TERRESTRE – PESSOA'];
+  // Para acrescentar um tipo novo: incluir aqui, em tipoDaNatureza, no banco (operacoes_tipo_check e
+  // aplicar_cadastro_operacao) e nos rótulos de cadastro.js, dashboard.js, sci-modo.js e relatorio-pdf.js.
+  var NATUREZAS = ['BUSCA AQUÁTICA – PESSOA', 'BUSCA TERRESTRE – PESSOA', 'SARP – AERONAVE REMOTAMENTE PILOTADA', 'BREC – BUSCA E RESGATE EM ESTRUTURAS COLAPSADAS'];
   var OUTRA_NATUREZA = '__outra__';
   // Perfis da vítima (estudos): valores fixos gravados no banco; o formulário só seleciona.
   var PERFIS_VITIMA = [['idoso', 'Idoso'], ['crianca', 'Criança'], ['adolescente', 'Adolescente'], ['demencia', 'Alzheimer / demência'],
@@ -26,7 +28,7 @@
   var MAX_TEXTO = 300, MAX_LONGO = 1000;
 
   // Natureza → tipo da operação (o tipo não é mais escolhido à parte: vem da natureza).
-  // Só as duas da lista viram aquática/terrestre; qualquer outra (o "Outro" descrito) é "outras".
+  // Só as da lista viram aquática, terrestre, SARP ou BREC; qualquer outra (o "Outro" descrito) é "outras".
   function semAcento(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
   function ehAquatica(natureza) { return semAcento(natureza).indexOf('AQUATIC') >= 0; }
   function tipoDaNatureza(natureza) {
@@ -35,6 +37,8 @@
     if (!limpo) return { tipo: null, tipo_outro: null };
     if (t === semAcento(NATUREZAS[0])) return { tipo: 'aquatica', tipo_outro: null };
     if (t === semAcento(NATUREZAS[1])) return { tipo: 'terrestre', tipo_outro: null };
+    if (t === semAcento(NATUREZAS[2])) return { tipo: 'sarp', tipo_outro: null };
+    if (t === semAcento(NATUREZAS[3])) return { tipo: 'brec', tipo_outro: null };
     return { tipo: 'outras', tipo_outro: limpo.slice(0, 60) };
   }
   // Data e hora (campo datetime-local) → ISO; vazio ou inválido → ''

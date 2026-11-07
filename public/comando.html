@@ -55,6 +55,15 @@
     </div>
   </section>
 
+  <!-- Link público do painel: link desligado, trocado ou sem conexão -->
+  <section id="tela-publico-erro" class="tela-centro" hidden>
+    <div class="cartao cartao-login">
+      <h1 class="titulo-aviso">Não foi possível abrir</h1>
+      <p id="publico-erro-texto"></p>
+      <button class="btn btn-escuro btn-gigante" type="button" id="publico-erro-tentar">TENTAR DE NOVO</button>
+    </div>
+  </section>
+
   <!-- Pedido de acesso (modal aberto pela tela de login) -->
   <template id="tpl-form-solicitacao">
     <form class="form-resp" novalidate>
@@ -253,6 +262,7 @@
       <button class="btn etiqueta-topo btn-recolher-topo" type="button" id="btn-recolher-topo" aria-label="Esconder o cabeçalho" title="Esconder o cabeçalho para ganhar espaço no mapa"><span aria-hidden="true">▲</span> Esconder cabeçalho</button>
       <div class="painel-acoes">
         <button class="btn btn-barra btn-pequeno btn-ajuda" type="button" id="btn-ajuda" hidden title="Pedidos de ajuda em aberto: abrir o tratamento"><span aria-hidden="true">🆘</span> <span id="ajuda-qtd">0</span> <span id="ajuda-tempo" class="rotulo-longo"></span></button>
+        <button class="btn btn-barra btn-pequeno btn-pedidos" type="button" id="btn-pedidos" hidden title="Pessoas esperando a sua resposta para entrar na operação com o código"><span aria-hidden="true">🔑</span> <span id="pedidos-qtd">0</span> <span class="rotulo-longo">pedido(s) de acesso</span></button>
         <button class="btn btn-barra btn-pequeno btn-alerta-pendente" type="button" id="btn-alerta-pendente" hidden title="Mensagem de outro responsável aguardando sua resposta">✉ <span id="alerta-pendente-qtd">1</span> <span class="rotulo-longo">para você</span></button>
         <div class="ferramentas" id="ferramentas">
           <button class="btn btn-barra btn-pequeno btn-ferramentas" type="button" id="btn-ferramentas" aria-label="Ferramentas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-ferramentas" title="Ferramentas da operação e do mapa">
@@ -294,6 +304,7 @@
                 <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
                 <button class="menu-item" type="button" id="menu-binomio"><span class="ico-item" aria-hidden="true">🐕</span><span>Binômio (cão e condutor)</span><small class="menu-estado" id="menu-binomio-qtd"></small></button>
                 <button class="menu-item" type="button" id="menu-drone-agua"><span class="ico-item" aria-hidden="true">✈</span><span>Drone e água</span><small class="menu-estado" id="menu-obs-qtd"></small></button>
+                <button class="menu-item" type="button" id="menu-acesso" title="Código da operação e pessoas pedindo para entrar"><span class="ico-item" aria-hidden="true">🔑</span><span>Código e pedidos de acesso</span><small class="menu-estado" id="menu-acesso-qtd"></small></button>
                 <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
                 </div>
               </section>
@@ -311,6 +322,7 @@
               <section class="menu-secao" data-secao="comando">
                 <button class="menu-secao-titulo" type="button" aria-expanded="true">Comando e registros</button>
                 <div class="menu-secao-itens">
+                <button class="menu-item" type="button" id="menu-link-comando" title="Link para outras pessoas acompanharem o mapa sem login, só visualizando"><span class="ico-item" aria-hidden="true">🔗</span><span>Link público do painel</span></button>
                 <button class="menu-item" type="button" id="menu-briefing"><span class="ico-item" aria-hidden="true">★</span><span>Briefing e passagem de comando</span></button>
                 <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
                 <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
@@ -766,6 +778,7 @@
   <script src="js/recursos-equipe.js"></script>
   <script src="js/briefing.js"></script>
   <script src="js/convites.js"></script>
+  <script src="js/acesso.js"></script>
   <script src="js/sci-dados.js"></script>
   <script src="js/sci-modo.js"></script>
   <script src="js/relatos-revisao.js"></script>

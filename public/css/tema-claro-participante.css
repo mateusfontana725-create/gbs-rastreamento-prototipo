@@ -74,3 +74,13 @@ html[data-tema="claro"] .status-civil[data-estado="ok"] { background: #e7f7ee; c
 html[data-tema="claro"] .status-civil[data-estado="sem-gps"],
 html[data-tema="claro"] .status-civil[data-estado="sem-internet"] { background: #fff3d6; color: #6b3d00; }
 html[data-tema="claro"] .status-civil[data-estado="erro"] { background: #fde8e8; color: #7f1d1d; }
+
+/* mapa em tela cheia (revisão de novembro/2026): os botões sobre o mapa e a folha do menu no tema claro */
+html[data-tema="claro"] .civil-em-rastreio #tela-rastreio .acao:not(.acao-sos):not(.acao-foto) { background: #ffffff; border-color: var(--borda-forte); color: var(--texto); }
+html[data-tema="claro"] .civil-em-rastreio #tela-rastreio .acao-foto { background: #1f2933; border-color: #1f2933; color: #ffffff; }
+html[data-tema="claro"] .civil-em-rastreio #tela-rastreio .acoes-civil { background: linear-gradient(to top, rgba(223, 230, 236, .85), rgba(223, 230, 236, 0)); }
+html[data-tema="claro"] .civil-em-rastreio #tela-rastreio .acao-menu.tem-aviso::after { border-color: #ffffff; }
+html[data-tema="claro"] .civil-em-rastreio #tela-rastreio .navegacao { background: rgba(255, 255, 255, .97); }
+html[data-tema="claro"] .civil-em-rastreio .rastreio-topo .fila-estado,
+html[data-tema="claro"] .civil-em-rastreio .rastreio-topo .mapa-offline-estado { background: rgba(255, 255, 255, .9); }
+html[data-tema="claro"] .folha-corpo { background: var(--superficie); }

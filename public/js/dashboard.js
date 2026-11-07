@@ -11,7 +11,7 @@
   var C = raiz.Comunicacao, UI = raiz.UI;
   var NS = 'http://www.w3.org/2000/svg';
   var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', outras: 'Outras', sem_tipo: 'Sem tipo' };
+  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', sarp: 'SARP', brec: 'BREC', outras: 'Outras', sem_tipo: 'Sem tipo' };
   var CONDICOES = { viva: 'Com vida', obito: 'Em óbito' };
   var gradCont = 0;
 

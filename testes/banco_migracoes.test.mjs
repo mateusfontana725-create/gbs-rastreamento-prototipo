@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -3039,5 +3039,135 @@ chk((await como(resp1, `select count(*)::int n from public.descansos where opera
 chk(await (async () => { try { await como(resp1, `insert into public.descansos (operacao_id, participante_id, inicio) values ($1, $2, now())`, [opZ.id, pZ[1].participante_id]); return false; } catch (e) { return /permission|row-level/i.test(String(e.message)); } })(), 'ninguém escreve descanso direto (só o servidor)');
 
 
-console.log('\nMigrações 007–068 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Código de acesso, pedidos de acesso, tipos SARP/BREC e link público do comando (migração 069) ---
+console.log('\nCódigo de acesso e pedidos de acesso');
+const opC = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CODIGO', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre', descricao: 'Segredo do caso', local_endereco: 'Rua do caso, 10', local_lat: -25.5, local_lng: -49.3 }) });
+const cod1 = (await db.query(`select codigo_acesso, codigo_acesso_ativo from public.operacoes where id = $1`, [opC.id])).rows[0];
+chk(/^[A-HJ-NP-Z2-9]{6}$/.test(cod1.codigo_acesso) && cod1.codigo_acesso_ativo === true, 'operação nova ganha código de 6 caracteres (sem 0/O/1/I), ligado', cod1);
+const outrosCods = new Set([cod1.codigo_acesso]);
+for (let i = 0; i < 6; i++) { const o = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP COD ' + i, p_retencao_horas: 0 }); outrosCods.add((await db.query(`select codigo_acesso c from public.operacoes where id = $1`, [o.id])).rows[0].c); }
+chk(outrosCods.size === 7, 'os códigos não se repetem entre operações');
+await db.query(`update public.operacoes set codigo_acesso = null where id = $1`, [opC.id]);
+await db.exec(ler('supabase/migracoes/069_codigo_acesso_pedidos_publico_comando.sql'));
+const cod2 = (await db.query(`select codigo_acesso c from public.operacoes where id = $1`, [opC.id])).rows[0].c;
+chk(/^[A-HJ-NP-Z2-9]{6}$/.test(cod2), 'operação ativa que já existia (sem código) recebe um ao aplicar a migração', cod2);
+const CODIGO = cod2;
+
+const anP = [await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+const pedir = (u, cod, nome, t, c) => rpc(u, 'solicitar_acesso_operacao', { p_codigo: cod, p_nome: nome, p_cpf: c === undefined ? null : c, p_telefone: t === undefined ? tel : t });
+const minusc = CODIGO.slice(0, 3).toLowerCase() + ' - ' + CODIGO.slice(3).toLowerCase();
+const ped0 = await pedir(anP[0], minusc, 'Maria Código');
+chk(ped0.ok === true && ped0.status === 'pendente' && ped0.operacao === 'OP CODIGO', 'pedir acesso com o código (minúsculas, espaços e hífen são aceitos): pedido pendente', ped0);
+chk(/telefone_invalido/.test(await erroDe(pedir(anP[1], CODIGO, 'Sem Fone', ''))), 'o celular é obrigatório no pedido');
+chk(/nome_invalido/.test(await erroDe(pedir(anP[1], CODIGO, 'X'))), 'nome muito curto é recusado');
+chk(/cpf_invalido/.test(await erroDe(pedir(anP[1], CODIGO, 'Cpf Ruim', tel, '111'))), 'CPF informado e inválido é recusado');
+const ped0b = await pedir(anP[0], CODIGO, 'Maria Código Atualizada');
+chk(ped0b.pedido === ped0.pedido && (await db.query(`select nome from public.pedidos_acesso where id = $1`, [ped0.pedido])).rows[0].nome === 'Maria Código Atualizada', 'pedir de novo atualiza o mesmo pedido (sem duplicar)');
+const certo = (await rpc(anP[0], 'consultar_pedido_acesso', { p_pedido: ped0.pedido }));
+chk(certo.status === 'pendente' && certo.token === null, 'enquanto pendente o aparelho não recebe o link', certo);
+chk(/sem_permissao/.test(await erroDe(rpc(anP[1], 'consultar_pedido_acesso', { p_pedido: ped0.pedido }))), 'outra pessoa não consulta o pedido alheio');
+chk((await como(anP[0], `select count(*)::int n from public.pedidos_acesso`)).rows[0].n === 0, 'participante não lê a tabela de pedidos (RLS)');
+chk((await como(resp1, `select count(*)::int n from public.pedidos_acesso where operacao_id = $1`, [opC.id])).rows[0].n === 1, 'responsável da operação lê os pedidos');
+chk((await como(resp2, `select count(*)::int n from public.pedidos_acesso where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'responsável de fora da operação não lê os pedidos');
+chk(await (async () => { try { await como(resp1, `update public.pedidos_acesso set status = 'aceito'`); return false; } catch (e) { return /permission|row-level/i.test(String(e.message)); } })(), 'ninguém altera pedido direto (só por RPC)');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: true, p_tipo: 'civil' }))), 'responsável de fora não decide o pedido');
+chk(/permission|denied/i.test(await erroDe(como(null, `select public.decidir_pedido_acesso($1, true, 'civil')`, [ped0.pedido], 'anon'))), 'sem login não decide');
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: true, p_tipo: 'responsavel' }))), 'só civil ou militar pode ser concedido');
+const dec0 = await rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: true, p_tipo: 'militar' });
+chk(dec0.status === 'aceito' && dec0.tipo_concedido === 'militar', 'o responsável aceita como militar', dec0);
+const ap0 = await rpc(anP[0], 'consultar_pedido_acesso', { p_pedido: ped0.pedido });
+chk(ap0.status === 'aceito' && ap0.token === opC.token_militar && ap0.tipo === 'militar', 'aceito: o aparelho recebe o link do tipo concedido', ap0);
+const ing0 = await rpc(anP[0], 'ingressar', { p_token: ap0.token, p_nome: 'Maria Código Atualizada', p_tipo: 'militar', p_cpf: null, p_telefone: tel });
+chk(ing0.tipo === 'militar' && ing0.operacao === 'OP CODIGO', 'com o link recebido a entrada termina pelo ingressar de sempre', ing0);
+chk(/pedido_ja_aceito/.test(await erroDe(rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: false, p_tipo: 'civil' }))), 'pedido aceito não volta atrás');
+chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'pedido_acesso'`, [opC.id])).rows[0].n === 1, 'a decisão entra no diário');
+const pedJa = await pedir(anP[0], CODIGO, 'Maria Código Atualizada');
+chk(pedJa.status === 'aceito', 'quem já participa e pede de novo continua aceito', pedJa);
+
+// recusa
+const ped1 = await pedir(anP[1], CODIGO, 'João Recusado');
+const rec1 = await rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped1.pedido, p_aceitar: false, p_tipo: 'civil' });
+const rc1 = await rpc(anP[1], 'consultar_pedido_acesso', { p_pedido: ped1.pedido });
+chk(rec1.status === 'recusado' && rc1.status === 'recusado' && rc1.token === null, 'recusado: o aparelho não recebe o link', rc1);
+chk(/acesso_recusado/.test(await erroDe(pedir(anP[1], CODIGO, 'João Recusado'))), 'quem foi recusado não consegue pedir de novo');
+const rev1 = await rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped1.pedido, p_aceitar: true, p_tipo: 'civil' });
+chk(rev1.status === 'aceito' && (await rpc(anP[1], 'consultar_pedido_acesso', { p_pedido: ped1.pedido })).token === opC.token_civil, 'o responsável ainda pode aceitar quem recusou (civil recebe o link dos civis)');
+// cancelamento
+const ped2 = await pedir(anP[2], CODIGO, 'Ana Cancela');
+await rpc(anP[2], 'cancelar_pedido_acesso', { p_pedido: ped2.pedido });
+chk(/pedido_cancelado/.test(await erroDe(rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped2.pedido, p_aceitar: true, p_tipo: 'civil' }))), 'pedido cancelado não pode ser decidido');
+chk((await pedir(anP[2], CODIGO, 'Ana Cancela')).status === 'pendente', 'depois de cancelar, a pessoa pode pedir de novo');
+// código errado e limite de tentativas
+chk((await pedir(anP[3], 'ZZZZZZ', 'Chute Um')).erro === 'codigo_acesso_invalido', 'código inexistente: erro "codigo_acesso_invalido" (sem revelar nada)');
+chk((await pedir(anP[3], '12', 'Chute Dois')).erro === 'codigo_acesso_invalido', 'código mal formado: o mesmo erro');
+for (let i = 0; i < 6; i++) await pedir(anP[3], 'AAAA' + (i + 2) + '2', 'Chute');
+chk(/codigo_muitas_tentativas/.test(await erroDe(pedir(anP[3], CODIGO, 'Chute Certo'))), 'depois de 8 erros seguidos nem o código certo passa por 10 minutos');
+await db.query(`delete from public.tentativas_codigo_acesso`);
+// trocar e desligar
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_codigo_acesso', { p_operacao: opC.id, p_trocar: true }))), 'só responsável da operação troca o código');
+const novoCod = await rpc(resp1, 'definir_codigo_acesso', { p_operacao: opC.id, p_trocar: true });
+chk(novoCod.codigo_acesso !== CODIGO && /^[A-HJ-NP-Z2-9]{6}$/.test(novoCod.codigo_acesso), 'trocar gera outro código', novoCod);
+chk((await pedir(anP[3], CODIGO, 'Código Velho')).erro === 'codigo_acesso_invalido', 'o código anterior deixa de valer');
+await rpc(resp1, 'definir_codigo_acesso', { p_operacao: opC.id, p_ativo: false });
+chk((await pedir(anP[3], novoCod.codigo_acesso, 'Desligado')).erro === 'codigo_acesso_invalido', 'com a entrada por código desligada o código não funciona');
+await rpc(resp1, 'definir_codigo_acesso', { p_operacao: opC.id, p_ativo: true });
+chk((await pedir(anP[3], novoCod.codigo_acesso, 'Ligado De Novo')).status === 'pendente', 'ligar de novo volta a funcionar');
+// operação encerrada
+await rpc(resp1, 'encerrar_operacao', { p_operacao: opC.id });
+chk(/operacao_encerrada/.test(await erroDe(pedir(anP[4], novoCod.codigo_acesso, 'Tarde Demais'))), 'operação encerrada: o código não aceita pedidos');
+chk((await rpc(anP[3], 'consultar_pedido_acesso', { p_pedido: (await db.query(`select id from public.pedidos_acesso where user_id = $1`, [anP[3]])).rows[0].id })).status === 'encerrada', 'o aparelho com pedido pendente é avisado que a operação acabou');
+
+console.log('Tipos de operação SARP e BREC');
+for (const t of ['sarp', 'brec']) {
+  const o = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ' + t.toUpperCase(), p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: t, acionado_em: new Date(Date.now() - 60e3).toISOString() }) });
+  chk(o.tipo === t && o.tipo_outro === null, 'cria operação do tipo ' + t.toUpperCase(), o.tipo);
+}
+chk(/tipo_operacao_invalido/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'OP TIPO RUIM', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'sar', acionado_em: new Date(Date.now() - 60e3).toISOString() }) }))), 'tipo desconhecido continua recusado');
+const opT2 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TROCA TIPO', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'outras', tipo_outro: 'Teste', acionado_em: new Date(Date.now() - 60e3).toISOString() }) });
+const trocado = await rpc(resp1, 'atualizar_operacao', { p_operacao: opT2.id, p_dados: JSON.stringify({ tipo: 'brec' }) });
+chk(trocado.tipo === 'brec' && trocado.tipo_outro === null, 'trocar "Outras" por BREC limpa o texto livre', trocado);
+
+console.log('Link público do painel do comando');
+const opL = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP PUBLICA', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre', descricao: 'Segredo do caso', local_endereco: 'Rua do caso, 10', local_lat: -25.5, local_lng: -49.3 }) });
+const anL = [await usuario(null, true), await usuario(null, true)];
+const pL = [];
+for (let i = 0; i < 2; i++) pL.push(await rpc(anL[i], 'ingressar', { p_token: opL.token_civil, p_nome: 'Fulano Secreto ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+const kl = (n) => 9500 + n;
+await enviaT(anL[0], pL[0].participante_id, [pt(kl(1), -25.5, -49.3, Date.now() - 5000), pt(kl(2), -25.5001, -49.3, Date.now() - 4000)]);
+await rpc(resp1, 'salvar_ponto', { p_operacao: opL.id, p_id: null, p_dados: JSON.stringify({ categoria: 'RISCO', titulo: 'Barranco público', lat: -25.51, lng: -49.31, raio_m: 80 }) });
+const anonRpc = async (fn, ...args) => (await como(null, `select public.${fn}(${args.map((_, i) => '$' + (i + 1)).join(', ')}) r`, args, 'anon')).rows[0].r;
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'comando_publico_gerar', { p_operacao: opL.id }))), 'só responsável da operação liga o link público do comando');
+chk(/permission|denied/i.test(await erroDe(como(null, `select public.comando_publico_gerar($1)`, [opL.id], 'anon'))), 'sem login não liga o link');
+const lkC = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opL.id });
+chk(/^[0-9a-f]{48}$/.test(lkC.token) && lkC.nomes === false, 'o link nasce com os nomes escondidos', lkC);
+const docP = await anonRpc('comando_publico', lkC.token, null);
+chk(docP.formato === 'gbs-arquivo-operacao' && docP.publico === true && docP.operacao.id === opL.id && docP.tabelas.participantes.length === 2 && docP.tabelas.posicoes.length === 2, 'sem login: devolve as linhas da operação no formato do arquivo', Object.keys(docP.tabelas));
+const textoDoc = JSON.stringify(docP);
+chk(!/Fulano Secreto/.test(textoDoc) && docP.tabelas.participantes.every((x) => /^Participante \d$/.test(x.nome)), 'os nomes das pessoas não saem (viram "Participante N")');
+chk(!new RegExp(cpf.replace(/\D/g, '')).test(textoDoc) && !/"cpf"|"telefone"|"user_id"/.test(textoDoc), 'CPF, celular e identificadores de usuário nunca saem');
+chk(!/Segredo do caso|Rua do caso|token_civil|token_militar|dashboard_token|comando_token|codigo_acesso|responsavel_id/.test(textoDoc), 'a operação sai sem descrição, endereço, links e código de acesso');
+chk(docP.operacao.local_lat === -25.5 && docP.operacao.codigo === 'OP PUBLICA', 'mas o ponto da operação e o nome saem (o mapa precisa)');
+chk(docP.tabelas.pontos_interesse.some((x) => x.titulo === 'Barranco público') && Array.isArray(docP.tabelas.tipos_ponto) && Array.isArray(docP.tabelas.categorias_ponto_estilo), 'pontos e catálogos do mapa saem');
+chk(!/criado_por/.test(textoDoc), 'nomes e identificadores de quem registrou não saem');
+chk(docP.posicoes_ate === docP.tabelas.posicoes[docP.tabelas.posicoes.length - 1].id && docP.incremental === false, 'informa o último id de posição (para a atualização só do que é novo)');
+await enviaT(anL[1], pL[1].participante_id, [pt(kl(3), -25.52, -49.32, Date.now() - 3000)]);
+const incr = await anonRpc('comando_publico', lkC.token, docP.posicoes_ate);
+chk(incr.incremental === true && incr.tabelas.posicoes.length === 1 && incr.tabelas.posicoes[0].id > docP.posicoes_ate, 'atualização incremental traz só as posições novas', incr.tabelas.posicoes.length);
+chk(/permission|denied/i.test(await erroDe(como(null, `select count(*) from public.participantes`, [], 'anon'))), 'sem login as tabelas continuam fechadas');
+chk(/permission|denied/i.test(await erroDe(como(null, `select count(*) from public.posicoes`, [], 'anon'))), 'sem login as posições continuam fechadas');
+const lkNomes = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opL.id, p_nomes: true, p_trocar: false });
+chk(lkNomes.token === lkC.token && lkNomes.nomes === true, 'mudar a opção de nomes não troca o link', lkNomes);
+const docN = await anonRpc('comando_publico', lkC.token, null);
+chk(docN.tabelas.participantes.some((x) => /Fulano Secreto/.test(x.nome)) && !/"cpf"|"telefone"|"user_id"/.test(JSON.stringify(docN)), 'com nomes ligados os nomes saem, CPF e celular continuam fora');
+const lkC2 = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opL.id });
+chk(lkC2.token !== lkC.token && lkC2.nomes === true, 'trocar o link mantém a opção de nomes', lkC2);
+chk(/link_publico_comando_invalido/.test(await erroDe(anonRpc('comando_publico', lkC.token, null))), 'o link anterior deixa de funcionar');
+chk(/link_publico_comando_invalido/.test(await erroDe(anonRpc('comando_publico', 'x', null))), 'link mal formado: recusado');
+chk((await anonRpc('comando_publico', lkC2.token, null)).operacao.id === opL.id, 'o link novo funciona');
+chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'comando_publico'`, [opL.id])).rows[0].n >= 3, 'ligar, trocar e mudar a opção entram no diário');
+await rpc(resp1, 'comando_publico_desligar', { p_operacao: opL.id });
+chk(/link_publico_comando_invalido/.test(await erroDe(anonRpc('comando_publico', lkC2.token, null))), 'desligado: o link para de funcionar');
+
+
+console.log('\nMigrações 007–069 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

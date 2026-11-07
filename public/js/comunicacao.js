@@ -61,6 +61,14 @@
     operacao_encerrada: 'Esta operação foi encerrada pelo responsável.',
     nome_invalido: 'Informe um nome ou indicativo com 2 a 40 caracteres.',
     participante_removido: 'Você foi removido desta operação pelo responsável.',
+    somente_leitura: 'Este é o link público do painel: só dá para visualizar, não para alterar.',
+    link_publico_comando_invalido: 'Este link do painel não funciona mais: foi trocado ou desligado. Peça o link novo a quem enviou.',
+    codigo_acesso_invalido: 'Este código não existe ou está desligado. Confira com os bombeiros.',
+    codigo_muitas_tentativas: 'Muitos códigos errados seguidos. Espere 10 minutos e tente de novo.',
+    acesso_recusado: 'Os bombeiros não aceitaram o seu pedido de acesso. Fale com o responsável da operação.',
+    limite_pedidos: 'Há muitos pedidos esperando nesta operação. Fale com o responsável.',
+    pedido_ja_aceito: 'Este pedido de acesso já foi aceito.',
+    pedido_cancelado: 'A pessoa desistiu deste pedido de acesso.',
     participante_invalido: 'Sua participação não foi encontrada. Entre novamente pelo link.',
     limite_participantes: 'A operação atingiu o limite de participantes.',
     sem_permissao: 'Você não tem permissão para esta ação.',
@@ -278,8 +286,13 @@
     });
   }
 
+  // Link público do painel do comando: só leitura. Qualquer chamada ao servidor que não seja a leitura do próprio link
+  // é recusada aqui (o servidor também recusa: quem abre o link não tem permissão de escrita).
+  var somenteLeitura = false;
+  var LEITURAS_PUBLICAS = ['comando_publico'];
   async function rpc(nome, args, ms) {
     if (!cliente) throw criarErro({ message: 'Aplicativo não configurado.' });
+    if (somenteLeitura && LEITURAS_PUBLICAS.indexOf(nome) === -1) throw criarErro({ message: 'somente_leitura' });
     // operação arquivada: relatório, SCI e briefing completos vêm do arquivo (o servidor recusa)
     if (window.ArquivoLocal) {
       var guardado;
@@ -361,6 +374,8 @@
     return desvioRelogio;
   }
   function agora() { return Date.now() + desvioRelogio; }
+  // Link público: o relógio do servidor vem junto com os dados (sem a chamada 'agora', que ele não pode fazer)
+  function definirRelogioServidor(ms) { if (typeof ms === 'number' && isFinite(ms)) desvioRelogio = ms - Date.now(); }
 
   /* ---------- Formatação ------------------------------------------------ */
   function paraMs(v) {
@@ -463,6 +478,8 @@
     configurado: configurado,
     cliente: cliente,
     rpc: rpc,
+    definirSomenteLeitura: function (v) { somenteLeitura = Boolean(v); },
+    definirRelogioServidor: definirRelogioServidor,
     consultar: consultar,
     consultarTudo: consultarTudo,
     consultarTudoParalelo: consultarTudoParalelo,

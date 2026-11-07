@@ -93,6 +93,7 @@
   var est = {
     usuario: null,
     responsavel: null,
+    publico: null,           // link público do painel (migração 069): { token, op, posicoesAte, timer, falhas }
     op: null,
     encerrarAoAbrir: null,   // id de operação que deve ser encerrada logo ao abrir o painel (menu da lista)
     mapa: null,
@@ -237,7 +238,7 @@
   /* ------------------------------------------------------------------ */
   /* Telas e navegação                                                    */
   /* ------------------------------------------------------------------ */
-  var TELAS = ['carregando', 'login', 'sem-permissao', 'operacoes', 'responsaveis', 'painel'];
+  var TELAS = ['carregando', 'login', 'sem-permissao', 'operacoes', 'responsaveis', 'painel', 'publico-erro'];
   function mostrarTela(nome) {
     TELAS.forEach(function (t) { $('tela-' + t).hidden = t !== nome; });
     document.body.classList.toggle('no-painel', nome === 'painel');
@@ -250,7 +251,7 @@
 
 
   function rotear() {
-    if (!est.responsavel) return;
+    if (!est.responsavel || est.publico) return;
     if (location.hash === '#responsaveis') {
       fecharPainel();
       if (est.responsavel.admin) mostrarResponsaveis();
@@ -393,6 +394,10 @@
     $('menu-binomio').addEventListener('click', function () { fecharMenu(false); if (window.Binomio) window.Binomio.abrir(); });
     $('menu-drone-agua').addEventListener('click', function () { fecharMenu(false); if (window.ObservacoesCampo) window.ObservacoesCampo.abrir(); });
     $('menu-briefing').addEventListener('click', function () { fecharMenu(false); if (window.Briefing) window.Briefing.abrir(); });
+    $('menu-acesso').addEventListener('click', function () { fecharMenu(false); if (window.Acesso) window.Acesso.abrir(); });
+    $('publico-erro-tentar').addEventListener('click', function () { location.reload(); });
+    $('menu-link-comando').addEventListener('click', function () { fecharMenu(false); abrirLinkPublicoComando(); });
+    $('btn-pedidos').addEventListener('click', function () { if (window.Acesso) window.Acesso.abrir(); });
     $('comando-chip').addEventListener('click', function () { if (window.Briefing) window.Briefing.abrir(); });
     if (window.AjudaPedidos) window.AjudaPedidos.aoMudar(function () { if (est.op) { atualizarEstados(); if (est.selecionado) atualizarFicha(); } });
     $('visao-3d-fechar').addEventListener('click', fecharRelevo3D);
@@ -503,6 +508,10 @@
       $('btn-entrar').disabled = true;
       return;
     }
+
+    // Link público do painel (?p=...): abre sem login, só para visualizar
+    var tokenPublico = lerTokenPublico();
+    if (tokenPublico) return iniciarPublico(tokenPublico);
 
     C.cliente.auth.onAuthStateChange(function (evento) {
       if (evento === 'SIGNED_OUT') {
@@ -638,7 +647,13 @@
   /* ------------------------------------------------------------------ */
   // Operação encerrada: o painel abre só para visualização (o servidor também recusa alterações, migração 026).
   function podeAlterar() {
-    return Boolean(est.op && est.op.status === 'ativa' && !est.op.dados_apagados_em);
+    return Boolean(est.op && est.op.status === 'ativa' && !est.op.dados_apagados_em && !est.publico);
+  }
+
+  // Link público: a operação chega ao painel com status "encerrada" (assim TODA a edição fica fechada, como numa operação
+  // encerrada); o status verdadeiro fica em _statusReal. Esta função diz se a operação está de fato em andamento.
+  function operacaoViva() {
+    return Boolean(est.op && (est.op.status === 'ativa' || (est.publico && est.op._statusReal === 'ativa')));
   }
 
   // Os dados ficam guardados depois de encerrar; só saem se a operação for excluída (migração 027).
@@ -1237,6 +1252,179 @@
     } });
   }
 
+
+  /* ------------------------------------------------------------------ */
+  /* Link público do painel do comando (migração 069)                     */
+  /* ------------------------------------------------------------------ */
+  // Quem abre o link não faz login e só visualiza. O servidor entrega um documento com o que o mapa precisa (sem CPF,
+  // celular, mensagens, fotos, diário nem vítimas; nomes só se o responsável deixou). Ele é registrado em
+  // js/arquivo-local.js e o painel lê tudo dali, como numa operação arquivada. A cada LIM_PUBLICO_MS o documento é
+  // atualizado (posições novas e demais tabelas) e a conferência de sempre (sincronizar) refaz o mapa.
+  var LIM_PUBLICO_MS = 10000;
+
+  function lerTokenPublico() {
+    var v = new URLSearchParams(location.search).get('p') || new URLSearchParams(location.hash.replace(/^#/, '')).get('p') || '';
+    v = v.trim().toLowerCase();
+    return /^[0-9a-f]{48}$/.test(v) ? v : null;
+  }
+
+  function urlComandoPublico(token) { return location.origin + '/comando.html?p=' + token; }
+
+  async function iniciarPublico(token) {
+    document.body.classList.add('modo-publico');
+    C.definirSomenteLeitura(true);
+    est.publico = { token: token, op: null, posicoesAte: 0, timer: null, falhas: 0, nomes: false, atualizando: false };
+    est.responsavel = { nome: 'Visitante', admin: false, ativo: true };
+    mostrarTela('painel');
+    carregandoPainel(true);
+    try {
+      await carregarDocPublico(true);
+    } catch (e) {
+      carregandoPainel(false);
+      mostrarErroPublico(e);
+      return;
+    }
+    await abrirPainelPublico();
+  }
+
+  async function carregarDocPublico(primeira) {
+    var pub = est.publico;
+    var doc = await C.rpc('comando_publico', { p_token: pub.token, p_desde: primeira ? null : pub.posicoesAte }, 90000);
+    if (!doc || !doc.tabelas || !doc.operacao) throw C.criarErro({ message: 'link_publico_comando_invalido' });
+    if (doc.agora) C.definirRelogioServidor(C.paraMs(doc.agora));
+    pub.nomes = Boolean(doc.nomes);
+    if (primeira) {
+      var op = Object.assign({}, doc.operacao, { _statusReal: doc.operacao.status, status: 'encerrada' });
+      doc.tabelas.operacoes = [op];
+      window.ArquivoLocal.registrar(op.id, doc, { operacao: op });
+      pub.op = op;
+    } else {
+      window.ArquivoLocal.mesclarPublico(pub.op.id, doc);
+    }
+    pub.posicoesAte = Math.max(pub.posicoesAte, Number(doc.posicoes_ate) || 0);
+    return doc;
+  }
+
+  function mostrarErroPublico(e) {
+    var pub = est.publico;
+    if (pub && pub.timer) clearInterval(pub.timer);
+    var invalido = e && (e.codigo === 'link_publico_comando_invalido' || /link_publico_comando_invalido/.test(String(e.message)));
+    $('publico-erro-texto').textContent = invalido ? C.traduzirErro({ message: 'link_publico_comando_invalido' })
+      : (e && e.rede ? 'Sem conexão com a internet. Conecte-se e recarregue a página.' : 'Não foi possível abrir este link agora: ' + ((e && e.message) || 'erro desconhecido') + '.');
+    mostrarTela('publico-erro');
+  }
+
+  async function abrirPainelPublico() {
+    var pub = est.publico;
+    fecharPainel();
+    mostrarTela('painel');
+    carregandoPainel(true);
+    est.op = pub.op;
+    avaliarGaveta();
+    aplicarLateral(false);
+    renderizarCabecalho();
+    criarMapa();
+    desenharLocalOp();
+    atualizarChipDeslocamento();
+    await carregarTudo();
+    est.tempoReal = 'ok';
+    est.timerStatus = setInterval(vigiarEstados, 2000);
+    clearInterval(est.timerFadiga);
+    est.timerFadiga = setInterval(function () { if (operacaoViva()) { renderizarLista(); if (est.selecionado) atualizarFicha(); } }, 60000);
+    pub.timer = setInterval(atualizarPublico, LIM_PUBLICO_MS);
+    atualizarPilula();
+    carregandoPainel(false);
+  }
+
+  async function atualizarPublico() {
+    var pub = est.publico;
+    if (!pub || pub.atualizando || document.hidden || !est.op) return;
+    pub.atualizando = true;
+    var vivaAntes = operacaoViva();
+    try {
+      await carregarDocPublico(false);
+      pub.falhas = 0;
+      est.tempoReal = 'ok';
+      await sincronizar();
+      if (operacaoViva() !== vivaAntes) { renderizarCabecalho(); est.listaSuja = true; renderizarLista(); }
+    } catch (e) {
+      if (e && (e.codigo === 'link_publico_comando_invalido' || /link_publico_comando_invalido/.test(String(e.message)))) {
+        fecharPainel();
+        mostrarErroPublico(e);
+        return;
+      }
+      pub.falhas++;
+      est.tempoReal = pub.falhas >= 2 ? 'falha' : 'ok';
+    } finally {
+      pub.atualizando = false;
+      atualizarPilula();
+    }
+  }
+
+  // Ferramentas → Link público do painel (só quem pode alterar a operação): liga, troca, desliga e escolhe mostrar os nomes.
+  function abrirLinkPublicoComando() {
+    var op = est.op;
+    if (!op || !podeAlterar()) return;
+    var corpo = UI.el('div');
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Link público do painel' }),
+      UI.dica('Quem abre o link vê o mapa desta operação ao vivo, sem entrar no sistema e sem poder alterar nada: pessoas, trilhas, setores, pontos, grupos e áreas. Não aparecem CPF, celular, mensagens, fotos, diário, vítimas, descrição nem o endereço. Trocar o link faz o anterior parar de funcionar.'),
+      corpo,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]), { empilhar: true });
+    async function executar(fn, args, aviso) {
+      try {
+        var r = await C.rpc(fn, Object.assign({ p_operacao: op.id }, args || {}));
+        op.comando_token = r.token || null;
+        if (r.nomes !== undefined) op.comando_publico_nomes = Boolean(r.nomes);
+        desenhar();
+        if (aviso) UI.aviso(aviso, 'ok');
+      } catch (e) { UI.aviso('Não foi possível: ' + e.message, 'erro', 7000); desenhar(); }
+    }
+    function desenhar() {
+      corpo.innerHTML = '';
+      if (!('comando_token' in op)) {
+        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'O servidor ainda não tem o link público do painel (migração 069).' }));
+        return;
+      }
+      var nomes = UI.el('input', { type: 'checkbox', id: 'cmd-pub-nomes', checked: Boolean(op.comando_publico_nomes) });
+      var rotNomes = UI.el('label', { classe: 'linha-opcao', for: 'cmd-pub-nomes' }, [nomes, ' Mostrar os nomes das pessoas (senão aparece "Participante 1", "Participante 2"…)']);
+      if (!op.comando_token) {
+        corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Esta operação ainda não tem link público do painel.' }));
+        corpo.appendChild(rotNomes);
+        corpo.appendChild(UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'cmd-pub-criar', texto: 'Criar link público', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Criar o link público do painel?', texto: 'Qualquer pessoa com o link verá o mapa da operação ao vivo, sem login e sem poder alterar nada' + (nomes.checked ? ', COM os nomes das pessoas.' : ', sem os nomes das pessoas.'), ok: 'Criar link', empilhar: true }))) return;
+          executar('comando_publico_gerar', { p_nomes: nomes.checked, p_trocar: true }, 'Link público criado.');
+        } }));
+        return;
+      }
+      var url = urlComandoPublico(op.comando_token);
+      var campo = UI.el('input', { classe: 'campo mono', id: 'cmd-pub-url', readonly: true, value: url });
+      corpo.appendChild(UI.campo('Endereço', campo, { para: 'cmd-pub-url' }));
+      nomes.addEventListener('change', async function () {
+        if (nomes.checked && !(await UI.confirmar({ titulo: 'Mostrar os nomes das pessoas?', texto: 'Quem tiver o link passa a ver o nome de cada participante e responsável no mapa.', ok: 'Mostrar nomes', empilhar: true }))) { nomes.checked = false; return; }
+        executar('comando_publico_gerar', { p_nomes: nomes.checked, p_trocar: false }, nomes.checked ? 'Nomes ligados no link público.' : 'Nomes escondidos no link público.');
+      });
+      corpo.appendChild(rotNomes);
+      corpo.appendChild(UI.el('div', { classe: 'linha-botoes' }, [
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'cmd-pub-copiar', texto: 'Copiar link', onclick: function () {
+          (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function () { UI.aviso('Link copiado.', 'ok'); }, function () { campo.select(); UI.aviso('Selecione e copie o endereço.', 'erro'); });
+        } }),
+        UI.el('a', { classe: 'btn', id: 'cmd-pub-whatsapp', target: '_blank', rel: 'noopener', href: 'https://wa.me/?text=' + encodeURIComponent('Acompanhe a operação ' + op.codigo + ' no mapa (somente visualização): ' + url), texto: 'Enviar pelo WhatsApp' }),
+        UI.el('a', { classe: 'btn', target: '_blank', rel: 'noopener', href: url, texto: 'Abrir' }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'cmd-pub-trocar', texto: 'Trocar link', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Trocar o link público?', texto: 'O link atual para de funcionar na hora. Quem estiver acompanhando precisará do novo.', ok: 'Trocar', empilhar: true }))) return;
+          executar('comando_publico_gerar', { p_trocar: true }, 'Link trocado. O anterior não funciona mais.');
+        } }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'cmd-pub-desligar', texto: 'Desligar', onclick: async function () {
+          if (!(await UI.confirmar({ titulo: 'Desligar o link público?', texto: 'Quem tiver o link deixa de ver o painel.', ok: 'Desligar', perigo: true, empilhar: true }))) return;
+          executar('comando_publico_desligar', {}, 'Link público desligado.');
+        } }),
+      ]));
+    }
+    desenhar();
+  }
+
   // Link público do dashboard (migração 048): quem abre não precisa de login e só vê os números (sem nomes,
   // sem textos de mensagens, sem fotos). Pode ser trocado (o anterior para de funcionar) ou desligado.
   function urlDashboardPublico(token) { return location.origin + '/dashboard.html?p=' + token; }
@@ -1518,7 +1706,7 @@
     assinarAreasSemTrilha();
     assinarDescansos();
     var cargasModulos = [];
-    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing', 'RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) {
+    ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing', 'RelatosRevisao', 'Binomio', 'ObservacoesCampo', 'Acesso'].forEach(function (nome) {
       if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
     });
     // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
@@ -1632,7 +1820,7 @@
     if (window.AjudaPedidos) window.AjudaPedidos.parar();
     if (window.RecursosEquipe) window.RecursosEquipe.parar();
     if (window.Briefing) window.Briefing.parar();
-    ['RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) { if (window[nome]) window[nome].parar(); });
+    ['RelatosRevisao', 'Binomio', 'ObservacoesCampo', 'Acesso'].forEach(function (nome) { if (window[nome]) window[nome].parar(); });
     if (est.fotosFila.length) UI.aviso(est.fotosFila.length + ' foto(s) sua(s) não chegaram a ser enviadas e foram descartadas ao sair do painel.', 'erro', 10000);
     est.fotosFila = [];
     clearInterval(est.timerStatus);
@@ -1715,7 +1903,8 @@
     var op = est.op;
     $('op-codigo').textContent = op.codigo;
     var tipoOp = window.Cadastro.textoTipo(op);
-    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (op.status === 'ativa' ? 'Operação ativa' : op.arquivada_em ? 'Operação arquivada · só leitura' : 'Operação encerrada · só leitura');
+    $('op-sub').textContent = (tipoOp ? tipoOp + ' · ' : '') + (est.publico ? (operacaoViva() ? 'Operação ativa · visualização pública' : 'Operação encerrada · visualização pública')
+      : op.status === 'ativa' ? 'Operação ativa' : op.arquivada_em ? 'Operação arquivada · só leitura' : 'Operação encerrada · só leitura');
     $('menu-dados-estado').textContent = 'tipo' in op && window.Cadastro.incompleto(op) ? 'cadastro incompleto' : '';
     $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
@@ -1734,8 +1923,12 @@
     $('tela-painel').classList.toggle('op-somente-leitura', op.status !== 'ativa');
     if (op.status !== 'ativa' && est.compartilhando) pararMinhaPosicao(true);
     var faixa = $('faixa-encerrada');
-    faixa.hidden = op.status === 'ativa';
-    if (op.status !== 'ativa') {
+    faixa.hidden = op.status === 'ativa' && !est.publico;
+    if (est.publico) {
+      faixa.hidden = false;
+      $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> Link público do painel' +
+        (est.publico.nomes ? '' : ' · nomes das pessoas escondidos') + '. <span class="faixa-detalhe">Atualiza sozinho a cada ' + Math.round(LIM_PUBLICO_MS / 1000) + ' segundos. Não é possível alterar nada.</span>';
+    } else if (op.status !== 'ativa') {
       // no celular só a primeira frase aparece (.faixa-detalhe some): a faixa fica com uma linha
       $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> ' + C.esc((op.arquivada_em ? 'Arquivada' : 'Encerrada') + ' em ' + C.hora(op.encerrada_em) + '.') +
         ' <span class="faixa-detalhe">' + C.esc(op.dados_apagados_em ? 'Os dados pessoais foram apagados (regra antiga de retenção); o cadastro, o diário e os relatórios continuam.' : 'Nada pode ser alterado. Os dados continuam guardados para consulta e análise.') + '</span>';
@@ -2705,8 +2898,10 @@
     var pil = $('pilula');
     if (!pil) return;
     var cls, txt;
-    if (est.op && est.op.status !== 'ativa') {
+    if (est.op && !operacaoViva()) {
       cls = 'parado'; txt = est.op.arquivada_em ? 'Arquivada · só leitura' : 'Encerrada · só leitura';
+    } else if (est.publico && est.publico.falhas >= 2) {
+      cls = 'sem_atualizacao'; txt = 'Sem conexão — reconectando';
     } else if (navigator.onLine === false || (est.syncFalhou && est.tempoReal !== 'ok')) {
       cls = 'sem_atualizacao'; txt = 'Sem conexão — reconectando';
     } else if (est.tempoReal === 'ok') {
@@ -3008,7 +3203,7 @@
     var por = d.removido_por_nome ? ' por ' + d.removido_por_nome : '';
     if (d.liberado_em) return { cod: 'removido', rot: 'Saída liberada às ' + C.hora(d.liberado_em, false) + por };
     if (d.removido) return { cod: 'removido', rot: 'Removido' + (d.removido_em ? ' às ' + C.hora(d.removido_em, false) : '') + por };
-    if (est.op && est.op.status !== 'ativa') return { cod: 'encerrado', rot: 'Operação encerrada' };
+    if (est.op && !operacaoViva()) return { cod: 'encerrado', rot: 'Operação encerrada' };
     if (aguardandoRetorno(p)) return { cod: 'aguardando', rot: 'Reincluído às ' + C.hora(d.reincluido_em, false) + ' · aguardando o celular voltar' };
     var contato = C.paraMs(d.ultimo_contato_em);
     if (!contato) return { cod: 'aguardando', rot: 'Aguardando primeiro contato' };
@@ -3848,7 +4043,7 @@
 
   // Abas da ficha: "Conversa" (padrão) e "Dados". A escolhida fica até fechar a ficha.
   function mostrarAbaFicha(nome) {
-    est.abaFicha = nome === 'dados' ? 'dados' : 'conversa';
+    est.abaFicha = nome === 'dados' || est.publico ? 'dados' : 'conversa';   // link público: não há conversa
     document.querySelectorAll('#ficha .ficha-aba').forEach(function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-aba') === est.abaFicha)); });
     document.querySelectorAll('#ficha [data-aba-painel]').forEach(function (sec) { sec.hidden = sec.getAttribute('data-aba-painel') !== est.abaFicha; });
   }
@@ -3965,7 +4160,7 @@
       ['Rastreamento', (ehResp ? (d.rastreando ? 'Compartilhando posição' : 'Posição não compartilhada') : (d.rastreando ? 'Ativo' : 'Interrompido')) + ' · ' + C.esc(textoGps(d.gps_estado))],
       [ehResp ? 'Entrou no painel' : 'Ingressou', C.hora(d.criado_em)],
     ];
-    if (ehResp) linhas = linhas.filter(function (l) { return l[0] !== 'CPF' && l[0] !== 'Celular'; });
+    if (ehResp || est.publico) linhas = linhas.filter(function (l) { return l[0] !== 'CPF' && l[0] !== 'Celular'; });
     $('ficha-dados').innerHTML = linhas.map(function (l) { return '<dt>' + l[0] + '</dt><dd>' + l[1] + '</dd>'; }).join('');
     var bCpf = $('ficha-dados').querySelector('[data-cpf]');
     if (bCpf) bCpf.addEventListener('click', function () {
@@ -4447,7 +4642,7 @@
     return u.href;
   }
 
-  function abrirConvite() {
+  function abrirConvite(abaInicial) {
     var op = est.op;
     if (!op || op.status !== 'ativa') return;
     var links = { civil: linkPara(op.token_civil), militar: linkPara(op.token_militar) };
@@ -4460,18 +4655,20 @@
     var abaMil = UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-bombeiros', texto: '■ Link para BOMBEIROS' });
     var abaWhats = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-whatsapp', texto: '☎ WhatsApp' }) : null;
     var abaEmail = window.Convites ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-email', texto: '✉ E-mail' }) : null;
+    var abaCodigo = window.Acesso && 'codigo_acesso' in op ? UI.el('button', { classe: 'btn', type: 'button', id: 'aba-convite-codigo', texto: '🔑 Código' }) : null;
     var caixaLink = UI.el('div', { classe: 'link-caixa' });
-    var paineis = { whatsapp: abaWhats ? window.Convites.painel('whatsapp') : null, email: abaEmail ? window.Convites.painel('email') : null };
+    var paineis = { whatsapp: abaWhats ? window.Convites.painel('whatsapp') : null, email: abaEmail ? window.Convites.painel('email') : null, codigo: abaCodigo ? window.Acesso.painelCodigo() : null };
     Object.keys(paineis).forEach(function (k) { if (paineis[k]) paineis[k].hidden = true; });
 
     function mostrar(tipo) {
-      var convite = tipo === 'email' || tipo === 'whatsapp';
+      var convite = tipo === 'email' || tipo === 'whatsapp' || tipo === 'codigo';
       if (!convite) atual = tipo;
       if (!convite) entrada.value = links[tipo];
       abaCivil.className = 'btn' + (tipo === 'civil' ? ' btn-ativo' : '');
       abaMil.className = 'btn' + (tipo === 'militar' ? ' btn-ativo' : '');
       if (abaWhats) abaWhats.className = 'btn' + (tipo === 'whatsapp' ? ' btn-ativo' : '');
       if (abaEmail) abaEmail.className = 'btn' + (tipo === 'email' ? ' btn-ativo' : '');
+      if (abaCodigo) abaCodigo.className = 'btn' + (tipo === 'codigo' ? ' btn-ativo' : '');
       caixaLink.hidden = qr.hidden = nota.hidden = convite;
       Object.keys(paineis).forEach(function (k) { if (paineis[k]) paineis[k].hidden = k !== tipo; });
       if (convite) return;
@@ -4514,6 +4711,7 @@
     abaMil.addEventListener('click', function () { mostrar('militar'); });
     if (abaEmail) abaEmail.addEventListener('click', function () { mostrar('email'); });
     if (abaWhats) abaWhats.addEventListener('click', function () { mostrar('whatsapp'); });
+    if (abaCodigo) abaCodigo.addEventListener('click', function () { mostrar('codigo'); });
 
     var botoes = [UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Copiar', onclick: copiar })];
     if (navigator.share) botoes.push(UI.el('button', { classe: 'btn', type: 'button', texto: 'Compartilhar', onclick: compartilhar }));
@@ -4521,15 +4719,16 @@
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Convidar' }, [UI.dica('Os links de civis e de bombeiros não dão acesso ao painel: só servem para entrar na operação como participante. Responsável convidado entra pelo painel, com a própria conta.')]),
-      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil, abaWhats, abaEmail]),
+      UI.el('div', { classe: 'abas' }, [abaCivil, abaMil, abaWhats, abaEmail, abaCodigo]),
       caixaLink,
       qr,
       nota,
       paineis.whatsapp,
       paineis.email,
+      paineis.codigo,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
-    mostrar(atual);
+    mostrar(abaInicial === 'codigo' && abaCodigo ? 'codigo' : atual);
   }
 
   /* ------------------------------------------------------------------ */
@@ -12144,7 +12343,7 @@
     abrirGrupos: function (gid) { if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
     abrirMissoes: function () { abrirMissoes(); },
     abrirEquipe: function () { abrirEquipe(); },
-    abrirConvite: function () { abrirConvite(); },
+    abrirConvite: function (aba) { abrirConvite(aba); },
     abrirDadosOperacao: function () { abrirDadosOperacao(); },
   };
 

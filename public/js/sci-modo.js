@@ -18,7 +18,7 @@
   var CORES_FASE = { plotada: 'azul', remocao: 'ambar', acv: 'laranja', entregue: 'verde' };
   var CAT_DIARIO = { operacao: ['COMANDO', 'azul'], setor: ['SETOR', 'azul'], deslocamento: ['EQUIPE', 'ambar'], chegada: ['EQUIPE', 'ambar'], encontro: ['VÍTIMA', 'verde'],
     alerta: ['ALERTA', 'laranja'], pessoa: ['PESSOA', 'cinza'], observacao: ['REGISTRO', 'cinza'], documento: ['DOCUMENTO', 'cinza'] };
-  var NATUREZA = { aquatica: 'Busca aquática', terrestre: 'Busca terrestre', aerea: 'Busca aérea' };
+  var NATUREZA = { aquatica: 'Busca aquática', terrestre: 'Busca terrestre', aerea: 'Busca aérea', sarp: 'Operação SARP (aeronave remotamente pilotada)', brec: 'BREC (busca e resgate em estruturas colapsadas)' };
 
   var est = {
     ativo: false, opId: null, pagina: 'resumo', voltarPara: 'resumo', ausente: false, erro: null, carregou: false,

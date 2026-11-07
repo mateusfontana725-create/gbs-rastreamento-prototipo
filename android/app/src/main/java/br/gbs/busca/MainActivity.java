@@ -207,17 +207,30 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
   private void carregar() {
     String origem = cfg.origem(), token = cfg.token();
     if (origem == null || !Config.tokenValido(token)) {
-      mostrarBoasVindas();
+      // Sem operação ainda: com o servidor fixado na compilação, abre a página de entrada com o código da operação
+      // (o pedido é aceito pelos bombeiros e a operação é guardada aqui por "operacao"). Sem servidor fixado, as boas-vindas.
+      String fixa = Config.origemValida(BuildConfig.ORIGEM);
+      if (fixa == null) {
+        mostrarBoasVindas();
+        return;
+      }
+      esconderPainel();
+      prepararOrigem(fixa);
+      web.loadUrl(fixa + "/participante.html#app=1");
       return;
     }
-    if (!origem.equals(origemCarregada)) {
-      if (pontePronta) { recriarWebView(); }
-      origemCarregada = origem;
-      ligarPonte(origem);
-    }
+    prepararOrigem(origem);
     String v = cfg.vinculoPendente();
     String hash = "t=" + token + "&app=1" + (Config.codigoValido(v) ? "&v=" + v : "");
     web.loadUrl(origem + "/participante.html#" + hash);
+  }
+
+  /** Liga a ponte com a página só para o servidor certo (troca de servidor recria a WebView). */
+  private void prepararOrigem(String origem) {
+    if (origem.equals(origemCarregada)) return;
+    if (pontePronta) { recriarWebView(); }
+    origemCarregada = origem;
+    ligarPonte(origem);
   }
 
   private void recriarWebView() {
@@ -331,6 +344,7 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
         case "estado": responder(id, Estado.I.resumo()); break;
         case "pontos": responder(id, new JSONObject().put("pontos", Estado.I.recentesJson())); break;
         case "vinculoUsado": cfg.esquecerVinculo(); responder(id, new JSONObject().put("ok", true)); break;
+        case "operacao": responder(id, guardarOperacaoDaPagina(d.optString("token", null))); break;
         case "bateria": responder(id, new JSONObject().put("ignorando", pedirBateria())); break;
         case "configuracoes": abrirConfiguracoesDoApp(); responder(id, new JSONObject().put("ok", true)); break;
         case "localizacaoDoCelular": startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)); responder(id, new JSONObject().put("ok", true)); break;
@@ -343,6 +357,17 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
     } catch (Exception e) {
       try { responder(id, new JSONObject().put("erro", "falha")); } catch (Exception ignorada) { /* sem resposta */ }
     }
+  }
+
+  /** A pessoa entrou pelo código e os bombeiros aceitaram: guarda a operação (como se o link tivesse sido aberto). */
+  private JSONObject guardarOperacaoDaPagina(String token) throws Exception {
+    if (token != null) token = token.toLowerCase(java.util.Locale.ROOT);
+    if (origemCarregada == null || !Config.tokenValido(token)) return new JSONObject().put("erro", "dados_invalidos");
+    // trocar de operação com registro ativo só pelo aviso de confirmação de aplicarLink; aqui o registro ainda não começou
+    if (cfg.rastreando() && !token.equals(cfg.token())) return new JSONObject().put("erro", "registrando_outra");
+    cfg.definirOperacao(origemCarregada, token, null);
+    cfg.esquecerVinculo();
+    return new JSONObject().put("ok", true);
   }
 
   private JSONObject info() throws Exception {

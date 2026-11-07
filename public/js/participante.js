@@ -22,6 +22,11 @@
   var CHAVE_CONF = 'sar-civil-confirmacoes';
   var CHAVE_MSGS = 'gbs-civil-mensagens-pendentes';
   var CHAVE_VISTO = 'gbs-civil-conversa-vista';
+  // Entrada pelo código da operação (migração 069): o pedido aguardando resposta e os dados já digitados
+  var CHAVE_PEDIDO = 'gbs-civil-pedido-acesso';
+  var CHAVE_PRE = 'gbs-civil-pre-cadastro';
+  // Modal do aplicativo já mostrado sozinho para esta participação
+  var CHAVE_APP_OFERECIDO = 'gbs-civil-app-oferecido';
   // Fotos com local pendente: [{ id (client_id), capturada, fix: {lat,lng,prec,t} | 'nenhuma' | null }]
   var CHAVE_FOTOS_PEND = 'gbs-civil-fotos-local-pendente';
   var EQUIPE_ATUAL_S = 120;          // posição de bombeiro com até 2 min = atual
@@ -122,11 +127,13 @@
   /* ------------------------------------------------------------------ */
   /* Telas                                                               */
   /* ------------------------------------------------------------------ */
-  var TELAS = ['carregando', 'erro', 'inicio', 'rastreio', 'encerrado'];
+  var TELAS = ['carregando', 'erro', 'codigo', 'espera', 'inicio', 'rastreio', 'encerrado'];
   function mostrarTela(nome) {
     TELAS.forEach(function (t) { $('tela-' + t).hidden = t !== nome; });
-    document.body.classList.toggle('civil-em-rastreio', nome === 'rastreio');   // cabeçalho compacto: o espaço vai para o mapa
+    document.body.classList.toggle('civil-em-rastreio', nome === 'rastreio');   // o mapa ocupa a tela toda
+    if (nome !== 'rastreio') fecharMenuFolha();
     window.scrollTo(0, 0);
+    if (nome === 'rastreio' && estado.mapa) setTimeout(function () { estado.mapa.invalidateSize(); }, 60);
   }
 
   function mostrarErro(texto) {
@@ -163,12 +170,11 @@
       return mostrarErro('Este navegador não oferece acesso à localização. Use o Google Chrome atualizado.');
     }
     estado.token = lerToken();
-    if (!estado.token) {
-      return mostrarErro('Link incompleto. Abra o link completo enviado pelos bombeiros ou leia o QR Code novamente.');
-    }
     // Guarda a página e o mapa no aparelho já na primeira visita (abre de novo mesmo sem internet)
     registrarServiceWorker();
     if (NATIVO) ouvirApp();
+    // Sem link: a pessoa entra com o código da operação e espera os bombeiros aceitarem
+    if (!estado.token) return iniciarPorCodigo();
 
     try {
       estado.info = await C.rpc('info_operacao', { p_token: estado.token });
@@ -199,6 +205,15 @@
         if (conv && conv.nome) $('ini-nome').value = conv.nome;
         else estado.convite = null;
       } catch (e) { /* sem o nome pré-preenchido: a pessoa digita */ }
+    }
+    // Acesso aprovado pelo código: os dados digitados no pedido já vêm preenchidos
+    var pre = C.local.ler(CHAVE_PRE, null);
+    if (pre && !(salvo && salvo.token === estado.token)) {
+      C.local.apagar(CHAVE_PRE);
+      if (!$('ini-nome').value) $('ini-nome').value = pre.nome || '';
+      $('ini-cpf').value = mascararCpf(pre.cpf || '');
+      $('ini-tel').value = mascararTelefone(pre.telefone || '');
+      estado.aprovadoPorCodigo = true;
     }
     if (salvo && salvo.token === estado.token) {
       $('ini-nome').value = salvo.nome || '';
@@ -233,6 +248,14 @@
     $('form-msg').addEventListener('submit', aoEnviarMensagem);
     $('btn-registrar').addEventListener('click', abrirRegistro);
     $('btn-ampliar-mapa').addEventListener('click', function () { alternarMapaAmpliado(true); });
+    // Menu (folha), foto direta e legenda do mapa dentro do menu
+    $('btn-menu').addEventListener('click', function () { abrirMenuFolha(true); });
+    $('folha-fechar').addEventListener('click', function () { abrirMenuFolha(false); });
+    $('folha-fundo').addEventListener('click', function () { abrirMenuFolha(false); });
+    $('foto-rapida').addEventListener('change', function (ev) { aoEscolherFoto(ev, true); });
+    var legendaMapa = document.querySelector('.legenda-civil');
+    if (legendaMapa) { legendaMapa.removeAttribute('aria-hidden'); $('folha-legenda').appendChild(legendaMapa); }
+    document.querySelector('#navegacao .nav-topo').addEventListener('click', function () { $('navegacao').classList.toggle('nav-aberta'); });
     $('btn-fechar-mapa').addEventListener('click', function () { alternarMapaAmpliado(false); });
     $('bussola-ativar').addEventListener('click', pedirBussola);
     $('btn-sos').addEventListener('click', pedirSocorro);
@@ -244,6 +267,8 @@
       b.addEventListener('click', function () { trocarModoNav(b.getAttribute('data-modo')); });
     });
     document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && !$('folha-menu').hidden && !document.querySelector('.modal-fundo')) abrirMenuFolha(false);
+      if (ev.key === 'Escape' && !$('camadas-civil').hidden && !document.querySelector('.modal-fundo')) { $('camadas-civil').hidden = true; $('btn-camadas').setAttribute('aria-expanded', 'false'); }
       if (ev.key === 'Escape' && !$('painel-conversa').hidden && !document.querySelector('.modal-fundo')) fecharConversa();
       if (ev.key === 'Escape' && document.querySelector('.mapa-civil-caixa.mapa-ampliado')) alternarMapaAmpliado(false);
     });
@@ -280,6 +305,7 @@
       if (await retomarParticipacao(salvo)) return;
     }
     mostrarTela('inicio');
+    if (estado.aprovadoPorCodigo) UI.aviso('Acesso aprovado pelos bombeiros! Confira seus dados e toque em COMEÇAR.', 'ok', 10000);
   }
 
   // Consulta a situação de quem já participava (sem criar sessão nova).
@@ -486,6 +512,122 @@
     });
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Menu (folha) do rastreio                                             */
+  /* ------------------------------------------------------------------ */
+  function abrirMenuFolha(abrir) {
+    var f = $('folha-menu');
+    if (!f || f.hidden === !abrir) return;
+    f.hidden = !abrir;
+    $('btn-menu').setAttribute('aria-expanded', String(abrir));
+    document.body.classList.toggle('folha-aberta', abrir);
+    if (abrir) { try { $('folha-fechar').focus(); } catch (e) { /* ignora */ } }
+  }
+  function fecharMenuFolha() { if ($('folha-menu') && !$('folha-menu').hidden) abrirMenuFolha(false); }
+
+  /* ------------------------------------------------------------------ */
+  /* Entrar com o código da operação (migração 069)                       */
+  /* ------------------------------------------------------------------ */
+  // Letras e números sem 0/O/1/I; o campo mostra "ABC 234".
+  function codigoDigitado() { return $('cod-codigo').value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6); }
+  function mostrarCodigo() { var c = codigoDigitado(); $('cod-codigo').value = c.length > 3 ? c.slice(0, 3) + ' ' + c.slice(3) : c; }
+  function erroCodigo(texto) { $('cod-erro').textContent = texto || ''; $('cod-erro').hidden = !texto; }
+
+  async function iniciarPorCodigo() {
+    $('form-codigo').addEventListener('submit', aoPedirAcesso);
+    $('cod-codigo').addEventListener('input', mostrarCodigo);
+    $('cod-cpf').addEventListener('input', function () { this.value = mascararCpf(this.value); });
+    $('cod-tel').addEventListener('input', function () { this.value = mascararTelefone(this.value); });
+    $('btn-cancelar-pedido').addEventListener('click', cancelarPedidoAcesso);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && estado.pedidoAcesso) conferirPedido(); });
+    var ped = C.local.ler(CHAVE_PEDIDO, null);
+    if (ped && ped.pedido) {
+      estado.pedidoAcesso = ped;
+      $('esp-operacao').textContent = ped.operacao || 'a operação';
+      mostrarTela('espera');
+      conferirPedido();
+      return;
+    }
+    mostrarTela('codigo');
+  }
+
+  async function aoPedirAcesso(ev) {
+    ev.preventDefault();
+    erroCodigo('');
+    var codigo = codigoDigitado();
+    var nome = $('cod-nome').value.replace(/\s+/g, ' ').trim();
+    var cpf = digitos($('cod-cpf').value), tel = digitos($('cod-tel').value);
+    if (codigo.length !== 6) { erroCodigo('O código tem 6 letras e números. Confira com os bombeiros.'); $('cod-codigo').focus(); return; }
+    if (nome.length < 2 || nome.length > 40) { erroCodigo('Informe seu nome ou indicativo (2 a 40 caracteres).'); $('cod-nome').focus(); return; }
+    if (cpf && !cpfValido(cpf)) { erroCodigo('CPF inválido. Confira os 11 números.'); $('cod-cpf').focus(); return; }
+    if (!telefoneValido(tel)) { erroCodigo('Celular inválido. Informe o DDD e o número, por exemplo (21) 99876-5432.'); $('cod-tel').focus(); return; }
+    var btn = $('btn-pedir');
+    btn.disabled = true;
+    btn.textContent = 'ENVIANDO…';
+    try {
+      await garantirSessao();
+      var r = await C.rpc('solicitar_acesso_operacao', { p_codigo: codigo, p_nome: nome, p_cpf: cpf || null, p_telefone: tel });
+      if (!r || r.ok === false) { erroCodigo(C.traduzirErro({ message: (r && r.erro) || 'codigo_acesso_invalido' })); return; }
+      estado.pedidoAcesso = { pedido: r.pedido, operacao: r.operacao, nome: nome, cpf: cpf, telefone: tel, em: Date.now() };
+      C.local.gravar(CHAVE_PEDIDO, estado.pedidoAcesso);
+      $('esp-operacao').textContent = r.operacao || 'a operação';
+      mostrarTela('espera');
+      conferirPedido();
+    } catch (e) {
+      erroCodigo(e.rede ? 'Sem conexão com a internet. Verifique os dados móveis ou o Wi-Fi e tente de novo.' : e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'PEDIR PARA ENTRAR';
+    }
+  }
+
+  // Pergunta ao servidor, a cada 4 s, se os bombeiros já responderam
+  async function conferirPedido() {
+    clearTimeout(estado.timerPedido);
+    var ped = estado.pedidoAcesso;
+    if (!ped || estado.conferindoPedido) return;
+    estado.conferindoPedido = true;
+    var r = null;
+    try {
+      await garantirSessao();
+      r = await C.rpc('consultar_pedido_acesso', { p_pedido: ped.pedido }, 12000);
+      $('esp-estado').textContent = 'Conferido às ' + C.hora(Date.now(), true) + '. Pode deixar esta tela aberta.';
+    } catch (e) {
+      if (e.codigo === 'sem_permissao') { limparPedidoAcesso(); mostrarTela('codigo'); estado.conferindoPedido = false; return; }
+      $('esp-estado').textContent = e.rede ? 'Sem internet agora. Tentando de novo…' : e.message;
+    }
+    estado.conferindoPedido = false;
+    if (r && r.status === 'aceito' && r.token) return aoAcessoAprovado(r.token, ped);
+    if (r && r.status === 'recusado') { limparPedidoAcesso(); mostrarTela('codigo'); erroCodigo(C.traduzirErro({ message: 'acesso_recusado' })); return; }
+    if (r && r.status === 'encerrada') { limparPedidoAcesso(); mostrarTela('codigo'); erroCodigo(C.traduzirErro({ message: 'operacao_encerrada' })); return; }
+    if (r && r.status === 'cancelado') { limparPedidoAcesso(); mostrarTela('codigo'); return; }
+    estado.timerPedido = setTimeout(conferirPedido, 4000);
+  }
+
+  function limparPedidoAcesso() {
+    clearTimeout(estado.timerPedido);
+    estado.pedidoAcesso = null;
+    C.local.apagar(CHAVE_PEDIDO);
+  }
+
+  async function cancelarPedidoAcesso() {
+    var ped = estado.pedidoAcesso;
+    if (!ped) { mostrarTela('codigo'); return; }
+    try { await C.rpc('cancelar_pedido_acesso', { p_pedido: ped.pedido }, 10000); } catch (e) { /* sai mesmo assim; o responsável vê que não há mais pedido ao recarregar */ }
+    limparPedidoAcesso();
+    mostrarTela('codigo');
+  }
+
+  // Aceito: o aparelho recebe o link da operação. Guarda os dados digitados, avisa o aplicativo e abre a tela de sempre
+  // (a localização só começa depois do toque em COMEÇAR).
+  async function aoAcessoAprovado(token, ped) {
+    C.local.gravar(CHAVE_PRE, { nome: ped.nome || '', cpf: ped.cpf || '', telefone: ped.telefone || '' });
+    limparPedidoAcesso();
+    if (NATIVO && APP.operacao) { try { await APP.operacao(token); } catch (e) { /* o aplicativo guarda a operação quando a participação começa */ } }
+    try { history.replaceState(null, '', location.pathname + location.search + '#t=' + token + (NATIVO ? '&app=1' : '')); } catch (e) { /* segue */ }
+    location.reload();
+  }
+
   async function garantirSessao() {
     var r = await C.cliente.auth.getSession();
     if (r.data && r.data.session) return r.data.session;
@@ -587,6 +729,7 @@
 
       mostrarTela('rastreio');
       registrarServiceWorker();
+      setTimeout(oferecerAppAposCadastro, 1500);
       if (!teste.ok) estado.gps = teste.codigo === 2 ? 'indisponivel' : 'sem_sinal';
       comecarRastreamento(teste.ok ? teste.pos : null);
       if (!teste.ok && teste.codigo === 2) {
@@ -3236,6 +3379,17 @@
     }).catch(function () { /* sem o botão */ });
   }
 
+  // Logo depois do cadastro (uma vez por participação): abre sozinho o passo a passo do aplicativo. O botão
+  // "Baixar aplicativo" (no menu) continua lá para quem fechar o aviso.
+  function oferecerAppAposCadastro() {
+    if (NATIVO || !estado.appBaixar || !estado.part || estado.finalizado || estado.abrindoApp) return;
+    if (document.querySelector('.modal-fundo')) { setTimeout(oferecerAppAposCadastro, 2500); return; }
+    var feito = C.local.ler(CHAVE_APP_OFERECIDO, null);
+    if (feito && feito.participante_id === estado.part.participante_id) return;
+    C.local.gravar(CHAVE_APP_OFERECIDO, { participante_id: estado.part.participante_id, em: Date.now() });
+    abrirBaixarApp(true);
+  }
+
   // Quem já tem o aplicativo: abre nele direto (sem o passo a passo). Sem o aplicativo, o Chrome cai no download.
   function abrirNoAplicativo() {
     var origem = location.origin;
@@ -3246,7 +3400,7 @@
 
   // Passo a passo: baixar, instalar e abrir o aplicativo já nesta busca. Quem já está participando leva o cadastro
   // por um código de uso único (30 min); o aplicativo assume e esta página para de enviar (evita trilha em dobro).
-  async function abrirBaixarApp() {
+  async function abrirBaixarApp(automatico) {
     if (estado.abrindoApp) return;
     estado.abrindoApp = true;
     var participando = Boolean(estado.part && !estado.finalizado);
@@ -3274,7 +3428,7 @@
     var abrir = UI.el('a', { classe: 'btn btn-escuro', href: intent, texto: '📱 Abrir no aplicativo', onclick: copiar });
     var podeAbrir = !participando || Boolean(codigo);
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao modal-app' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Aplicativo para Android' }, [UI.dica(
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: automatico === true ? 'Baixe o aplicativo para ajudar melhor' : 'Aplicativo para Android' }, [UI.dica(
         'É a mesma página da busca, com o GPS lido pelo próprio celular: a localização continua indo com a tela apagada e, sem internet, ' +
         'fica guardada no celular e vai sozinha quando o sinal voltar. O arquivo vem do servidor dos bombeiros (não da Play Store), ' +
         'por isso o Android pede para permitir a instalação.')]),
@@ -3289,6 +3443,8 @@
       ]),
       aviso ? UI.el('p', { classe: 'erro-form', role: 'alert', texto: aviso }) : null,
       aviso ? UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Tentar de novo', onclick: function () { abrirBaixarApp(); } })]) : null,
+      automatico === true ? UI.rodape([UI.el('button', { classe: 'btn', type: 'button', id: 'app-agora-nao', texto: 'Agora não', onclick: function () { fechar(); } }),
+        UI.el('p', { classe: 'ajuda', texto: 'Depois, se quiser, use o botão "Baixar aplicativo" no menu.' })]) : null,
     ]));
   }
 
@@ -3349,6 +3505,7 @@
     $('saida-pendente').hidden = !pendente;
     if (pendente) $('saida-hora').textContent = C.hora(estado.saidaSolicitadaEm, false);
     $('btn-saida').hidden = pendente;
+    $('btn-menu').classList.toggle('tem-aviso', pendente);
   }
 
   iniciar();

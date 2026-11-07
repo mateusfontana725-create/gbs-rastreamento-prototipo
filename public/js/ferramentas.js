@@ -1003,9 +1003,10 @@
         UI.aviso(nome + ' voltou ao setor ' + s.nome + '.', 'ok', 6000);
       }
     });
-    // áreas de risco
+    // áreas de risco (com a migração 068 o servidor gera o alerta: persistente, para todos os responsáveis e também para trilhas gravadas sem internet)
+    var zonasNoServidor = Boolean(P.zonasNoServidor && P.zonasNoServidor());
     P.pontosInteresse().forEach(function (d) {
-      if (d.categoria !== 'RISCO') return;
+      if (d.categoria !== 'RISCO' || zonasNoServidor) return;
       var chave = p.id + ':r:' + d.id;
       var raio = d.raio_m || P.raioAlertaPadrao;
       var dd = G.distancia(pt.lat, pt.lng, d.lat, d.lng);

@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1329,6 +1329,7 @@ console.log('\nPedidos de ajuda: estados, prioridade, histórico e escalação �
     values ($1, $2, $3, 'Beto', 'PARTICIPANTE', 'socorro antigo', 'entrada', 'AJUDA', now() - interval '3 days') returning id`, [opH.id, beto.participante_id, uBeto]);
   await db.query(`delete from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id]);
   await db.exec(ler('supabase/migracoes/035_pedidos_ajuda.sql'));
+  await db.exec(ler('supabase/migracoes/068_zonas_perigo_descanso.sql'));   // a 035 recria a lista de tipos de alerta sem os mais novos: reaplica a 068 por cima (em produção cada migração roda uma vez, em ordem)
   const legado = (await db.query(`select estado, resolucao, resolucao_texto from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows;
   chk(legado.length === 1 && legado[0].estado === 'resolvido' && /anterior ao fluxo/.test(legado[0].resolucao_texto), 'pedido antigo (mais de 24 h) entra resolvido, marcado como registro anterior ao fluxo', legado);
   chk((await db.query(`select count(*)::int n from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows[0].n === 1, 'reexecutar a migração não duplica');
@@ -2962,5 +2963,81 @@ const gVazio = await rpc(resp1, 'salvar_grupo', { p_operacao: opG.id, p_id: null
 chk(/grupo_sem_integrantes/.test(await erroDe(rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gVazio.id, p_tipo: 'PERSONALIZADA', p_texto: 'a' }))), 'grupo sem integrantes: avisa, não envia');
 
 
-console.log('\nMigrações 007–067 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Segurança: alertas de zona (risco e proibida) e descanso na base (migração 068) ---
+console.log('\nZonas de perigo, áreas proibidas e descanso na base');
+const opZ = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ZONAS', p_retencao_horas: 0 });
+await db.query(`update public.operacoes set criada_em = now() - interval '6 hours' where id = $1`, [opZ.id]);
+const anZ = [await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+const pZ = [];
+for (let i = 0; i < 4; i++) pZ.push(await rpc(anZ[i], 'ingressar', { p_token: opZ.token_civil, p_nome: 'Zona ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+const LZ = -25.6, GZ = -49.4;   // ponto de risco (raio 100 m)
+await rpc(resp1, 'salvar_ponto', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ categoria: 'RISCO', titulo: 'Barranco', lat: LZ, lng: GZ, raio_m: 100 }) });
+const LP = -25.61, GP = -49.41;  // área proibida: quadrado de 200 m
+const cLP = Math.cos(LP * Math.PI / 180);   // um grau de longitude vale menos metros que um de latitude
+const quadZ = [[LP + 100 * mT, GP - 100 * mT / cLP], [LP + 100 * mT, GP + 100 * mT / cLP], [LP - 100 * mT, GP + 100 * mT / cLP], [LP - 100 * mT, GP - 100 * mT / cLP]];
+await rpc(resp1, 'salvar_area_proibida', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ nome: 'Pedreira', pontos: quadZ, motivo: 'Desabamento' }) });
+const alertasZ = async () => (await db.query(`select tipo, nivel, titulo, texto, participante_id, posicao_em from public.alertas where operacao_id = $1 and tipo in ('zona_perigo', 'zona_proibida') order by id`, [opZ.id])).rows;
+const agoraZ = Date.now();
+const kz = (n) => 9100 + n;
+// distância ao polígono (função)
+const dpol = async (la, ln) => (await db.query(`select public.distancia_ao_poligono_m($1, $2, $3::jsonb) d`, [la, ln, JSON.stringify(quadZ)])).rows[0].d;
+chk(await dpol(LP, GP) === 0, 'ponto dentro do polígono: distância 0');
+const dfora = await dpol(LP, GP + 120 * mT / cLP);
+chk(Math.abs(dfora - 20) < 1.5, 'ponto a 20 m da borda: distância ≈ 20 m', dfora);
+// 1. ao vivo, dentro do raio de risco
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(1), LZ + 50 * mT, GZ, agoraZ - 2000)]);
+let az = await alertasZ();
+chk(az.length === 1 && az[0].tipo === 'zona_perigo' && az[0].nivel === 'critico' && /Barranco/.test(az[0].titulo), 'ponto ao vivo dentro do raio de risco gera alerta crítico', az);
+chk(!/sem internet/.test(az[0].texto), 'ao vivo: sem a observação de trilha gravada sem internet', az[0].texto);
+// reenvio e novo ponto na mesma janela: não repete
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(1), LZ + 50 * mT, GZ, agoraZ - 2000), pt(kz(2), LZ + 40 * mT, GZ, agoraZ - 1000)]);
+chk((await alertasZ()).length === 1, 'reenviar os mesmos pontos (ou ficar na área) não repete o alerta');
+// 2. ao vivo, dentro da área proibida
+await enviaT(anZ[1], pZ[1].participante_id, [pt(kz(3), LP, GP, agoraZ - 2000)]);
+az = await alertasZ();
+chk(az.length === 2 && az[1].tipo === 'zona_proibida' && az[1].nivel === 'critico' && /ENTROU/.test(az[1].titulo), 'ponto dentro da área proibida gera alerta crítico "ENTROU"', az[1]);
+// 3. passou perto (20 m fora) e longe (100 m fora)
+await enviaT(anZ[2], pZ[2].participante_id, [pt(kz(4), LP, GP + 120 * mT / cLP, agoraZ - 2000)]);
+az = await alertasZ();
+chk(az.length === 3 && /perto de área proibida/.test(az[2].titulo) && /cerca de \d+ m/.test(az[2].texto), 'a 20 m da área proibida: "passou perto"', az[2]);
+await enviaT(anZ[3], pZ[3].participante_id, [pt(kz(5), LP, GP + 300 * mT / cLP, agoraZ - 2000), pt(kz(6), LZ + 400 * mT, GZ, agoraZ - 1500)]);
+chk((await alertasZ()).length === 3, 'longe das zonas (a 200 m da proibida e 300 m do risco): nenhum alerta');
+// 4. trilha gravada sem internet, recebida agora
+await db.query(`update public.participantes set gravar_trilha = false where id = $1`, [pZ[3].participante_id]);   // com a gravação desligada o alerta continua
+const atras = agoraZ - 3 * 3600e3;
+const rOff = await enviaT(anZ[3], pZ[3].participante_id, [pt(kz(7), LP + 10 * mT, GP, atras), pt(kz(8), LZ + 30 * mT, GZ, atras + 600e3)]);
+az = await alertasZ();
+const offs = az.filter((x) => x.participante_id === pZ[3].participante_id);
+chk(offs.length === 2, 'trilha gravada sem internet que passou pelas duas zonas gera os dois alertas (mesmo com a gravação desligada)', offs.map((x) => x.tipo));
+chk(offs.find((x) => x.tipo === 'zona_proibida').nivel === 'critico' && offs.find((x) => x.tipo === 'zona_perigo').nivel === 'info', 'trilha atrasada: proibida segue crítica; área de risco entra como informativo');
+chk(offs.every((x) => /gravada sem internet/.test(x.texto)), 'o texto diz que a trilha foi gravada sem internet e recebida agora');
+chk(offs.every((x) => x.posicao_em && Math.abs(new Date(x.posicao_em).getTime() - atras) < 3600e3), 'o alerta guarda o horário da passagem (pela trilha GPS), não o de recebimento');
+chk(rOff.confirmados.length === 2, 'os pontos continuam sendo confirmados ao aparelho');
+const antesDup = (await alertasZ()).length;
+await enviaT(anZ[3], pZ[3].participante_id, [pt(kz(7), LP + 10 * mT, GP, atras), pt(kz(8), LZ + 30 * mT, GZ, atras + 600e3)]);
+chk((await alertasZ()).length === antesDup, 'reenviar a trilha atrasada não repete os alertas');
+chk((await db.query(`select count(*)::int n from public.diario d where d.operacao_id = $1 and d.categoria = 'alerta' and d.tipo in ('alerta_zona_perigo', 'alerta_zona_proibida')`, [opZ.id])).rows[0].n >= 4, 'os alertas de zona entram no diário (categoria alerta)');
+
+// descanso na base
+console.log('Descanso na base');
+await rpc(resp1, 'salvar_ponto', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ categoria: 'BASE', titulo: 'Base Z', lat: -25.7, lng: -49.5, raio_m: 50 }) });
+const BL = -25.7, BG = -49.5;
+const t0d = Date.now() - 600e3;
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(21), BL + 200 * mT, BG, t0d), pt(kz(22), BL + 10 * mT, BG, t0d + 60e3), pt(kz(23), BL + 5 * mT, BG, t0d + 120e3)]);
+let ds = (await db.query(`select inicio, fim from public.descansos where participante_id = $1 order by id`, [pZ[0].participante_id])).rows;
+chk(ds.length === 1 && ds[0].fim === null && Math.abs(new Date(ds[0].inicio).getTime() - (t0d + 60e3)) < 1500, 'o primeiro ponto dentro da base abre o descanso (e só um)', ds);
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(24), BL + 8 * mT, BG, t0d + 180e3)]);
+chk((await db.query(`select count(*)::int n from public.descansos where participante_id = $1`, [pZ[0].participante_id])).rows[0].n === 1, 'continuar na base não abre outro descanso');
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(25), BL + 150 * mT, BG, t0d + 300e3)]);
+ds = (await db.query(`select inicio, fim from public.descansos where participante_id = $1 order by id`, [pZ[0].participante_id])).rows;
+chk(ds.length === 1 && ds[0].fim && Math.abs(new Date(ds[0].fim).getTime() - (t0d + 300e3)) < 1500, 'o primeiro ponto fora da base fecha o descanso', ds);
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(26), BL + 20 * mT, BG, t0d + 420e3)]);
+ds = (await db.query(`select fim from public.descansos where participante_id = $1 order by id`, [pZ[0].participante_id])).rows;
+chk(ds.length === 2 && ds[1].fim === null, 'voltar à base abre um novo descanso', ds);
+chk((await como(anZ[0], `select count(*)::int n from public.descansos`)).rows[0].n === 0, 'participante não lê os descansos (RLS)');
+chk((await como(resp1, `select count(*)::int n from public.descansos where operacao_id = $1`, [opZ.id])).rows[0].n === 2, 'responsável da operação lê');
+chk(await (async () => { try { await como(resp1, `insert into public.descansos (operacao_id, participante_id, inicio) values ($1, $2, now())`, [opZ.id, pZ[1].participante_id]); return false; } catch (e) { return /permission|row-level/i.test(String(e.message)); } })(), 'ninguém escreve descanso direto (só o servidor)');
+
+
+console.log('\nMigrações 007–068 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

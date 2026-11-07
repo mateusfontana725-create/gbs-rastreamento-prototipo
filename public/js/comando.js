@@ -197,6 +197,7 @@
     trilhasManuais: new Map(),  // id → { d: dados, camada }
     areasProibidas: new Map(),  // id → { d: dados, camada } (migração 061)
     areasSemTrilha: new Map(),  // id → { d: dados, camada } (migração 066)
+    descansos: new Map(),       // participante → [{ inicio, fim|null }] em ms (migração 068)
     camadaTrilhasManuais: null,
     canalTrilhas: null,
     timerTrilhas: null,
@@ -1515,6 +1516,7 @@
     assinarTrilhasManuais();
     assinarAreasProibidas();
     assinarAreasSemTrilha();
+    assinarDescansos();
     var cargasModulos = [];
     ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing', 'RelatosRevisao', 'Binomio', 'ObservacoesCampo'].forEach(function (nome) {
       if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
@@ -1522,6 +1524,9 @@
     // o spinner sai quando tudo da operação chegou (e só se ainda é a mesma operação)
     Promise.all(cargasModulos).then(function () { if (est.op && est.op.id === op.id) carregandoPainel(false); });
     est.timerStatus = setInterval(vigiarEstados, 2000);
+    // a fadiga e o descanso andam com o relógio: refaz a lista a cada minuto
+    clearInterval(est.timerFadiga);
+    est.timerFadiga = setInterval(function () { if (est.op && est.op.status === 'ativa') { renderizarLista(); if (est.selecionado) atualizarFicha(); } }, 60000);
     // Reserva do alerta de retorno atrasado (o servidor verifica por pg_cron; sem ele, o painel aberto verifica).
     est.timerRetornos = setInterval(verificarRetornosPainel, 30000);
     iniciarPolling();
@@ -2510,6 +2515,7 @@
       carregarVitimasLoc().catch(falhou),
       carregarPermanencias().catch(falhou),
       carregarMissoes(true).catch(falhou),
+      carregarDescansos().catch(falhou),
     ]));
     if (!ainda()) return;
     if (falhas.length) {
@@ -2573,6 +2579,7 @@
         carregarVitimasLoc(),
         carregarPermanencias(),
         carregarMissoes(false),
+        carregarDescansos(),
       ]));
       if (!mesmaOp()) return;
 
@@ -3653,6 +3660,7 @@
     var saida = saidaPendente(p);
     var pend = mensagensPendentes(p);
     var novas = naoLidasDe(p.id).length;
+    var fad = fadigaDe(p);
     var pos = posicaoAtual(p);
     var partes = p.liPartes;
     var grupos = gruposDe(p.id);
@@ -3665,6 +3673,8 @@
     var resp = grupos.some(function (g) { return g.papel === 'responsavel'; });
     var htmlNome = (resp ? '<span class="li-estrela" title="Responsável do grupo">★</span>' : '') +
       '<span class="nome-txt">' + C.esc(nomeExibido(p)) + '</span>' +
+      (fad ? '<span class="li-fadiga li-fadiga-' + fad.nivel + '" role="img" aria-label="Fadiga ' + fad.nivel + '" title="Fadiga ' + window.Fadiga.ROTULOS[fad.nivel].toLowerCase() + ': ' + C.esc(fad.texto) + '"></span>' : '') +
+      (fad && fad.descansando ? '<span class="li-descanso" title="Descansando na base há ' + window.Fadiga.textoMinutos(fad.descansando.min) + (fad.descansando.longo ? ' (descanso longo: a contagem de fadiga foi zerada)' : '') + '">☕ ' + window.Fadiga.textoMinutos(fad.descansando.min) + '</span>' : '') +
       (ajuda ? '<span class="li-aviso li-aviso-ajuda" title="Pediu ajuda">SOS</span>' : '') +
       (saida ? '<span class="li-aviso li-aviso-saida" title="Pediu para sair">Saída</span>' : '') +
       (novas ? '<span class="li-aviso li-aviso-msg" title="' + (novas === 1 ? 'Mensagem nova' : novas + ' mensagens novas') + '">✉' + (novas > 1 ? novas : '') + '</span>' : '');
@@ -3901,6 +3911,14 @@
     $('ficha-pos').classList.toggle('antiga', !pos || posicaoAntiga(p) || gpsRuim);
     var perm = textoPermanenciaParticipante(p.id);
     $('ficha-permanencia').hidden = !perm;
+    var fadF = fadigaDe(p), caixaFad = $('ficha-fadiga');
+    caixaFad.hidden = !fadF;
+    if (fadF) {
+      caixaFad.className = 'ficha-fadiga ficha-fadiga-' + fadF.nivel;
+      caixaFad.textContent = 'Fadiga ' + window.Fadiga.ROTULOS[fadF.nivel].toLowerCase() + ' — ' + fadF.texto +
+        (fadF.descansando ? ' · descansando na base há ' + window.Fadiga.textoMinutos(fadF.descansando.min) : '') +
+        (fadF.descansoTotalMin >= 1 ? ' · descanso na base no total: ' + window.Fadiga.textoMinutos(fadF.descansoTotalMin) : '');
+    }
     if (perm) {
       $('ficha-permanencia').textContent = '⏱ ' + perm.texto;
       $('ficha-permanencia').classList.toggle('acima', perm.acima);
@@ -5615,6 +5633,7 @@
     est.areasProibidas = new Map();
     est.areasSemTrilha.forEach(function (a) { if (a.camada) a.camada.remove(); });
     est.areasSemTrilha = new Map();
+    est.descansos = new Map();
     renderizarAreas();
   }
 
@@ -7858,6 +7877,7 @@
     est.areasProibidas.forEach(function (a) { if (a.camada) a.camada.remove(); });
     est.areasProibidas = new Map();
     encerrarAreasSemTrilha();
+    encerrarDescansos();
     est.semTrilhasManuais = false;
     est.erroTrilhasManuais = null;
   }
@@ -8441,6 +8461,118 @@
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]));
+  }
+
+  /* ---------- Descanso na base e fadiga (migração 068, js/fadiga.js) ---------- */
+  // O servidor abre o descanso quando a pessoa entra no raio de uma base e fecha quando ela sai. Aqui: carga,
+  // tempo real e o cálculo da fadiga (tempo de busca, km individual e km do grupo desde o último descanso longo).
+  async function carregarDescansos() {
+    if (!est.op || est.semDescansos) return;
+    var opId = est.op.id;
+    try {
+      var lista = await C.consultarTudo(function () {
+        return C.cliente.from('descansos').select('id,participante_id,base_id,inicio,fim').eq('operacao_id', opId).order('id', { ascending: true });
+      });
+      if (!est.op || est.op.id !== opId) return;
+      var mapa = new Map();
+      lista.forEach(function (d) {
+        if (!mapa.has(d.participante_id)) mapa.set(d.participante_id, []);
+        mapa.get(d.participante_id).push({ inicio: C.paraMs(d.inicio), fim: d.fim ? C.paraMs(d.fim) : null, base_id: d.base_id });
+      });
+      est.descansos = mapa;
+      est.zonasNoServidor = true;   // banco com a migração 068: os alertas de zona vêm do servidor
+      est.listaSuja = true;
+      est.participantes.forEach(function (p) { p._ciclo = null; });
+    } catch (e) {
+      if (ehTabelaAusente(e)) est.semDescansos = true;
+    }
+  }
+
+  function assinarDescansos() {
+    if (!est.op || est.semDescansos) return;
+    var opId = est.op.id;
+    if (est.canalDescansos) { try { C.cliente.removeChannel(est.canalDescansos); } catch (e) { /* ignora */ } }
+    try {
+      est.canalDescansos = C.cliente.channel('op-descansos-' + opId + '-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'descansos', filter: 'operacao_id=eq.' + opId }, function () {
+          clearTimeout(est.timerDescansos);
+          est.timerDescansos = setTimeout(function () { carregarDescansos().then(function () { renderizarLista(); if (est.selecionado) atualizarFicha(); }); }, 500);
+        })
+        .subscribe(function (status) {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            setTimeout(function () { if (est.op && est.op.id === opId) { carregarDescansos(); assinarDescansos(); } }, 60000);
+          }
+        });
+    } catch (e) { /* sem tempo real: a conferência periódica atualiza */ }
+  }
+
+  function encerrarDescansos() {
+    clearTimeout(est.timerDescansos);
+    if (est.canalDescansos) { try { C.cliente.removeChannel(est.canalDescansos); } catch (e) { /* ignora */ } }
+    est.canalDescansos = null;
+    est.descansos = new Map();
+    est.semDescansos = false;
+    est.zonasNoServidor = false;
+  }
+
+  // Ciclo de esforço do participante (com cache de 1 minuto: refazer a trilha de todos a cada redesenho da lista seria caro).
+  function cicloDoParticipante(p) {
+    var F = window.Fadiga;
+    var agora = C.agora();
+    var ultimo = p.pontos.length ? p.pontos[p.pontos.length - 1] : null;
+    var rows = est.descansos.get(p.id) || [];
+    var chave = [Math.floor(agora / 60000), p.pontos.length, ultimo ? ultimo.id : 0, rows.length, rows.length ? rows[rows.length - 1].fim : 0].join('|');
+    if (p._ciclo && p._ciclo.chave === chave) return p._ciclo;
+    var d = p.dados;
+    var contato = d.ultimo_contato_em ? C.paraMs(d.ultimo_contato_em) : (ultimo ? ultimo.t : null);
+    // sem contato há mais de 15 min o tempo para de contar na última notícia (não se sabe o que a pessoa está fazendo)
+    var ate = d.rastreando && contato && agora - contato < 15 * 60000 ? agora : (contato || agora);
+    var cic = F.ciclo(rows, ate, p.pontos.length ? p.pontos[0].t : null);
+    var tr = trilhaDePontos(p.pontos, true);
+    p._ciclo = { chave: chave, ciclo: cic, km: F.kmDesde(tr.segmentos, cic.inicioMs) };
+    return p._ciclo;
+  }
+
+  // Fadiga da pessoa: { nivel: 'verde'|'amarelo'|'vermelho', itens, texto, buscaMin, km, kmGrupo, descansando, descansoTotalMin } ou null
+  // (responsáveis do painel, quem saiu da operação e quem ainda não tem trilha não têm indicador).
+  function fadigaDe(p) {
+    var F = window.Fadiga, d = p.dados;
+    if (!F || tipoDe(d) === 'responsavel' || d.removido || d.liberado_em || !p.pontos.length) return null;
+    var c = cicloDoParticipante(p);
+    var g = grupoDoParticipante(p), kmGrupo = null;
+    if (g) {
+      var ms = membrosAtivosCampo(g.id).filter(function (x) { return x.p.pontos.length && !x.p.dados.liberado_em; });
+      if (ms.length) kmGrupo = F.mediaKm(ms.map(function (x) { return cicloDoParticipante(x.p).km; }));
+    }
+    var longo = Boolean(c.ciclo.descansando && c.ciclo.descansando.longo);
+    var av = F.avaliar({ buscaMin: c.ciclo.buscaMin, km: c.km, kmGrupo: kmGrupo, emDescansoLongo: longo });
+    return Object.assign(av, { buscaMin: c.ciclo.buscaMin, km: c.km, kmGrupo: kmGrupo, descansando: c.ciclo.descansando, descansoTotalMin: c.ciclo.descansoTotalMin });
+  }
+
+  // Resumo para o dashboard: pessoas e grupos (do pior para o melhor).
+  function resumoFadiga() {
+    var F = window.Fadiga;
+    var pessoas = [], porGrupo = new Map(), cont = { verde: 0, amarelo: 0, vermelho: 0 };
+    est.participantes.forEach(function (p) {
+      var f = fadigaDe(p);
+      if (!f) return;
+      var g = grupoDoParticipante(p);
+      cont[f.nivel]++;
+      pessoas.push({ id: p.id, nome: nomeExibido(p), tipo: tipoDe(p.dados), grupo: g ? g.nome : null, grupoCor: g ? g.cor : null, nivel: f.nivel, indice: f.indice,
+        buscaMin: f.buscaMin, km: f.km, kmGrupo: f.kmGrupo, descansando: f.descansando ? Math.round(f.descansando.min) : null,
+        descansoTotalMin: Math.round(f.descansoTotalMin), texto: f.texto });
+      if (g) {
+        var x = porGrupo.get(g.id) || { id: g.id, nome: g.nome, cor: g.cor, pessoas: 0, indice: 0, km: 0, buscaMin: 0, vermelhos: 0, amarelos: 0 };
+        x.pessoas++; x.km += f.km; x.buscaMin += f.buscaMin; x.indice = Math.max(x.indice, f.indice);
+        if (f.nivel === 'vermelho') x.vermelhos++; else if (f.nivel === 'amarelo') x.amarelos++;
+        porGrupo.set(g.id, x);
+      }
+    });
+    pessoas.sort(function (a, b) { return b.indice - a.indice || b.buscaMin - a.buscaMin; });
+    var grupos = Array.from(porGrupo.values()).map(function (x) {
+      return Object.assign(x, { nivel: F.NOMES[x.indice], kmMedio: x.km / x.pessoas, buscaMedia: x.buscaMin / x.pessoas });
+    }).sort(function (a, b) { return b.indice - a.indice || b.kmMedio - a.kmMedio; });
+    return { pessoas: pessoas, grupos: grupos, contagem: cont, limites: F.LIMITES, descansoDisponivel: !est.semDescansos };
   }
 
   /* ---------- Áreas sem trilha (migração 066) ---------- */
@@ -11955,6 +12087,8 @@
     enviarAreasComoSetores: function (areas, opcoes) { return enviarAreasComoSetores(areas, opcoes); },
     marcarImportadosConcluidos: function (ids) { return marcarImportadosConcluidos(ids); },
     resumoOperacao: function () { return resumoOperacao(); },
+    fadiga: function () { return resumoFadiga(); },
+    zonasNoServidor: function () { return Boolean(est.zonasNoServidor); },
     marcarPontoConcluidoId: function (id) { return C.rpc('marcar_ponto_concluido', { p_operacao: est.op.id, p_id: id, p_concluido: true }).then(function (r) { aplicarPontos([r]); return r; }); },
     enviarTrilhaImportada: function (dados) { return enviarTrilhaImportada(dados); },
     criarSetorUlv: function (v, local) { return criarSetorUlv(v, local); },

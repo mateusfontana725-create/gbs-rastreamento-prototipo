@@ -908,6 +908,12 @@
     // ações no painel (comando.js): ver pessoa / setor no mapa, abrir a central e o diário
     var acoes = (r && r.acoes) || {};
     var porId = new Map((e ? e.pessoas : []).map(function (p) { return [p.id, p]; }));
+    // Fadiga (só no painel com a operação aberta): tempo de busca, km individual e km do grupo desde o último descanso longo na base
+    var fadiga = null;
+    var PNF = raiz.Painel;
+    if (PNF && PNF.fadiga && PNF.op && PNF.op() && PNF.op().id === op.id && raiz.Fadiga && !encerrada) {
+      try { fadiga = PNF.fadiga(); } catch (eF) { fadiga = null; }
+    }
     var TIPO_PESSOA = { militar: 'militar', civil: 'civil', responsavel: 'responsável' };
     function situacao(p) { return p.emCampo ? 'em campo agora' : p.ultimo ? 'último ponto ' + haQuanto(p.ultimo, agora) : 'sem GPS'; }
     function itemPessoa(p, valor) {
@@ -922,6 +928,22 @@
         vazio: 'Ninguém.', nota: acoes.verPessoa ? 'Toque numa pessoa para vê-la no mapa e abrir a ficha.' : null });
     }
     function porNome(a, b) { return a.nome.localeCompare(b.nome); }
+    var ROTULO_FADIGA = { verde: 'verde', amarelo: 'amarela', vermelho: 'vermelha' };
+    function selo(nivel, texto) { return el('span', { classe: 'dash-fad dash-fad-' + nivel, texto: texto || ROTULO_FADIGA[nivel] }); }
+    function detalheFadiga() {
+      abrirDetalhe({
+        titulo: 'Fadiga', subtitulo: 'Do mais para o menos cansado, desde o último descanso longo na base.',
+        lista: fadiga.pessoas.map(function (p) {
+          return { titulo: p.nome, meta: [p.grupo || 'sem grupo', 'busca ' + raiz.Fadiga.textoMinutos(p.buscaMin) + ' · ' + raiz.Fadiga.textoKm(p.km) +
+            (p.kmGrupo != null ? ' · grupo ' + raiz.Fadiga.textoKm(p.kmGrupo) : '') + (p.descansando != null ? ' · descansando há ' + raiz.Fadiga.textoMinutos(p.descansando) : '')].join(' · '),
+            valor: selo(p.nivel), aoClicar: acoes.verPessoa ? function () { acoes.verPessoa(p.id); } : null };
+        }),
+        vazio: 'Ninguém com trilha ainda.',
+        nota: 'Amarelo: ' + raiz.Fadiga.textoMinutos(raiz.Fadiga.LIMITES.tempoMin.amarelo) + ' de busca, ' + raiz.Fadiga.LIMITES.km.amarelo + ' km ou média do grupo de ' + raiz.Fadiga.LIMITES.kmGrupo.amarelo +
+          ' km. Vermelho: ' + raiz.Fadiga.textoMinutos(raiz.Fadiga.LIMITES.tempoMin.vermelho) + ', ' + raiz.Fadiga.LIMITES.km.vermelho + ' km ou ' + raiz.Fadiga.LIMITES.kmGrupo.vermelho +
+          ' km. Um descanso de ' + raiz.Fadiga.LIMITES.descansoLongoMin + ' min ou mais na base zera a contagem. É indicação para o comando decidir a troca da equipe.',
+      });
+    }
     function detalheSetor(st) {
       abrirDetalhe({
         titulo: st.nome || 'Setor',
@@ -1018,6 +1040,8 @@
         e ? function () { detalhePessoas('Percorrido por pessoa', num(e.km, 1) + ' km no total', e.pessoas.slice().sort(function (a, b) { return b.km - a.km; }), function (p) { return num(p.km, 1) + ' km'; }); } : null),
       kpi('⧗', 'Esforço', e ? num(e.horas, 1) + ' h' : '—', 'pessoa·hora com GPS', 'azul',
         e ? function () { detalhePessoas('Horas com GPS por pessoa', num(e.horas, 1) + ' pessoa·hora no total', e.pessoas.slice().sort(function (a, b) { return b.horas - a.horas; }), function (p) { return num(p.horas, 1) + ' h'; }); } : null),
+      fadiga ? kpi('☕', 'Fadiga (vermelho)', String(fadiga.contagem.vermelho), fadiga.contagem.amarelo + ' amarelo · ' + fadiga.contagem.verde + ' verde',
+        fadiga.contagem.vermelho ? 'vermelho' : fadiga.contagem.amarelo ? 'ambar' : 'verde', fadiga.pessoas.length ? function () { detalheFadiga(); } : null) : null,
       kpi('▦', 'Setores', e ? String(e.setores.length) : '—', e && e.coberturaMedia != null ? pct(e.coberturaMedia) + ' coberto' : 'nenhum desenhado', 'ambar',
         e && e.setores.length ? function () {
           abrirDetalhe({ titulo: 'Setores', subtitulo: 'Do menos para o mais coberto.', lista: e.setores.map(function (st) {
@@ -1096,6 +1120,23 @@
     });
 
     // cobertura dos setores
+    var cFadiga = fadiga ? cartao({
+      span: 6, titulo: 'Fadiga e descanso', n: fadiga.pessoas.length,
+      pergunta: 'Tempo de busca, quilômetros da pessoa e do grupo desde o último descanso longo na base. Verde, amarelo ou vermelho pelo pior dos três; o descanso começa sozinho quando a pessoa está na base.',
+      corpo: [fadiga.pessoas.length ? el('div', null, [
+        el('div', { classe: 'dash-fad-resumo' }, [selo('verde', fadiga.contagem.verde + ' verde'), selo('amarelo', fadiga.contagem.amarelo + ' amarelo'), selo('vermelho', fadiga.contagem.vermelho + ' vermelho')]),
+        fadiga.grupos.length ? tabela('dash-tab-fadiga-grupos', [{ titulo: 'Grupo' }, { titulo: 'Pessoas', num: true }, { titulo: 'Média km', num: true }, { titulo: 'Fadiga' }],
+          fadiga.grupos.map(function (g) { return [g.nome, String(g.pessoas), num(g.kmMedio, 1), selo(g.nivel, g.vermelhos ? g.vermelhos + ' vermelho' : g.amarelos ? g.amarelos + ' amarelo' : 'verde')]; })) : null,
+        tabela('dash-tab-fadiga', [{ titulo: 'Pessoa' }, { titulo: 'Busca', num: true }, { titulo: 'Km', num: true, classe: 'dash-so-largo' }, { titulo: 'Descanso', num: true, classe: 'dash-so-largo' }, { titulo: 'Fadiga' }],
+          fadiga.pessoas.slice(0, 12).map(function (p) {
+            return [p.nome + (p.grupo ? ' · ' + p.grupo : ''), raiz.Fadiga.textoMinutos(p.buscaMin), num(p.km, 1),
+              p.descansando != null ? 'agora ' + raiz.Fadiga.textoMinutos(p.descansando) : (p.descansoTotalMin ? raiz.Fadiga.textoMinutos(p.descansoTotalMin) : '—'), selo(p.nivel)];
+          }), function (j) { var p = fadiga.pessoas[j]; if (acoes.verPessoa) acoes.verPessoa(p.id); }),
+        fadiga.pessoas.length > 12 ? el('p', { classe: 'muted', texto: 'Mostrando as 12 mais cansadas. Toque no indicador "Fadiga" no topo para ver todas.' }) : null,
+      ]) : el('p', { classe: 'muted', texto: 'Ninguém com trilha ainda.' })],
+      nota: fadiga.descansoDisponivel ? 'Limites padrão: amarelo a partir de 2 h de busca, 8 km ou média do grupo de 7 km; vermelho a partir de 4 h, 15 km ou 12 km. Um descanso de 30 min ou mais na base zera a contagem.'
+        : 'O descanso na base precisa da migração 068 no banco; sem ela a contagem não é zerada.',
+    }) : null;
     var cSet = cartao({
       span: 6, titulo: 'Cobertura dos setores', n: e ? e.setores.length : undefined,
       pergunta: 'Quanto da área de cada setor teve alguém passando, e quando foi a última passagem.',
@@ -1177,7 +1218,7 @@
       });
     }
 
-    return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cSet, cOcorr, cVerif])];
+    return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cFadiga, cSet, cOcorr, cVerif])];
   }
 
   /* ------------------------------ mapa do Paraná (operações) ------------------------------ */

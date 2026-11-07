@@ -2717,3 +2717,25 @@ html[data-tema="claro"] .chip-deslocamento { background: rgba(255, 255, 255, .96
 /* Grupos: quem já está em outro grupo não pode ser marcado */
 .linha-desativada { opacity: .6; cursor: not-allowed; }
 .ficha-um-grupo { display: block; margin-top: 6px; }
+
+/* ---------- Fadiga e descanso (verde, amarelo, vermelho) ---------- */
+.li-fadiga { display: inline-block; width: 10px; height: 10px; margin-left: 6px; border-radius: 50%; vertical-align: middle; border: 1.5px solid rgba(0, 0, 0, .55); flex: none; }
+.li-fadiga-verde { background: #22c55e; }
+.li-fadiga-amarelo { background: #facc15; }
+.li-fadiga-vermelho { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, .28); }
+.li-descanso { margin-left: 6px; padding: 0 5px; border-radius: 8px; font-size: .68rem; font-weight: 700; background: rgba(56, 189, 248, .16); color: #7dd3fc; white-space: nowrap; }
+html[data-tema="claro"] .li-descanso { color: #0369a1; background: rgba(2, 132, 199, .12); }
+.ficha-fadiga { margin: 6px 0 0; padding: 6px 9px; border-radius: 8px; font-size: .82rem; border-left: 5px solid #22c55e; background: rgba(34, 197, 94, .1); }
+.ficha-fadiga-amarelo { border-left-color: #facc15; background: rgba(250, 204, 21, .13); }
+.ficha-fadiga-vermelho { border-left-color: #ef4444; background: rgba(239, 68, 68, .13); font-weight: 600; }
+.dash-fad { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: .74rem; font-weight: 700; white-space: nowrap; color: #0b1220; }
+.dash-fad-verde { background: #4ade80; }
+.dash-fad-amarelo { background: #fde047; }
+.dash-fad-vermelho { background: #f87171; }
+.dash-fad-resumo { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.dash-tab-fadiga { grid-template-columns: minmax(0, 1.5fr) 74px 56px 96px 96px; }
+.dash-tab-fadiga-grupos { grid-template-columns: minmax(0, 1.2fr) 60px 70px 110px; margin-bottom: 10px; }
+.dash-kpi-vermelho .dash-kpi-icone { background: rgba(248, 113, 113, .16); color: #f87171; }
+@media (max-width: 860px) {
+  .dash-tab-fadiga { grid-template-columns: minmax(0, 1fr) 64px 96px; gap: 6px 10px; }
+}

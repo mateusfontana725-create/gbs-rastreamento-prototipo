@@ -327,6 +327,31 @@ O mapa da página do participante mostra, além dos bombeiros:
   pedem confirmação. O limite de 60 mensagens por minuto da operação continua valendo (quem passar do limite não recebe e o
   painel avisa para reenviar). **Antes de usar, rode `067_grupos_mensagem_e_unico.sql` no Supabase.**
 
+### Segurança: alertas de zona, fadiga e descanso na base (migração 068)
+
+- **Alerta de área de risco ou proibida** (servidor): cada ponto recebido é conferido contra os **pontos de RISCO** (dentro do raio) e
+  as **áreas proibidas** (dentro ou a até **25 m**). Gera o alerta **zona_perigo** / **zona_proibida** para os responsáveis, com o nome da
+  pessoa, o grupo, a distância e o horário da passagem ("pela trilha GPS"), entra no **diário** e aparece na central de alertas.
+  - **Ao vivo** (pessoa com internet): alerta **crítico**, com alarme, faixa vermelha e **Ciente**.
+  - **Trilha gravada sem internet** (chega depois, quando o celular reconecta): o mesmo alerta, com o horário **da passagem** (não o do
+    recebimento) e o aviso "trilha gravada sem internet e recebida agora". Área proibida segue **crítica**; área de risco entra como
+    **informativo** (o evento já passou).
+  - Um alerta por **pessoa, zona e janela de 30 min**: reenviar os mesmos pontos ou ficar parado na área não repete. Vale mesmo com a
+    gravação da trilha desligada para a pessoa (migração 066). Com a 068 aplicada, o alarme local de "entrou na área de risco" do painel
+    deixa de tocar (o do servidor o substitui); sem ela, continua como antes.
+- **Descanso na base**: dentro do raio de uma **Base** (padrão 50 m) a pessoa passa a **descansar** sozinha: o servidor abre o descanso no
+  primeiro ponto dentro da base e fecha no primeiro ponto fora (tabela `descansos`; só os responsáveis leem). Na **lista de participantes**
+  aparece "☕ 12 min" enquanto descansa, e a **ficha** mostra o descanso atual e o total na base.
+- **Indicador de fadiga** (verde, amarelo, vermelho), na **lista de participantes** (ponto ao lado do nome), na **ficha** e no **dashboard**
+  (indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso", por pessoa e por grupo, do mais para o menos cansado). Conta, **desde o último
+  descanso longo** (30 min ou mais na base, que zera a contagem), o **tempo de busca** (sem os descansos curtos), os **km da pessoa** e a
+  **média de km do grupo**; o nível é o **pior dos três**. Padrões (em `public/js/fadiga.js`, `LIMITES`): amarelo a partir de **2 h**, **8 km**
+  ou média do grupo de **7 km**; vermelho a partir de **4 h**, **15 km** ou **12 km**. Quem descansa há 30 min ou mais fica verde. É
+  **indicação para o comando decidir a troca da equipe**, não um limite médico. Sem contato há mais de 15 min o tempo para de contar na
+  última notícia. Responsáveis do painel e quem ainda não tem trilha não têm indicador. O cartão do dashboard só aparece no **painel com
+  a operação aberta** (o link público e a operação arquivada não têm o descanso). **Antes de usar, rode `068_zonas_perigo_descanso.sql`
+  no Supabase** (sem ela os alertas de zona e o descanso não existem; a fadiga aparece, mas sem zerar nos descansos).
+
 ### Deslocamento de grupos, alertas e controle de retorno
 
 - **Enviar destino → Grupo** (Ferramentas → Enviar destino, "Enviar o centro como destino" num setor, ou
@@ -2341,6 +2366,12 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 46f | Tentar colocar em outro grupo alguém que já está num grupo (Membros e ficha) | aparece desativado/sem o botão; se for forçado, o servidor recusa com "já está em outro grupo" |
 | 46g | Abrir o link do grupo B num celular cuja pessoa já está no grupo A | continua na operação e no grupo A, sem entrar no B |
 | 47a | Abrir uma operação grande (100 pessoas ou mais, dezenas de milhares de posições) com o celular em 4G | a lista de participantes aparece em poucos segundos, antes das trilhas; os setores aparecem logo em seguida e o spinner sai sem esperar o restante |
+| 48a | Marcar um ponto **Risco** e uma **Área proibida**; com o celular de um participante online, andar até o raio do risco e até a borda da área | alerta crítico (alarme, faixa vermelha, "Ciente") com o nome, o grupo e a distância; um só por janela de 30 min |
+| 48b | Com o celular em modo avião, passar por uma área proibida e por um ponto de risco; religar a internet 10 min depois | os alertas chegam com o horário da passagem e o aviso de "trilha gravada sem internet"; a proibida é crítica e o risco, informativo |
+| 48c | Entrar no raio de uma **Base** e ficar parado 5 min; sair e voltar | "☕ N min" na lista e na ficha; o descanso fecha ao sair e abre outro ao voltar |
+| 48d | Ficar mais de 30 min na base e voltar a campo | a fadiga volta a verde e o tempo de busca recomeça do fim do descanso |
+| 48e | Equipe andando 2 h, 4 h e 8 km, 15 km (ou grupo com média alta) | o ponto da lista passa de verde a amarelo e a vermelho; ficha e dashboard mostram o motivo (tempo, km, grupo) |
+| 48f | Abrir o **Dashboard** da operação ativa | indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso" com pessoas e grupos |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento

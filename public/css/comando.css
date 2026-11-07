@@ -2693,16 +2693,6 @@ button.sci2-kpi:hover { border-color: var(--borda-forte); background: var(--supe
 /* Setores: o contorno é contínuo e forte (a situação aparece no preenchimento); o filete escuro separa a área do fundo */
 .setor-filete { pointer-events: none; }
 
-/* Vários elementos no mesmo ponto: lista para escolher qual abrir */
-.balao-sobrepostos { display: grid; gap: 6px; min-width: 180px; }
-.balao-item-sobreposto {
-  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
-  padding: 7px 9px; border: 1px solid var(--borda, #334155); border-radius: 8px; background: transparent; color: inherit; font: inherit;
-}
-.balao-item-sobreposto:hover, .balao-item-sobreposto:focus-visible { background: rgba(148, 163, 184, .18); outline: 2px solid var(--acento, #f59e0b); outline-offset: 1px; }
-.balao-item-sobreposto .chip-cor { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, .5); }
-.balao-item-txt { display: grid; min-width: 0; }
-.balao-item-txt small { opacity: .75; }
 
 /* Em deslocamento até o local: o mapa fica no endereço da operação */
 .chip-deslocamento {

@@ -800,7 +800,8 @@
     function abrirDetalhes(ev) {
       cancelarSegurar(); fecharBalao();
       var itens = o.sobrepostos ? o.sobrepostos(ev.latlng) : null;
-      if (itens && itens.length > 1) { abrirEscolhaSobrepostos(ev.latlng, itens); return; }
+      // vários no mesmo ponto: abre o que o toque escolheu (o menor, ou o de baixo depois de tocar de novo)
+      if (itens && itens.length > 1) { itens[sobrepostoAtual(ev, itens)].abrir(); return; }
       o.detalhes(ev);
     }
     function marcarSegurou() { segurou = true; setTimeout(function () { segurou = false; }, 1200); }
@@ -809,7 +810,7 @@
       if (est.desenho) { if (o.noDesenho) o.noDesenho(ev); return; }
       if (segurou) { segurou = false; return; }   // o clique que termina o "segurar"
       var itens = o.sobrepostos ? o.sobrepostos(ev.latlng) : null;
-      if (itens && itens.length > 1) { abrirEscolhaSobrepostos(ev.latlng, itens); return; }   // vários elementos no mesmo ponto: escolher
+      if (itens && itens.length > 1) { abrirSobreposto(ev, itens); return; }   // vários no mesmo ponto: o menor (tocar de novo: o de baixo)
       var info = o.info(ev);
       abrirBalao(info.latlng || ev.latlng, info, function () { o.detalhes(ev); });
     });
@@ -5975,6 +5976,18 @@
     });
     camada.addTo(est.camadaSetores);
     s.camada = camada;
+    agendarOrdemSetores();
+  }
+
+  // Setores menores por cima dos maiores: o contorno de quem está dentro de outro continua inteiro à vista e o toque cai nele.
+  function agendarOrdemSetores() {
+    if (est.timerOrdemSetores) return;
+    est.timerOrdemSetores = setTimeout(function () {
+      est.timerOrdemSetores = null;
+      Array.from(est.setores.values()).filter(function (x) { return x.camada; })
+        .sort(function (a, b) { return areaSetorM2(b.d) - areaSetorM2(a.d); })
+        .forEach(function (x) { if (x.filete && x.filete.bringToFront) x.filete.bringToFront(); if (x.camada.bringToFront) x.camada.bringToFront(); });
+    }, 0);
   }
 
   /* ---------- Pontos de interesse ----------------------------------- */
@@ -6470,8 +6483,7 @@
   }
 
   /* ---------- Elementos sobrepostos: escolher qual abrir ---------- */
-  // Setores e áreas proibidas que cobrem o ponto tocado. Com mais de um, o toque abre uma lista para escolher
-  // (antes só abria o de cima e o de baixo só dava para alcançar excluindo o outro).
+  // Setores e áreas proibidas que cobrem o ponto tocado, do menor para o maior.
   function itensSobrepostosEm(ll) {
     var G = window.TrilhaGeo, itens = [];
     if (!G) return itens;
@@ -6481,33 +6493,65 @@
         : Array.isArray(d.pontos) && d.pontos.length >= 3 && G.pontoNoPoligono(ll.lat, ll.lng, d.pontos);
       if (!dentro) return;
       var a = areaSetorM2(d);
-      itens.push({ cor: d.cor, area: a, titulo: 'Setor ' + d.nome, sub: STATUS_SETOR[d.status].rotulo + ' · ' + formatarArea(a), abrir: function () { abrirSetor(d.id); } });
+      itens.push({ chave: 's:' + d.id, cor: d.cor, area: a, titulo: 'Setor ' + d.nome, sub: STATUS_SETOR[d.status].rotulo + ' · ' + formatarArea(a),
+        camada: s.camada, estilo: function () { return estiloSetor(d); }, abrir: function () { abrirSetor(d.id); } });
     });
     est.areasProibidas.forEach(function (x) {
       var d = x.d;
       if (!Array.isArray(d.pontos) || d.pontos.length < 3 || !G.pontoNoPoligono(ll.lat, ll.lng, d.pontos)) return;
-      itens.push({ cor: '#dc2626', area: G.areaPoligonoM2(d.pontos), titulo: '⛔ ' + d.nome, sub: 'Área proibida', abrir: function () { abrirAreaProibida(d.id); } });
+      itens.push({ chave: 'p:' + d.id, cor: '#dc2626', area: G.areaPoligonoM2(d.pontos), titulo: '⛔ ' + d.nome, sub: 'Área proibida', camada: x.camada,
+        estilo: function () { return ESTILO_PROIBIDA; }, abrir: function () { abrirAreaProibida(d.id); } });
     });
     return itens.sort(function (a, b) { return a.area - b.area; });   // o menor (mais específico) primeiro
   }
 
-  function abrirEscolhaSobrepostos(latlng, itens) {
-    if (!est.mapa) return;
-    var corpo = UI.el('div', { classe: 'balao-corpo balao-sobrepostos' }, [
-      UI.el('strong', { classe: 'balao-titulo', texto: itens.length + ' elementos neste ponto' }),
-      UI.el('small', { classe: 'balao-sub', texto: 'Escolha qual abrir:' }),
-    ].concat(itens.map(function (it) {
-      return UI.el('button', { classe: 'balao-item-sobreposto', type: 'button', onclick: function () { fecharBalao(); it.abrir(); } }, [
-        UI.el('span', { classe: 'chip-cor', style: 'background:' + it.cor }),
-        UI.el('span', { classe: 'balao-item-txt' }, [UI.el('strong', { texto: it.titulo }), UI.el('small', { texto: it.sub })]),
-      ]);
-    })));
-    if (!est.balao) {
-      est.balao = L.popup({ className: 'balao-mapa', closeButton: true, autoPan: true, autoPanPadding: [30, 30], maxWidth: 260, minWidth: 160, offset: [0, -8] });
-    }
-    est.balao.setLatLng(latlng).setContent(corpo);
-    est.balao.options.offset = L.point(0, -8);
-    est.balao.openOn(est.mapa);
+  // Vários elementos no ponto tocado: abre direto o MENOR que contém o ponto (o mais específico: num círculo dentro de
+  // outro, tocar no miolo abre o de dentro e tocar no anel abre o de fora). Tocar de novo no mesmo lugar passa para o de
+  // baixo (o próximo maior) e assim por diante; o escolhido fica com o contorno destacado por alguns segundos.
+  var cicloSobreposto = { chave: '', i: 0, t: 0, ponto: null };
+  function sobrepostoAtual(ev, itens) {
+    var c = cicloSobreposto;
+    var chave = itens.map(function (x) { return x.chave; }).join('|');
+    var pt = ev.containerPoint || null;
+    var dt = Date.now() - c.t;
+    var mesmoLugar = c.ponto && pt && c.ponto.distanceTo(pt) <= 14 && c.chave === chave;
+    return mesmoLugar && dt < 8000 ? Math.min(c.i, itens.length - 1) : 0;
+  }
+  function avancarSobreposto(ev, itens) {
+    var c = cicloSobreposto;
+    var chave = itens.map(function (x) { return x.chave; }).join('|');
+    var pt = ev.containerPoint || null;
+    var dt = Date.now() - c.t;
+    var mesmoLugar = c.ponto && pt && c.ponto.distanceTo(pt) <= 14 && c.chave === chave && dt < 8000;
+    // o 2º clique de um clique duplo não troca (o duplo abre o que já está escolhido)
+    c.i = mesmoLugar ? (dt < 350 ? c.i : (c.i + 1) % itens.length) : 0;
+    c.chave = chave; c.t = Date.now(); c.ponto = pt;
+    return c.i;
+  }
+  function abrirSobreposto(ev, itens) {
+    var i = avancarSobreposto(ev, itens);
+    var it = itens[i];
+    var prox = itens[(i + 1) % itens.length];
+    destacarSobreposto(it);
+    abrirBalao(ev.latlng, {
+      titulo: it.titulo,
+      sub: it.sub,
+      texto: (itens.length - 1) + (itens.length > 2 ? ' outros elementos' : ' outro elemento') + ' neste ponto. Toque de novo aqui para ' +
+        (i + 1 < itens.length ? 'o de baixo: ' : 'voltar ao primeiro: ') + prox.titulo + '.',
+    }, function () { it.abrir(); });
+  }
+  function destacarSobreposto(it) {
+    var d = est.destaqueSobreposto;
+    if (d) { clearTimeout(d.timer); try { d.restaurar(); } catch (e) { /* camada já saiu do mapa */ } }
+    est.destaqueSobreposto = null;
+    if (!it.camada || !it.camada.setStyle) return;
+    var camada = it.camada;
+    camada.setStyle({ weight: 7, opacity: 1 });
+    if (camada.bringToFront) camada.bringToFront();
+    est.destaqueSobreposto = {
+      restaurar: function () { camada.setStyle(it.estilo()); agendarOrdemSetores(); },
+      timer: setTimeout(function () { if (est.destaqueSobreposto) { est.destaqueSobreposto.restaurar(); est.destaqueSobreposto = null; } }, 3500),
+    };
   }
 
   /* ---------- Primeira área de busca: setor de 200 m em volta do ULV ---------- */

@@ -15,7 +15,7 @@
   var C = window.Comunicacao;
   var UI = window.UI;
 
-  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', outras: 'Outras' };
+  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', sarp: 'SARP', brec: 'BREC', outras: 'Outras' };
   var BUCKET = 'vitimas';
 
   // Data e hora do formulário (datetime-local) → ISO; vazio ou inválido → ''
@@ -1016,6 +1016,8 @@
         fechar(true);
         UI.aviso(local ? 'Último local visto salvo.' : 'Último local visto retirado.', 'ok');
         if (opcoes.aoSalvar) opcoes.aoSalvar();
+        // o ULV ganha, automaticamente, o setor de 200 m (primeira área de busca; dá para dividi-lo depois)
+        if (local && window.Painel && window.Painel.criarSetorUlv) window.Painel.criarSetorUlv(v, local);
       } catch (e) {
         erro.textContent = 'Não foi possível salvar: ' + (e.message || e);
         erro.hidden = false;

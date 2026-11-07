@@ -61,6 +61,14 @@
     operacao_encerrada: 'Esta operação foi encerrada pelo responsável.',
     nome_invalido: 'Informe um nome ou indicativo com 2 a 40 caracteres.',
     participante_removido: 'Você foi removido desta operação pelo responsável.',
+    somente_leitura: 'Este é o link público do painel: só dá para visualizar, não para alterar.',
+    link_publico_comando_invalido: 'Este link do painel não funciona mais: foi trocado ou desligado. Peça o link novo a quem enviou.',
+    codigo_acesso_invalido: 'Este código não existe ou está desligado. Confira com os bombeiros.',
+    codigo_muitas_tentativas: 'Muitos códigos errados seguidos. Espere 10 minutos e tente de novo.',
+    acesso_recusado: 'Os bombeiros não aceitaram o seu pedido de acesso. Fale com o responsável da operação.',
+    limite_pedidos: 'Há muitos pedidos esperando nesta operação. Fale com o responsável.',
+    pedido_ja_aceito: 'Este pedido de acesso já foi aceito.',
+    pedido_cancelado: 'A pessoa desistiu deste pedido de acesso.',
     participante_invalido: 'Sua participação não foi encontrada. Entre novamente pelo link.',
     limite_participantes: 'A operação atingiu o limite de participantes.',
     sem_permissao: 'Você não tem permissão para esta ação.',
@@ -170,6 +178,8 @@
     nome_repetido: 'Já existe uma trilha com esse nome nesta operação.',
     responsavel_trajeto_invalido: 'O responsável escolhido não participa desta operação.',
     grupo_invalido: 'O grupo escolhido não pertence a esta operação (pode ter sido excluído).',
+    participante_em_outro_grupo: 'Esta pessoa já está em outro grupo. Tire-a do grupo atual (Ferramentas → Grupos → Membros) antes de colocá-la neste.',
+    grupo_sem_integrantes: 'Este grupo não tem integrantes de campo ativos para receber a mensagem.',
     // depois de responsavel_trajeto_invalido (a busca pelo código é por trecho do texto)
     trajeto_invalido: 'Trajeto inválido: desenhe uma linha com pelo menos 2 pontos.',
     cenario_imutavel_aprovado: 'Esta versão do cenário já foi aprovada e não pode mais ser alterada. Crie uma nova versão.',
@@ -276,8 +286,13 @@
     });
   }
 
+  // Link público do painel do comando: só leitura. Qualquer chamada ao servidor que não seja a leitura do próprio link
+  // é recusada aqui (o servidor também recusa: quem abre o link não tem permissão de escrita).
+  var somenteLeitura = false;
+  var LEITURAS_PUBLICAS = ['comando_publico'];
   async function rpc(nome, args, ms) {
     if (!cliente) throw criarErro({ message: 'Aplicativo não configurado.' });
+    if (somenteLeitura && LEITURAS_PUBLICAS.indexOf(nome) === -1) throw criarErro({ message: 'somente_leitura' });
     // operação arquivada: relatório, SCI e briefing completos vêm do arquivo (o servidor recusa)
     if (window.ArquivoLocal) {
       var guardado;
@@ -319,6 +334,31 @@
     return todas;
   }
 
+  // Como consultarTudo, mas pede várias páginas ao mesmo tempo (a ordem é mantida; a fabrica precisa ordenar
+  // por uma chave única, como o id). Uma operação grande tem dezenas de milhares de posições: em fila, cada
+  // página esperava a anterior.
+  async function consultarTudoParalelo(fabrica, tamanho, simultaneas) {
+    tamanho = tamanho || 1000;
+    simultaneas = simultaneas || 4;
+    var todas = [];
+    for (var inicio = 0; inicio <= 500000; inicio += simultaneas * tamanho) {
+      var lote = [];
+      for (var k = 0; k < simultaneas; k++) {
+        var de = inicio + k * tamanho;
+        lote.push(consultar(fabrica().range(de, de + tamanho - 1)));
+      }
+      var paginas = await Promise.all(lote);
+      var acabou = false;
+      for (var j = 0; j < paginas.length; j++) {
+        var pg = paginas[j] || [];
+        for (var x = 0; x < pg.length; x++) todas.push(pg[x]);
+        if (pg.length < tamanho) { acabou = true; break; }   // página curta: o resto não existe
+      }
+      if (acabou) break;
+    }
+    return todas;
+  }
+
   /* ---------- Relógio do servidor --------------------------------------- */
   // Diferença entre o relógio do servidor e o do aparelho. Evita que um
   // celular com hora errada mostre "há 3 horas" para uma posição recente.
@@ -334,6 +374,8 @@
     return desvioRelogio;
   }
   function agora() { return Date.now() + desvioRelogio; }
+  // Link público: o relógio do servidor vem junto com os dados (sem a chamada 'agora', que ele não pode fazer)
+  function definirRelogioServidor(ms) { if (typeof ms === 'number' && isFinite(ms)) desvioRelogio = ms - Date.now(); }
 
   /* ---------- Formatação ------------------------------------------------ */
   function paraMs(v) {
@@ -436,8 +478,11 @@
     configurado: configurado,
     cliente: cliente,
     rpc: rpc,
+    definirSomenteLeitura: function (v) { somenteLeitura = Boolean(v); },
+    definirRelogioServidor: definirRelogioServidor,
     consultar: consultar,
     consultarTudo: consultarTudo,
+    consultarTudoParalelo: consultarTudoParalelo,
     traduzirErro: traduzirErro,
     criarErro: criarErro,
     ehErroDeRede: ehErroDeRede,

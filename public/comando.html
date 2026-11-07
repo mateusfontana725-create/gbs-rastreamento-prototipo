@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#06080a">
   <meta name="robots" content="noindex, nofollow">
   <meta name="gbs-versao" content="2026-10-13.1">
-  <title>Rastreamento GBS — Painel do Responsável</title>
+  <title>Rastreamento GBS — Comando</title>
   <link rel="icon" type="image/png" sizes="256x256" href="img/brasao-cbmpr.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
   <link rel="stylesheet" href="css/estilos.css">
-  <link rel="stylesheet" href="css/militar.css">
+  <link rel="stylesheet" href="css/comando.css">
   <script src="js/tema.js"></script>
 </head>
 <body>
@@ -27,7 +27,7 @@
       <div class="marca">
         <img class="marca-icone marca-brasao" src="img/brasao-cbmpr.png" alt="Corpo de Bombeiros Militar do Paraná" width="44" height="44">
         <div>
-          <h1>Painel do Responsável</h1>
+          <h1>Comando</h1>
           <small>Rastreamento GBS · Acesso restrito</small>
         </div>
       </div>
@@ -52,6 +52,15 @@
       <h1 class="titulo-aviso">Acesso não autorizado</h1>
       <p id="sem-permissao-texto">Este usuário não está cadastrado como responsável. Peça ao administrador do sistema para autorizar o seu acesso.</p>
       <button class="btn btn-escuro btn-gigante" type="button" data-acao="sair">SAIR</button>
+    </div>
+  </section>
+
+  <!-- Link público do painel: link desligado, trocado ou sem conexão -->
+  <section id="tela-publico-erro" class="tela-centro" hidden>
+    <div class="cartao cartao-login">
+      <h1 class="titulo-aviso">Não foi possível abrir</h1>
+      <p id="publico-erro-texto"></p>
+      <button class="btn btn-escuro btn-gigante" type="button" id="publico-erro-tentar">TENTAR DE NOVO</button>
     </div>
   </section>
 
@@ -116,7 +125,7 @@
       <div class="cartao secao" id="vista-lista" hidden>
         <div class="ops-topo">
           <h2 id="ops-titulo">Minhas operações</h2>
-          <!-- o cadastro abre num modal (militar.js: abrirNovaOperacao) -->
+          <!-- o cadastro abre num modal (comando.js: abrirNovaOperacao) -->
           <button class="btn btn-primario" type="button" id="btn-nova-op">+ Nova operação</button>
         </div>
         <div class="filtros" role="search" aria-label="Filtrar operações">
@@ -200,7 +209,7 @@
       <div class="cartao secao">
         <div class="ops-topo">
           <h2>Responsáveis cadastrados</h2>
-          <!-- o cadastro abre num modal (militar.js: abrirCadastroResponsavel) -->
+          <!-- o cadastro abre num modal (comando.js: abrirCadastroResponsavel) -->
           <button class="btn btn-primario" type="button" id="btn-novo-resp">+ Cadastrar responsável</button>
         </div>
         <div class="filtros" role="search" aria-label="Filtrar responsáveis">
@@ -253,6 +262,7 @@
       <button class="btn etiqueta-topo btn-recolher-topo" type="button" id="btn-recolher-topo" aria-label="Esconder o cabeçalho" title="Esconder o cabeçalho para ganhar espaço no mapa"><span aria-hidden="true">▲</span> Esconder cabeçalho</button>
       <div class="painel-acoes">
         <button class="btn btn-barra btn-pequeno btn-ajuda" type="button" id="btn-ajuda" hidden title="Pedidos de ajuda em aberto: abrir o tratamento"><span aria-hidden="true">🆘</span> <span id="ajuda-qtd">0</span> <span id="ajuda-tempo" class="rotulo-longo"></span></button>
+        <button class="btn btn-barra btn-pequeno btn-pedidos" type="button" id="btn-pedidos" hidden title="Pessoas esperando a sua resposta para entrar na operação com o código"><span aria-hidden="true">🔑</span> <span id="pedidos-qtd">0</span> <span class="rotulo-longo">pedido(s) de acesso</span></button>
         <button class="btn btn-barra btn-pequeno btn-alerta-pendente" type="button" id="btn-alerta-pendente" hidden title="Mensagem de outro responsável aguardando sua resposta">✉ <span id="alerta-pendente-qtd">1</span> <span class="rotulo-longo">para você</span></button>
         <div class="ferramentas" id="ferramentas">
           <button class="btn btn-barra btn-pequeno btn-ferramentas" type="button" id="btn-ferramentas" aria-label="Ferramentas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-ferramentas" title="Ferramentas da operação e do mapa">
@@ -294,6 +304,7 @@
                 <button class="menu-item" type="button" id="menu-missoes"><span class="ico-item" aria-hidden="true">➜</span><span>Deslocamentos de grupos</span><small class="menu-estado" id="menu-missoes-qtd"></small></button>
                 <button class="menu-item" type="button" id="menu-binomio"><span class="ico-item" aria-hidden="true">🐕</span><span>Binômio (cão e condutor)</span><small class="menu-estado" id="menu-binomio-qtd"></small></button>
                 <button class="menu-item" type="button" id="menu-drone-agua"><span class="ico-item" aria-hidden="true">✈</span><span>Drone e água</span><small class="menu-estado" id="menu-obs-qtd"></small></button>
+                <button class="menu-item" type="button" id="menu-acesso" title="Código da operação e pessoas pedindo para entrar"><span class="ico-item" aria-hidden="true">🔑</span><span>Código e pedidos de acesso</span><small class="menu-estado" id="menu-acesso-qtd"></small></button>
                 <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
                 </div>
               </section>
@@ -311,6 +322,7 @@
               <section class="menu-secao" data-secao="comando">
                 <button class="menu-secao-titulo" type="button" aria-expanded="true">Comando e registros</button>
                 <div class="menu-secao-itens">
+                <button class="menu-item" type="button" id="menu-link-comando" title="Link para outras pessoas acompanharem o mapa sem login, só visualizando"><span class="ico-item" aria-hidden="true">🔗</span><span>Link público do painel</span></button>
                 <button class="menu-item" type="button" id="menu-briefing"><span class="ico-item" aria-hidden="true">★</span><span>Briefing e passagem de comando</span></button>
                 <button class="menu-item" type="button" id="menu-dados-op"><span class="ico-item" aria-hidden="true">ⓘ</span><span>Dados da operação</span><small class="menu-estado" id="menu-dados-estado"></small></button>
                 <button class="menu-item" type="button" id="menu-diario"><span class="ico-item" aria-hidden="true">☰</span><span>Diário</span></button>
@@ -631,6 +643,7 @@
           <div class="ficha-bloco" id="ficha-saida" hidden></div>
           <div class="ficha-bloco ficha-situacao" id="ficha-situacao" hidden></div>
           <p class="ficha-permanencia" id="ficha-permanencia" hidden></p>
+          <p class="ficha-fadiga" id="ficha-fadiga" hidden></p>
           <p class="ficha-destino" id="ficha-destino" hidden></p>
           <div class="acoes-linha ficha-acoes">
             <button class="btn" type="button" id="ficha-centralizar">Ver no mapa</button>
@@ -640,6 +653,7 @@
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-enviar-destino" title="Enviar um destino para este participante navegar até lá">🧭 Enviar destino</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-ir-ate" title="Traçar a rota até onde esta pessoa está (para ir até ela ou mandar apoio)">📍 Rota até ela</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-gravacao" hidden title="Liga ou desliga a gravação do caminho desta pessoa (a posição atual continua aparecendo)">⏹ Desativar a gravação da trilha</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
                 <a class="menu-linha-item" role="menuitem" id="ficha-ligar" href="#" hidden>📞 Ligar</a>
               </div>
@@ -755,13 +769,16 @@
   <script src="js/mapa-resumo.js"></script>
   <script src="js/regua.js"></script>
   <script src="js/pod.js"></script>
-  <script src="js/militar.js"></script>
+  <script src="js/trilha-geo.js"></script>
+  <script src="js/fadiga.js"></script>
+  <script src="js/comando.js"></script>
   <script src="js/ferramentas.js"></script>
   <script src="js/busca-cenario.js"></script>
   <script src="js/ajuda-pedidos.js"></script>
   <script src="js/recursos-equipe.js"></script>
   <script src="js/briefing.js"></script>
   <script src="js/convites.js"></script>
+  <script src="js/acesso.js"></script>
   <script src="js/sci-dados.js"></script>
   <script src="js/sci-modo.js"></script>
   <script src="js/relatos-revisao.js"></script>

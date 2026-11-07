@@ -13,8 +13,8 @@ var QUADROS = 'https://tile.openstreetmap.org/';
 
 // A página do participante inteira, para abrir sem internet já na primeira vez (cada arquivo à parte: um que falhe não
 // impede os outros). Online, a rede continua tendo prioridade (redePrimeiro).
-var PAGINA = ['civil.html', 'css/estilos.css', '/api/config', 'js/comunicacao.js', 'js/interface.js', 'js/fotos.js', 'js/gps.js',
-  'js/trilha-local.js', 'js/fila-estado.js', 'js/rotas.js', 'js/coords.js', 'js/mapa-offline.js', 'js/app-nativo.js', 'js/civil.js'];
+var PAGINA = ['participante.html', 'css/estilos.css', 'css/tema-claro-participante.css', '/api/config', 'js/comunicacao.js', 'js/interface.js', 'js/fotos.js', 'js/gps.js',
+  'js/trilha-local.js', 'js/fila-estado.js', 'js/rotas.js', 'js/coords.js', 'js/mapa-offline.js', 'js/app-nativo.js', 'js/participante.js'];
 var BIBLIOTECAS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'];
 self.addEventListener('install', function (ev) {
@@ -100,9 +100,9 @@ self.addEventListener('notificationclick', function (ev) {
   ev.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (lista) {
       for (var i = 0; i < lista.length; i++) {
-        if (lista[i].url.indexOf('/civil.html') !== -1 && 'focus' in lista[i]) return lista[i].focus();
+        if (lista[i].url.indexOf('/participante.html') !== -1 && 'focus' in lista[i]) return lista[i].focus();
       }
-      return self.clients.openWindow ? self.clients.openWindow('civil.html') : null;
+      return self.clients.openWindow ? self.clients.openWindow('participante.html') : null;
     })
   );
 });

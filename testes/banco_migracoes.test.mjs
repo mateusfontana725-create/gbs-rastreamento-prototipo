@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1329,6 +1329,7 @@ console.log('\nPedidos de ajuda: estados, prioridade, histórico e escalação �
     values ($1, $2, $3, 'Beto', 'PARTICIPANTE', 'socorro antigo', 'entrada', 'AJUDA', now() - interval '3 days') returning id`, [opH.id, beto.participante_id, uBeto]);
   await db.query(`delete from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id]);
   await db.exec(ler('supabase/migracoes/035_pedidos_ajuda.sql'));
+  await db.exec(ler('supabase/migracoes/068_zonas_perigo_descanso.sql'));   // a 035 recria a lista de tipos de alerta sem os mais novos: reaplica a 068 por cima (em produção cada migração roda uma vez, em ordem)
   const legado = (await db.query(`select estado, resolucao, resolucao_texto from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows;
   chk(legado.length === 1 && legado[0].estado === 'resolvido' && /anterior ao fluxo/.test(legado[0].resolucao_texto), 'pedido antigo (mais de 24 h) entra resolvido, marcado como registro anterior ao fluxo', legado);
   chk((await db.query(`select count(*)::int n from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows[0].n === 1, 'reexecutar a migração não duplica');
@@ -2277,6 +2278,11 @@ console.log('Aplicativo Android: passagem do navegador para o app e aparelho com
   chk(sv.status === 'ativa' && sv.gps_intervalo_s === 15, 'sinal de vida pelo app', sv);
   chk((await db.query(`select gps_estado from public.participantes where id = $1`, [pid])).rows[0].gps_estado === 'fraco', 'sinal pelo app grava o estado do GPS');
   chk(/permission denied/.test(await erroDe(como(null, `select public.app_dono_do_dispositivo($1, $2)`, [d1.dispositivo_id, d1.segredo], 'anon'))), 'função interna não é chamável de fora');
+  const pr = (await como(null, `select public.app_parar_rastreio($1, $2) r`, [d1.dispositivo_id, d1.segredo], 'anon')).rows[0].r;
+  chk(pr.status === 'ativa' && (await db.query(`select rastreando from public.participantes where id = $1`, [pid])).rows[0].rastreando === false, 'app fechado de vez: o painel vê que o registro parou, sem encerrar a participação', pr);
+  chk(/aparelho_app_invalido/.test(await erroDe(como(null, `select public.app_parar_rastreio($1, $2)`, [d1.dispositivo_id, 'a'.repeat(64)], 'anon'))), 'parar o registro exige o segredo do aparelho');
+  await como(null, `select public.app_sinal_vida($1, $2, 'fraco')`, [d1.dispositivo_id, d1.segredo], 'anon');
+  chk((await db.query(`select rastreando from public.participantes where id = $1`, [pid])).rows[0].rastreando === true, 'ao abrir o aplicativo de novo, o sinal de vida volta a marcar que está registrando');
   chk((await como(null, `select auth.uid() u`, [], 'anon')).rows[0].u === null, 'a identidade usada pelo serviço não sobra para a próxima chamada');
 
   const d2 = await rpc(app, 'app_dispositivo_registrar', { p_participante: pid, p_modelo: 'Moto G (reinstalado)' });
@@ -2818,5 +2824,350 @@ chk(reaberto.concluido_em === null && reaberto.concluido_por_nome === null, 'rea
 await rpc(resp1, 'encerrar_operacao', { p_operacao: opPC.id });
 chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'marcar_ponto_concluido', { p_operacao: opPC.id, p_id: pontoPC.id, p_concluido: true }))), 'operação encerrada: o concluído não muda');
 
-console.log('\nMigrações 007–064 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Mapa do participante (migração 065) ---
+console.log('\nMapa do participante: público e privado, áreas proibidas e trilhas da equipe');
+const opM = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP MAPA PARTICIPANTE', p_retencao_horas: 0 });
+const anM1 = await usuario(null, true), anM2 = await usuario(null, true);
+const pm1 = await rpc(anM1, 'ingressar', { p_token: opM.token_civil, p_nome: 'Paulo', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+const pm2 = await rpc(anM2, 'ingressar', { p_token: opM.token_civil, p_nome: 'Rita', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+const mkSetor = (d) => rpc(resp1, 'salvar_setor', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify(Object.assign({ forma: 'circulo', centro_lat: -25.43, centro_lng: -49.27, raio_m: 200 }, d)) });
+const sPub = await mkSetor({ nome: 'Público', visibilidade: 'publico' });
+const sPriv = await mkSetor({ nome: 'Privado de ninguém' });
+const sDele = await mkSetor({ nome: 'Atribuído ao Paulo', participante_id: pm1.participante_id });
+chk(sPub.visibilidade === 'publico' && sPriv.visibilidade === null, 'setor guarda a visibilidade (vazio = privado)', [sPub.visibilidade, sPriv.visibilidade]);
+chk(/dados_invalidos/.test(await erroDe(mkSetor({ nome: 'X', visibilidade: 'talvez' }))), 'visibilidade inválida é recusada');
+const m1 = await rpc(anM1, 'mapa_do_participante', { p_participante: pm1.participante_id });
+const m2 = await rpc(anM2, 'mapa_do_participante', { p_participante: pm2.participante_id });
+chk(m1.setores.map((x) => x.nome).sort().join() === 'Atribuído ao Paulo,Público', 'participante vê o setor público e o atribuído a ele (não o privado dos outros)', m1.setores.map((x) => x.nome));
+chk(m1.setores.find((x) => x.nome === 'Atribuído ao Paulo').meu === true && m1.setores.find((x) => x.nome === 'Público').meu === false, 'só o atribuído é "meu"');
+chk(m2.setores.length === 1 && m2.setores[0].nome === 'Público', 'outro participante vê só o público', m2.setores.map((x) => x.nome));
+const mkPonto = (d) => rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify(Object.assign({ lat: -25.43, lng: -49.27 }, d)) });
+const ptRisco = await mkPonto({ categoria: 'RISCO', titulo: 'Risco (padrão público)' });
+const ptPriv = await mkPonto({ categoria: 'VESTIGIO', titulo: 'Vestígio privado' });
+const ptPub = await mkPonto({ categoria: 'VESTIGIO', titulo: 'Vestígio público', visibilidade: 'publico' });
+const ptEnv = await mkPonto({ categoria: 'VESTIGIO', titulo: 'Vestígio enviado ao Paulo' });
+await db.query(`insert into public.destinos (operacao_id, participante_id, nome, lat, lng, ponto_id, enviado_por_nome) values ($1, $2, 'Vestígio enviado ao Paulo', -25.43, -49.27, $3, 'Sgt Um')`, [opM.id, pm1.participante_id, ptEnv.id]);
+const m1b = await rpc(anM1, 'mapa_do_participante', { p_participante: pm1.participante_id });
+const m2b = await rpc(anM2, 'mapa_do_participante', { p_participante: pm2.participante_id });
+chk(m1b.pontos.map((x) => x.titulo).sort().join('|') === 'Risco (padrão público)|Vestígio enviado ao Paulo|Vestígio público', 'participante vê pontos públicos, o risco padrão e o que recebeu', m1b.pontos.map((x) => x.titulo));
+chk(m2b.pontos.map((x) => x.titulo).sort().join('|') === 'Risco (padrão público)|Vestígio público', 'outro participante não vê o ponto privado enviado ao Paulo', m2b.pontos.map((x) => x.titulo));
+await rpc(resp1, 'salvar_area_proibida', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: 'Pedreira', pontos: [[-25.40, -49.30], [-25.40, -49.28], [-25.42, -49.28]], motivo: 'Desabamento' }) });
+const m1c = await rpc(anM1, 'mapa_do_participante', { p_participante: pm1.participante_id });
+chk(m1c.areas_proibidas.length === 1 && m1c.areas_proibidas[0].nome === 'Pedreira', 'todos os participantes veem as áreas proibidas', m1c.areas_proibidas);
+const vez = (n) => Array.from({ length: n }, (_, i) => `('${opM.id}', '${pm2.participante_id}', gen_random_uuid(), ${-25.43 + i * 0.0002}, -49.27, 8, now() - interval '${60 - i} minutes', now())`).join(',');
+await db.query(`insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em, recebido_em) values ${vez(10)}`);
+await db.query(`insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em, recebido_em) values ('${opM.id}', '${pm1.participante_id}', gen_random_uuid(), -25.5, -49.2, 8, now(), now()), ('${opM.id}', '${pm1.participante_id}', gen_random_uuid(), -25.51, -49.2, 8, now(), now())`);
+const tr1 = await rpc(anM1, 'trilhas_da_equipe', { p_participante: pm1.participante_id });
+chk(tr1.length === 1 && tr1[0].pontos.length === 10 && tr1[0].tipo === 'civil', 'participante vê a trilha dos outros, sem a própria', tr1.map((x) => x.pontos.length));
+chk(!JSON.stringify(tr1).includes('Rita') && !JSON.stringify(tr1).includes(pm2.participante_id), 'a trilha da equipe não traz nome nem identificador');
+chk(/participante_invalido/.test(await erroDe(rpc(anM2, 'trilhas_da_equipe', { p_participante: pm1.participante_id }))), 'não dá para pedir as trilhas como se fosse outro participante');
+
+// --- Trilhas: gravação por participante, raio da base e áreas sem trilha (migração 066) ---
+console.log('\nTrilhas: base sem gravação, gravação por participante e áreas sem trilha');
+const opT = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TRILHAS BASE', p_retencao_horas: 0 });
+const anT1 = await usuario(null, true), anT2 = await usuario(null, true);
+const pT1 = await rpc(anT1, 'ingressar', { p_token: opT.token_civil, p_nome: 'Tiago', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+const pT2 = await rpc(anT2, 'ingressar', { p_token: opT.token_civil, p_nome: 'Vera', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+await rpc(resp1, 'salvar_ponto', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ categoria: 'BASE', titulo: 'Base T', lat: -25.5, lng: -49.3, raio_m: 50 }) });
+const tT = (k) => Date.now() - 120000 + k * 1000;
+const mT = 1 / 111320;
+const enviaT = (an, pid, pts) => rpc(an, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: JSON.stringify(pts) });
+const rT = await enviaT(anT1, pT1.participante_id, [
+  pt(9001, -25.5 + 120 * mT, -49.3, tT(1)),   // fora (120 m)
+  pt(9002, -25.5 + 10 * mT, -49.3, tT(2)),    // dentro: ponto de entrada (guardado)
+  pt(9003, -25.5 + 5 * mT, -49.3, tT(3)),     // dentro: descartado
+  pt(9004, -25.5 + 8 * mT, -49.3, tT(4)),     // dentro: descartado
+  pt(9005, -25.5 + 90 * mT, -49.3, tT(5)),    // fora: guardado
+]);
+const gravT = (await db.query(`select client_id, na_base from public.posicoes where participante_id = $1 order by registrado_em`, [pT1.participante_id])).rows;
+chk(gravT.map((r) => r.client_id).join() === [9001, 9002, 9005].map(uid).join(), 'dentro do raio da base só o ponto de entrada fica gravado', gravT.map((r) => r.client_id.slice(-4)));
+chk(gravT.map((r) => r.na_base).join() === 'false,true,false', 'o ponto de entrada fica marcado na_base', gravT);
+chk(rT.confirmados.length === 5 && [9001, 9002, 9003, 9004, 9005].every((n) => rT.confirmados.includes(uid(n))), 'todos os pontos são confirmados ao aparelho (inclusive os descartados)', rT.confirmados.length);
+chk(rT.inseridos === 3, 'inseridos conta só os gravados', rT.inseridos);
+const rT2 = await enviaT(anT1, pT1.participante_id, [pt(9006, -25.5 + 3 * mT, -49.3, tT(10)), pt(9007, -25.5 + 2 * mT, -49.3, tT(11))]);
+chk(rT2.inseridos === 1 && rT2.confirmados.length === 2, 'voltou à base: um novo ponto de entrada; o resto é descartado', rT2);
+const upT = (await db.query(`select ultima_lat, rastreando, gps_estado from public.participantes where id = $1`, [pT1.participante_id])).rows[0];
+chk(Math.abs(upT.ultima_lat - (-25.5 + 2 * mT)) < 1e-9 && upT.gps_estado === 'ok', 'a posição atual segue o último ponto, mesmo o descartado', upT);
+// gravação desligada para uma pessoa
+chk(/sem_permissao/.test(await erroDe(rpc(anT2, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false }))), 'participante não liga nem desliga a gravação');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false }))), 'responsável de outra operação não mexe na gravação');
+const dg = await rpc(resp1, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false });
+chk(dg.gravar_trilha === false, 'responsável desliga a gravação da trilha de uma pessoa', dg);
+const rT3 = await enviaT(anT2, pT2.participante_id, [pt(9011, -25.45, -49.3, tT(20)), pt(9012, -25.449, -49.3, tT(21))]);
+chk(rT3.inseridos === 0 && rT3.confirmados.length === 2 && rT3.gravar_trilha === false, 'com a gravação desligada nada entra na trilha, mas os pontos são confirmados', rT3);
+chk((await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [pT2.participante_id])).rows[0].n === 0, 'nenhuma posição gravada para quem está com a gravação desligada');
+chk((await db.query(`select ultima_lat from public.participantes where id = $1`, [pT2.participante_id])).rows[0].ultima_lat === -25.449, 'a posição atual dela continua aparecendo');
+const svT = await rpc(anT2, 'sinal_vida', { p_participante: pT2.participante_id, p_rastreando: true, p_gps: 'ok' });
+chk(svT.gravar_trilha === false, 'o sinal de vida avisa o aparelho que a gravação está desligada', svT);
+await rpc(resp1, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: true });
+const rT4 = await enviaT(anT2, pT2.participante_id, [pt(9013, -25.44, -49.3, tT(30))]);
+chk(rT4.inseridos === 1 && rT4.gravar_trilha === true, 'religada, a trilha volta a ser gravada', rT4);
+// trilha da equipe não traz o ponto de entrada na base
+const trT = await rpc(anT2, 'trilhas_da_equipe', { p_participante: pT2.participante_id });
+chk(trT.length === 1 && trT[0].pontos.length === 2, 'a trilha da equipe só traz os pontos fora da base', trT.map((x) => x.pontos.length));
+// áreas sem trilha
+const aT = await rpc(resp1, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ nome: 'Estacionamento', lat: -25.5, lng: -49.3 }) });
+chk(aT.raio_m === 50 && aT.ativa === true, 'área sem trilha começa com 50 m e ativa', aT);
+chk(/raio_m|check/i.test(await erroDe(rpc(resp1, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ lat: -25.5, lng: -49.3, raio_m: 2 }) }))), 'raio fora de 5 a 5000 m é recusado');
+const aT2 = await rpc(resp1, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: aT.id, p_dados: JSON.stringify({ raio_m: 120, ativa: false }) });
+chk(aT2.raio_m === 120 && aT2.ativa === false && aT2.nome === 'Estacionamento', 'altera o raio e desativa sem perder o resto', aT2);
+chk((await como(anT1, `select count(*)::int n from public.areas_sem_trilha`)).rows[0].n === 0, 'participante não lê as áreas sem trilha (RLS)');
+chk((await como(resp1, `select count(*)::int n from public.areas_sem_trilha where operacao_id = $1`, [opT.id])).rows[0].n === 1, 'responsável da operação lê');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_area_sem_trilha', { p_operacao: opT.id, p_id: null, p_dados: JSON.stringify({ lat: -25.5, lng: -49.3 }) }))), 'responsável de outra operação não cria');
+await rpc(resp1, 'excluir_area_sem_trilha', { p_id: aT.id });
+chk((await db.query(`select count(*)::int n from public.areas_sem_trilha where operacao_id = $1`, [opT.id])).rows[0].n === 0, 'excluir remove a área');
+
+
+// --- Grupos: uma pessoa em um grupo só e mensagem para o grupo inteiro (migração 067) ---
+console.log('\nGrupos: um grupo por pessoa e mensagem para todos');
+const opG = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP GRUPOS UNICO', p_retencao_horas: 0 });
+const anG = [await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+const pG = [];
+for (let i = 0; i < 4; i++) pG.push(await rpc(anG[i], 'ingressar', { p_token: opG.token_civil, p_nome: 'Pessoa ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+const gA = await rpc(resp1, 'salvar_grupo', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo A', cor: '#ff6a00' }) });
+const gB = await rpc(resp1, 'salvar_grupo', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo B', cor: '#0055ff' }) });
+await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[0].participante_id, p_papel: 'membro' });
+await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[1].participante_id, p_papel: 'membro' });
+await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[2].participante_id, p_papel: 'membro' });
+chk(/participante_em_outro_grupo/.test(await erroDe(rpc(resp1, 'definir_membro', { p_grupo: gB.id, p_participante: pG[0].participante_id, p_papel: 'membro' }))), 'quem já está num grupo não entra em outro pelo painel');
+const mudaPapel = await rpc(resp1, 'definir_membro', { p_grupo: gA.id, p_participante: pG[0].participante_id, p_papel: 'responsavel' });
+chk(mudaPapel.papel === 'responsavel', 'mudar o papel no mesmo grupo continua valendo', mudaPapel);
+await rpc(resp1, 'remover_membro', { p_grupo: gA.id, p_participante: pG[2].participante_id });
+const trocou = await rpc(resp1, 'definir_membro', { p_grupo: gB.id, p_participante: pG[2].participante_id, p_papel: 'membro' });
+chk(trocou.grupo_id === gB.id, 'depois de tirar do grupo, a pessoa pode entrar em outro');
+// link do grupo: quem já está em outro grupo segue na operação, sem entrar no segundo
+const linkB = await rpc(resp1, 'gerar_novo_link_grupo', { p_grupo: gB.id });
+const reingresso = await rpc(anG[0], 'ingressar', { p_token: linkB.token, p_nome: 'Pessoa 1', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+chk(reingresso.participante_id === pG[0].participante_id && reingresso.grupo === 'Grupo A', 'pelo link do grupo B, quem está no A continua no A e segue na operação', reingresso);
+chk((await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1`, [pG[0].participante_id])).rows[0].n === 1, 'continua em um grupo só');
+const novoNoLink = await rpc(anG[3], 'ingressar', { p_token: linkB.token, p_nome: 'Pessoa 4', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+chk(novoNoLink.grupo === 'Grupo B' && (await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1 and grupo_id = $2`, [pG[3].participante_id, gB.id])).rows[0].n === 1, 'quem não estava em grupo entra normalmente pelo link');
+// dados antigos: quem já estava em dois grupos não é mexido, mas não entra em um terceiro
+await db.query(`alter table public.grupo_membros disable trigger grupo_membros_um_grupo_ins`);
+await db.query(`insert into public.grupo_membros (grupo_id, participante_id, operacao_id) values ($1, $2, $3)`, [gB.id, pG[1].participante_id, opG.id]);
+await db.query(`alter table public.grupo_membros enable trigger grupo_membros_um_grupo_ins`);
+chk((await db.query(`select count(*)::int n from public.grupo_membros where participante_id = $1`, [pG[1].participante_id])).rows[0].n === 2, 'quem já estava em dois grupos antes continua como está (nada é apagado)');
+// mensagem para o grupo
+const msgA = await rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: 'Voltem para a base' });
+chk(msgA.total === 2 && msgA.enviadas === 2 && msgA.falhas === 0 && msgA.mensagens.length === 2, 'a mensagem vai de uma vez para todos os integrantes do grupo', msgA);
+const linhasA = (await db.query(`select participante_id, texto, tipo, direcao from public.mensagens where operacao_id = $1 and texto = 'Voltem para a base'`, [opG.id])).rows;
+chk(linhasA.length === 2 && linhasA.every((r) => r.direcao === 'saida' && r.tipo === 'PERSONALIZADA') && new Set(linhasA.map((r) => r.participante_id)).size === 2 &&
+  [pG[0].participante_id, pG[1].participante_id].every((id) => linhasA.some((r) => r.participante_id === id)), 'uma mensagem por integrante, cada uma com o próprio destinatário');
+const ordem = await rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'RETORNE', p_texto: '' });
+chk(ordem.enviadas === 2, 'orientação rápida (RETORNE) também vai para o grupo todo');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: 'x' }))), 'responsável de outra operação não manda ao grupo');
+chk(/sem_permissao/.test(await erroDe(rpc(anG[0], 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: 'x' }))), 'participante não manda ao grupo');
+chk(/texto_obrigatorio/.test(await erroDe(rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'PERSONALIZADA', p_texto: '  ' }))), 'mensagem livre vazia é recusada');
+chk(/tipo_invalido/.test(await erroDe(rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gA.id, p_tipo: 'XPTO', p_texto: 'a' }))), 'tipo inválido é recusado');
+const gVazio = await rpc(resp1, 'salvar_grupo', { p_operacao: opG.id, p_id: null, p_dados: JSON.stringify({ nome: 'Grupo vazio', cor: '#00d84a' }) });
+chk(/grupo_sem_integrantes/.test(await erroDe(rpc(resp1, 'enviar_mensagem_grupo', { p_grupo: gVazio.id, p_tipo: 'PERSONALIZADA', p_texto: 'a' }))), 'grupo sem integrantes: avisa, não envia');
+
+
+// --- Segurança: alertas de zona (risco e proibida) e descanso na base (migração 068) ---
+console.log('\nZonas de perigo, áreas proibidas e descanso na base');
+const opZ = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ZONAS', p_retencao_horas: 0 });
+await db.query(`update public.operacoes set criada_em = now() - interval '6 hours' where id = $1`, [opZ.id]);
+const anZ = [await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+const pZ = [];
+for (let i = 0; i < 4; i++) pZ.push(await rpc(anZ[i], 'ingressar', { p_token: opZ.token_civil, p_nome: 'Zona ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+const LZ = -25.6, GZ = -49.4;   // ponto de risco (raio 100 m)
+await rpc(resp1, 'salvar_ponto', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ categoria: 'RISCO', titulo: 'Barranco', lat: LZ, lng: GZ, raio_m: 100 }) });
+const LP = -25.61, GP = -49.41;  // área proibida: quadrado de 200 m
+const cLP = Math.cos(LP * Math.PI / 180);   // um grau de longitude vale menos metros que um de latitude
+const quadZ = [[LP + 100 * mT, GP - 100 * mT / cLP], [LP + 100 * mT, GP + 100 * mT / cLP], [LP - 100 * mT, GP + 100 * mT / cLP], [LP - 100 * mT, GP - 100 * mT / cLP]];
+await rpc(resp1, 'salvar_area_proibida', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ nome: 'Pedreira', pontos: quadZ, motivo: 'Desabamento' }) });
+const alertasZ = async () => (await db.query(`select tipo, nivel, titulo, texto, participante_id, posicao_em from public.alertas where operacao_id = $1 and tipo in ('zona_perigo', 'zona_proibida') order by id`, [opZ.id])).rows;
+const agoraZ = Date.now();
+const kz = (n) => 9100 + n;
+// distância ao polígono (função)
+const dpol = async (la, ln) => (await db.query(`select public.distancia_ao_poligono_m($1, $2, $3::jsonb) d`, [la, ln, JSON.stringify(quadZ)])).rows[0].d;
+chk(await dpol(LP, GP) === 0, 'ponto dentro do polígono: distância 0');
+const dfora = await dpol(LP, GP + 120 * mT / cLP);
+chk(Math.abs(dfora - 20) < 1.5, 'ponto a 20 m da borda: distância ≈ 20 m', dfora);
+// 1. ao vivo, dentro do raio de risco
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(1), LZ + 50 * mT, GZ, agoraZ - 2000)]);
+let az = await alertasZ();
+chk(az.length === 1 && az[0].tipo === 'zona_perigo' && az[0].nivel === 'critico' && /Barranco/.test(az[0].titulo), 'ponto ao vivo dentro do raio de risco gera alerta crítico', az);
+chk(!/sem internet/.test(az[0].texto), 'ao vivo: sem a observação de trilha gravada sem internet', az[0].texto);
+// reenvio e novo ponto na mesma janela: não repete
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(1), LZ + 50 * mT, GZ, agoraZ - 2000), pt(kz(2), LZ + 40 * mT, GZ, agoraZ - 1000)]);
+chk((await alertasZ()).length === 1, 'reenviar os mesmos pontos (ou ficar na área) não repete o alerta');
+// 2. ao vivo, dentro da área proibida
+await enviaT(anZ[1], pZ[1].participante_id, [pt(kz(3), LP, GP, agoraZ - 2000)]);
+az = await alertasZ();
+chk(az.length === 2 && az[1].tipo === 'zona_proibida' && az[1].nivel === 'critico' && /ENTROU/.test(az[1].titulo), 'ponto dentro da área proibida gera alerta crítico "ENTROU"', az[1]);
+// 3. passou perto (20 m fora) e longe (100 m fora)
+await enviaT(anZ[2], pZ[2].participante_id, [pt(kz(4), LP, GP + 120 * mT / cLP, agoraZ - 2000)]);
+az = await alertasZ();
+chk(az.length === 3 && /perto de área proibida/.test(az[2].titulo) && /cerca de \d+ m/.test(az[2].texto), 'a 20 m da área proibida: "passou perto"', az[2]);
+await enviaT(anZ[3], pZ[3].participante_id, [pt(kz(5), LP, GP + 300 * mT / cLP, agoraZ - 2000), pt(kz(6), LZ + 400 * mT, GZ, agoraZ - 1500)]);
+chk((await alertasZ()).length === 3, 'longe das zonas (a 200 m da proibida e 300 m do risco): nenhum alerta');
+// 4. trilha gravada sem internet, recebida agora
+await db.query(`update public.participantes set gravar_trilha = false where id = $1`, [pZ[3].participante_id]);   // com a gravação desligada o alerta continua
+const atras = agoraZ - 3 * 3600e3;
+const rOff = await enviaT(anZ[3], pZ[3].participante_id, [pt(kz(7), LP + 10 * mT, GP, atras), pt(kz(8), LZ + 30 * mT, GZ, atras + 600e3)]);
+az = await alertasZ();
+const offs = az.filter((x) => x.participante_id === pZ[3].participante_id);
+chk(offs.length === 2, 'trilha gravada sem internet que passou pelas duas zonas gera os dois alertas (mesmo com a gravação desligada)', offs.map((x) => x.tipo));
+chk(offs.find((x) => x.tipo === 'zona_proibida').nivel === 'critico' && offs.find((x) => x.tipo === 'zona_perigo').nivel === 'info', 'trilha atrasada: proibida segue crítica; área de risco entra como informativo');
+chk(offs.every((x) => /gravada sem internet/.test(x.texto)), 'o texto diz que a trilha foi gravada sem internet e recebida agora');
+chk(offs.every((x) => x.posicao_em && Math.abs(new Date(x.posicao_em).getTime() - atras) < 3600e3), 'o alerta guarda o horário da passagem (pela trilha GPS), não o de recebimento');
+chk(rOff.confirmados.length === 2, 'os pontos continuam sendo confirmados ao aparelho');
+const antesDup = (await alertasZ()).length;
+await enviaT(anZ[3], pZ[3].participante_id, [pt(kz(7), LP + 10 * mT, GP, atras), pt(kz(8), LZ + 30 * mT, GZ, atras + 600e3)]);
+chk((await alertasZ()).length === antesDup, 'reenviar a trilha atrasada não repete os alertas');
+chk((await db.query(`select count(*)::int n from public.diario d where d.operacao_id = $1 and d.categoria = 'alerta' and d.tipo in ('alerta_zona_perigo', 'alerta_zona_proibida')`, [opZ.id])).rows[0].n >= 4, 'os alertas de zona entram no diário (categoria alerta)');
+
+// descanso na base
+console.log('Descanso na base');
+await rpc(resp1, 'salvar_ponto', { p_operacao: opZ.id, p_id: null, p_dados: JSON.stringify({ categoria: 'BASE', titulo: 'Base Z', lat: -25.7, lng: -49.5, raio_m: 50 }) });
+const BL = -25.7, BG = -49.5;
+const t0d = Date.now() - 600e3;
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(21), BL + 200 * mT, BG, t0d), pt(kz(22), BL + 10 * mT, BG, t0d + 60e3), pt(kz(23), BL + 5 * mT, BG, t0d + 120e3)]);
+let ds = (await db.query(`select inicio, fim from public.descansos where participante_id = $1 order by id`, [pZ[0].participante_id])).rows;
+chk(ds.length === 1 && ds[0].fim === null && Math.abs(new Date(ds[0].inicio).getTime() - (t0d + 60e3)) < 1500, 'o primeiro ponto dentro da base abre o descanso (e só um)', ds);
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(24), BL + 8 * mT, BG, t0d + 180e3)]);
+chk((await db.query(`select count(*)::int n from public.descansos where participante_id = $1`, [pZ[0].participante_id])).rows[0].n === 1, 'continuar na base não abre outro descanso');
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(25), BL + 150 * mT, BG, t0d + 300e3)]);
+ds = (await db.query(`select inicio, fim from public.descansos where participante_id = $1 order by id`, [pZ[0].participante_id])).rows;
+chk(ds.length === 1 && ds[0].fim && Math.abs(new Date(ds[0].fim).getTime() - (t0d + 300e3)) < 1500, 'o primeiro ponto fora da base fecha o descanso', ds);
+await enviaT(anZ[0], pZ[0].participante_id, [pt(kz(26), BL + 20 * mT, BG, t0d + 420e3)]);
+ds = (await db.query(`select fim from public.descansos where participante_id = $1 order by id`, [pZ[0].participante_id])).rows;
+chk(ds.length === 2 && ds[1].fim === null, 'voltar à base abre um novo descanso', ds);
+chk((await como(anZ[0], `select count(*)::int n from public.descansos`)).rows[0].n === 0, 'participante não lê os descansos (RLS)');
+chk((await como(resp1, `select count(*)::int n from public.descansos where operacao_id = $1`, [opZ.id])).rows[0].n === 2, 'responsável da operação lê');
+chk(await (async () => { try { await como(resp1, `insert into public.descansos (operacao_id, participante_id, inicio) values ($1, $2, now())`, [opZ.id, pZ[1].participante_id]); return false; } catch (e) { return /permission|row-level/i.test(String(e.message)); } })(), 'ninguém escreve descanso direto (só o servidor)');
+
+
+// --- Código de acesso, pedidos de acesso, tipos SARP/BREC e link público do comando (migração 069) ---
+console.log('\nCódigo de acesso e pedidos de acesso');
+const opC = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP CODIGO', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre', descricao: 'Segredo do caso', local_endereco: 'Rua do caso, 10', local_lat: -25.5, local_lng: -49.3 }) });
+const cod1 = (await db.query(`select codigo_acesso, codigo_acesso_ativo from public.operacoes where id = $1`, [opC.id])).rows[0];
+chk(/^[A-HJ-NP-Z2-9]{6}$/.test(cod1.codigo_acesso) && cod1.codigo_acesso_ativo === true, 'operação nova ganha código de 6 caracteres (sem 0/O/1/I), ligado', cod1);
+const outrosCods = new Set([cod1.codigo_acesso]);
+for (let i = 0; i < 6; i++) { const o = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP COD ' + i, p_retencao_horas: 0 }); outrosCods.add((await db.query(`select codigo_acesso c from public.operacoes where id = $1`, [o.id])).rows[0].c); }
+chk(outrosCods.size === 7, 'os códigos não se repetem entre operações');
+await db.query(`update public.operacoes set codigo_acesso = null where id = $1`, [opC.id]);
+await db.exec(ler('supabase/migracoes/069_codigo_acesso_pedidos_publico_comando.sql'));
+const cod2 = (await db.query(`select codigo_acesso c from public.operacoes where id = $1`, [opC.id])).rows[0].c;
+chk(/^[A-HJ-NP-Z2-9]{6}$/.test(cod2), 'operação ativa que já existia (sem código) recebe um ao aplicar a migração', cod2);
+const CODIGO = cod2;
+
+const anP = [await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+const pedir = (u, cod, nome, t, c) => rpc(u, 'solicitar_acesso_operacao', { p_codigo: cod, p_nome: nome, p_cpf: c === undefined ? null : c, p_telefone: t === undefined ? tel : t });
+const minusc = CODIGO.slice(0, 3).toLowerCase() + ' - ' + CODIGO.slice(3).toLowerCase();
+const ped0 = await pedir(anP[0], minusc, 'Maria Código');
+chk(ped0.ok === true && ped0.status === 'pendente' && ped0.operacao === 'OP CODIGO', 'pedir acesso com o código (minúsculas, espaços e hífen são aceitos): pedido pendente', ped0);
+chk(/telefone_invalido/.test(await erroDe(pedir(anP[1], CODIGO, 'Sem Fone', ''))), 'o celular é obrigatório no pedido');
+chk(/nome_invalido/.test(await erroDe(pedir(anP[1], CODIGO, 'X'))), 'nome muito curto é recusado');
+chk(/cpf_invalido/.test(await erroDe(pedir(anP[1], CODIGO, 'Cpf Ruim', tel, '111'))), 'CPF informado e inválido é recusado');
+const ped0b = await pedir(anP[0], CODIGO, 'Maria Código Atualizada');
+chk(ped0b.pedido === ped0.pedido && (await db.query(`select nome from public.pedidos_acesso where id = $1`, [ped0.pedido])).rows[0].nome === 'Maria Código Atualizada', 'pedir de novo atualiza o mesmo pedido (sem duplicar)');
+const certo = (await rpc(anP[0], 'consultar_pedido_acesso', { p_pedido: ped0.pedido }));
+chk(certo.status === 'pendente' && certo.token === null, 'enquanto pendente o aparelho não recebe o link', certo);
+chk(/sem_permissao/.test(await erroDe(rpc(anP[1], 'consultar_pedido_acesso', { p_pedido: ped0.pedido }))), 'outra pessoa não consulta o pedido alheio');
+chk((await como(anP[0], `select count(*)::int n from public.pedidos_acesso`)).rows[0].n === 0, 'participante não lê a tabela de pedidos (RLS)');
+chk((await como(resp1, `select count(*)::int n from public.pedidos_acesso where operacao_id = $1`, [opC.id])).rows[0].n === 1, 'responsável da operação lê os pedidos');
+chk((await como(resp2, `select count(*)::int n from public.pedidos_acesso where operacao_id = $1`, [opC.id])).rows[0].n === 0, 'responsável de fora da operação não lê os pedidos');
+chk(await (async () => { try { await como(resp1, `update public.pedidos_acesso set status = 'aceito'`); return false; } catch (e) { return /permission|row-level/i.test(String(e.message)); } })(), 'ninguém altera pedido direto (só por RPC)');
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: true, p_tipo: 'civil' }))), 'responsável de fora não decide o pedido');
+chk(/permission|denied/i.test(await erroDe(como(null, `select public.decidir_pedido_acesso($1, true, 'civil')`, [ped0.pedido], 'anon'))), 'sem login não decide');
+chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: true, p_tipo: 'responsavel' }))), 'só civil ou militar pode ser concedido');
+const dec0 = await rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: true, p_tipo: 'militar' });
+chk(dec0.status === 'aceito' && dec0.tipo_concedido === 'militar', 'o responsável aceita como militar', dec0);
+const ap0 = await rpc(anP[0], 'consultar_pedido_acesso', { p_pedido: ped0.pedido });
+chk(ap0.status === 'aceito' && ap0.token === opC.token_militar && ap0.tipo === 'militar', 'aceito: o aparelho recebe o link do tipo concedido', ap0);
+const ing0 = await rpc(anP[0], 'ingressar', { p_token: ap0.token, p_nome: 'Maria Código Atualizada', p_tipo: 'militar', p_cpf: null, p_telefone: tel });
+chk(ing0.tipo === 'militar' && ing0.operacao === 'OP CODIGO', 'com o link recebido a entrada termina pelo ingressar de sempre', ing0);
+chk(/pedido_ja_aceito/.test(await erroDe(rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped0.pedido, p_aceitar: false, p_tipo: 'civil' }))), 'pedido aceito não volta atrás');
+chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'pedido_acesso'`, [opC.id])).rows[0].n === 1, 'a decisão entra no diário');
+const pedJa = await pedir(anP[0], CODIGO, 'Maria Código Atualizada');
+chk(pedJa.status === 'aceito', 'quem já participa e pede de novo continua aceito', pedJa);
+
+// recusa
+const ped1 = await pedir(anP[1], CODIGO, 'João Recusado');
+const rec1 = await rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped1.pedido, p_aceitar: false, p_tipo: 'civil' });
+const rc1 = await rpc(anP[1], 'consultar_pedido_acesso', { p_pedido: ped1.pedido });
+chk(rec1.status === 'recusado' && rc1.status === 'recusado' && rc1.token === null, 'recusado: o aparelho não recebe o link', rc1);
+chk(/acesso_recusado/.test(await erroDe(pedir(anP[1], CODIGO, 'João Recusado'))), 'quem foi recusado não consegue pedir de novo');
+const rev1 = await rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped1.pedido, p_aceitar: true, p_tipo: 'civil' });
+chk(rev1.status === 'aceito' && (await rpc(anP[1], 'consultar_pedido_acesso', { p_pedido: ped1.pedido })).token === opC.token_civil, 'o responsável ainda pode aceitar quem recusou (civil recebe o link dos civis)');
+// cancelamento
+const ped2 = await pedir(anP[2], CODIGO, 'Ana Cancela');
+await rpc(anP[2], 'cancelar_pedido_acesso', { p_pedido: ped2.pedido });
+chk(/pedido_cancelado/.test(await erroDe(rpc(resp1, 'decidir_pedido_acesso', { p_pedido: ped2.pedido, p_aceitar: true, p_tipo: 'civil' }))), 'pedido cancelado não pode ser decidido');
+chk((await pedir(anP[2], CODIGO, 'Ana Cancela')).status === 'pendente', 'depois de cancelar, a pessoa pode pedir de novo');
+// código errado e limite de tentativas
+chk((await pedir(anP[3], 'ZZZZZZ', 'Chute Um')).erro === 'codigo_acesso_invalido', 'código inexistente: erro "codigo_acesso_invalido" (sem revelar nada)');
+chk((await pedir(anP[3], '12', 'Chute Dois')).erro === 'codigo_acesso_invalido', 'código mal formado: o mesmo erro');
+for (let i = 0; i < 6; i++) await pedir(anP[3], 'AAAA' + (i + 2) + '2', 'Chute');
+chk(/codigo_muitas_tentativas/.test(await erroDe(pedir(anP[3], CODIGO, 'Chute Certo'))), 'depois de 8 erros seguidos nem o código certo passa por 10 minutos');
+await db.query(`delete from public.tentativas_codigo_acesso`);
+// trocar e desligar
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_codigo_acesso', { p_operacao: opC.id, p_trocar: true }))), 'só responsável da operação troca o código');
+const novoCod = await rpc(resp1, 'definir_codigo_acesso', { p_operacao: opC.id, p_trocar: true });
+chk(novoCod.codigo_acesso !== CODIGO && /^[A-HJ-NP-Z2-9]{6}$/.test(novoCod.codigo_acesso), 'trocar gera outro código', novoCod);
+chk((await pedir(anP[3], CODIGO, 'Código Velho')).erro === 'codigo_acesso_invalido', 'o código anterior deixa de valer');
+await rpc(resp1, 'definir_codigo_acesso', { p_operacao: opC.id, p_ativo: false });
+chk((await pedir(anP[3], novoCod.codigo_acesso, 'Desligado')).erro === 'codigo_acesso_invalido', 'com a entrada por código desligada o código não funciona');
+await rpc(resp1, 'definir_codigo_acesso', { p_operacao: opC.id, p_ativo: true });
+chk((await pedir(anP[3], novoCod.codigo_acesso, 'Ligado De Novo')).status === 'pendente', 'ligar de novo volta a funcionar');
+// operação encerrada
+await rpc(resp1, 'encerrar_operacao', { p_operacao: opC.id });
+chk(/operacao_encerrada/.test(await erroDe(pedir(anP[4], novoCod.codigo_acesso, 'Tarde Demais'))), 'operação encerrada: o código não aceita pedidos');
+chk((await rpc(anP[3], 'consultar_pedido_acesso', { p_pedido: (await db.query(`select id from public.pedidos_acesso where user_id = $1`, [anP[3]])).rows[0].id })).status === 'encerrada', 'o aparelho com pedido pendente é avisado que a operação acabou');
+
+console.log('Tipos de operação SARP e BREC');
+for (const t of ['sarp', 'brec']) {
+  const o = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP ' + t.toUpperCase(), p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: t, acionado_em: new Date(Date.now() - 60e3).toISOString() }) });
+  chk(o.tipo === t && o.tipo_outro === null, 'cria operação do tipo ' + t.toUpperCase(), o.tipo);
+}
+chk(/tipo_operacao_invalido/.test(await erroDe(rpc(resp1, 'criar_operacao', { p_codigo: 'OP TIPO RUIM', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'sar', acionado_em: new Date(Date.now() - 60e3).toISOString() }) }))), 'tipo desconhecido continua recusado');
+const opT2 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP TROCA TIPO', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'outras', tipo_outro: 'Teste', acionado_em: new Date(Date.now() - 60e3).toISOString() }) });
+const trocado = await rpc(resp1, 'atualizar_operacao', { p_operacao: opT2.id, p_dados: JSON.stringify({ tipo: 'brec' }) });
+chk(trocado.tipo === 'brec' && trocado.tipo_outro === null, 'trocar "Outras" por BREC limpa o texto livre', trocado);
+
+console.log('Link público do painel do comando');
+const opL = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP PUBLICA', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre', descricao: 'Segredo do caso', local_endereco: 'Rua do caso, 10', local_lat: -25.5, local_lng: -49.3 }) });
+const anL = [await usuario(null, true), await usuario(null, true)];
+const pL = [];
+for (let i = 0; i < 2; i++) pL.push(await rpc(anL[i], 'ingressar', { p_token: opL.token_civil, p_nome: 'Fulano Secreto ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+const kl = (n) => 9500 + n;
+await enviaT(anL[0], pL[0].participante_id, [pt(kl(1), -25.5, -49.3, Date.now() - 5000), pt(kl(2), -25.5001, -49.3, Date.now() - 4000)]);
+await rpc(resp1, 'salvar_ponto', { p_operacao: opL.id, p_id: null, p_dados: JSON.stringify({ categoria: 'RISCO', titulo: 'Barranco público', lat: -25.51, lng: -49.31, raio_m: 80 }) });
+const anonRpc = async (fn, ...args) => (await como(null, `select public.${fn}(${args.map((_, i) => '$' + (i + 1)).join(', ')}) r`, args, 'anon')).rows[0].r;
+chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'comando_publico_gerar', { p_operacao: opL.id }))), 'só responsável da operação liga o link público do comando');
+chk(/permission|denied/i.test(await erroDe(como(null, `select public.comando_publico_gerar($1)`, [opL.id], 'anon'))), 'sem login não liga o link');
+const lkC = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opL.id });
+chk(/^[0-9a-f]{48}$/.test(lkC.token) && lkC.nomes === false, 'o link nasce com os nomes escondidos', lkC);
+const docP = await anonRpc('comando_publico', lkC.token, null);
+chk(docP.formato === 'gbs-arquivo-operacao' && docP.publico === true && docP.operacao.id === opL.id && docP.tabelas.participantes.length === 2 && docP.tabelas.posicoes.length === 2, 'sem login: devolve as linhas da operação no formato do arquivo', Object.keys(docP.tabelas));
+const textoDoc = JSON.stringify(docP);
+chk(!/Fulano Secreto/.test(textoDoc) && docP.tabelas.participantes.every((x) => /^Participante \d$/.test(x.nome)), 'os nomes das pessoas não saem (viram "Participante N")');
+chk(!new RegExp(cpf.replace(/\D/g, '')).test(textoDoc) && !/"cpf"|"telefone"|"user_id"/.test(textoDoc), 'CPF, celular e identificadores de usuário nunca saem');
+chk(!/Segredo do caso|Rua do caso|token_civil|token_militar|dashboard_token|comando_token|codigo_acesso|responsavel_id/.test(textoDoc), 'a operação sai sem descrição, endereço, links e código de acesso');
+chk(docP.operacao.local_lat === -25.5 && docP.operacao.codigo === 'OP PUBLICA', 'mas o ponto da operação e o nome saem (o mapa precisa)');
+chk(docP.tabelas.pontos_interesse.some((x) => x.titulo === 'Barranco público') && Array.isArray(docP.tabelas.tipos_ponto) && Array.isArray(docP.tabelas.categorias_ponto_estilo), 'pontos e catálogos do mapa saem');
+chk(!/criado_por/.test(textoDoc), 'nomes e identificadores de quem registrou não saem');
+chk(docP.posicoes_ate === docP.tabelas.posicoes[docP.tabelas.posicoes.length - 1].id && docP.incremental === false, 'informa o último id de posição (para a atualização só do que é novo)');
+await enviaT(anL[1], pL[1].participante_id, [pt(kl(3), -25.52, -49.32, Date.now() - 3000)]);
+const incr = await anonRpc('comando_publico', lkC.token, docP.posicoes_ate);
+chk(incr.incremental === true && incr.tabelas.posicoes.length === 1 && incr.tabelas.posicoes[0].id > docP.posicoes_ate, 'atualização incremental traz só as posições novas', incr.tabelas.posicoes.length);
+chk(/permission|denied/i.test(await erroDe(como(null, `select count(*) from public.participantes`, [], 'anon'))), 'sem login as tabelas continuam fechadas');
+chk(/permission|denied/i.test(await erroDe(como(null, `select count(*) from public.posicoes`, [], 'anon'))), 'sem login as posições continuam fechadas');
+const lkNomes = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opL.id, p_nomes: true, p_trocar: false });
+chk(lkNomes.token === lkC.token && lkNomes.nomes === true, 'mudar a opção de nomes não troca o link', lkNomes);
+const docN = await anonRpc('comando_publico', lkC.token, null);
+chk(docN.tabelas.participantes.some((x) => /Fulano Secreto/.test(x.nome)) && !/"cpf"|"telefone"|"user_id"/.test(JSON.stringify(docN)), 'com nomes ligados os nomes saem, CPF e celular continuam fora');
+const lkC2 = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opL.id });
+chk(lkC2.token !== lkC.token && lkC2.nomes === true, 'trocar o link mantém a opção de nomes', lkC2);
+chk(/link_publico_comando_invalido/.test(await erroDe(anonRpc('comando_publico', lkC.token, null))), 'o link anterior deixa de funcionar');
+chk(/link_publico_comando_invalido/.test(await erroDe(anonRpc('comando_publico', 'x', null))), 'link mal formado: recusado');
+chk((await anonRpc('comando_publico', lkC2.token, null)).operacao.id === opL.id, 'o link novo funciona');
+chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'comando_publico'`, [opL.id])).rows[0].n >= 3, 'ligar, trocar e mudar a opção entram no diário');
+await rpc(resp1, 'comando_publico_desligar', { p_operacao: opL.id });
+chk(/link_publico_comando_invalido/.test(await erroDe(anonRpc('comando_publico', lkC2.token, null))), 'desligado: o link para de funcionar');
+
+
+console.log('\nMigrações 007–069 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

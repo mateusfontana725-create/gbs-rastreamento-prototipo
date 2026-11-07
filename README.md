@@ -4,10 +4,10 @@ Aplicativo web para o Corpo de Bombeiros Militar acompanhar, em tempo real, a po
 civis voluntários e militares durante operações de busca e salvamento, e enviar orientações direto
 ao celular de cada participante.
 
-- **`/militar.html`**: painel do bombeiro responsável (login obrigatório). Mapa, lista, trilhas, fichas,
+- **`/comando.html`**: **Comando**, o painel do bombeiro responsável (login obrigatório; era `/militar.html`, que redireciona). Mapa, lista, trilhas, fichas,
   mensagens nos dois sentidos, relatos de campo, fotos georreferenciadas, equipe de responsáveis e a
   posição de cada responsável. Funciona no computador, no tablet e no celular.
-- **`/civil.html#t=…`**: página do participante. Só abre com o link (ou QR Code) gerado pelo painel.
+- **`/participante.html#t=…`**: página do participante (era `/civil.html`, que redireciona e mantém o `#t=…`). Só abre com o link (ou QR Code) gerado pelo painel.
   O participante informa nome, celular e (opcionalmente) CPF, conversa com a equipe, relata pistas e envia fotos;
   o encerramento do rastreamento é feito pelo responsável.
 
@@ -108,6 +108,26 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 - Fotos: prévia "A foto ficou boa?" sem coordenadas; "Suas fotos" mostra só miniaturas com
   "✓ Enviada" ou "Esperando internet".
 - Sair: o link discreto **Quero sair da busca** (os bombeiros liberam a saída pelo painel).
+
+### Mapa do participante: setores, pontos, camadas, tema e trilhas (migração 065)
+
+O mapa da página do participante mostra, além dos bombeiros:
+
+- **Setores e pontos de interesse com visibilidade** (campo **Quem vê** no cadastro de setor e de ponto):
+  **Público** = todos os participantes da operação veem; **Privado** = responsáveis e administradores veem sempre, e o
+  participante só vê se o setor foi **atribuído** a ele (ou ao grupo/missão dele) ou se o ponto foi **enviado** a ele como
+  destino. Sem escolha, setores são privados e pontos de encontro, risco e base são públicos (como já eram).
+  O servidor só entrega ao participante o que ele pode ver (`mapa_do_participante`); o campo **Visível para** aparece na ficha do ponto.
+- **Áreas proibidas** aparecem para todos os participantes (tracejado vermelho, "⛔ Proibido") e o alerta de risco avisa
+  quando a pessoa entra em uma.
+- **Camadas** (botão 🗺 no mapa): fundo **Mapa / Relevo / Satélite**; ligar e desligar **Setores, Pontos de interesse,
+  Áreas proibidas e Trilhas da equipe**; e o **Tema** (escuro ou claro). A escolha fica guardada no aparelho.
+- **Rota até um ponto público**: o balão do ponto tem **🧭 Rota até aqui**, que abre o mesmo painel de navegação dos
+  destinos, só neste aparelho (não avisa o servidor). Um destino enviado pelos bombeiros tem prioridade.
+- **Trilhas dos outros** (`trilhas_da_equipe`): linhas de uma **cor só** (cinza-azulado), **sem nome**, das últimas 4 horas;
+  a trilha da própria pessoa continua na cor do grupo e por cima. Sem a migração 065, essas camadas simplesmente não aparecem.
+- **SOS**: botão vermelho **PRECISO DE AJUDA** abaixo do mapa (pede confirmação e envia o pedido com a última localização;
+  sem internet, fica guardado e vai quando o sinal voltar). Vira um pedido de ajuda no painel (ver "Pedidos de ajuda").
 
 ### Comunicação com os participantes (no painel)
 
@@ -291,6 +311,84 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 - **Quem vê o quê (RLS)**: os responsáveis da operação veem todos os grupos e links; cada participante vê
   **somente os grupos de que faz parte** e o próprio papel (no celular: "Grupo X (responsável)"). Ninguém
   em campo lê os links nem a lista de membros.
+
+### Grupos: uma pessoa em um grupo só e mensagem ao grupo (migração 067)
+
+- **Um grupo por pessoa**: quem já está num grupo da operação **não entra em outro** ao mesmo tempo (o servidor recusa com
+  "Esta pessoa já está em outro grupo"). Em **Grupos → Membros**, quem já está em outro grupo aparece desativado ("já em: Grupo A —
+  tire de lá antes"); na **ficha**, quem já está em um grupo não tem o botão "Adicionar a um grupo" (há a orientação de tirar do
+  grupo atual). Pelo **link do grupo**, quem já está em outro grupo continua na operação normalmente, só **não entra** no segundo.
+  Mudar o papel (membro / ★ responsável) no mesmo grupo continua valendo. Quem já estava em mais de um grupo antes da migração
+  **não é mexido** (nada é apagado); basta tirar das sobras.
+- **✉ Mensagem ao grupo** (Ferramentas → Grupos): a **mesma mensagem ou orientação** (livre, ATENÇÃO, RETORNE, MUDE A ROTA, PARE ou
+  CONFIRME, com o texto padrão editável) vai **de uma vez** para todos os integrantes de campo do grupo (ativos, sem os
+  responsáveis do painel). Cada pessoa recebe a sua, com a própria confirmação de entrega e resposta, como numa mensagem
+  individual; o painel mostra quantos receberam e avisa quem está sem conexão (a mensagem fica aguardando). Orientações críticas
+  pedem confirmação. O limite de 60 mensagens por minuto da operação continua valendo (quem passar do limite não recebe e o
+  painel avisa para reenviar). **Antes de usar, rode `067_grupos_mensagem_e_unico.sql` no Supabase.**
+
+### Segurança: alertas de zona, fadiga e descanso na base (migração 068)
+
+- **Alerta de área de risco ou proibida** (servidor): cada ponto recebido é conferido contra os **pontos de RISCO** (dentro do raio) e
+  as **áreas proibidas** (dentro ou a até **25 m**). Gera o alerta **zona_perigo** / **zona_proibida** para os responsáveis, com o nome da
+  pessoa, o grupo, a distância e o horário da passagem ("pela trilha GPS"), entra no **diário** e aparece na central de alertas.
+  - **Ao vivo** (pessoa com internet): alerta **crítico**, com alarme, faixa vermelha e **Ciente**.
+  - **Trilha gravada sem internet** (chega depois, quando o celular reconecta): o mesmo alerta, com o horário **da passagem** (não o do
+    recebimento) e o aviso "trilha gravada sem internet e recebida agora". Área proibida segue **crítica**; área de risco entra como
+    **informativo** (o evento já passou).
+  - Um alerta por **pessoa, zona e janela de 30 min**: reenviar os mesmos pontos ou ficar parado na área não repete. Vale mesmo com a
+    gravação da trilha desligada para a pessoa (migração 066). Com a 068 aplicada, o alarme local de "entrou na área de risco" do painel
+    deixa de tocar (o do servidor o substitui); sem ela, continua como antes.
+- **Descanso na base**: dentro do raio de uma **Base** (padrão 50 m) a pessoa passa a **descansar** sozinha: o servidor abre o descanso no
+  primeiro ponto dentro da base e fecha no primeiro ponto fora (tabela `descansos`; só os responsáveis leem). Na **lista de participantes**
+  aparece "☕ 12 min" enquanto descansa, e a **ficha** mostra o descanso atual e o total na base.
+- **Indicador de fadiga** (verde, amarelo, vermelho), na **lista de participantes** (ponto ao lado do nome), na **ficha** e no **dashboard**
+  (indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso", por pessoa e por grupo, do mais para o menos cansado). Conta, **desde o último
+  descanso longo** (30 min ou mais na base, que zera a contagem), o **tempo de busca** (sem os descansos curtos), os **km da pessoa** e a
+  **média de km do grupo**; o nível é o **pior dos três**. Padrões (em `public/js/fadiga.js`, `LIMITES`): amarelo a partir de **2 h**, **8 km**
+  ou média do grupo de **7 km**; vermelho a partir de **4 h**, **15 km** ou **12 km**. Quem descansa há 30 min ou mais fica verde. É
+  **indicação para o comando decidir a troca da equipe**, não um limite médico. Sem contato há mais de 15 min o tempo para de contar na
+  última notícia. Responsáveis do painel e quem ainda não tem trilha não têm indicador. O cartão do dashboard só aparece no **painel com
+  a operação aberta** (o link público e a operação arquivada não têm o descanso). **Antes de usar, rode `068_zonas_perigo_descanso.sql`
+  no Supabase** (sem ela os alertas de zona e o descanso não existem; a fadiga aparece, mas sem zerar nos descansos).
+
+
+### Aplicativos e acesso: código da operação, pedidos de acesso, tela do participante e link público do painel (migração 069)
+
+- **Código da operação**: toda operação ativa ganha sozinha um código de 6 letras e números, sem os parecidos (0/O, 1/I), por exemplo
+  `K7M 2PQ`. Fica em **Convidar → 🔑 Código** (em letras grandes, para ditar pelo rádio), com **Copiar**, **Trocar código** (o anterior
+  para de valer) e **Desligar/Ligar entrada por código**. O link e o QR Code continuam entrando direto, como antes; o código é o
+  caminho **com aprovação**. Quem erra o código 8 vezes em 10 minutos fica barrado por 10 minutos.
+- **Entrar com o código** (participante que já tem o aplicativo, ou a página aberta sem link): a tela pede o código, o nome, o celular e
+  o CPF (opcional) e envia o **pedido**. A tela fica "Aguardando os bombeiros" (pode fechar e abrir de novo: o pedido continua) e segue
+  sozinha quando o responsável responder. Aceito: abre a tela de sempre da operação, já com os dados preenchidos, e a localização só
+  começa depois do toque em **COMEÇAR**. Recusado: volta à tela do código com a explicação. Dá para **cancelar** o pedido.
+  No aplicativo Android com o servidor fixado na compilação (variável `GBS_ORIGEM`), abrir o aplicativo sem operação já mostra essa tela
+  (antes mostrava "Abra pela página da busca"); a operação aceita fica guardada no aplicativo.
+- **Pedidos de acesso no painel**: quando alguém pede, aparece o aviso e o botão **🔑 N pedido(s) de acesso** no topo (e o item
+  **Ferramentas → Código e pedidos de acesso**). Cada pedido mostra nome, celular (toque para ligar) e CPF, com **Aceitar como civil**,
+  **Aceitar como bombeiro** e **Recusar**. Aceito não volta atrás (para tirar a pessoa, remova o participante); recusado pode ser aceito
+  depois. Cada decisão entra no **diário**.
+- **Download do aplicativo**: no Android, logo depois do cadastro pelo link (ao entrar na operação), o passo a passo **"Baixe o aplicativo
+  para ajudar melhor"** abre sozinho, uma vez por participação, com **Agora não**. O botão **📱 Baixar aplicativo** continua no **MENU**.
+- **Tela do participante voltada para o mapa** (navegador e aplicativo): durante a busca o **mapa ocupa a tela inteira**. Em cima, o estado
+  ("Os bombeiros estão vendo você", sem internet etc.) e os avisos (área de risco, destino). À direita, **📍 onde estou**, **🗺 camadas** e a
+  bússola. Embaixo, uma barra com **SOS** (vermelho, grande, pede confirmação), **📷 FOTO** (grande, abre a câmera direto; a prévia e a
+  localização seguem como antes), **＋ REGISTRAR** (mensagem, algo encontrado, foto da galeria) e **☰ MENU** (quem é você, suas fotos,
+  legenda do mapa, aplicativo, avisos, "Quero sair da busca"). A navegação até um destino vira um cartão sobre o mapa: fechado mostra a
+  distância e a direção (e "Busca no setor concluída"); tocar no título abre a rota, os modos e "Encerrar navegação".
+- **Tipos de operação SARP e BREC**: na **Natureza** do cadastro, além de busca aquática e terrestre, **SARP – Aeronave remotamente
+  pilotada** e **BREC – Busca e resgate em estruturas colapsadas** (tipos `sarp` e `brec`). Para acrescentar outro tipo: `NATUREZAS` e
+  `tipoDaNatureza` em `public/js/ipo.js`, o banco (`operacoes_tipo_check` e `aplicar_cadastro_operacao`) e os rótulos de `cadastro.js`,
+  `dashboard.js`, `sci-modo.js` e `relatorio-pdf.js`.
+- **Link público do painel do comando**: **Ferramentas → 🔗 Link público do painel** cria um link (`comando.html?p=…`) para outras pessoas
+  acompanharem o mapa **ao vivo, sem login e sem poder alterar nada**: pessoas e estados, trilhas, setores, pontos, grupos, áreas, fadiga,
+  régua, medir, ir para coordenada, camadas e o dashboard. Atualiza sozinho a cada 10 s (só o que é novo). **Nunca** aparecem CPF,
+  celular, mensagens, fotos, diário, vítimas (nem o ponto "vítima encontrada"), a descrição, o endereço nem quem registrou. Os **nomes das
+  pessoas** só aparecem se o responsável marcar "Mostrar os nomes" (senão "Participante 1", "Participante 2"…). **Trocar link** invalida o
+  anterior; **Desligar** tira o acesso; tudo entra no diário. A proteção está no servidor (o link só lê, por `comando_publico`) e também
+  no navegador (nenhuma escrita sai da página aberta pelo link).
+- **Antes de usar, rode `069_codigo_acesso_pedidos_publico_comando.sql` no Supabase.**
 
 ### Deslocamento de grupos, alertas e controle de retorno
 
@@ -503,7 +601,7 @@ obrigatório, porque é o login. O servidor cria o acesso e inclui a pessoa na o
 - Trocar a senha (no primeiro acesso ou em **Minha conta**) tira a marca de senha provisória.
 
 **Convidar → ✉ Convidar por e-mail**: o responsável digita o **nome** e o **e-mail** do participante e toca **Enviar convite**. O
-participante recebe um e-mail com o botão **Abrir e começar** (o link do `civil.html` da operação). Ao abrir no celular, o
+participante recebe um e-mail com o botão **Abrir e começar** (o link do `participante.html` da operação). Ao abrir no celular, o
 **nome já vem preenchido** e basta tocar em COMEÇAR e permitir a localização.
 
 - A lista **Convidados** mostra a situação de cada convite: **Não enviado**, **Enviado** (hora e número de envios), **Falha no envio**
@@ -540,7 +638,7 @@ participante recebe um e-mail com o botão **Abrir e começar** (o link do `civi
     **Concluir**; o contorno é fechado e preenchido com cor semitransparente.
 - Cada setor tem **nome/número/código**, **cor** (8 opções bem distintas entre si e das trilhas),
   **responsável** (um participante da operação) e/ou **equipe** (texto livre, ex.: "Equipe Alfa"),
-  **situação** (**Pendente** — contorno tracejado, **Em andamento**, **Concluído** — preenchimento mais
+  **situação** (**Pendente**, **Em andamento**, **Concluído** — preenchimento mais
   claro), observações, **área aproximada** (m², hectares ou km²), quem criou e quando, quem alterou e quando.
 - **Editar**: tocar no setor (ou em **Lista de setores, trilhas e pontos**) abre os detalhes: botões de situação,
   **Editar** (nome, cor, responsável, equipe, observações, raio), **Ajustar limites** (arrastar os cantos;
@@ -675,6 +773,64 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   com o nome do arquivo). O voo de um drone ou o GPS de outra equipe entra por **Importar arquivo** → tocar na
   linha → **Registrar como trilha**: o formulário já vem com o nome, a cor e o horário do arquivo, e "drone"
   quando o nome ou o tipo indicam voo. O diário registra o meio no percurso percorrido.
+
+### Setores: cores fortes, ULV de 200 m, dividir, sobreposição e deslocamento
+
+- **Cores padrão mais fortes e mais numerosas**: o seletor de cor (setores, grupos, trilhas e tipos de ponto) traz **25 cores
+  saturadas** (como no AlpineQuest), além de **Minhas cores** e da **cor personalizada** (tom, intensidade, claridade, código
+  `#rrggbb`). A sugestão automática de cor segue uma ordem de cores bem diferentes entre si e pula as já usadas. Os grupos não usam
+  vermelho, roxo nem magenta (reservados a militar, civil e responsável). A cor da trilha agora também usa o seletor completo.
+- **Contorno e opacidade dos setores**: o contorno é **contínuo**, mais grosso e com um filete escuro por baixo (antes o tracejado
+  parecia uma trilha); a **situação** aparece no preenchimento (Pendente mais leve, Em andamento mais forte, Concluído discreto) e no
+  rótulo. O mesmo vale no mapa do celular do participante.
+- **ULV com 200 m**: ao salvar o **último local visto** de uma vítima, o painel cria sozinho o setor circular **"ULV · nome"** de
+  **200 m** (primeira área de busca). O setor não acompanha mudanças posteriores do ULV (pode já ter sido dividido) e não duplica.
+- **✂ Dividir** (detalhes do setor): **▥ Faixas** (paralelas, com o rumo), **◔ Fatias** (a partir do centro, com o início) ou
+  **╱ Linha de corte** (dois toques). Com − / + escolhe-se de 2 a 12 partes e ↻ 15° gira; a prévia aparece no mapa. **A** continua sendo o
+  setor original (responsável, missões e histórico); as outras partes viram setores novos ("… B", "… C"), com cor diferente e a mesma
+  situação. Setor circular vira polígono (48 lados). Limite de 300 vértices por setor.
+- **Concluído e o ×**: depois de marcar o setor como Concluído, o detalhe antigo (ainda "Pendente") ficava por baixo do novo e voltava
+  a aparecer ao tocar no ×; agora o antigo é fechado antes.
+- **Elementos sobrepostos**: os setores **menores ficam desenhados por cima** dos maiores (o contorno de quem está dentro de outro
+  continua inteiro à vista). Tocar num ponto coberto por mais de um **setor ou área proibida** abre **direto o menor que contém o
+  ponto**, com o contorno destacado: num círculo dentro de outro, tocar no miolo abre o de dentro e tocar no anel abre o de fora.
+  **Tocar de novo no mesmo lugar** passa para o de baixo (o próximo maior), e o balão diz qual é ("Toque de novo aqui para o de baixo:
+  Setor X"). Segurar ou dar duplo toque abre os detalhes do escolhido. Onde há um só, nada muda.
+- **Deslocamento até o local**: enquanto este aparelho compartilha a posição e ainda não chegou ao endereço da operação, o mapa **não
+  é levado para a posição da viatura**: o foco fica no endereço (aviso "🚗 Em deslocamento" com **Ver minha posição** e **Cheguei ao
+  local**). A menos de **300 m** do local (ou ao tocar em "Cheguei"), tudo volta ao normal e o mapa enquadra todos uma vez. A chegada
+  fica guardada neste aparelho. Operação sem endereço cadastrado não tem esse comportamento.
+
+### Trilhas: de quem é, borracha, áreas sem trilha, gravação e base (migração 066)
+
+- **Tocar numa trilha de GPS** (a linha de uma pessoa no mapa) abre um balão com **de quem é** ("Trilha de Ana"), o tipo, o grupo, a
+  distância percorrida e o horário; **Ficha ›** abre a ficha da pessoa. Tocar numa trilha desenhada ou importada mostra também a
+  equipe/pessoa a quem ela está vinculada.
+- **Importar trilha e vincular**: ao importar um arquivo com trilhas, o painel pergunta **De quem é a trilha?** — um participante
+  específico ou **alguém de um grupo** (as pessoas aparecem agrupadas pelo grupo, que também pode ser escolhido inteiro, para o caso
+  de um grupo que se dividiu). Dá para vincular todas de uma vez ou uma a uma; **Importar sem vincular** mantém o comportamento
+  anterior. O vínculo pode ser mudado depois em **Editar dados** da trilha.
+- **Borracha**: nos detalhes de uma trilha desenhada ou importada, **✂ Apagar trechos** abre o modo borracha: arraste o dedo ou o
+  mouse sobre o trecho a apagar (como numa lousa); **Desfazer**, **✋ Mover mapa** (para dar zoom e arrastar o mapa) e **✔ Concluir**.
+  Se a linha ficar em várias partes, a primeira continua na trilha e as outras viram trilhas novas com o nome "… (parte 2)", com os
+  mesmos dados. Apagar tudo oferece excluir a trilha. A borracha **não apaga rastros de GPS** gravados pelos aparelhos (para
+  limpar o mapa deles, use as áreas sem trilha abaixo).
+- **Enviar a participante**: nos detalhes de **qualquer** trilha salva (desenhada, importada ou planejada) há **➝ Enviar a participante**:
+  a pessoa ou o grupo segue a linha no celular. (Antes só dava para enviar durante o desenho; a trilha já salva não tinha como ser enviada.)
+- **Desativar a gravação da trilha de uma pessoa**: na ficha, **⋮ Mais → ⏹ Desativar a gravação da trilha** (e **⏺ Ligar** para voltar).
+  Com ela desligada, a posição atual continua aparecendo, mas o caminho não é gravado (o que já foi gravado fica); o celular da pessoa
+  avisa "O seu caminho não está sendo gravado". Sem trilha, os alertas de deslocamento e retorno à base dessa pessoa não funcionam.
+- **Área sem trilha** (**Ferramentas → Setor → ◌ Ocultar trilhas numa área**): toque no centro e a área nasce com **50 m** de raio (editável
+  de 5 m a 5.000 m, com nome opcional e liga/desliga). Dentro do círculo (contorno discreto) o painel **não desenha** as trilhas, nem
+  as de GPS nem as desenhadas; nada é apagado e é só o desenho. Vale para todos os responsáveis da operação.
+- **Base com raio de 50 m** (ponto de interesse **Base**; raio editável, 10 m a 5 km): o círculo aparece bem discreto (no painel e
+  no celular do participante) e **dentro dele a trilha não é gravada**. Para o controle de retorno continuar funcionando, o servidor
+  guarda só o **ponto de entrada** (marcado `na_base`, que não entra na linha desenhada); os demais pontos dentro do raio são
+  confirmados ao aparelho e descartados, e a posição atual da pessoa continua aparecendo. Fora do raio tudo funciona normalmente.
+- **Fechar o aplicativo** (Android): arrastar da lista de recentes **para o registro**; tela apagada, aplicativo minimizado ou botão
+  voltar **não** (ver "Aplicativo Android do participante").
+- Banco: `participantes.gravar_trilha`, `posicoes.na_base`, tabela `areas_sem_trilha`, funções `definir_gravacao_trilha`,
+  `salvar_area_sem_trilha`, `excluir_area_sem_trilha` e `app_parar_rastreio`. **Antes de usar, rode `066_trilhas_gravacao_base.sql` no Supabase.**
 
 ### Trajeto desenhado enviado como destino
 
@@ -1001,7 +1157,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
 
 ### Organização do painel
 
-- **Identidade visual** do painel do responsável (`public/css/militar.css`, só na página militar):
+- **Identidade visual** do Comando (`public/css/comando.css`, só na página `comando.html`):
   tipografia **Barlow** (estilo DIN, de sinalização; Barlow no texto, Barlow Condensed nos títulos) e **IBM Plex Mono** nos
   números — arquivos locais em `public/vendor/fontes`, licença OFL, sem CDN de fontes —, cantos retos, sombras discretas,
   vermelho só para o crítico e âmbar para o que está selecionado/ligado. Em **Personalizar tela → Letra** dá para trocar
@@ -1083,7 +1239,7 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   - **Resumo clicável**: as bolinhas com o número de conectados, instáveis e sem atualização filtram a lista (tocar
     de novo mostra todos); ao lado, o total de militares (M) e civis (C). O botão "Ocultar trilhas" saiu da lista
     (fica em **Camadas → Trilhas**).
-  - **Letras e botões menores** no painel do responsável (a página do participante continua com botões grandes);
+  - **Letras e botões menores** no Comando (a página do participante continua com botões grandes);
     em telas de toque os botões mantêm pelo menos 36–40 px.
   - **Cabeçalho mais baixo**: "Tempo real ativo" virou **Ao vivo** (no tablet, só a bolinha; o texto completo
     aparece ao passar o mouse).
@@ -1195,6 +1351,17 @@ Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na 
   vista). Cada item pode virar **ponto de interesse**, **setor de busca**, **trilha da operação** (equipe, drone…)
   ou **trajeto enviado** (aí sim, visível a todos); "Transformar pontos" converte até 100 de uma vez. Nada é
   enviado ao servidor sem essa escolha.
+- **Importação por tipo, com a mesma cor em todos os aparelhos** (a camada de referência acima é o ponto de partida): ao importar, cada
+  coisa entra **como o que é** — **áreas viram setores** (com a **cor do arquivo**, a mesma em todos os dispositivos; sem cor, uma
+  cor forte livre), **pontos viram pontos de interesse**, **linhas viram trilhas** (com a cor do arquivo e, se quiser, o participante
+  vinculado) e **imagens ficam como imagens** neste aparelho (não há onde guardá-las na operação). O que foi enviado à operação **sai da
+  camada local** (antes aparecia duas vezes e só neste aparelho com a cor do arquivo; nos outros, o setor aparecia com o azul padrão
+  porque a cor não era enviada). Setor com mais de 300 vértices é **simplificado** (antes era cortado). Mesmo nome e mesmo desenho:
+  não duplica; mesmo nome com **outro desenho**: entra como "Nome (2)". O resultado diz o que foi enviado e o que **não** foi (com o
+  motivo). Em **Importar mapa**, a caixa **Marcar o que for importado como concluído** faz os setores entrarem **Concluídos**, os pontos
+  **baixados** e as trilhas **percorridas** (vale também para arquivos arrastados); e, em cada camada, **✔ Marcar como concluídos**
+  faz o mesmo depois, e **⇪ Enviar à operação** manda o que ainda estiver só neste aparelho (camadas de antes da correção). O
+  **dashboard** mostra os setores importados (com a situação: pendente, em andamento ou concluído).
 - **Estatísticas da trilha** (ficha → Estatísticas): distância, período, **tempo em movimento**, velocidade
   média e máxima (sem contar picos isolados), **subida e descida acumuladas**, altitude mínima/máxima e o
   **perfil de altitude** — passar o dedo/mouse no gráfico mostra a distância, a altitude e o ponto no mapa.
@@ -1532,8 +1699,8 @@ aguarda, a localização continua sendo enviada. Quem teve a saída liberada pod
 ```
 rastreamento-sar/
 ├── public/                     ← site publicado pelo Vercel
-│   ├── militar.html            painel do responsável
-│   ├── civil.html              página do participante
+│   ├── comando.html            Comando (painel dos responsáveis)
+│   ├── participante.html       página do participante
 │   ├── sw.js                   service worker: notificações no Android, página e mapa guardados para abrir sem internet
 │   ├── versao.json             versão publicada (páginas abertas há muito tempo avisam que há versão nova)
 │   ├── css/estilos.css         estilos (alto contraste, botões grandes, responsivo)
@@ -1563,8 +1730,8 @@ rastreamento-sar/
 │       ├── observacoes-campo.js drone (plano, telemetria, área observada, foco térmico) e indicação na água
 │       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
 │       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM, limite da política)
-│       ├── militar.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
-│       └── civil.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
+│       ├── comando.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
+│       └── participante.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 │   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
 ├── api/
 │   ├── config.js               entrega ao navegador só a URL e a chave PÚBLICA (de variáveis de ambiente)
@@ -1833,10 +2000,10 @@ vercel --prod
 
 Depois do deploy, o Vercel mostra o domínio do projeto, por exemplo `https://rastreamento-sar.vercel.app`.
 
-1. **Painel do militar**: `https://rastreamento-sar.vercel.app/militar.html`
+1. **Comando**: `https://rastreamento-sar.vercel.app/comando.html`
    (o endereço raiz `/` também redireciona para ele). Faça login e crie a operação.
 2. **Link do participante**: é gerado **por operação**, no botão **Convidar** do cabeçalho da operação. Há duas abas:
-   - **Link para CIVIS** — `https://rastreamento-sar.vercel.app/civil.html#t=<token de 64 caracteres>`
+   - **Link para CIVIS** — `https://rastreamento-sar.vercel.app/participante.html#t=<token de 64 caracteres>`
      Quem entra por ele sempre aparece como **civil**.
    - **Link para BOMBEIROS** — outro token; permite escolher **militar** (ou civil). Compartilhe só com bombeiros.
 
@@ -1990,7 +2157,7 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 7. **Altitude** (pontos e 3D): é a do **modelo de terreno** (≈ 30 m de resolução), não a medida pelo
    GPS; em encostas e vales estreitos pode diferir dezenas de metros.
 6. **Fotos e mensagens com a página fechada**: na página do participante, ficam guardadas no aparelho e
-   são enviadas quando ele voltar à página. No painel do responsável, a fila de fotos fica só na memória:
+   são enviadas quando ele voltar à página. No Comando, a fila de fotos fica só na memória:
    o painel avisa antes de ser fechado com foto pendente.
 7. **Câmera**: "TIRAR FOTO" abre o aplicativo de câmera do próprio celular. No computador, o botão abre
    a escolha de arquivo. Fotos HEIC muito grandes podem não abrir em navegadores antigos (a pessoa é avisada).
@@ -2002,8 +2169,9 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
 A página do participante tem o botão **📱 Baixar aplicativo** (só aparece no Android, fora do aplicativo) e, na tela
 inicial, **Já tenho o aplicativo: abrir nele** (abre direto no aplicativo instalado; sem ele, cai no download). O aplicativo
 **GBS Busca** (pasta `android/`) é a própria página do participante, aberta numa WebView presa ao servidor da operação,
-com o GPS lido e enviado por um serviço do Android. Funciona com a tela apagada, com o aplicativo minimizado ou fechado
-da lista de recentes, e sem internet.
+com o GPS lido e enviado por um serviço do Android. Funciona com a tela apagada, com o aplicativo minimizado (inclusive pelo botão
+voltar) e sem internet. **Se o participante fechar o aplicativo de vez** (arrastar da lista de recentes), o registro **para** e o
+painel é avisado; a participação continua valendo e o registro **retoma sozinho** quando o aplicativo for aberto de novo.
 
 **Como o participante instala e entra sem novo cadastro**
 
@@ -2021,7 +2189,7 @@ da lista de recentes, e sem internet.
 
 **Arquitetura**
 
-- **Página**: o aplicativo carrega `https://servidor/civil.html#t=…&app=1`. Atualizações do site chegam sem reinstalar; o
+- **Página**: o aplicativo carrega `https://servidor/participante.html#t=…&app=1`. Atualizações do site chegam sem reinstalar; o
   service worker guarda a página e o mapa para abrir sem internet. A página fala com o aplicativo pelo objeto `GBSNativo`
   (`js/app-nativo.js`), criado com `addWebMessageListener` **só para a origem do servidor**; links para outros sites abrem
   fora do aplicativo. Fora do aplicativo `window.GBSApp.disponivel` é falso e a página funciona exatamente como antes.
@@ -2042,7 +2210,7 @@ da lista de recentes, e sem internet.
   obrigatório. A página não guarda o segredo.
 - **Mapa sem internet**: ao entrar, o aplicativo guarda o mapa da **região da operação** (setores e pontos, raio de até
   15 km, dentro do limite do OpenStreetMap), além da área em volta da posição que a página já guarda.
-- **Mensagens com o aplicativo fechado ou a tela apagada** (migração 056): a cada sinal de vida (15 s) o serviço pergunta
+- **Mensagens com o aplicativo minimizado ou a tela apagada** (migração 056): a cada sinal de vida (15 s) o serviço pergunta
   ao servidor (`app_mensagens_pendentes`, com o segredo do aparelho) se há mensagem dos bombeiros ainda não confirmada e
   mostra a notificação como num aplicativo de conversa: **som, vibração, aparece por cima dos outros aplicativos e na tela
   bloqueada**, juntando as mensagens numa conversa "Bombeiros" (tocar abre o aplicativo). Cada mensagem avisa uma vez só
@@ -2126,7 +2294,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 9 | No celular do civil | alerta em tela cheia com vibração; ao tocar **CONFIRMAR**, o painel mostra "Recebida pelo aparelho" e depois "Confirmada às …" |
 | 10 | Pôr o celular do civil em modo avião por 1–2 min, andando | o civil vê "Sem internet · N posições guardadas"; o painel passa a "Sinal instável" e depois "Sem atualização", com o marcador desbotado |
 | 11 | Desligar o modo avião | os pontos guardados chegam, a trilha é completada sem duplicar e o estado volta a "Conectado" |
-| 12 | No celular do civil, abrir `/militar.html` | pede login; com a sessão do civil não há acesso ao painel nem às posições |
+| 12 | No celular do civil, abrir `/comando.html` | pede login; com a sessão do civil não há acesso ao painel nem às posições |
 | 13 | Encerrar a operação | o celular mostra "Operação encerrada"; no painel a operação abre só para consulta e todos os dados continuam (só saem ao excluir) |
 | 14 | No celular do civil, tocar em **Solicitar encerramento** | o painel toca alarme e mostra "Pediu para sair"; o rastreamento continua; ao **Liberar saída**, o celular mostra "Saída liberada" |
 | 15 | Adicionar um segundo responsável em **Equipe** e abrir a operação nos dois painéis (**Minha posição** liga sozinha) | cada um vê o outro no mapa (losango vermelho com R); mensagem de um para o outro chega como alerta |
@@ -2205,9 +2373,55 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 42d | No modo avião, abrir o aplicativo | a página abre (guardada) e o mapa mostra a região da operação |
 | 42e | Liberar a saída do participante no painel | o aplicativo para de registrar, o aviso fixo some e a tela mostra "Saída liberada" |
 | 42f | Abrir **📱 Baixar aplicativo** de novo em outro celular e abrir no aplicativo de lá | o primeiro aplicativo para ("Participação encerrada neste celular"); o segundo continua a mesma trilha |
-| 42g | No aplicativo registrando, **fechar o aplicativo** (tirar da lista de recentes) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
+| 42g | No aplicativo registrando, **minimizar o aplicativo** (voltar para a tela inicial do celular) e apagar a tela; no painel, mandar **RETORNE** e depois uma mensagem livre | em até 15 s o celular toca e vibra, a notificação "Mensagem dos bombeiros" aparece na tela bloqueada com as duas mensagens; no painel elas ficam como entregues; ao abrir o app a notificação some e a página mostra o alerta para confirmar |
 | 42h | Com o aplicativo registrando, puxar a barra de notificações e a tela bloqueada | o aviso fixo verde "Busca …" mostra "Enviando sua localização aos bombeiros", o tempo de busca correndo e os pontos enviados; no Android 14, arrastar o aviso para fora: ele volta |
 | 42i | No Chrome do Android, tocar em **Baixar aplicativo**, esperar alguns minutos com o download pausado e continuar | o arquivo baixa de `/api/app?baixar=1` como `gbs-busca.apk` e instala (sem erro de link expirado) |
+| 43a | No painel, criar um setor e um ponto de interesse **públicos** e outros **privados** (campo **Quem vê**); abrir a página do participante de um celular sem nada atribuído | só o setor e o ponto públicos aparecem no mapa |
+| 43b | Atribuir o setor privado a esse participante (ou enviar o ponto privado como destino) | o setor/ponto passa a aparecer só para ele; outro participante continua sem ver |
+| 43c | Criar uma área proibida e caminhar até ela com o celular do participante | a área aparece em vermelho para todos e o alerta de risco avisa ao entrar |
+| 43d | No botão 🗺, trocar o fundo (Mapa/Relevo/Satélite), desligar cada camada e escolher o tema claro; recarregar a página | tudo muda na hora e a escolha continua depois de recarregar |
+| 43e | Tocar num ponto público → **Rota até aqui** | o painel de navegação abre com a distância e a linha até o ponto; sem enviar nada aos bombeiros; **Encerrar** limpa |
+| 43f | Com dois celulares andando na mesma operação, olhar o mapa de um deles | a trilha do outro aparece numa cor só, sem nome; a própria fica na cor do grupo |
+| 43g | Tocar em **PRECISO DE AJUDA** e confirmar (e também sem internet) | o painel recebe o pedido de ajuda com a localização; sem internet, chega quando o sinal volta |
+| 44a | Tocar numa trilha de GPS no mapa do Comando | balão "Trilha de …" com tipo, grupo, distância e horário; **Ficha ›** abre a pessoa |
+| 44b | Importar um GPX com uma trilha e escolher um participante em "De quem é a trilha?" | a trilha entra vinculada a essa pessoa (balão e detalhes mostram o nome) |
+| 44c | Detalhes de uma trilha desenhada → **✂ Apagar trechos**, passar o dedo no meio, **Concluir** | a linha se divide; a segunda parte vira "… (parte 2)"; Desfazer devolve o trecho |
+| 44d | Desenhar uma trilha com ✔ Concluir e depois abrir os detalhes → **➝ Enviar a participante** | o celular da pessoa recebe a linha como trajeto e a segue |
+| 44e | Na ficha → **⋮ Mais → ⏹ Desativar a gravação da trilha** e a pessoa andar 5 min | a posição segue no mapa, mas a trilha dela não cresce; o celular mostra "O seu caminho não está sendo gravado"; **Ligar** volta a gravar |
+| 44f | **Ferramentas → Setor → ◌ Ocultar trilhas numa área**, tocar no mapa, mudar o raio e salvar | as trilhas somem dentro do círculo (50 m padrão); desativar ou excluir a área traz as trilhas de volta |
+| 44g | Marcar um ponto **Base** (raio 50 m) e andar de dentro dele para fora e de volta | sem trilha dentro do raio (só o ponto de entrada); fora dele a trilha é normal; o grupo que volta é dado como "na base" |
+| 44h | No aplicativo Android registrando, **arrastar o aplicativo da lista de recentes** e olhar o painel | o registro para (a pessoa aparece sem sinal/parada); ao abrir o aplicativo de novo, retoma sozinho |
+| 44i | No aplicativo, **apagar a tela** e **minimizar** por 10 min | o registro **continua** (a trilha segue crescendo no painel) |
+| 45a | Registrar o último local visto de uma vítima | cria o setor "ULV · nome" de 200 m em volta do ponto, sem duplicar se salvar de novo |
+| 45b | Abrir esse setor → **✂ Dividir** → Fatias, 4 partes, ✔ Dividir | o setor vira A (original) e B, C, D novos, com cores diferentes; o mapa mostra as 4 partes |
+| 45c | Dividir outro setor com **╱ Linha de corte** (dois toques) e com **▥ Faixas** | duas partes pela linha; faixas paralelas de largura igual |
+| 45d | Marcar um setor como **Concluído** e tocar no × | fecha e o setor segue Concluído (não volta a "Pendente") |
+| 45e | Criar círculos de 1, 2 e 3 km no mesmo centro e um setor desenhado por cima; tocar no miolo, no anel e de novo no mesmo lugar | o toque abre direto o menor que contém o ponto (miolo: o de dentro; anel: o de fora), com o contorno destacado; tocar de novo passa para o de baixo; duplo toque abre os detalhes |
+| 45f | No tablet na viatura, com o endereço cadastrado a alguns km, abrir a operação e deixar andar | o mapa fica no endereço e não segue a posição; ao chegar a 300 m (ou em "Cheguei ao local") volta ao normal |
+| 45g | Criar setor, grupo e trilha e olhar as cores sugeridas e o seletor | cores fortes e variadas; a cor personalizada continua disponível |
+| 46a | Importar um KML com uma área colorida (vermelha) e olhar o painel em dois aparelhos | o setor aparece nos dois com a **mesma cor** do arquivo (não azul) e não aparece de novo como camada local no aparelho que importou |
+| 46b | Importar o mesmo arquivo de novo, e depois outro com o mesmo nome e desenho diferente | o igual não duplica; o diferente entra como "Nome (2)" |
+| 46c | **Importar mapa**, marcar "Marcar o que for importado como concluído" e importar | setores Concluídos, pontos baixados, trilhas percorridas; o dashboard mostra os setores com a situação |
+| 46d | Em uma camada importada antes, tocar em **⇪ Enviar à operação** e depois em **✔ Marcar como concluídos** | o que estava só no aparelho passa a aparecer para todos e fica concluído |
+| 46e | Em **Grupos**, tocar em **✉ Mensagem ao grupo** e enviar uma mensagem livre e uma orientação (RETORNE) | todos os integrantes de campo do grupo recebem; o painel diz quantos; quem está sem conexão recebe ao reconectar |
+| 46f | Tentar colocar em outro grupo alguém que já está num grupo (Membros e ficha) | aparece desativado/sem o botão; se for forçado, o servidor recusa com "já está em outro grupo" |
+| 46g | Abrir o link do grupo B num celular cuja pessoa já está no grupo A | continua na operação e no grupo A, sem entrar no B |
+| 47a | Abrir uma operação grande (100 pessoas ou mais, dezenas de milhares de posições) com o celular em 4G | a lista de participantes aparece em poucos segundos, antes das trilhas; os setores aparecem logo em seguida e o spinner sai sem esperar o restante |
+| 48a | Marcar um ponto **Risco** e uma **Área proibida**; com o celular de um participante online, andar até o raio do risco e até a borda da área | alerta crítico (alarme, faixa vermelha, "Ciente") com o nome, o grupo e a distância; um só por janela de 30 min |
+| 48b | Com o celular em modo avião, passar por uma área proibida e por um ponto de risco; religar a internet 10 min depois | os alertas chegam com o horário da passagem e o aviso de "trilha gravada sem internet"; a proibida é crítica e o risco, informativo |
+| 48c | Entrar no raio de uma **Base** e ficar parado 5 min; sair e voltar | "☕ N min" na lista e na ficha; o descanso fecha ao sair e abre outro ao voltar |
+| 48d | Ficar mais de 30 min na base e voltar a campo | a fadiga volta a verde e o tempo de busca recomeça do fim do descanso |
+| 48e | Equipe andando 2 h, 4 h e 8 km, 15 km (ou grupo com média alta) | o ponto da lista passa de verde a amarelo e a vermelho; ficha e dashboard mostram o motivo (tempo, km, grupo) |
+| 48f | Abrir o **Dashboard** da operação ativa | indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso" com pessoas e grupos |
+| 49a | No Android, abrir o link de civis, preencher e tocar em COMEÇAR | depois de permitir a localização, abre sozinho "Baixe o aplicativo para ajudar melhor"; "Agora não" fecha; o botão "Baixar aplicativo" continua no MENU; ao recarregar não abre de novo |
+| 49b | No aplicativo instalado e sem operação, abrir o aplicativo | aparece "Entrar na busca com o código" (servidor fixado na compilação) |
+| 49c | Digitar o código (minúsculas ou com espaço), nome e celular e pedir | tela "Aguardando os bombeiros"; no painel aparece o aviso e o botão 🔑 1 |
+| 49d | No painel, **Aceitar como civil** (ou bombeiro); em outro pedido, **Recusar** | o celular aceito segue sozinho para a tela da operação já preenchida; o recusado volta ao código com a explicação; as decisões vão ao diário |
+| 49e | Fechar o aplicativo com o pedido esperando e abrir de novo | continua esperando o mesmo pedido |
+| 49f | **Trocar código** e **Desligar entrada por código**; tentar o código antigo e o desligado | os dois são recusados ("não existe ou está desligado"); errar 8 vezes barra por 10 minutos |
+| 49g | Durante a busca, olhar a tela do participante | mapa em tela cheia; SOS e FOTO grandes embaixo; FOTO abre a câmera; MENU tem fotos, legenda, aplicativo e "Quero sair da busca" |
+| 49h | Criar operação com natureza SARP e outra BREC | o cabeçalho, a lista e os relatórios mostram o tipo |
+| 49i | **Ferramentas → Link público do painel**, criar e abrir o link numa janela anônima (sem login) | mapa ao vivo, nomes como "Participante N", sem botões de edição, mensagens, convite, Ferramentas só com visualização; marcar "Mostrar os nomes" mostra os nomes; trocar/desligar faz o link antigo mostrar "não funciona mais" |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |
 
 ### Testes já realizados no desenvolvimento
@@ -2401,7 +2615,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
     5 min ou 100 m). Para operações grandes ou críticas, use um plano maior ou instale o openrouteservice
     num servidor próprio (`ORS_URL`).
   Para uso intenso ou institucional, contrate um provedor de mapas (ex.: MapTiler, Stadia, Esri) e troque
-  as URLs em `public/js/militar.js` (`criarMapa` e `BASES_3D`) e na CSP do `vercel.json`. Nenhuma chave
+  as URLs em `public/js/comando.js` (`criarMapa` e `BASES_3D`) e na CSP do `vercel.json`. Nenhuma chave
   ou cadastro é necessário para o que foi implementado.
 - Sem sinal de celular não há rastreamento ao vivo, e nenhuma tecnologia web contorna isso. Em áreas
   remotas, a fila offline completa a trilha quando o participante volta a ter sinal.

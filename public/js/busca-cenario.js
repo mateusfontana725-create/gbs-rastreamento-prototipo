@@ -7,7 +7,7 @@
  *     (previsão) ou pós-execução; pode ficar "não estimada" (não vira zero). Registro errado se anula.
  *   - O cálculo (POA atual, POD acumulado, POS) é de js/pod.js; os dados ficam nas tabelas das migrações 033 e 034.
  *   - Números calculados aqui são uma PRÉVIA do navegador: o que vale e fica guardado são os dados aprovados.
- * Usa a interface window.Painel (militar.js).
+ * Usa a interface window.Painel (comando.js).
  * ===================================================================== */
 (function () {
   'use strict';

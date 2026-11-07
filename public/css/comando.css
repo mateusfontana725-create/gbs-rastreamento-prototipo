@@ -1,7 +1,7 @@
 /* =====================================================================
- * Rastreamento GBS — identidade do painel do responsável (comando)
- * Carregado só por militar.html, DEPOIS de estilos.css: ajusta os tokens e
- * a composição sem mexer na página do participante (civil.html).
+ * Rastreamento GBS — identidade do Comando (painel dos responsáveis)
+ * Carregado só por comando.html, DEPOIS de estilos.css: ajusta os tokens e
+ * a composição sem mexer na página do participante (participante.html).
  * Linguagem: técnica e sóbria — tipografia Barlow (estilo DIN, de sinalização; local, sem CDN;
  * IBM Plex e a letra do aparelho continuam como opção em Personalizar tela),
  * cantos retos, sombras discretas, vermelho só para o que é crítico e
@@ -434,7 +434,7 @@ body.gaveta.info-ponto-aberto #mapa .leaflet-bottom { visibility: hidden; }
 .btn.btn-ativo:hover { background: #fbbf24; border-color: #fbbf24; color: #0a0d10; }
 
 /* =====================================================================
- * TEMA CLARO (painel do responsável; Ferramentas → Configurações → Tema)
+ * TEMA CLARO (Comando; Ferramentas → Configurações → Tema)
  * Só vale com html[data-tema="claro"]. O escuro segue como está, e a página
  * do participante não usa este bloco. A barra do topo segue o tema (clara aqui).
  * ===================================================================== */
@@ -1094,7 +1094,7 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { border-color: v
 
 /* =====================================================================
  * Painel enxuto: letras e botões menores, lista em uma linha, faixas compactas
- * (só no painel do responsável; a página do participante continua com alvos grandes)
+ * (só no Comando; a página do participante continua com alvos grandes)
  * ===================================================================== */
 html { --texto-base: 93.75%; }   /* 15 px; o tamanho escolhido em Personalizar tela escala a partir daqui */
 body { font-size: 0.9375rem; }
@@ -1250,7 +1250,7 @@ body { font-size: 0.9375rem; }
 #mapa.ocultar-pessoas .mk-wrap, #mapa.ocultar-pessoas .cluster-pessoas-wrap { display: none; }
 
 /* Mensagem de outro responsável: cartão compacto como uma notificação (nunca tela cheia), com × para responder depois.
-   A altura (top) é definida em posicionarAlerta (militar.js): logo abaixo da etiqueta do cabeçalho. */
+   A altura (top) é definida em posicionarAlerta (comando.js): logo abaixo da etiqueta do cabeçalho. */
 #alerta-cmd.alerta-painel {
   position: fixed; inset: auto; z-index: 2800; top: 150px; right: 12px; width: min(300px, calc(100vw - 24px));
   max-height: calc(100vh - 170px); border-radius: 8px; border: 1.5px solid var(--responsavel); box-shadow: 0 6px 22px rgba(0, 0, 0, .6);
@@ -1806,7 +1806,7 @@ body.janela-dashboard { min-height: 100vh; margin: 0; background: var(--fundo); 
 }
 .janela-dash-corpo { max-width: 1280px; margin: 0 auto; padding: 16px 20px 40px; }
 
-/* Deslocamentos de grupos: um cartão por deslocamento (militar.js → abrirMissoes) */
+/* Deslocamentos de grupos: um cartão por deslocamento (comando.js → abrirMissoes) */
 .modal:has(.modal-missoes) { width: min(880px, calc(100vw - 24px)); }
 .cartao-missao { border: 1px solid var(--borda); border-left: 5px solid var(--neutro); border-radius: var(--raio); background: var(--superficie-2); padding: 12px 14px; display: grid; gap: 12px; margin: 0 0 12px; }
 .cartao-missao.status-em_deslocamento, .cartao-missao.status-busca_finalizada { border-left-color: var(--alerta); }
@@ -2689,3 +2689,109 @@ button.sci2-kpi:hover { border-color: var(--borda-forte); background: var(--supe
   .painel-topo > .modo-seletor button { padding: 0 8px; font-size: .64rem; letter-spacing: .03em; }
 }
 
+
+/* Setores: o contorno é contínuo e forte (a situação aparece no preenchimento); o filete escuro separa a área do fundo */
+.setor-filete { pointer-events: none; }
+
+
+/* Em deslocamento até o local: o mapa fica no endereço da operação */
+.chip-deslocamento {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 850;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 120px);
+  padding: 6px 10px; border-radius: 12px; background: rgba(15, 23, 42, .92); color: #f8fafc; border: 1px solid #f59e0b; box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
+  font-size: .85rem;
+}
+.chip-deslocamento[hidden] { display: none; }
+html[data-tema="claro"] .chip-deslocamento { background: rgba(255, 255, 255, .96); color: #0f172a; }
+
+/* Grupos: quem já está em outro grupo não pode ser marcado */
+.linha-desativada { opacity: .6; cursor: not-allowed; }
+.ficha-um-grupo { display: block; margin-top: 6px; }
+
+/* ---------- Fadiga e descanso (verde, amarelo, vermelho) ---------- */
+.li-fadiga { display: inline-block; width: 10px; height: 10px; margin-left: 6px; border-radius: 50%; vertical-align: middle; border: 1.5px solid rgba(0, 0, 0, .55); flex: none; }
+.li-fadiga-verde { background: #22c55e; }
+.li-fadiga-amarelo { background: #facc15; }
+.li-fadiga-vermelho { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, .28); }
+.li-descanso { margin-left: 6px; padding: 0 5px; border-radius: 8px; font-size: .68rem; font-weight: 700; background: rgba(56, 189, 248, .16); color: #7dd3fc; white-space: nowrap; }
+html[data-tema="claro"] .li-descanso { color: #0369a1; background: rgba(2, 132, 199, .12); }
+.ficha-fadiga { margin: 6px 0 0; padding: 6px 9px; border-radius: 8px; font-size: .82rem; border-left: 5px solid #22c55e; background: rgba(34, 197, 94, .1); }
+.ficha-fadiga-amarelo { border-left-color: #facc15; background: rgba(250, 204, 21, .13); }
+.ficha-fadiga-vermelho { border-left-color: #ef4444; background: rgba(239, 68, 68, .13); font-weight: 600; }
+.dash-fad { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: .74rem; font-weight: 700; white-space: nowrap; color: #0b1220; }
+.dash-fad-verde { background: #4ade80; }
+.dash-fad-amarelo { background: #fde047; }
+.dash-fad-vermelho { background: #f87171; }
+.dash-fad-resumo { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.dash-tab-fadiga { grid-template-columns: minmax(0, 1.5fr) 74px 56px 96px 96px; }
+.dash-tab-fadiga-grupos { grid-template-columns: minmax(0, 1.2fr) 60px 70px 110px; margin-bottom: 10px; }
+.dash-kpi-vermelho .dash-kpi-icone { background: rgba(248, 113, 113, .16); color: #f87171; }
+@media (max-width: 860px) {
+  .dash-tab-fadiga { grid-template-columns: minmax(0, 1fr) 64px 96px; gap: 6px 10px; }
+}
+
+/* =====================================================================
+ * Código de acesso e pedidos de acesso (js/acesso.js, migração 069)
+ * ===================================================================== */
+.btn-pedidos { border-color: var(--acento) !important; color: var(--acento) !important; animation: pedidos-pulso 1.8s ease-in-out infinite; }
+@keyframes pedidos-pulso { 50% { box-shadow: 0 0 0 5px rgba(56, 189, 248, .22); } }
+@media (prefers-reduced-motion: reduce) { .btn-pedidos { animation: none; } }
+.modal:has(.acesso-modal) { width: min(640px, 100%); }
+.acesso-codigo-resumo { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 10px; margin: 6px 0 10px; border: 1px solid var(--borda); border-radius: 8px; }
+.acesso-codigo-mini { font-size: 1.1rem; letter-spacing: .18em; }
+.acesso-sub { margin: 12px 0 6px; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--texto-3); }
+.acesso-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.acesso-pedido { border: 1px solid var(--borda); border-left-width: 5px; border-radius: 8px; padding: 10px 12px; background: var(--superficie-2, transparent); }
+.acesso-pendente { border-left-color: var(--alerta); }
+.acesso-aceito { border-left-color: var(--ok); opacity: .92; }
+.acesso-recusado { border-left-color: var(--perigo); opacity: .92; }
+.acesso-cancelado { border-left-color: var(--borda-forte); opacity: .75; }
+.acesso-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.acesso-dados { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.acesso-nome { font-size: 1.05rem; }
+.acesso-tel { color: var(--acento); text-decoration: none; font-weight: 700; }
+.acesso-por { margin: 4px 0 0; font-size: .8rem; }
+.acesso-acoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.acesso-acoes .btn { flex: 1 1 auto; min-height: 40px; }
+.acesso-codigo-painel { display: flex; flex-direction: column; gap: 10px; }
+.acesso-codigo-grande {
+  align-self: center; padding: 14px 22px; border: 2px dashed var(--borda-forte); border-radius: 12px; background: var(--superficie-2, transparent);
+  font: 800 2.6rem/1 var(--mono, monospace); letter-spacing: .22em; text-align: center; color: var(--texto); user-select: all; white-space: nowrap;
+}
+.acesso-codigo-grande.desligado { opacity: .4; text-decoration: line-through; }
+@media (max-width: 420px) { .acesso-codigo-grande { font-size: 2rem; letter-spacing: .14em; padding: 10px 14px; } }
+
+/* =====================================================================
+ * Link público do painel (migração 069): só visualização.
+ * O painel abre sem login e com a operação em modo "encerrada" (toda a edição fica fechada pelo próprio painel);
+ * aqui sai da tela o que só serve a quem edita, a quem conversa com os participantes ou a quem tem login.
+ * O bloqueio de verdade está no servidor e em comunicacao.js (nenhuma escrita sai deste navegador).
+ * ===================================================================== */
+body.modo-publico #btn-voltar,
+body.modo-publico #modo-seletor,
+body.modo-publico #acoes-topo > .btn:not(#btn-regua):not(#menu-dashboard),
+body.modo-publico .painel-acoes .btn-ajuda,
+body.modo-publico .painel-acoes .btn-pedidos,
+body.modo-publico .painel-acoes .btn-alerta-pendente,
+body.modo-publico #menu-zona-perigo,
+body.modo-publico #gps-alerta,
+body.modo-publico #fila-estado-meu,
+body.modo-publico .menu-lista .menu-item:not(#menu-areas):not(#menu-ir-coord):not(#menu-medir):not(#menu-regua):not(#menu-aparencia):not(.menu-select),
+body.modo-publico #central,
+body.modo-publico #btn-mensagens,
+body.modo-publico #ficha-enviar-destino,
+body.modo-publico #ficha-ir-ate,
+body.modo-publico #ficha-gravacao,
+body.modo-publico #ficha-vitima,
+body.modo-publico #ficha-ligar,
+body.modo-publico #ficha-aba-conversa,
+body.modo-publico #ficha-conversa,
+body.modo-publico #ficha-renomear,
+body.modo-publico #ficha-remover,
+body.modo-publico #ficha-exportar,
+body.modo-publico #areas-novo-setor,
+body.modo-publico #areas-novo-ponto,
+body.modo-publico #areas-nova-trilha,
+body.modo-publico #ficha-aba-dados,
+body.modo-publico #ficha .ficha-abas { display: none !important; }
+body.modo-publico .faixa-encerrada { background: rgba(6, 182, 212, .14); border-color: var(--responsavel); }

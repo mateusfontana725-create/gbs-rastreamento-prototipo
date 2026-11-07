@@ -5,7 +5,7 @@
  *   - O cão normalmente não tem GPS: o mapa mostra a trilha do CONDUTOR durante a sessão e diz isso.
  *   - Indicação do cão (I1, I2…) começa "em análise": indicação não é confirmação.
  *     Confirmação (C1…) é ligada a uma indicação e exige um método independente do cão (equipe, visual, drone…).
- *   Usa a interface window.Painel (militar.js).
+ *   Usa a interface window.Painel (comando.js).
  * ===================================================================== */
 (function () {
   'use strict';

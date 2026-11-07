@@ -2,7 +2,7 @@
  * mapa-resumo.js — agrupamento ÚNICO do mapa quando se está longe.
  *
  *   O mapa tem camadas que agrupam cada uma o que é seu: pessoas (js/mapa-rotulos.js) e pontos, relatos e fotos
- *   (militar.js). Cada camada não enxerga a outra: de longe sobram vários "grupos" no mesmo lugar, empilhados, com as
+ *   (comando.js). Cada camada não enxerga a outra: de longe sobram vários "grupos" no mesmo lugar, empilhados, com as
  *   etiquetas de vítima e de quem pede ajuda uma por cima da outra.
  *
  *   Aqui, até o zoom do nível "longe" (14, o mesmo do mapa-rotulos.js), tudo é agrupado JUNTO, por distância na tela,

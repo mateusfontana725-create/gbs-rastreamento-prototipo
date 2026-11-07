@@ -87,6 +87,8 @@
     API.estado = function () { return pedir('estado'); };
     API.pontos = function () { return pedir('pontos'); };
     API.vinculoUsado = function () { return pedir('vinculoUsado'); };
+    // Guarda no aplicativo a operação que a pessoa acabou de ganhar pelo código (para abrir nela na próxima vez)
+    API.operacao = function (token) { return pedir('operacao', { token: token }); };
     API.bateria = function () { return pedir('bateria'); };
     API.configuracoes = function () { return pedir('configuracoes'); };
     API.localizacaoDoCelular = function () { return pedir('localizacaoDoCelular'); };

@@ -426,6 +426,27 @@ public class RastreioService extends Service {
     stopSelf();
   }
 
+  /**
+   * O usuário FECHOU o aplicativo de vez (arrastou da lista de recentes): o registro para.
+   * Tela apagada, aplicativo minimizado ou botão voltar NÃO chegam aqui (o aplicativo só vai para o segundo plano),
+   * e o registro segue normalmente nesses casos. A participação continua: a fila fica guardada e o registro retoma
+   * quando o aplicativo for aberto de novo.
+   */
+  @Override public void onTaskRemoved(Intent rootIntent) {
+    super.onTaskRemoved(rootIntent);
+    if (!ativo) return;
+    gps.post(this::suspenderPorFechamento);
+  }
+
+  private void suspenderPorFechamento() {
+    if (!ativo) return;
+    cfg.suspender();
+    final Sincronizador s = sync;
+    if (s != null) rede.post(() -> { try { s.parar(); } catch (Exception e) { /* sem rede: o painel marca a falta de sinal */ } });
+    Estado.I.rastreando = false;
+    pararServico();
+  }
+
   @Override public void onDestroy() {
     if (ativo) pararServico();
     linhaGps.quitSafely();

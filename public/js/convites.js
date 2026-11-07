@@ -5,7 +5,7 @@
  *   painel da operação (pede o login de responsável). Civil e bombeiro levam o código do convite, que preenche o nome.
  *   WhatsApp: abre a conversa com a mensagem pronta (wa.me), sem salvar o contato. E-mail: o servidor envia; sem o
  *   provedor configurado, o painel oferece "Abrir no meu e-mail" e "Copiar link".
- *   Usa a interface window.Painel (militar.js).
+ *   Usa a interface window.Painel (comando.js).
  * ===================================================================== */
 (function () {
   'use strict';

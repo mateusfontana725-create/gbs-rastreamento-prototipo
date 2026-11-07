@@ -71,7 +71,20 @@
     try { localStorage.setItem(CHAVE_MINHAS, JSON.stringify(lista.slice(0, MAX_MINHAS))); } catch (e) { /* sem armazenamento: não guarda */ }
   }
 
-  var API = { normalizar: normalizar, hexParaHsl: hexParaHsl, hslParaHex: hslParaHex, livre: livre, textoSobre: textoSobre, MAX_MINHAS: MAX_MINHAS };
+  // Cores padrão FORTES (saturadas, como no AlpineQuest) para setores, grupos, trilhas e tipos de ponto.
+  // O seletor continua com a cor personalizada (tom, intensidade, claridade, código #rrggbb) e "Minhas cores".
+  var PALETA = ['#ff0000', '#ff6a00', '#ffb300', '#ffee00', '#9cff00', '#00d84a', '#00a651', '#007a3d',
+    '#00e5c8', '#00bcd4', '#00a2ff', '#0055ff', '#1a1ad6', '#7a00ff', '#c800ff', '#ff00b8',
+    '#ff3d7f', '#e91e63', '#00ffa0', '#8b4513', '#5a2d0c', '#ffffff', '#bdbdbd', '#6b6b6b', '#202020'];
+  // Ordem de escolha automática dos setores: cores bem diferentes entre si primeiro.
+  var PALETA_SETOR = ['#ff6a00', '#0055ff', '#00d84a', '#ffee00', '#00bcd4', '#ff00b8', '#9cff00', '#7a00ff',
+    '#ff3d7f', '#00a2ff', '#ffb300', '#00a651', '#c800ff', '#1a1ad6', '#8b4513', '#00e5c8', '#ff0000', '#007a3d'];
+  // Grupos: sem vermelho, roxo e magenta (reservados a militar, civil e responsável no mapa).
+  var PALETA_GRUPO = ['#ff6a00', '#0055ff', '#00d84a', '#ffee00', '#00a2ff', '#00ffa0', '#9cff00', '#ffb300',
+    '#00a651', '#1a1ad6', '#00e5c8', '#8b4513'];
+
+  var API = { normalizar: normalizar, hexParaHsl: hexParaHsl, hslParaHex: hslParaHex, livre: livre, textoSobre: textoSobre, MAX_MINHAS: MAX_MINHAS,
+    PALETA: PALETA, PALETA_SETOR: PALETA_SETOR, PALETA_GRUPO: PALETA_GRUPO };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   raiz.Cores = API;
 

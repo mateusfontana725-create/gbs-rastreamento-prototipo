@@ -152,6 +152,82 @@ const passos = (...p) => p;
     A.esquecer(OP);
   });
 
+  console.log('\nLink público do painel do comando: documento público (migração 069)');
+  const docPub = () => ({
+    formato: 'gbs-arquivo-operacao', publico: true, agora: '2026-11-07T12:00:00Z', operacao: { id: OP, codigo: 'OP 1', status: 'ativa' },
+    tabelas: {
+      operacoes: [{ id: OP, codigo: 'OP 1', status: 'encerrada', _statusReal: 'ativa' }],
+      participantes: [{ id: 'p1', operacao_id: OP, nome: 'Participante 1' }],
+      posicoes: [{ id: 1, operacao_id: OP, participante_id: 'p1' }, { id: 2, operacao_id: OP, participante_id: 'p1' }],
+      setores: [{ id: 's1', operacao_id: OP, nome: 'Alfa' }],
+      tipos_ponto: [{ id: 't1', nome: 'Base' }],
+    },
+  });
+  await teste('tabela que não vem no link responde vazio (não vai ao servidor) e o catálogo sem operacao_id vem do documento', async () => {
+    const r = { [OP]: { doc: docPub(), extras: {} } };
+    const msgs = A.resolver(r, 'mensagens', passos(['select', ['*']], ['eq', ['operacao_id', OP]], ['order', ['criada_em', { ascending: true }]]));
+    assert.deepStrictEqual(msgs.data, [], 'mensagens: vazio');
+    const fotos = A.resolver(r, 'fotos', passos(['select', ['*']], ['eq', ['operacao_id', OP]]));
+    assert.deepStrictEqual(fotos.data, []);
+    const tipos = A.resolver(r, 'tipos_ponto', passos(['select', ['*']], ['order', ['nome', { ascending: true }]]));
+    assert.deepStrictEqual(tipos.data, [{ id: 't1', nome: 'Base' }], 'catálogo do mapa vem do documento');
+    const desconhecida = A.resolver(r, 'qualquer_outra', passos(['select', ['*']]));
+    assert.deepStrictEqual(desconhecida.data, [], 'sem operacao_id e fora do documento: vazio');
+    const op = A.resolver(r, 'operacoes', passos(['select', ['*']], ['eq', ['id', OP]], ['maybeSingle', []]));
+    assert.strictEqual(op.data._statusReal, 'ativa');
+  });
+  await teste('toda escrita no documento público é recusada, tenha ou não a tabela', async () => {
+    const r = { [OP]: { doc: docPub(), extras: {} } };
+    for (const [tab, m] of [['setores', 'update'], ['mensagens', 'insert'], ['posicoes', 'delete'], ['fotos', 'upsert']]) {
+      const x = A.resolver(r, tab, passos([m, [{}]], ['eq', ['id', 'x']]));
+      assert.strictEqual(x.error && x.error.code, 'somente_leitura', tab + '.' + m);
+      assert.strictEqual(x.data, null);
+    }
+  });
+  await teste('sem documento público, tudo continua como antes (consulta fora do arquivo vai ao servidor)', async () => {
+    const r = reg();
+    assert.strictEqual(A.resolver(r, 'mensagens', passos(['select', ['*']], ['eq', ['operacao_id', OUTRA]])), null);
+    assert.strictEqual(A.resolver(r, 'tipos_ponto', passos(['select', ['*']])), null);
+  });
+  await teste('atualização do documento: posições novas entram sem repetir, as demais tabelas são trocadas, o status local é mantido', async () => {
+    A.registrar(OP, docPub(), { operacao: { id: OP } });
+    const novo = {
+      agora: '2026-11-07T12:00:10Z', nomes: false, incremental: true, posicoes_ate: 3, operacao: { id: OP, codigo: 'OP 1 (novo nome)', status: 'encerrada' },
+      tabelas: { posicoes: [{ id: 2, operacao_id: OP, participante_id: 'p1' }, { id: 3, operacao_id: OP, participante_id: 'p1' }], setores: [], participantes: [{ id: 'p1', operacao_id: OP, nome: 'Participante 1' }, { id: 'p2', operacao_id: OP, nome: 'Participante 2' }] },
+    };
+    A.mesclarPublico(OP, novo);
+    const pos = A.consulta('posicoes', passos(['select', ['id']], ['eq', ['operacao_id', OP]], ['order', ['id', { ascending: true }]]));
+    assert.deepStrictEqual(pos.data, [{ id: 1 }, { id: 2 }, { id: 3 }], 'o id 2 não se repete');
+    assert.strictEqual(A.consulta('setores', passos(['select', ['*']], ['eq', ['operacao_id', OP]])).data.length, 0, 'setores trocados');
+    assert.strictEqual(A.consulta('participantes', passos(['select', ['*']], ['eq', ['operacao_id', OP]])).data.length, 2, 'participantes trocados');
+    const op = A.consulta('operacoes', passos(['select', ['*']], ['eq', ['id', OP]], ['maybeSingle', []])).data;
+    assert.strictEqual(op.status, 'encerrada', 'o painel continua em modo somente leitura');
+    assert.strictEqual(op._statusReal, 'encerrada', 'e o status verdadeiro acompanha o servidor');
+    assert.strictEqual(op.codigo, 'OP 1 (novo nome)');
+    assert.throws(() => A.mesclarPublico(OUTRA, novo), /documento público/);
+    A.esquecer(OP);
+  });
+  await teste('comunicacao.js em modo somente leitura: só a leitura do link passa; escrita e outras funções são recusadas', async () => {
+    const chamados = [];
+    const janela = {
+      APP_CONFIG: { supabaseUrl: 'https://x.supabase.co', supabaseKey: 'k' },
+      supabase: { createClient: () => ({ from: () => ({}), rpc: async (n) => { chamados.push(n); return { data: 'ok ' + n, error: null }; }, auth: {}, storage: {} }) },
+      ArquivoLocal: A, Proxy, setTimeout, clearTimeout, navigator: { onLine: true },
+    };
+    janela.window = janela;
+    const ctx = vm.createContext(Object.assign(janela, { document: { documentElement: { getAttribute: () => 'app' } }, console, Promise, Date, Math, JSON }));
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'comunicacao.js'), 'utf8'), ctx);
+    const C = janela.Comunicacao;
+    assert.strictEqual(await C.rpc('salvar_ponto', {}), 'ok salvar_ponto', 'antes de ligar o modo, tudo passa');
+    C.definirSomenteLeitura(true);
+    assert.strictEqual(await C.rpc('comando_publico', { p_token: 'x' }), 'ok comando_publico');
+    await assert.rejects(C.rpc('salvar_ponto', {}), (e) => e.codigo === 'somente_leitura' && /só dá para visualizar/.test(e.message));
+    await assert.rejects(C.rpc('agora', {}), (e) => e.codigo === 'somente_leitura');
+    assert.deepStrictEqual(chamados, ['salvar_ponto', 'comando_publico'], 'só a leitura do link chegou ao servidor');
+    C.definirRelogioServidor(Date.now() + 60000);
+    assert.ok(C.agora() - Date.now() > 59000, 'o relógio do servidor vem junto com os dados');
+  });
+
   console.log(falhas ? '\nFalhas: ' + falhas : '\nLeitura do arquivo: todos OK');
   process.exit(falhas ? 1 : 0);
 })();

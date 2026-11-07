@@ -6,7 +6,7 @@
  *          vento com a fonte do dado e condições.
  *   Cada registro guarda a fonte, a hora observada e um estado; verificar, descartar e "inconclusivo" pedem
  *   justificativa. Plano não prova voo; foco térmico não é vítima; corrente desconhecida é um valor válido.
- *   Usa a interface window.Painel (militar.js) e window.Arquivos (importar GPX/KML/GeoJSON/CSV).
+ *   Usa a interface window.Painel (comando.js) e window.Arquivos (importar GPX/KML/GeoJSON/CSV).
  * ===================================================================== */
 (function () {
   'use strict';

@@ -622,7 +622,7 @@
       (op.encerrada_em ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'em andamento');
     // Resumo em texto corrido: só números, tipo e datas (sem nomes, sem o texto livre do resultado)
     var grupos = (d.grupos || []).length;
-    var tipoOp = { aquatica: 'aquática', terrestre: 'terrestre', aerea: 'aérea' }[op.tipo] || (op.tipo_outro ? op.tipo_outro.toLowerCase() : null);
+    var tipoOp = { aquatica: 'aquática', terrestre: 'terrestre', aerea: 'aérea', sarp: 'com SARP', brec: 'em estrutura colapsada (BREC)' }[op.tipo] || (op.tipo_outro ? op.tipo_outro.toLowerCase() : null);
     var fim = op.encerrada_em || Date.now();
     var frases = [
       'Operação de busca' + (tipoOp ? ' ' + tipoOp : '') + ', acionada em ' + dataHora(op.acionado_em || op.criada_em) +

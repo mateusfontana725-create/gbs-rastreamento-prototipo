@@ -6,7 +6,7 @@
  *   - Passagem de comando: quem comanda escolhe outro responsável; o servidor guarda uma FOTO do briefing naquele
  *     momento; quem recebe lê a foto e ACEITA (o comando só muda no aceite, com a hora) ou recusa com motivo.
  *     Se o comandante não responde, outro responsável pode ASSUMIR o comando com motivo obrigatório.
- *   Usa a interface window.Painel (militar.js).
+ *   Usa a interface window.Painel (comando.js).
  * ===================================================================== */
 (function () {
   'use strict';

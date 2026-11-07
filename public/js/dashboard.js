@@ -11,7 +11,7 @@
   var C = raiz.Comunicacao, UI = raiz.UI;
   var NS = 'http://www.w3.org/2000/svg';
   var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', outras: 'Outras', sem_tipo: 'Sem tipo' };
+  var TIPOS = { aquatica: 'Aquática', terrestre: 'Terrestre', aerea: 'Aérea', sarp: 'SARP', brec: 'BREC', outras: 'Outras', sem_tipo: 'Sem tipo' };
   var CONDICOES = { viva: 'Com vida', obito: 'Em óbito' };
   var gradCont = 0;
 
@@ -381,7 +381,7 @@
   // Lista de medidas alinhada: rótulo à esquerda, valor à direita.
   function medidas(linhas) {
     var nodos = [];
-    linhas.forEach(function (l) {
+    linhas.filter(Boolean).forEach(function (l) {
       nodos.push(el('dt', { texto: l[0] }), el('dd', null, [l[1] == null ? oculto() : l[1]]));
     });
     return el('dl', { classe: 'dash-medidas' }, nodos);
@@ -625,7 +625,7 @@
 
   // Dados do banco (janela própria do dashboard ou link público: dashboard_operacao_dados / dashboard_publico)
   // no mesmo formato do resumo do painel, para os números serem os mesmos nas duas telas.
-  var PRECISAO_TRILHA_M = 150;   // a mesma do painel (militar.js, LIM.precisaoTrilhaM)
+  var PRECISAO_TRILHA_M = 150;   // a mesma do painel (comando.js, LIM.precisaoTrilhaM)
   function verticesSetor(s) {
     if (s.forma === 'poligono') return s.pontos || [];
     var v = [], c = Math.cos(s.centro_lat * RAD);
@@ -644,6 +644,7 @@
     for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) a += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
     return Math.abs(a / 2);
   }
+  var SITUACAO_SETOR = { pendente: 'pendente', andamento: 'em andamento', concluido: 'concluído' };
   function resumoDoServidor(dd) {
     var G = raiz.GPS;
     var lacuna = dd.operacao && dd.operacao.gps_lacuna_s ? dd.operacao.gps_lacuna_s * 1000 : undefined;
@@ -655,7 +656,7 @@
     });
     var setores = (dd.setores || []).map(function (s) {
       var v = verticesSetor(s);
-      return { id: s.id, nome: s.nome, areaM2: areaSetorM2(s, v), vertices: v };
+      return { id: s.id, nome: s.nome, areaM2: areaSetorM2(s, v), vertices: v, status: s.status, cor: s.cor };
     });
     return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: dd.ocorrencias || {}, relatos: dd.relatos || [], publico: Boolean(dd.publico) };
   }
@@ -766,7 +767,7 @@
     var campo = pessoas.filter(function (p) { return p.tipo !== 'responsavel' || p.pontos; });
     var porTipo = { militar: 0, civil: 0, responsavel: 0 };
     campo.forEach(function (p) { porTipo[p.tipo] = (porTipo[p.tipo] || 0) + 1; });
-    var setores = r.setores.map(function (s) { return coberturaSetor(s, r); });
+    var setores = r.setores.map(function (s) { var o = coberturaSetor(s, r); o.status = s.status; o.cor = s.cor; return o; });
     var areaTotal = 0, areaCoberta = 0;
     setores.forEach(function (s) { if (s.cobertura != null) { areaTotal += s.areaKm2; areaCoberta += s.areaKm2 * s.cobertura; } });
     return {
@@ -904,9 +905,15 @@
     var e = r ? calcularEsforco(r, inicio, fim) : null;
     var loc = d && d.localizacao;
     var encerrada = Boolean(fim);
-    // ações no painel (militar.js): ver pessoa / setor no mapa, abrir a central e o diário
+    // ações no painel (comando.js): ver pessoa / setor no mapa, abrir a central e o diário
     var acoes = (r && r.acoes) || {};
     var porId = new Map((e ? e.pessoas : []).map(function (p) { return [p.id, p]; }));
+    // Fadiga (só no painel com a operação aberta): tempo de busca, km individual e km do grupo desde o último descanso longo na base
+    var fadiga = null;
+    var PNF = raiz.Painel;
+    if (PNF && PNF.fadiga && PNF.op && PNF.op() && PNF.op().id === op.id && raiz.Fadiga && !encerrada) {
+      try { fadiga = PNF.fadiga(); } catch (eF) { fadiga = null; }
+    }
     var TIPO_PESSOA = { militar: 'militar', civil: 'civil', responsavel: 'responsável' };
     function situacao(p) { return p.emCampo ? 'em campo agora' : p.ultimo ? 'último ponto ' + haQuanto(p.ultimo, agora) : 'sem GPS'; }
     function itemPessoa(p, valor) {
@@ -921,10 +928,27 @@
         vazio: 'Ninguém.', nota: acoes.verPessoa ? 'Toque numa pessoa para vê-la no mapa e abrir a ficha.' : null });
     }
     function porNome(a, b) { return a.nome.localeCompare(b.nome); }
+    var ROTULO_FADIGA = { verde: 'verde', amarelo: 'amarela', vermelho: 'vermelha' };
+    function selo(nivel, texto) { return el('span', { classe: 'dash-fad dash-fad-' + nivel, texto: texto || ROTULO_FADIGA[nivel] }); }
+    function detalheFadiga() {
+      abrirDetalhe({
+        titulo: 'Fadiga', subtitulo: 'Do mais para o menos cansado, desde o último descanso longo na base.',
+        lista: fadiga.pessoas.map(function (p) {
+          return { titulo: p.nome, meta: [p.grupo || 'sem grupo', 'busca ' + raiz.Fadiga.textoMinutos(p.buscaMin) + ' · ' + raiz.Fadiga.textoKm(p.km) +
+            (p.kmGrupo != null ? ' · grupo ' + raiz.Fadiga.textoKm(p.kmGrupo) : '') + (p.descansando != null ? ' · descansando há ' + raiz.Fadiga.textoMinutos(p.descansando) : '')].join(' · '),
+            valor: selo(p.nivel), aoClicar: acoes.verPessoa ? function () { acoes.verPessoa(p.id); } : null };
+        }),
+        vazio: 'Ninguém com trilha ainda.',
+        nota: 'Amarelo: ' + raiz.Fadiga.textoMinutos(raiz.Fadiga.LIMITES.tempoMin.amarelo) + ' de busca, ' + raiz.Fadiga.LIMITES.km.amarelo + ' km ou média do grupo de ' + raiz.Fadiga.LIMITES.kmGrupo.amarelo +
+          ' km. Vermelho: ' + raiz.Fadiga.textoMinutos(raiz.Fadiga.LIMITES.tempoMin.vermelho) + ', ' + raiz.Fadiga.LIMITES.km.vermelho + ' km ou ' + raiz.Fadiga.LIMITES.kmGrupo.vermelho +
+          ' km. Um descanso de ' + raiz.Fadiga.LIMITES.descansoLongoMin + ' min ou mais na base zera a contagem. É indicação para o comando decidir a troca da equipe.',
+      });
+    }
     function detalheSetor(st) {
       abrirDetalhe({
         titulo: st.nome || 'Setor',
         medidas: [
+          st.status ? ['Situação', SITUACAO_SETOR[st.status] || st.status] : null,
           ['Área', st.areaKm2 < 1 ? num(st.areaKm2 * 100, 1) + ' ha' : num(st.areaKm2, 2) + ' km²'],
           ['Coberto (aproximado)', st.cobertura == null ? '—' : pct(st.cobertura)],
           ['Última passagem', st.ultimaPassagem ? haQuanto(st.ultimaPassagem, agora) + ' (' + hora(st.ultimaPassagem) + ')' : 'ninguém passou'],
@@ -1016,6 +1040,8 @@
         e ? function () { detalhePessoas('Percorrido por pessoa', num(e.km, 1) + ' km no total', e.pessoas.slice().sort(function (a, b) { return b.km - a.km; }), function (p) { return num(p.km, 1) + ' km'; }); } : null),
       kpi('⧗', 'Esforço', e ? num(e.horas, 1) + ' h' : '—', 'pessoa·hora com GPS', 'azul',
         e ? function () { detalhePessoas('Horas com GPS por pessoa', num(e.horas, 1) + ' pessoa·hora no total', e.pessoas.slice().sort(function (a, b) { return b.horas - a.horas; }), function (p) { return num(p.horas, 1) + ' h'; }); } : null),
+      fadiga ? kpi('☕', 'Fadiga (vermelho)', String(fadiga.contagem.vermelho), fadiga.contagem.amarelo + ' amarelo · ' + fadiga.contagem.verde + ' verde',
+        fadiga.contagem.vermelho ? 'vermelho' : fadiga.contagem.amarelo ? 'ambar' : 'verde', fadiga.pessoas.length ? function () { detalheFadiga(); } : null) : null,
       kpi('▦', 'Setores', e ? String(e.setores.length) : '—', e && e.coberturaMedia != null ? pct(e.coberturaMedia) + ' coberto' : 'nenhum desenhado', 'ambar',
         e && e.setores.length ? function () {
           abrirDetalhe({ titulo: 'Setores', subtitulo: 'Do menos para o mais coberto.', lista: e.setores.map(function (st) {
@@ -1094,13 +1120,30 @@
     });
 
     // cobertura dos setores
+    var cFadiga = fadiga ? cartao({
+      span: 6, titulo: 'Fadiga e descanso', n: fadiga.pessoas.length,
+      pergunta: 'Tempo de busca, quilômetros da pessoa e do grupo desde o último descanso longo na base. Verde, amarelo ou vermelho pelo pior dos três; o descanso começa sozinho quando a pessoa está na base.',
+      corpo: [fadiga.pessoas.length ? el('div', null, [
+        el('div', { classe: 'dash-fad-resumo' }, [selo('verde', fadiga.contagem.verde + ' verde'), selo('amarelo', fadiga.contagem.amarelo + ' amarelo'), selo('vermelho', fadiga.contagem.vermelho + ' vermelho')]),
+        fadiga.grupos.length ? tabela('dash-tab-fadiga-grupos', [{ titulo: 'Grupo' }, { titulo: 'Pessoas', num: true }, { titulo: 'Média km', num: true }, { titulo: 'Fadiga' }],
+          fadiga.grupos.map(function (g) { return [g.nome, String(g.pessoas), num(g.kmMedio, 1), selo(g.nivel, g.vermelhos ? g.vermelhos + ' vermelho' : g.amarelos ? g.amarelos + ' amarelo' : 'verde')]; })) : null,
+        tabela('dash-tab-fadiga', [{ titulo: 'Pessoa' }, { titulo: 'Busca', num: true }, { titulo: 'Km', num: true, classe: 'dash-so-largo' }, { titulo: 'Descanso', num: true, classe: 'dash-so-largo' }, { titulo: 'Fadiga' }],
+          fadiga.pessoas.slice(0, 12).map(function (p) {
+            return [p.nome + (p.grupo ? ' · ' + p.grupo : ''), raiz.Fadiga.textoMinutos(p.buscaMin), num(p.km, 1),
+              p.descansando != null ? 'agora ' + raiz.Fadiga.textoMinutos(p.descansando) : (p.descansoTotalMin ? raiz.Fadiga.textoMinutos(p.descansoTotalMin) : '—'), selo(p.nivel)];
+          }), function (j) { var p = fadiga.pessoas[j]; if (acoes.verPessoa) acoes.verPessoa(p.id); }),
+        fadiga.pessoas.length > 12 ? el('p', { classe: 'muted', texto: 'Mostrando as 12 mais cansadas. Toque no indicador "Fadiga" no topo para ver todas.' }) : null,
+      ]) : el('p', { classe: 'muted', texto: 'Ninguém com trilha ainda.' })],
+      nota: fadiga.descansoDisponivel ? 'Limites padrão: amarelo a partir de 2 h de busca, 8 km ou média do grupo de 7 km; vermelho a partir de 4 h, 15 km ou 12 km. Um descanso de 30 min ou mais na base zera a contagem.'
+        : 'O descanso na base precisa da migração 068 no banco; sem ela a contagem não é zerada.',
+    }) : null;
     var cSet = cartao({
       span: 6, titulo: 'Cobertura dos setores', n: e ? e.setores.length : undefined,
       pergunta: 'Quanto da área de cada setor teve alguém passando, e quando foi a última passagem.',
       corpo: [e && e.setores.length ? tabela('dash-tab-setores', [
         { titulo: 'Setor' }, { titulo: 'Área', num: true, classe: 'dash-so-largo' }, { titulo: '', barra: true, classe: 'dash-so-largo' }, { titulo: 'Coberto', num: true }, { titulo: 'Última passagem', num: true },
       ], e.setores.map(function (s) {
-        return [s.nome || 'Setor', s.areaKm2 < 1 ? num(s.areaKm2 * 100, 1) + ' ha' : num(s.areaKm2, 2) + ' km²', s.cobertura,
+        return [(s.nome || 'Setor') + (SITUACAO_SETOR[s.status] ? ' · ' + SITUACAO_SETOR[s.status] : ''), s.areaKm2 < 1 ? num(s.areaKm2 * 100, 1) + ' ha' : num(s.areaKm2, 2) + ' km²', s.cobertura,
           s.cobertura == null ? null : pct(s.cobertura), s.ultimaPassagem ? haQuanto(s.ultimaPassagem, agora) : 'ninguém passou'];
       }), function (j) { detalheSetor(e.setores[j]); }) : el('p', { classe: 'muted', texto: 'Nenhum setor desenhado.' })],
       nota: e && e.setores.length ? 'Aproximado: o setor é dividido em quadrados de ~' + (e.setores[0].celulaM || 30) + ' m; conta como coberto o quadrado por onde passou alguma trilha. Os menos cobertos aparecem primeiro.' : null,
@@ -1175,7 +1218,7 @@
       });
     }
 
-    return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cSet, cOcorr, cVerif])];
+    return [topo, kpis, el('div', { classe: 'dash-grade' }, [cAtiv, cVit, cGrupos, cFadiga, cSet, cOcorr, cVerif])];
   }
 
   /* ------------------------------ mapa do Paraná (operações) ------------------------------ */

@@ -1520,18 +1520,13 @@
     agendarDecoracoesTrilhas();
   }
 
-  /* ---------- Trilhas no estilo AlpineQuest: espessura pelo zoom, setas de sentido e hora do início ---------- */
-  var ESPACO_SETAS_PX = 70, MAX_SETAS = 600, ZOOM_SETAS = 15, ZOOM_HORA = 16;
+  /* ---------- Trilhas no estilo AlpineQuest: espessura pelo zoom e setas de sentido ---------- */
+  var ESPACO_SETAS_PX = 70, MAX_SETAS = 600, ZOOM_SETAS = 15;
   function fatorZoomTrilhaP() {
     var z = estado.mapa ? estado.mapa.getZoom() : 17;
     return z >= 18 ? 1 : z >= 17 ? 0.85 : z >= 16 ? 0.7 : z >= 15 ? 0.55 : z >= 14 ? 0.45 : 0.38;
   }
   function pesoTrilhaP(base) { return Math.max(1.5, Math.round(base * fatorZoomTrilhaP() * 10) / 10); }
-  function horaTrilhaP(ms) {
-    var d = new Date(ms), hoje = new Date(C.agora());
-    var h = ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2);
-    return d.toDateString() === hoje.toDateString() ? h : ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + ' ' + h;
-  }
   // Setas brancas (uma camada só) sobre as linhas [[lat,lng]…] que aparecem na tela; peso = espessura da linha
   function criarSetasP(listaSegs, peso, anterior, opacidade) {
     var mapa = estado.mapa, G = window.TrilhaGeo;
@@ -1573,20 +1568,6 @@
       var equipeLigada = estado.prefs.trilhas && estado.camTrilhasEquipe && mapa.hasLayer(estado.camTrilhasEquipe);
       estado.setasEquipe = criarSetasP(equipeLigada ? estado.segsEquipe : null, pesoTrilhaP(4), estado.setasEquipe, 0.85);
       estado.setasMinha = criarSetasP(estado.trilhaMinha, pesoTrilhaP(6), estado.setasMinha, 1);
-      // hora em que a minha trilha começou
-      var t0 = estado.temposMinha && estado.temposMinha[0] && estado.temposMinha[0][0];
-      if (t0 != null && estado.trilhaMinha[0] && mapa.getZoom() >= ZOOM_HORA) {
-        var chave = t0 + '|' + estado.trilhaMinha[0][0].join(',');
-        if (!estado.horaMinha || estado.horaMinha._chave !== chave) {
-          if (estado.horaMinha) estado.horaMinha.remove();
-          estado.horaMinha = L.marker(estado.trilhaMinha[0][0], { interactive: false, keyboard: false,
-            icon: L.divIcon({ className: 'hora-trilha hora-trilha-inicio', html: '<span>' + C.esc(horaTrilhaP(t0)) + '</span>', iconSize: null, iconAnchor: [-6, 9] }) });
-          estado.horaMinha._chave = chave;
-        }
-        if (!mapa.hasLayer(estado.horaMinha)) estado.horaMinha.addTo(mapa);
-      } else if (estado.horaMinha && mapa.hasLayer(estado.horaMinha)) {
-        estado.horaMinha.remove();
-      }
       ordemTrilhasP();
     } catch (e) { /* enfeite: nunca atrapalha a trilha nem a navegação */ }
   }

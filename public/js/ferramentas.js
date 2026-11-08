@@ -851,6 +851,10 @@
     return s;
   }
 
+  function dataCompleta(ms) {
+    return new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
   function kmh(ms) { return (ms * 3.6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' km/h'; }
 
   function abrirEstatisticas(pid) {
@@ -859,12 +863,20 @@
     var s = estatisticas(p);
     var dl = UI.el('dl', { classe: 'dados' });
     function linha(r, v) { dl.appendChild(UI.el('dt', { texto: r })); dl.appendChild(UI.el('dd', { texto: v })); }
+    var grupo = P.grupoNome ? P.grupoNome(p) : null;
+    linha('Pessoa', P.nome(p) + (grupo ? ' · ' + grupo : ''));
     linha('Distância percorrida', fmtDist(s.distancia));
-    linha('Período', s.inicio ? C.hora(s.inicio) + ' a ' + C.hora(s.fim) + ' (' + fmtDur(s.fim - s.inicio) + ')' : '—');
+    linha('Data e hora do início', s.inicio ? dataCompleta(s.inicio) : '—');
+    linha('Data e hora do fim', s.fim ? dataCompleta(s.fim) : '—');
+    linha('Duração total', s.inicio ? fmtDur(s.fim - s.inicio) : '—');
     linha('Tempo em movimento', fmtDur(s.emMovimento));
+    linha('Tempo parado', s.inicio ? fmtDur(Math.max(0, s.fim - s.inicio - s.emMovimento)) : '—');
+    linha('Ritmo em movimento', s.distMovimento > 0 && s.emMovimento ? fmtDur(s.emMovimento / (s.distMovimento / 1000)) + ' por km' : '—');
     linha('Velocidade média em movimento', s.velMedia ? kmh(s.velMedia) : '—');
     linha('Velocidade máxima (aprox.)', s.velMax ? kmh(s.velMax) : '—');
     linha('Pontos registrados', String(s.pontos) + (s.lacunas ? ' · ' + s.lacunas + ' lacuna(s) sem registro' : ''));
+    var apagados = P.trechosApagados ? P.trechosApagados(p) : 0;
+    if (apagados) linha('Trechos apagados do mapa', apagados + ' (as posições continuam guardadas; a distância já desconta)');
     var subida = UI.el('dd', { texto: 'calculando…' }), descida = UI.el('dd', { texto: 'calculando…' }), extremos = UI.el('dd', { texto: 'calculando…' });
     dl.appendChild(UI.el('dt', { texto: 'Subida acumulada' })); dl.appendChild(subida);
     dl.appendChild(UI.el('dt', { texto: 'Descida acumulada' })); dl.appendChild(descida);
@@ -877,7 +889,10 @@
       UI.el('h3', { texto: 'Perfil de altitude' }),
       grafico,
       tabela,
-      UI.rodape([UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', id: 'estat-ficha', texto: 'Ficha de ' + P.nome(p), onclick: function () { fechar(); P.abrirPessoa(p.id); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
     ]), { aoFechar: function () { if (atual.marcaPerfil) { atual.marcaPerfil.remove(); atual.marcaPerfil = null; } } });
     if (!s.distancia) { subida.textContent = descida.textContent = extremos.textContent = '—'; return; }
     perfil(s.trilha).then(function (r) {

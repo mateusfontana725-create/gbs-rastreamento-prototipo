@@ -1110,12 +1110,19 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
 
 - **Desenho no estilo AlpineQuest** (painel do comando): linha cheia e contínua, mais grossa (6 px de perto, mais fina de longe), com
   **contorno escuro** por baixo em todas as pessoas, **setas brancas no sentido do deslocamento** (a cada ~70 px na tela, a partir do
-  zoom 15) e a **hora do início e do fim** nas pontas ("▶ 10h14", "■ 15h04"; com a data se não for hoje). Os horários aparecem de perto
-  (zoom 16 ou mais) ou para a pessoa selecionada; quem ainda está enviando não tem hora de fim (o símbolo dela marca onde está). Com
+  zoom 15). **Datas e horários não ficam desenhados no mapa** (poluíam): ficam nos **detalhes da trilha**. Com
   alguém selecionado, as outras trilhas e setas ficam apagadas. O tipo da pessoa (civil, bombeiro, responsável) continua no símbolo e no
   toque na trilha; a linha não é mais tracejada para os civis.
+- **Detalhes da trilha** (painel): tocar na trilha mostra de quem é e um resumo (distância, horário); **Detalhes da trilha ›**
+  abre pessoa/grupo, distância percorrida, **data e hora do início e do fim**, duração, tempo em movimento e parado, ritmo,
+  velocidades, **subida e descida acumuladas**, altitude mínima/máxima e o **perfil de altitude** (e quantos trechos foram apagados).
+  O balão também tem **Ficha de …** e **✂ Apagar trechos**. A mesma tela abre pela ficha ("📈 Estatísticas da trilha").
+- **Olho na lista de participantes** (painel): o botão 👁 na linha da pessoa leva o mapa até ela e mostra **só ela e o que é dela**:
+  posição, trilha (mesmo que as trilhas estejam ocultas), fotos, relatos, setores atribuídos (os dos outros ficam bem fracos) e destino.
+  O zoom só muda se tudo não couber na tela. Aparece a barra "Mostrando só X · ✕ Mostrar todos"; tocar no olho de outra pessoa troca
+  o foco e tocar de novo no mesmo desliga. A lista continua com todos e o foco não fica lembrado ao recarregar.
 - **Mesmo estilo na página do participante** (navegador e aplicativo): a **sua trilha** ganha contorno escuro, linha grossa e contínua na
-  cor do seu grupo, setas brancas no sentido em que você andou e a **hora em que começou** ("▶ 10h14", de perto). As **trilhas da
+  cor do seu grupo, setas brancas no sentido em que você andou (sem horários desenhados). As **trilhas da
   equipe** (sem nome e sem horário) também ficam com contorno escuro e setas, numa cor só; a sua fica por cima. A espessura acompanha o
   zoom e as setas só aparecem a partir do zoom 15.
 

@@ -2795,3 +2795,10 @@ body.modo-publico #areas-nova-trilha,
 body.modo-publico #ficha-aba-dados,
 body.modo-publico #ficha .ficha-abas { display: none !important; }
 body.modo-publico .faixa-encerrada { background: rgba(6, 182, 212, .14); border-color: var(--responsavel); }
+
+/* Opacidade do preenchimento do setor (formulário do setor) */
+.opacidade-setor { display: grid; gap: 6px; }
+.opacidade-setor-faixa { display: flex; align-items: center; gap: 10px; }
+.opacidade-setor-faixa input[type="range"] { flex: 1 1 auto; min-width: 0; }
+.opacidade-setor-faixa output { flex: 0 0 auto; min-width: 3.2em; text-align: right; }
+.opacidade-setor input[type="range"]:disabled { opacity: .45; }

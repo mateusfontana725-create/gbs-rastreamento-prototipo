@@ -5930,6 +5930,9 @@
   }
 
   /* ---------- Desenho dos setores ----------------------------------- */
+  // Opacidade padrão de cada situação (quando o setor não tem opacidade própria)
+  function opacidadePadraoSetor(status) { return status === 'concluido' ? 0.12 : status === 'andamento' ? 0.32 : 0.2; }
+
   function estiloSetor(d) {
     // Contorno contínuo e forte (com um filete escuro por baixo, em desenharSetor) e preenchimento bem visível:
     // a situação aparece no preenchimento e no rótulo, não mais num tracejado (que parecia uma trilha).
@@ -5940,7 +5943,7 @@
       opacity: 1,
       lineJoin: 'round',
       fillColor: d.cor,
-      fillOpacity: d.status === 'concluido' ? 0.12 : d.status === 'andamento' ? 0.32 : 0.2,
+      fillOpacity: d.opacidade != null ? d.opacidade : opacidadePadraoSetor(d.status),
       className: 'setor setor-' + d.status,
     };
   }
@@ -6395,6 +6398,23 @@
     }
     if (raio) raio.addEventListener('input', atualizarArea);
     var cores = UI.seletorCor({ rotulo: 'Cor do setor', valor: d.cor, padroes: window.Cores.PALETA });
+    // Opacidade do preenchimento: por padrão, a da situação; desmarcar "padrão" deixa escolher (10% a 90%)
+    var opPadrao = d.opacidade == null;
+    var opValor = Math.round((opPadrao ? opacidadePadraoSetor(d.status) : d.opacidade) * 100);
+    var opUsarPadrao = UI.el('input', { type: 'checkbox', id: 'setor-opacidade-padrao', checked: opPadrao ? true : null });
+    var opFaixa = UI.el('input', { type: 'range', id: 'setor-opacidade', min: '10', max: '90', step: '5', value: String(opValor), disabled: opPadrao ? true : null, 'aria-label': 'Opacidade do preenchimento' });
+    var opTexto = UI.el('output', { id: 'setor-opacidade-valor', classe: 'mono', texto: opValor + '%' });
+    var opPrevia = function () {
+      opTexto.textContent = (opUsarPadrao.checked ? opacidadePadraoSetor(d.status) * 100 : opFaixa.value) + '%';
+      var s0 = d.id && est.setores.get(d.id);
+      if (s0 && s0.camada && s0.camada.setStyle) s0.camada.setStyle({ fillOpacity: opUsarPadrao.checked ? opacidadePadraoSetor(d.status) : Number(opFaixa.value) / 100 });
+    };
+    opUsarPadrao.addEventListener('change', function () { opFaixa.disabled = opUsarPadrao.checked; opPrevia(); });
+    opFaixa.addEventListener('input', function () { opUsarPadrao.checked = false; opFaixa.disabled = false; opPrevia(); });
+    var opcaoOpacidade = UI.el('div', { classe: 'opacidade-setor' }, [
+      UI.el('label', { classe: 'linha-opcao', for: 'setor-opacidade-padrao' }, [opUsarPadrao, ' Usar a padrão da situação']),
+      UI.el('div', { classe: 'opacidade-setor-faixa' }, [opFaixa, opTexto]),
+    ]);
     var part = opcoesParticipantes(d.participante_id, true);
     var equipe = UI.el('input', { classe: 'campo', id: 'setor-equipe', maxlength: '60', value: d.equipe || '', placeholder: 'Ex.: Equipe Alfa' });
     var status = UI.el('select', { classe: 'campo', id: 'setor-status' }, Object.keys(STATUS_SETOR).map(function (k) {
@@ -6421,6 +6441,7 @@
         raio ? area : null,
       ]),
       UI.campo('Cor', cores, { largo: true }),
+      UI.campo('Opacidade do preenchimento', opcaoOpacidade, { largo: true, dica: 'Quanto a área aparece colorida no mapa. Não muda o contorno nem a legibilidade do nome.' }),
       UI.campo('Observações', obs, { para: 'setor-obs', largo: true, opcional: true }),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnSalvar]),
@@ -6436,6 +6457,7 @@
         status: status.value,
         observacoes: obs.value.trim(),
         visibilidade: visSetor.value,
+        opacidade: opUsarPadrao.checked ? null : Number(opFaixa.value) / 100,
       };
       if (!dados.nome) { erro.textContent = 'Informe o nome do setor.'; erro.hidden = false; return; }
       if (novo || raio) {
@@ -6462,7 +6484,11 @@
         btnSalvar.disabled = false;
       }
     });
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () { if (!salvo && novo) cancelarDesenho(); } });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () {
+      if (!salvo && novo) cancelarDesenho();
+      var s1 = !salvo && !novo && d.id && est.setores.get(d.id);
+      if (s1) desenharSetor(s1);   // desfaz a prévia da opacidade
+    } });
     atualizarArea();
   }
 

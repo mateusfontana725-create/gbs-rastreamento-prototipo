@@ -264,7 +264,51 @@
     return resultado(partes, P);
   }
 
+  // Setas de sentido ao longo de uma linha já em pixels ([{x, y}], na ordem do percurso): uma a cada `espaco` px
+  // (a primeira em espaco/2). O sentido vem de um trecho maior em volta da seta (de `janela` px antes a `janela`
+  // px depois), não do trechinho onde ela cai: o tremor do GPS (pessoa parada, sinal ruim) fazia setas apontarem
+  // para trás. Onde a linha vai e volta nesse trecho (vaivém), não há seta: ali não dá para saber o sentido.
+  function setasAoLongo(pts, espaco, max, janela) {
+    var r = [];
+    if (!pts || pts.length < 2 || !(espaco > 0)) return r;
+    max = max || 1000;
+    janela = janela == null ? Math.max(10, espaco * 0.35) : janela;
+    var acum = [0];
+    for (var i = 1; i < pts.length; i++) {
+      var dx0 = pts[i].x - pts[i - 1].x, dy0 = pts[i].y - pts[i - 1].y;
+      acum.push(acum[i - 1] + Math.sqrt(dx0 * dx0 + dy0 * dy0));
+    }
+    var total = acum[acum.length - 1];
+    if (!total) return r;
+    var k = 0;
+    function em(d) {   // ponto a d px do começo (d crescente na maior parte das chamadas: busca a partir do último)
+      d = Math.max(0, Math.min(total, d));
+      if (d < acum[k]) k = 0;
+      while (k < acum.length - 2 && acum[k + 1] < d) k++;
+      var seg = acum[k + 1] - acum[k], t = seg ? (d - acum[k]) / seg : 0;
+      return { x: pts[k].x + (pts[k + 1].x - pts[k].x) * t, y: pts[k].y + (pts[k + 1].y - pts[k].y) * t };
+    }
+    for (var s = espaco / 2; s <= total && r.length < max; s += espaco) {
+      var a = em(s - janela), b = em(s + janela), c = em(s);
+      var dx = b.x - a.x, dy = b.y - a.y, corda = Math.sqrt(dx * dx + dy * dy);
+      var caminho = Math.min(total, s + janela) - Math.max(0, s - janela);
+      if (!corda || corda < caminho * 0.6) continue;   // vaivém: sem seta
+      r.push({ x: c.x, y: c.y, ang: Math.atan2(dy, dx) });
+    }
+    return r;
+  }
+
+  // Vértices (pixels) de uma seta em forma de ponta (como no AlpineQuest), centrada na posição, apontando no ângulo.
+  // tam = meio comprimento em px.
+  function verticesSeta(s, tam) {
+    var c = Math.cos(s.ang), si = Math.sin(s.ang);
+    return [[tam, 0], [-tam * 0.8, tam * 0.85], [-tam * 0.35, 0], [-tam * 0.8, -tam * 0.85]].map(function (q) {
+      return { x: s.x + q[0] * c - q[1] * si, y: s.y + q[0] * si + q[1] * c };
+    });
+  }
+
   global.TrilhaGeo = {
+    setasAoLongo: setasAoLongo, verticesSeta: verticesSeta,
     recortarForaDosCirculos: recortarForaDosCirculos, apagarComPincel: apagarComPincel,
     dentroDeAlgum: dentroDeAlgum, dividirNaBase: dividirNaBase, comprimentoM: comprimentoM,
     pontoNoPoligono: pontoNoPoligono, pontoNoCirculo: pontoNoCirculo, circuloParaPoligono: circuloParaPoligono,

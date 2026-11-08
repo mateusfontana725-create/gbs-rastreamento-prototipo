@@ -1868,6 +1868,8 @@
       if (p.halo) p.halo.remove();
       if (p.toque) p.toque.remove();
       if (p.lacunas) p.lacunas.remove();
+      if (p.setas) p.setas.remove();
+      if (p.horasTrilha) p.horasTrilha.remove();
     });
     limparAreasDoMapa();
     // grupos, deslocamentos e alertas também são apagados com os dados (retenção)
@@ -2102,6 +2104,7 @@
     // De longe, um selo só por região no lugar dos agrupamentos separados (js/mapa-resumo.js)
     est.resumo = window.MapaResumo ? window.MapaResumo.instalar(mapa, { coletar: coletarParaResumo }) : null;
     mapa.on('zoomend', estilizarTrilhas);
+    mapa.on('moveend', agendarDecoracoesTrilhas);
     $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomesMapa);
     atualizarMenu();
     setTimeout(function () { mapa.invalidateSize(); }, 50);
@@ -3006,7 +3009,7 @@
         var cor = PALETA[tipo][cont[tipo]++ % PALETA[tipo].length];
         if (p.cor !== cor) {
           p.cor = cor;
-          if (p.trilha) p.trilha.setStyle({ color: corDoParticipante(p), dashArray: TIPOS[tipo].trilha });
+          if (p.trilha) p.trilha.setStyle({ color: corDoParticipante(p), dashArray: tracoTrilha(tipo) });
           if (p.marcador) { p.marcador.setIcon(criarIcone(p)); }
           if (p.li) p.li = null; // força recriar o item da lista
         }
@@ -3565,24 +3568,93 @@
     var w = window.innerWidth || 1280;
     return Math.max(0.6, Math.min(1, 0.6 + 0.4 * (w - 360) / (1280 - 360)));
   }
-  // linha fina (2,5 px de perto; ~1 px de longe); a selecionada um pouco mais grossa
+  // Estilo AlpineQuest: linha cheia e contínua (6 px de perto, mais fina de longe) com contorno escuro por baixo,
+  // setas brancas no sentido do deslocamento e a hora do início e do fim nas pontas. A selecionada fica mais grossa.
   function pesoTrilha(p) {
     var f = fatorZoomTrilha();
-    return Math.max(1, Math.round((est.selecionado === p.id ? 4 : 2.5) * f * 10) / 10);
+    return Math.max(1.5, Math.round((est.selecionado === p.id ? 7.5 : 6) * f * 10) / 10);
   }
-  function pesoHalo(p) { return pesoTrilha(p) + (fatorZoomTrilha() >= 0.7 ? 2 : 1); }
+  function pesoHalo(p) { return pesoTrilha(p) + (fatorZoomTrilha() >= 0.55 ? 3 : 2); }
   // com alguém selecionado, as outras trilhas ficam apagadas (menos cor no mapa)
   function opacidadeTrilha(p) {
-    if (est.selecionado && est.selecionado !== p.id) return 0.3;
-    return est.selecionado === p.id ? 0.95 : 0.7;
+    if (est.selecionado && est.selecionado !== p.id) return 0.35;
+    return 1;
   }
-  function opacidadeHalo(p) { return fatorZoomTrilha() >= 0.7 && (!est.selecionado || est.selecionado === p.id) ? 0.35 : 0; }
-  // tracejado proporcional à espessura (de longe os traços ficam curtos e finos)
-  function tracoTrilha(tipo) {
-    var base = TIPOS[tipo].trilha;
-    if (!base) return null;
-    var f = Math.max(0.5, fatorZoomTrilha());
-    return base.split(' ').map(function (n) { return Math.max(2, Math.round(+n * f)); }).join(' ');
+  function opacidadeHalo(p) { return est.selecionado && est.selecionado !== p.id ? 0.2 : 0.8; }
+  // linha contínua para todos (o tipo da pessoa aparece no símbolo e no toque na trilha)
+  function tracoTrilha() { return null; }
+
+  /* ---------- Setas de sentido e horário nas pontas (estilo AlpineQuest) ---------- */
+  var ESPACO_SETAS_PX = 70, MAX_SETAS = 800, ZOOM_SETAS = 15, ZOOM_HORAS = 16;
+  function horaTrilha(ms) {
+    var d = new Date(ms), hoje = new Date(C.agora());
+    var h = ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2);
+    return d.toDateString() === hoje.toDateString() ? h : ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + ' ' + h;
+  }
+  // primeiro e último ponto que entram na linha (sem os da base e os imprecisos)
+  function extremosTrilha(p) {
+    var ok = function (pt) { return !pt.na_base && (pt.prec == null || pt.prec <= LIM.precisaoTrilhaM); };
+    var ini = null, fim = null;
+    for (var i = 0; i < p.pontos.length; i++) if (ok(p.pontos[i])) { ini = p.pontos[i]; break; }
+    for (var j = p.pontos.length - 1; j >= 0; j--) if (ok(p.pontos[j])) { fim = p.pontos[j]; break; }
+    return { ini: ini, fim: fim };
+  }
+  function desenharSetas(p) {
+    var mapa = est.mapa, G = window.TrilhaGeo, segs = p.segsDesenhados;
+    if (!mapa || !G || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !mapa.hasLayer(p.trilha)) {
+      if (p.setas) p.setas.remove();
+      return;
+    }
+    var vista = mapa.getBounds().pad(0.25);
+    var tam = Math.max(3, pesoTrilha(p) * 0.8 + 1.5);
+    var poligonos = [], total = 0;
+    segs.forEach(function (seg) {
+      if (total >= MAX_SETAS || seg.length < 2) return;
+      var px = seg.map(function (ll) { return mapa.latLngToLayerPoint(ll); });
+      G.setasAoLongo(px, ESPACO_SETAS_PX, 20000).forEach(function (st) {
+        if (total >= MAX_SETAS || !vista.contains(mapa.layerPointToLatLng([st.x, st.y]))) return;
+        poligonos.push([G.verticesSeta(st, tam).map(function (q) { return mapa.layerPointToLatLng([q.x, q.y]); })]);
+        total++;
+      });
+    });
+    if (!poligonos.length) { if (p.setas) p.setas.remove(); return; }
+    var estilo = { stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: opacidadeTrilha(p), interactive: false, smoothFactor: 0, className: 'trilha-setas' };
+    if (!p.setas) p.setas = L.polygon(poligonos, estilo);
+    else { p.setas.setLatLngs(poligonos); p.setas.setStyle(estilo); }
+    if (!mapa.hasLayer(p.setas)) p.setas.addTo(mapa);
+    p.setas.bringToFront();
+  }
+  function desenharHorasTrilha(p) {
+    var mapa = est.mapa;
+    var mostrar = mapa && p.segsDesenhados && p.segsDesenhados.length && mapa.hasLayer(p.trilha) &&
+      (est.selecionado ? est.selecionado === p.id : mapa.getZoom() >= ZOOM_HORAS);
+    if (!mostrar) { if (p.horasTrilha) p.horasTrilha.remove(); return; }
+    var ext = extremosTrilha(p);
+    if (!ext.ini) { if (p.horasTrilha) p.horasTrilha.remove(); return; }
+    // quem ainda está enviando: o fim da linha é onde a pessoa está (o símbolo dela já marca)
+    var aoVivo = p.dados.rastreando && !p.dados.removido && operacaoViva();
+    var chave = [ext.ini.id, aoVivo ? '' : ext.fim && ext.fim.id].join('|');
+    if (!p.horasTrilha) p.horasTrilha = L.layerGroup();
+    if (p.horasTrilha._chave !== chave) {
+      p.horasTrilha._chave = chave;
+      p.horasTrilha.clearLayers();
+      var rotulo = function (pt, classe) {
+        return L.marker([pt.lat, pt.lng], { interactive: false, keyboard: false, pane: 'rotulosSetor',
+          icon: L.divIcon({ className: 'hora-trilha ' + classe, html: '<span>' + C.esc(horaTrilha(pt.t)) + '</span>', iconSize: null, iconAnchor: [-6, 9] }) });
+      };
+      rotulo(ext.ini, 'hora-trilha-inicio').addTo(p.horasTrilha);
+      if (!aoVivo && ext.fim && ext.fim !== ext.ini) rotulo(ext.fim, 'hora-trilha-fim').addTo(p.horasTrilha);
+    }
+    if (!mapa.hasLayer(p.horasTrilha)) p.horasTrilha.addTo(mapa);
+  }
+  // Refeitas ao mover ou aproximar o mapa (as setas têm tamanho e espaçamento em pixels) e ao selecionar alguém.
+  function agendarDecoracoesTrilhas() {
+    clearTimeout(est.timerDecoracoes);
+    est.timerDecoracoes = setTimeout(function () {
+      est.participantes.forEach(function (p) {
+        try { desenharSetas(p); desenharHorasTrilha(p); } catch (e) { /* enfeite: nunca impede a trilha */ }
+      });
+    }, 120);
   }
 
   function desenharTrilha(p) {
@@ -3590,22 +3662,23 @@
     var tr = p.trilhaVisivel && visivelNoFiltro(p) ? trilhaDe(p) : { segmentos: [], lacunas: [] };
     var segs = recortarSegmentos(tr.segmentos);   // fora das áreas sem trilha (migração 066)
     desenharLacunas(p, tr.lacunas.filter(function (l) { return !(ponteiroDentroSemTrilha(l.de) && ponteiroDentroSemTrilha(l.ate)); }));
+    p.segsDesenhados = segs;
     if (!segs.length) {   // oculta ou sem pontos: nada a desenhar
       if (p.trilha) p.trilha.remove();
       if (p.halo) p.halo.remove();
       if (p.toque) p.toque.remove();
+      if (p.setas) p.setas.remove();
+      if (p.horasTrilha) p.horasTrilha.remove();
       return;
     }
     var tipo = tipoDe(p.dados);
-    // Civis: contorno claro por baixo para a linha roxa aparecer sobre mata, satélite e topográfico.
-    if (tipo === 'civil') {
-      if (!p.halo) {
-        p.halo = L.polyline(segs, { color: '#ffffff', weight: pesoHalo(p), opacity: opacidadeHalo(p), interactive: false, lineJoin: 'round', className: 'trilha-halo' });
-      } else {
-        p.halo.setLatLngs(segs);
-      }
-      if (!est.mapa.hasLayer(p.halo)) p.halo.addTo(est.mapa);
+    // Contorno escuro por baixo (todas as pessoas): a linha aparece sobre mata, satélite, topográfico e mapa claro.
+    if (!p.halo) {
+      p.halo = L.polyline(segs, { color: '#0b1220', weight: pesoHalo(p), opacity: opacidadeHalo(p), interactive: false, lineJoin: 'round', lineCap: 'round', className: 'trilha-halo' });
+    } else {
+      p.halo.setLatLngs(segs);
     }
+    if (!est.mapa.hasLayer(p.halo)) p.halo.addTo(est.mapa);
     if (!p.trilha) {
       p.trilha = L.polyline(segs, {
         color: corDoParticipante(p),
@@ -3614,6 +3687,7 @@
         dashArray: tracoTrilha(tipo),
         interactive: false,
         lineJoin: 'round',
+        lineCap: 'round',
         className: 'trilha trilha-' + tipo,
       });
     } else {
@@ -3632,6 +3706,8 @@
       p.toque.setLatLngs(segs);
     }
     if (!est.mapa.hasLayer(p.toque)) p.toque.addTo(est.mapa);
+    desenharSetas(p);
+    desenharHorasTrilha(p);
   }
 
   // Falha: intervalo maior que o limite da operação entre dois pontos seguidos
@@ -3675,7 +3751,9 @@
         else l.setStyle({ weight: pesoLacuna() });
       });
       if (p.trilha && est.selecionado === p.id) p.trilha.bringToFront();
+      if (p.setas && est.selecionado === p.id) p.setas.bringToFront();
     });
+    agendarDecoracoesTrilhas();
   }
 
   // A tela mudou de tamanho (girou o celular, redimensionou a janela): espessuras acompanham.

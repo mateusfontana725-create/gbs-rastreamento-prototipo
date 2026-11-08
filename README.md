@@ -1102,6 +1102,10 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
   (zoom 16 ou mais) ou para a pessoa selecionada; quem ainda está enviando não tem hora de fim (o símbolo dela marca onde está). Com
   alguém selecionado, as outras trilhas e setas ficam apagadas. O tipo da pessoa (civil, bombeiro, responsável) continua no símbolo e no
   toque na trilha; a linha não é mais tracejada para os civis.
+- **Mesmo estilo na página do participante** (navegador e aplicativo): a **sua trilha** ganha contorno escuro, linha grossa e contínua na
+  cor do seu grupo, setas brancas no sentido em que você andou e a **hora em que começou** ("▶ 10h14", de perto). As **trilhas da
+  equipe** (sem nome e sem horário) também ficam com contorno escuro e setas, numa cor só; a sua fica por cima. A espessura acompanha o
+  zoom e as setas só aparecem a partir do zoom 15.
 
 O mesmo código (`public/js/gps.js`) é usado no celular do participante (civil ou militar) e na "Minha
 posição" do responsável. **Nenhuma posição é inventada nem suavizada**: cada ponto gravado é uma leitura

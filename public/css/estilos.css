@@ -2484,7 +2484,7 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 .camadas-opcao[aria-checked="true"] { background: var(--acento); border-color: var(--acento); color: #0a0d10; }
 .camadas-chave { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: .88rem; cursor: pointer; }
 .camadas-chave input { width: 20px; height: 20px; accent-color: var(--acento); }
-.lg-trilha-eq { display: inline-block; width: 16px; height: 0; border-top: 3px solid #8aa0b8; }
+.lg-trilha-eq { display: inline-block; width: 16px; height: 4px; border-radius: 2px; background: #8aa0b8; box-shadow: 0 0 0 1.5px #0b1220; }
 .lg-proibida-cor { display: inline-block; width: 12px; height: 12px; border: 2px dashed #dc2626; background: rgba(220, 38, 38, .25); }
 #tela-rastreio .legenda-civil .lg-proibida, #tela-rastreio .legenda-civil .lg-trilhas-equipe { font-size: .66rem; }
 .leaflet-tooltip.rotulo-proibida {

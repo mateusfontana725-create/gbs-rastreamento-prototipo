@@ -62,6 +62,7 @@
     nome_invalido: 'Informe um nome ou indicativo com 2 a 40 caracteres.',
     participante_removido: 'Você foi removido desta operação pelo responsável.',
     somente_leitura: 'Este é o link público do painel: só dá para visualizar, não para alterar.',
+    servidor_demorou: 'O servidor demorou demais para responder (a internet está funcionando). Tentando de novo em instantes.',
     link_publico_comando_invalido: 'Este link do painel não funciona mais: foi trocado ou desligado. Peça o link novo a quem enviou.',
     codigo_acesso_invalido: 'Este código não existe ou está desligado. Confira com os bombeiros.',
     codigo_muitas_tentativas: 'Muitos códigos errados seguidos. Espere 10 minutos e tente de novo.',
@@ -252,6 +253,8 @@
     var t = textoDoErro(err);
     // PostgREST: função inexistente no banco (migração não aplicada ou cache de esquema desatualizado)
     if (err && (err.code === 'PGRST202' || /Could not find the function/i.test(t))) return 'funcao_ausente';
+    // O banco cancelou a consulta por demora (statement timeout): a internet está boa, o servidor é que demorou
+    if (err && (err.code === '57014' || /statement timeout|canceling statement/i.test(t))) return 'servidor_demorou';
     for (var k in ERROS) {
       if (t.indexOf(k) !== -1) return k;
     }
@@ -269,7 +272,7 @@
   function criarErro(err) {
     var e = new Error(traduzirErro(err));
     e.codigo = codigoDoErro(err);
-    e.rede = e.codigo === 'rede';
+    e.rede = e.codigo === 'rede' || e.codigo === 'servidor_demorou';   // as duas se resolvem tentando de novo
     e.original = err;
     return e;
   }
@@ -332,6 +335,52 @@
       if (inicio > 500000) break; // salvaguarda
     }
     return todas;
+  }
+
+  // Busca todas as linhas em páginas pela chave (id > último recebido), não por posição (offset). Com offset, cada
+  // página mais funda obriga o banco a percorrer e conferir (RLS) todas as linhas anteriores: numa operação com
+  // 40 mil posições a carga passava de um minuto e estourava o tempo limite ("Sem conexão" com a internet boa).
+  // Pela chave, cada página custa o mesmo. A fabrica deve filtrar e ordenar pela chave em ordem crescente.
+  // aoPagina(linhas): opcional, recebe cada página assim que chega (a tela vai se completando).
+  async function consultarPorChave(fabrica, chave, tamanho, aoPagina) {
+    chave = chave || 'id';
+    tamanho = tamanho || 1000;
+    var todas = [];
+    var ultimo = null;
+    for (var n = 0; n < 2000; n++) {
+      var q = fabrica();
+      if (ultimo !== null) q = q.gt(chave, ultimo);
+      var pagina = (await consultar(q.limit(tamanho), 30000)) || [];
+      if (aoPagina && pagina.length) aoPagina(pagina);
+      for (var i = 0; i < pagina.length; i++) todas.push(pagina[i]);
+      if (pagina.length < tamanho) break;
+      ultimo = pagina[pagina.length - 1][chave];
+    }
+    return todas;
+  }
+
+  // Como consultarPorChave, mas em paralelo: o intervalo da chave (do menor ao maior valor, pedidos antes) é dividido
+  // em faixas e cada faixa é paginada pela chave ao mesmo tempo que as outras. Continua sem offset.
+  // limites(): Promise de { min, max } (null = sem linhas). As páginas chegam a aoPagina fora de ordem entre faixas.
+  async function consultarPorChaveEmFaixas(fabrica, chave, tamanho, aoPagina, limites, faixas) {
+    chave = chave || 'id';
+    var lim = await limites();
+    if (!lim || lim.min == null || lim.max == null) return [];
+    faixas = Math.max(1, Math.min(faixas || 4, Math.ceil((lim.max - lim.min + 1) / (tamanho || 1000))));
+    if (faixas === 1) return consultarPorChave(fabrica, chave, tamanho, aoPagina);
+    var passo = (lim.max - lim.min + 1) / faixas;
+    var tarefas = [];
+    for (var f = 0; f < faixas; f++) {
+      (function (de, ate) {
+        tarefas.push(consultarPorChave(function () {
+          var q = fabrica();
+          if (de !== null) q = q.gt(chave, de);
+          return q.lte(chave, ate);
+        }, chave, tamanho, aoPagina));
+      })(f === 0 ? null : Math.floor(lim.min - 1 + passo * f), f === faixas - 1 ? lim.max : Math.floor(lim.min - 1 + passo * (f + 1)));
+    }
+    var partes = await Promise.all(tarefas);
+    return [].concat.apply([], partes);
   }
 
   // Como consultarTudo, mas pede várias páginas ao mesmo tempo (a ordem é mantida; a fabrica precisa ordenar
@@ -483,6 +532,8 @@
     consultar: consultar,
     consultarTudo: consultarTudo,
     consultarTudoParalelo: consultarTudoParalelo,
+    consultarPorChave: consultarPorChave,
+    consultarPorChaveEmFaixas: consultarPorChaveEmFaixas,
     traduzirErro: traduzirErro,
     criarErro: criarErro,
     ehErroDeRede: ehErroDeRede,

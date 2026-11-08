@@ -2662,14 +2662,18 @@
   /* Carga de dados e sincronização                                       */
   /* ------------------------------------------------------------------ */
   // Posições com na_base (migração 066: ponto de entrada na base, que não entra na linha da trilha); banco antigo: sem a coluna.
-  async function consultarPosicoes(montar) {
+  // Posições em páginas pela chave (id), na ordem: cada página custa o mesmo para o banco, e quem passa aoPagina
+  // recebe as posições assim que chegam (as trilhas vão aparecendo durante a carga).
+  // limites (opcional): função que devolve { min, max } do id; com ela a carga vai em 4 faixas ao mesmo tempo.
+  async function consultarPosicoes(montar, aoPagina, limites) {
     var cols = 'id,participante_id,lat,lng,precisao,registrado_em,recebido_em' + (est.semNaBase ? '' : ',na_base');
     try {
-      return await C.consultarTudoParalelo(function () { return montar(cols); }, 1000, 4);
+      if (limites) return await C.consultarPorChaveEmFaixas(function () { return montar(cols); }, 'id', 1000, aoPagina, limites, 4);
+      return await C.consultarPorChave(function () { return montar(cols); }, 'id', 1000, aoPagina);
     } catch (e) {
       if (!est.semNaBase && /na_base/.test(String(e.original && (e.original.message || e.original.details) || e.message))) {
         est.semNaBase = true;
-        return consultarPosicoes(montar);
+        return consultarPosicoes(montar, aoPagina, limites);
       }
       throw e;
     }
@@ -2696,8 +2700,14 @@
     await emLoteLista(Promise.all([
       consultarPosicoes(function (cols) {
         return C.cliente.from('posicoes').select(cols).eq('operacao_id', opId).order('id', { ascending: true });
-      }).then(function (pontos) {
-        if (ainda()) adicionarPontosLote(pontos);
+      }, function (pagina) {
+        if (ainda()) adicionarPontosLote(pagina);   // cada página entra na hora: as trilhas vão aparecendo
+      }, function () {
+        // menor e maior id da operação (duas consultas pequenas, pelo índice) para dividir a carga em faixas
+        var base = function (asc) { return C.consultar(C.cliente.from('posicoes').select('id').eq('operacao_id', opId).order('id', { ascending: asc }).limit(1)); };
+        return Promise.all([base(true), base(false)]).then(function (r) {
+          return r[0] && r[0].length ? { min: r[0][0].id, max: r[1][0].id } : null;
+        });
       }).catch(falhou),
       C.consultarTudoParalelo(function () {
         return C.cliente.from('mensagens').select('*').eq('operacao_id', opId).order('criada_em', { ascending: true });
@@ -2777,7 +2787,7 @@
       await emLoteLista(Promise.all([
         consultarPosicoes(function (cols) {
           return C.cliente.from('posicoes').select(cols).eq('operacao_id', opId).gt('id', est.maxPosId).order('id', { ascending: true });
-        }).then(function (novos) { if (mesmaOp()) adicionarPontosLote(novos); }),
+        }, function (novos) { if (mesmaOp()) adicionarPontosLote(novos); }),
         C.consultar(C.cliente.from('mensagens').select('*').eq('operacao_id', opId).order('criada_em', { ascending: false }).limit(500))
           .then(function (msgs) { if (mesmaOp()) msgs.forEach(function (m) { receberMensagem(m, false); }); }),
         carregarFotos(false),

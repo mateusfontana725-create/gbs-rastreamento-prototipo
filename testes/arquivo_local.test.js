@@ -228,6 +228,79 @@ const passos = (...p) => p;
     assert.ok(C.agora() - Date.now() > 59000, 'o relógio do servidor vem junto com os dados');
   });
 
+  console.log('\nPaginação pela chave e erro de demora do servidor');
+  await teste('consultarPorChave: todas as linhas, na ordem, página a página (sem offset)', async () => {
+    const janela = {
+      APP_CONFIG: { supabaseUrl: 'https://x.supabase.co', supabaseKey: 'k' },
+      supabase: { createClient: () => ({ from: () => { throw new Error('não devia ir ao servidor'); }, rpc: async () => ({ data: null, error: null }), auth: {}, storage: {} }) },
+      ArquivoLocal: A, Proxy, setTimeout, clearTimeout, navigator: { onLine: true },
+    };
+    janela.window = janela;
+    const ctx = vm.createContext(Object.assign(janela, { document: { documentElement: { getAttribute: () => 'app' } }, console, Promise, Date, Math, JSON }));
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'comunicacao.js'), 'utf8'), ctx);
+    const C = janela.Comunicacao;
+    const grande = doc();
+    grande.contagens = {};
+    grande.tabelas.posicoes = [];
+    for (let i = 2500; i >= 1; i--) grande.tabelas.posicoes.push({ id: i * 3, operacao_id: OP, participante_id: 'p1', registrado_em: null });
+    A.registrar(OP, grande, { operacao: { id: OP } });
+    const paginas = [];
+    const todas = await C.consultarPorChave(() => C.cliente.from('posicoes').select('id').eq('operacao_id', OP).order('id', { ascending: true }), 'id', 1000, (pg) => paginas.push(pg.length));
+    assert.strictEqual(todas.length, 2500);
+    assert.deepStrictEqual(paginas, [1000, 1000, 500], 'três páginas, cada uma entregue assim que chega');
+    assert.ok(todas.every((x, i) => i === 0 || x.id > todas[i - 1].id), 'em ordem crescente, sem repetir');
+    // com outro filtro na mesma chave (conferência: só o que é novo)
+    const novos = await C.consultarPorChave(() => C.cliente.from('posicoes').select('id').eq('operacao_id', OP).gt('id', 6000).order('id', { ascending: true }), 'id', 1000);
+    assert.strictEqual(novos.length, 500, 'id > 6000: 500 linhas');
+    A.esquecer(OP);
+  });
+  await teste('consultarPorChaveEmFaixas: em faixas paralelas, todas as linhas uma vez só (ids espalhados)', async () => {
+    const janela = {
+      APP_CONFIG: { supabaseUrl: 'https://x.supabase.co', supabaseKey: 'k' },
+      supabase: { createClient: () => ({ from: () => { throw new Error('não devia ir ao servidor'); }, rpc: async () => ({ data: null, error: null }), auth: {}, storage: {} }) },
+      ArquivoLocal: A, Proxy, setTimeout, clearTimeout, navigator: { onLine: true },
+    };
+    janela.window = janela;
+    const ctx = vm.createContext(Object.assign(janela, { document: { documentElement: { getAttribute: () => 'app' } }, console, Promise, Date, Math, JSON }));
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'comunicacao.js'), 'utf8'), ctx);
+    const C = janela.Comunicacao;
+    const d = doc();
+    d.contagens = {};
+    d.tabelas.posicoes = [];
+    // ids com buracos e concentrados (outras operações gravando no meio): 3700 linhas
+    let id = 10;
+    for (let i = 0; i < 3700; i++) { id += i % 500 === 0 ? 50000 : 1 + (i % 7); d.tabelas.posicoes.push({ id, operacao_id: OP, participante_id: 'p1' }); }
+    A.registrar(OP, d, { operacao: { id: OP } });
+    const fab = () => C.cliente.from('posicoes').select('id').eq('operacao_id', OP).order('id', { ascending: true });
+    const limites = async () => {
+      const a = await C.consultar(C.cliente.from('posicoes').select('id').eq('operacao_id', OP).order('id', { ascending: true }).limit(1));
+      const z = await C.consultar(C.cliente.from('posicoes').select('id').eq('operacao_id', OP).order('id', { ascending: false }).limit(1));
+      return { min: a[0].id, max: z[0].id };
+    };
+    let paginas = 0;
+    const todas = await C.consultarPorChaveEmFaixas(fab, 'id', 1000, () => { paginas++; }, limites, 4);
+    const ids = todas.map((x) => x.id);
+    assert.strictEqual(ids.length, 3700, 'todas as linhas');
+    assert.strictEqual(new Set(ids).size, 3700, 'nenhuma repetida');
+    assert.ok(paginas >= 4, 'em várias páginas (' + paginas + ')');
+    const vazia = await C.consultarPorChaveEmFaixas(fab, 'id', 1000, null, async () => null, 4);
+    assert.strictEqual(vazia.length, 0, 'sem linhas: nada');
+    A.esquecer(OP);
+  });
+  await teste('consulta cancelada por demora no banco não vira "sem internet"', async () => {
+    const janela = {
+      APP_CONFIG: { supabaseUrl: 'https://x.supabase.co', supabaseKey: 'k' },
+      supabase: { createClient: () => ({ from: () => ({}), rpc: async () => ({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } }), auth: {}, storage: {} }) },
+      ArquivoLocal: A, Proxy, setTimeout, clearTimeout, navigator: { onLine: true },
+    };
+    janela.window = janela;
+    const ctx = vm.createContext(Object.assign(janela, { document: { documentElement: { getAttribute: () => 'app' } }, console, Promise, Date, Math, JSON }));
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'comunicacao.js'), 'utf8'), ctx);
+    const C = janela.Comunicacao;
+    await assert.rejects(C.rpc('qualquer', {}), (e) => e.codigo === 'servidor_demorou' && /demorou demais/.test(e.message) && !/Verifique a internet/.test(e.message) && e.rede === true);
+    assert.strictEqual(C.traduzirErro(new Error('Failed to fetch')), 'Sem conexão com o servidor. Verifique a internet.', 'falta de internet de verdade continua com a mensagem de antes');
+  });
+
   console.log(falhas ? '\nFalhas: ' + falhas : '\nLeitura do arquivo: todos OK');
   process.exit(falhas ? 1 : 0);
 })();

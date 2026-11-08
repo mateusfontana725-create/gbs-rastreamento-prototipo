@@ -264,7 +264,39 @@
     return resultado(partes, P);
   }
 
+  // Setas de sentido ao longo de uma linha já em pixels ([{x, y}], na ordem do percurso): uma a cada `espaco` px
+  // (a primeira em espaco/2), com o ângulo do trecho onde cai. No máximo `max` setas.
+  function setasAoLongo(pts, espaco, max) {
+    var r = [];
+    if (!pts || pts.length < 2 || !(espaco > 0)) return r;
+    max = max || 1000;
+    var prox = espaco / 2, acum = 0;
+    for (var i = 1; i < pts.length; i++) {
+      var a = pts[i - 1], b = pts[i];
+      var dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy);
+      if (!d) continue;
+      while (acum + d >= prox) {
+        var t = (prox - acum) / d;
+        r.push({ x: a.x + dx * t, y: a.y + dy * t, ang: Math.atan2(dy, dx) });
+        if (r.length >= max) return r;
+        prox += espaco;
+      }
+      acum += d;
+    }
+    return r;
+  }
+
+  // Vértices (pixels) de uma seta em forma de ponta (como no AlpineQuest), centrada na posição, apontando no ângulo.
+  // tam = meio comprimento em px.
+  function verticesSeta(s, tam) {
+    var c = Math.cos(s.ang), si = Math.sin(s.ang);
+    return [[tam, 0], [-tam * 0.8, tam * 0.85], [-tam * 0.35, 0], [-tam * 0.8, -tam * 0.85]].map(function (q) {
+      return { x: s.x + q[0] * c - q[1] * si, y: s.y + q[0] * si + q[1] * c };
+    });
+  }
+
   global.TrilhaGeo = {
+    setasAoLongo: setasAoLongo, verticesSeta: verticesSeta,
     recortarForaDosCirculos: recortarForaDosCirculos, apagarComPincel: apagarComPincel,
     dentroDeAlgum: dentroDeAlgum, dividirNaBase: dividirNaBase, comprimentoM: comprimentoM,
     pontoNoPoligono: pontoNoPoligono, pontoNoCirculo: pontoNoCirculo, circuloParaPoligono: circuloParaPoligono,

@@ -79,5 +79,17 @@ const concavo = [ponto(-100, -100), ponto(-100, 100), ponto(0, 20), ponto(100, 1
 const aC = G.areaPoligonoM2(concavo);
 chk(Math.abs(G.dividirEmFatias(concavo, 4, 10).reduce((a, f) => a + G.areaPoligonoM2(f), 0) - aC) < 30, 'polígono côncavo: a soma das fatias confere com a área (sem perda)');
 
+// --- Setas de sentido (estilo AlpineQuest) ---
+const linhaPx = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }];   // 100 px para a direita e 100 px para baixo
+const setas = G.setasAoLongo(linhaPx, 40);
+chk(setas.length === 5 && setas[0].x === 20 && setas[0].y === 0, 'setas a cada 40 px, a primeira em 20 px', setas.length);
+chk(setas.slice(0, 2).every((s) => Math.abs(s.ang) < 1e-9) && setas.slice(3).every((s) => Math.abs(s.ang - Math.PI / 2) < 1e-9), 'cada seta aponta no sentido do trecho (direita, depois para baixo)');
+chk(G.setasAoLongo(linhaPx, 40, 2).length === 2, 'respeita o máximo de setas');
+chk(G.setasAoLongo([{ x: 5, y: 5 }, { x: 5, y: 5 }], 10).length === 0 && G.setasAoLongo([{ x: 0, y: 0 }], 10).length === 0, 'linha sem comprimento ou com um ponto: nenhuma seta');
+const v = G.verticesSeta({ x: 10, y: 10, ang: 0 }, 5);
+chk(v.length === 4 && v[0].x === 15 && v[0].y === 10 && v[1].x < 10 && v[3].x < 10 && v[1].y > 10 && v[3].y < 10, 'a seta tem a ponta à frente e as abas para trás', v);
+const vb = G.verticesSeta({ x: 0, y: 0, ang: Math.PI / 2 }, 5);
+chk(Math.abs(vb[0].x) < 1e-9 && Math.abs(vb[0].y - 5) < 1e-9, 'girada para baixo, a ponta fica embaixo', vb[0]);
+
 console.log('\nGeometria das trilhas: ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

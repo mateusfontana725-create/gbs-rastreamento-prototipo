@@ -1096,6 +1096,13 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
 
 ### Trilhas GPS: captura, envio e desenho
 
+- **Desenho no estilo AlpineQuest** (painel do comando): linha cheia e contínua, mais grossa (6 px de perto, mais fina de longe), com
+  **contorno escuro** por baixo em todas as pessoas, **setas brancas no sentido do deslocamento** (a cada ~70 px na tela, a partir do
+  zoom 15) e a **hora do início e do fim** nas pontas ("▶ 10h14", "■ 15h04"; com a data se não for hoje). Os horários aparecem de perto
+  (zoom 16 ou mais) ou para a pessoa selecionada; quem ainda está enviando não tem hora de fim (o símbolo dela marca onde está). Com
+  alguém selecionado, as outras trilhas e setas ficam apagadas. O tipo da pessoa (civil, bombeiro, responsável) continua no símbolo e no
+  toque na trilha; a linha não é mais tracejada para os civis.
+
 O mesmo código (`public/js/gps.js`) é usado no celular do participante (civil ou militar) e na "Minha
 posição" do responsável. **Nenhuma posição é inventada nem suavizada**: cada ponto gravado é uma leitura
 real do aparelho; o filtro só decide quais leituras entram na trilha.

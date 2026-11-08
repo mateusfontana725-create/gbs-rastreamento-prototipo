@@ -1338,7 +1338,7 @@ body { font-size: 0.9375rem; }
 }
 .lg-trilha-desenhada.lg-planejada { border-top: 3px dashed #facc15; }
 .lg-trilha-desenhada.lg-percorrida { border-top-color: #fff; }
-.lg-trilha-gps { display: inline-block; width: 22px; height: 0; vertical-align: middle; border-top: 2.5px solid #ef4444; }
+.lg-trilha-gps { display: inline-block; width: 22px; height: 4px; vertical-align: middle; border-radius: 2px; background: #a855f7; box-shadow: 0 0 0 1.5px #0b1220; }
 .sinal-desenhada-planejada::before, .sinal-desenhada-percorrida::before {
   content: ""; width: 16px; height: 0; border-top: 3px solid #fff; box-shadow: 0 0 0 2px #0b1220; transform: rotate(-22deg);
 }

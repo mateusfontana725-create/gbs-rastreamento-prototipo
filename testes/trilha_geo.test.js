@@ -106,5 +106,24 @@ chk(v.length === 4 && v[0].x === 15 && v[0].y === 10 && v[1].x < 10 && v[3].x < 
 const vb = G.verticesSeta({ x: 0, y: 0, ang: Math.PI / 2 }, 5);
 chk(Math.abs(vb[0].x) < 1e-9 && Math.abs(vb[0].y - 5) < 1e-9, 'girada para baixo, a ponta fica embaixo', vb[0]);
 
+// --- Borracha na trilha de GPS: intervalos apagados ---
+const rastro = []; for (let k = 0; k < 10; k++) rastro.push({ id: k + 1, t: 1000 * k });
+chk(G.dividirPorIntervalos(rastro, []).length === 1 && G.dividirPorIntervalos(rastro, null)[0].length === 10, 'sem intervalos: o rastro segue inteiro');
+const gr = G.dividirPorIntervalos(rastro, [{ de: 3000, ate: 5000 }]);
+chk(gr.length === 2 && gr[0].length === 3 && gr[1].length === 4 && gr[0][2].t === 2000 && gr[1][0].t === 6000, 'o trecho apagado some e o rastro se divide nele (sem ligar por cima)', gr.map((g) => g.length));
+chk(G.dividirPorIntervalos(rastro, [{ de: 0, ate: 4000 }, { de: 7000, ate: 9000 }]).map((g) => g.length).join() === '2', 'apagado no começo e no fim: sobra um grupo só');
+chk(G.dividirPorIntervalos(rastro, [{ de: -1, ate: 99999 }]).length === 0, 'tudo apagado: nenhum grupo');
+chk(G.dividirPorIntervalos(rastro, [{ de: 3000, ate: 3000 }])[0].length === 3, 'o intervalo inclui as duas pontas (de 3000 a 3000 apaga o ponto de 3000)');
+// pontos novos depois do trecho apagado continuam aparecendo
+const comNovos = rastro.concat([{ id: 11, t: 20000 }, { id: 12, t: 21000 }]);
+chk(G.dividirPorIntervalos(comNovos, [{ de: 3000, ate: 5000 }]).slice(-1)[0].length === 6, 'os pontos que chegam depois (quem ainda anda) continuam aparecendo');
+const ap = new Set([4, 5, 6, 9]);
+const iv = G.intervalosApagados(rastro, ap);
+chk(iv.length === 2 && iv[0].de === 3000 && iv[0].ate === 5000 && iv[1].de === 8000 && iv[1].ate === 8000, 'sequências apagadas viram intervalos de horário', iv);
+const base = rastro.map((p) => Object.assign({}, p, { na_base: p.id === 5 }));
+const iv2 = G.intervalosApagados(base, new Set([4, 6]), (p) => !p.na_base);
+chk(iv2.length === 1 && iv2[0].de === 3000 && iv2[0].ate === 5000, 'ponto da base (que não aparece) no meio não separa uma sequência apagada', iv2);
+chk(G.unirIntervalos([{ de: 5, ate: 8 }, { de: 1, ate: 3 }, { de: 3, ate: 6 }, { de: 20, ate: 30 }]).map((i) => i.de + '-' + i.ate).join() === '1-8,20-30', 'intervalos que se tocam ou se sobrepõem são unidos');
+
 console.log('\nGeometria das trilhas: ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -264,6 +264,47 @@
     return resultado(partes, P);
   }
 
+  // Pontos de um rastro sem os que caem em algum intervalo de horário apagado (borracha da trilha de GPS, migração 071).
+  // pontos: [{ t (ms), … }] em ordem de horário; intervalos: [{ de, ate }] em ms (inclusive). Devolve os grupos de pontos que
+  // sobram: um grupo novo começa depois de cada trecho apagado, para a linha não ser ligada por cima dele.
+  function dividirPorIntervalos(pontos, intervalos) {
+    if (!intervalos || !intervalos.length) return [pontos || []];
+    var grupos = [], atual = [];
+    (pontos || []).forEach(function (p) {
+      var dentro = intervalos.some(function (i) { return p.t >= i.de && p.t <= i.ate; });
+      if (dentro) { if (atual.length) grupos.push(atual); atual = []; }
+      else atual.push(p);
+    });
+    if (atual.length) grupos.push(atual);
+    return grupos;
+  }
+
+  // Intervalos de horário [{ de, ate }] das sequências de pontos apagadas. pontos: todos os pontos do rastro, em ordem,
+  // com `t` e `id`; apagados: Set de ids apagados; desenhavel(p): o ponto aparece na linha? Os que não aparecem (base,
+  // imprecisos) não interrompem uma sequência apagada.
+  function intervalosApagados(pontos, apagados, desenhavel) {
+    var r = [], de = null, ate = null;
+    function fecha() { if (de !== null) { r.push({ de: de, ate: ate }); de = ate = null; } }
+    (pontos || []).forEach(function (p) {
+      if (desenhavel && !desenhavel(p)) return;
+      if (apagados.has(p.id)) { if (de === null) de = p.t; ate = p.t; }
+      else fecha();
+    });
+    fecha();
+    return r;
+  }
+
+  // Junta intervalos que se tocam ou se sobrepõem (ordenados por início).
+  function unirIntervalos(lista) {
+    var o = (lista || []).slice().sort(function (a, b) { return a.de - b.de; }), r = [];
+    o.forEach(function (i) {
+      var u = r[r.length - 1];
+      if (u && i.de <= u.ate) u.ate = Math.max(u.ate, i.ate);
+      else r.push({ de: i.de, ate: i.ate });
+    });
+    return r;
+  }
+
   // Setas de sentido ao longo de uma linha já em pixels ([{x, y}], na ordem do percurso): uma a cada `espaco` px
   // (a primeira em espaco/2). O sentido vem de um trecho maior em volta da seta (de `janela` px antes a `janela`
   // px depois), não do trechinho onde ela cai: o tremor do GPS (pessoa parada, sinal ruim) fazia setas apontarem
@@ -309,6 +350,7 @@
 
   global.TrilhaGeo = {
     setasAoLongo: setasAoLongo, verticesSeta: verticesSeta,
+    dividirPorIntervalos: dividirPorIntervalos, intervalosApagados: intervalosApagados, unirIntervalos: unirIntervalos,
     recortarForaDosCirculos: recortarForaDosCirculos, apagarComPincel: apagarComPincel,
     dentroDeAlgum: dentroDeAlgum, dividirNaBase: dividirNaBase, comprimentoM: comprimentoM,
     pontoNoPoligono: pontoNoPoligono, pontoNoCirculo: pontoNoCirculo, circuloParaPoligono: circuloParaPoligono,

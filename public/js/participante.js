@@ -1807,8 +1807,8 @@
     setores.forEach(function (st) {
       var meu = st.meu === undefined ? true : st.meu;   // servidor antigo: só vinham os atribuídos a mim
       var estilo = meu
-        ? { color: st.cor, weight: 3.5, opacity: 1, lineJoin: 'round', fillColor: st.cor, fillOpacity: st.status === 'concluido' ? 0.12 : 0.26 }   // contorno contínuo e forte (não parece trilha)
-        : { color: st.cor, weight: 2.5, opacity: 0.9, lineJoin: 'round', fillColor: st.cor, fillOpacity: 0.14 };
+        ? { color: st.cor, weight: 3.5, opacity: 1, lineJoin: 'round', fillColor: st.cor, fillOpacity: st.status === 'concluido' ? 0.08 : 0.16 }   // contorno contínuo e forte (não parece trilha)
+        : { color: st.cor, weight: 2.5, opacity: 0.9, lineJoin: 'round', fillColor: st.cor, fillOpacity: 0.10 };
       var camada = st.forma === 'circulo' ? L.circle([st.centro_lat, st.centro_lng], Object.assign({ radius: st.raio_m }, estilo)) : L.polygon(st.pontos || [], estilo);
       if (meu) {
         camada.options.interactive = false;

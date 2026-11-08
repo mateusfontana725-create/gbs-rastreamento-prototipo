@@ -791,6 +791,11 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   situação. Setor circular vira polígono (48 lados). Limite de 300 vértices por setor.
 - **Concluído e o ×**: depois de marcar o setor como Concluído, o detalhe antigo (ainda "Pendente") ficava por baixo do novo e voltava
   a aparecer ao tocar no ×; agora o antigo é fechado antes.
+- **Opacidade do preenchimento do setor** (migração 070): no formulário do setor, **Opacidade do preenchimento** (10% a 90%) mostra
+  a prévia no mapa enquanto você mexe; **Cancelar** desfaz. Por padrão o setor segue a cor de cada situação (pendente, em andamento,
+  concluído); desmarcar **Usar a padrão da situação** deixa escolher. Fica gravada com o setor, então todos os celulares da operação
+  veem a mesma opacidade. **Antes de usar, rode `070_opacidade_setores.sql` no Supabase.** Não muda o contorno nem o nome. O mapa do
+  participante ainda usa a padrão.
 - **Elementos sobrepostos**: os setores **menores ficam desenhados por cima** dos maiores (o contorno de quem está dentro de outro
   continua inteiro à vista). Tocar num ponto coberto por mais de um **setor ou área proibida** abre **direto o menor que contém o
   ponto**, com o contorno destacado: num círculo dentro de outro, tocar no miolo abre o de dentro e tocar no anel abre o de fora.
@@ -2396,6 +2401,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 45b | Abrir esse setor → **✂ Dividir** → Fatias, 4 partes, ✔ Dividir | o setor vira A (original) e B, C, D novos, com cores diferentes; o mapa mostra as 4 partes |
 | 45c | Dividir outro setor com **╱ Linha de corte** (dois toques) e com **▥ Faixas** | duas partes pela linha; faixas paralelas de largura igual |
 | 45d | Marcar um setor como **Concluído** e tocar no × | fecha e o setor segue Concluído (não volta a "Pendente") |
+| 45h | Abrir um setor, desmarcar "Usar a padrão da situação", mexer na opacidade e cancelar; depois salvar outro valor | a prévia muda o preenchimento no mapa; cancelar volta; salvar fica com o valor em todos os aparelhos; marcar a padrão e salvar volta ao padrão da situação |
 | 45e | Criar círculos de 1, 2 e 3 km no mesmo centro e um setor desenhado por cima; tocar no miolo, no anel e de novo no mesmo lugar | o toque abre direto o menor que contém o ponto (miolo: o de dentro; anel: o de fora), com o contorno destacado; tocar de novo passa para o de baixo; duplo toque abre os detalhes |
 | 45f | No tablet na viatura, com o endereço cadastrado a alguns km, abrir a operação e deixar andar | o mapa fica no endereço e não segue a posição; ao chegar a 300 m (ou em "Cheguei ao local") volta ao normal |
 | 45g | Criar setor, grupo e trilha e olhar as cores sugeridas e o seletor | cores fortes e variadas; a cor personalizada continua disponível |

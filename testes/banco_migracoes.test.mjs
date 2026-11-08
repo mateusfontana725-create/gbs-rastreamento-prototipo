@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando', '070_opacidade_setores']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -3169,5 +3169,26 @@ await rpc(resp1, 'comando_publico_desligar', { p_operacao: opL.id });
 chk(/link_publico_comando_invalido/.test(await erroDe(anonRpc('comando_publico', lkC2.token, null))), 'desligado: o link para de funcionar');
 
 
-console.log('\nMigrações 007–069 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Opacidade do preenchimento dos setores (migração 070) ---
+console.log('\nOpacidade dos setores');
+{
+  const opO = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP OPACIDADE', p_retencao_horas: 0 });
+  const sO = await rpc(resp1, 'salvar_setor', { p_operacao: opO.id, p_id: null, p_dados: JSON.stringify({ nome: 'Opaco', forma: 'circulo', centro_lat: -22.9, centro_lng: -43.2, raio_m: 300, cor: '#22c55e' }) });
+  chk(sO.opacidade === null, 'setor novo sem opacidade: padrão (nula)', sO.opacidade);
+  const com = await rpc(resp1, 'salvar_setor', { p_operacao: opO.id, p_id: sO.id, p_dados: JSON.stringify({ opacidade: 0.55 }) });
+  chk(com.opacidade === 0.55 && com.nome === 'Opaco' && com.cor === '#22c55e' && com.raio_m === 300, 'editar só a opacidade: grava 0,55 e mantém nome, cor e raio', com);
+  const outra = await rpc(resp1, 'salvar_setor', { p_operacao: opO.id, p_id: sO.id, p_dados: JSON.stringify({ nome: 'Opaco 2' }) });
+  chk(outra.opacidade === 0.55, 'editar outro campo não apaga a opacidade', outra.opacidade);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_setor', { p_operacao: opO.id, p_id: sO.id, p_dados: JSON.stringify({ opacidade: 0.95 }) }))), 'opacidade acima de 0,9 é recusada');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_setor', { p_operacao: opO.id, p_id: sO.id, p_dados: JSON.stringify({ opacidade: 0.05 }) }))), 'opacidade abaixo de 0,1 é recusada');
+  const padrao = await rpc(resp1, 'salvar_setor', { p_operacao: opO.id, p_id: sO.id, p_dados: JSON.stringify({ opacidade: null }) });
+  chk(padrao.opacidade === null, 'opacidade nula volta à padrão da situação', padrao.opacidade);
+  const linha = (await db.query(`select opacidade from public.setores where id = $1`, [sO.id])).rows[0];
+  chk(linha.opacidade === null, 'a padrão fica gravada no banco (nula)', linha);
+  await rpc(resp1, 'salvar_setor', { p_operacao: opO.id, p_id: sO.id, p_dados: JSON.stringify({ opacidade: 0.3 }) });
+  chk((await db.query(`select opacidade from public.setores where id = $1`, [sO.id])).rows[0].opacidade === 0.3, 'a opacidade gravada volta do banco');
+  chk(/permission|denied|row-level|sem_permissao/i.test(await erroDe(como(resp2, `update public.setores set opacidade = 0.4 where id = $1`, [sO.id]))) || (await db.query(`select opacidade from public.setores where id = $1`, [sO.id])).rows[0].opacidade === 0.3, 'quem não é da operação não altera a opacidade');
+}
+
+console.log('\nMigrações 007–070 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -1880,6 +1880,7 @@
     est.fichas = new Map();
     est.permanencias = new Map();
     est.filtroGrupos = new Set();   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
+    est.errosTrilha = new Set();
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
     renderizarControleGrupos();
     mostrarFaixaAlerta();
@@ -2727,6 +2728,18 @@
       est.jaEnquadrou = true;
       enquadrarAutomatico();
     }
+    avisarTrilhasOcultas();
+  }
+
+  // As trilhas de GPS podem ter sido ocultadas (Camadas → Trilhas de GPS). A escolha fica lembrada neste aparelho e
+  // vale para todas as operações: sem este aviso, parecia que a trilha não tinha sido gravada.
+  function avisarTrilhasOcultas() {
+    if (est.prefsMapa.trilhas !== false) return;
+    var comPontos = 0;
+    est.participantes.forEach(function (p) { if (p.pontos.length > 1) comPontos++; });
+    if (!comPontos) return;
+    UI.aviso('As trilhas de GPS estão ocultas neste aparelho (' + comPontos + (comPontos > 1 ? ' pessoas têm' : ' pessoa tem') +
+      ' trilha gravada). Para mostrar: Camadas → Trilhas de GPS.', 'erro', 'fixo');
   }
 
   // Conferência periódica: recupera eventos perdidos (queda do tempo real,
@@ -3476,13 +3489,27 @@
     if (est.rafTrilhas) return;
     est.rafTrilhas = requestAnimationFrame(function () {
       est.rafTrilhas = null;
-      est.trilhasSujas.forEach(function (id) {
-        var x = est.participantes.get(id);
-        if (x) desenharTrilha(x);
-      });
+      var ids = Array.from(est.trilhasSujas);
       est.trilhasSujas.clear();
+      // Cada trilha à parte: um erro no desenho de uma pessoa não pode impedir as dos outros (antes, a fila parava nela
+      // e as trilhas seguintes nunca apareciam). O erro aparece na tela, com o nome, para ser investigado.
+      ids.forEach(function (id) {
+        var x = est.participantes.get(id);
+        if (!x) return;
+        try { desenharTrilha(x); }
+        catch (e) { avisarErroTrilha(x, e); }
+      });
       if (est.listaSuja) renderizarLista();
     });
+  }
+
+  function avisarErroTrilha(p, e) {
+    try { console.error('Erro ao desenhar a trilha de ' + nomeExibido(p) + ' (' + p.id + '):', e); } catch (x) { /* sem console */ }
+    est.errosTrilha = est.errosTrilha || new Set();
+    if (est.errosTrilha.has(p.id)) return;   // um aviso por pessoa
+    est.errosTrilha.add(p.id);
+    UI.aviso('Não foi possível desenhar a trilha de ' + nomeExibido(p) + ' (' + p.pontos.length + ' pontos guardados): ' + ((e && e.message) || e) +
+      '. As outras trilhas continuam. Envie este aviso a quem cuida do sistema.', 'erro', 'fixo');
   }
 
   // Trilha em ordem cronológica (p.pontos já é mantido ordenado por horário).

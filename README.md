@@ -327,6 +327,17 @@ O mapa da página do participante mostra, além dos bombeiros:
   pedem confirmação. O limite de 60 mensagens por minuto da operação continua valendo (quem passar do limite não recebe e o
   painel avisa para reenviar). **Antes de usar, rode `067_grupos_mensagem_e_unico.sql` no Supabase.**
 
+### Carga das posições no painel e avisos de conexão
+
+- As posições são buscadas em páginas **pela chave** (`id` maior que o último recebido), em 4 faixas ao mesmo tempo, e não mais
+  pulando registros (offset). Com offset, cada página mais funda obrigava o banco a percorrer e conferir todas as anteriores: numa
+  operação com 40 mil posições a carga passava de um minuto, estourava o tempo limite e as trilhas não apareciam. Agora cada página
+  custa o mesmo e as trilhas vão aparecendo enquanto chegam.
+- Consulta cancelada por demora no servidor mostra "O servidor demorou demais para responder (a internet está funcionando)", e não
+  mais "Sem conexão com o servidor. Verifique a internet."
+- Se o desenho da trilha de uma pessoa falhar, as outras continuam e um aviso fixo mostra o nome e o erro. Com "Camadas → Trilhas de
+  GPS" desligado neste aparelho, um aviso fixo diz que as trilhas estão ocultas e onde ligar.
+
 ### Segurança: alertas de zona, fadiga e descanso na base (migração 068)
 
 - **Alerta de área de risco ou proibida** (servidor): cada ponto recebido é conferido contra os **pontos de RISCO** (dentro do raio) e
@@ -2413,6 +2424,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 46f | Tentar colocar em outro grupo alguém que já está num grupo (Membros e ficha) | aparece desativado/sem o botão; se for forçado, o servidor recusa com "já está em outro grupo" |
 | 46g | Abrir o link do grupo B num celular cuja pessoa já está no grupo A | continua na operação e no grupo A, sem entrar no B |
 | 47a | Abrir uma operação grande (100 pessoas ou mais, dezenas de milhares de posições) com o celular em 4G | a lista de participantes aparece em poucos segundos, antes das trilhas; os setores aparecem logo em seguida e o spinner sai sem esperar o restante |
+| 47b | Abrir uma operação com 40 mil posições ou mais (inclusive encerrada ou arquivada) | as trilhas vão aparecendo durante a carga e todas aparecem; não surge "Sem conexão com o servidor" com a internet funcionando; se o servidor demorar, o aviso diz que o servidor demorou (não a internet) |
 | 48a | Marcar um ponto **Risco** e uma **Área proibida**; com o celular de um participante online, andar até o raio do risco e até a borda da área | alerta crítico (alarme, faixa vermelha, "Ciente") com o nome, o grupo e a distância; um só por janela de 30 min |
 | 48b | Com o celular em modo avião, passar por uma área proibida e por um ponto de risco; religar a internet 10 min depois | os alertas chegam com o horário da passagem e o aviso de "trilha gravada sem internet"; a proibida é crítica e o risco, informativo |
 | 48c | Entrar no raio de uma **Base** e ficar parado 5 min; sair e voltar | "☕ N min" na lista e na ficha; o descanso fecha ao sair e abre outro ao voltar |

@@ -3606,7 +3606,7 @@
       return;
     }
     var vista = mapa.getBounds().pad(0.25);
-    var tam = Math.max(4, pesoTrilha(p) * 1.1 + 2);
+    var tam = Math.max(3, pesoTrilha(p) * 0.8 + 1.5);
     var poligonos = [], total = 0;
     segs.forEach(function (seg) {
       if (total >= MAX_SETAS || seg.length < 2) return;

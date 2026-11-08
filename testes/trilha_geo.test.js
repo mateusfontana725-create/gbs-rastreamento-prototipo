@@ -86,6 +86,21 @@ chk(setas.length === 5 && setas[0].x === 20 && setas[0].y === 0, 'setas a cada 4
 chk(setas.slice(0, 2).every((s) => Math.abs(s.ang) < 1e-9) && setas.slice(3).every((s) => Math.abs(s.ang - Math.PI / 2) < 1e-9), 'cada seta aponta no sentido do trecho (direita, depois para baixo)');
 chk(G.setasAoLongo(linhaPx, 40, 2).length === 2, 'respeita o máximo de setas');
 chk(G.setasAoLongo([{ x: 5, y: 5 }, { x: 5, y: 5 }], 10).length === 0 && G.setasAoLongo([{ x: 0, y: 0 }], 10).length === 0, 'linha sem comprimento ou com um ponto: nenhuma seta');
+// tremor do GPS: um passo curto para trás no meio de um trecho que vai para a direita
+const tremido = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 36, y: 0 }, { x: 33, y: 1 }, { x: 40, y: 0 }, { x: 100, y: 0 }];
+const st = G.setasAoLongo(tremido, 75);   // a primeira seta cai em 37,5 px, bem no passo para trás
+const local = G.setasAoLongo(tremido, 75, 10, 0.01);   // como era antes: só o trechinho onde a seta cai
+chk(local.length && Math.abs(Math.abs(local[0].ang) - Math.PI) < 0.5, 'controle: pelo trechinho local a seta apontaria para trás', local.map((s) => Math.round(s.ang * 180 / Math.PI)));
+chk(st.length >= 1 && st.every((s) => Math.abs(s.ang) < 0.35), 'um tremor do GPS para trás não vira seta ao contrário (todas para a direita)', st.map((s) => Math.round(s.ang * 180 / Math.PI)));
+// vaivém (parado, GPS indo e voltando no mesmo lugar): sem seta ali
+const vaivem = [{ x: 0, y: 0 }];
+for (let i = 0; i < 20; i++) vaivem.push({ x: i % 2 ? 0 : 8, y: (i % 3) * 2 });
+const sv = G.setasAoLongo(vaivem, 40);
+chk(sv.length === 0, 'vaivém no mesmo lugar: nenhuma seta (não dá para saber o sentido)', sv.length);
+// depois do vaivém, a trilha segue para cima: as setas desse trecho apontam para cima
+const depois = vaivem.concat([{ x: 4, y: -40 }, { x: 4, y: -200 }]);
+const sd = G.setasAoLongo(depois, 40).filter((s) => s.y < -45);
+chk(sd.length >= 2 && sd.every((s) => Math.abs(s.ang + Math.PI / 2) < 0.2), 'no trecho que segue, as setas apontam para onde a pessoa foi', sd.map((s) => Math.round(s.ang * 180 / Math.PI)));
 const v = G.verticesSeta({ x: 10, y: 10, ang: 0 }, 5);
 chk(v.length === 4 && v[0].x === 15 && v[0].y === 10 && v[1].x < 10 && v[3].x < 10 && v[1].y > 10 && v[3].y < 10, 'a seta tem a ponta à frente e as abas para trás', v);
 const vb = G.verticesSeta({ x: 0, y: 0, ang: Math.PI / 2 }, 5);

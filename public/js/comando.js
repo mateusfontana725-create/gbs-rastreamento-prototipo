@@ -117,6 +117,8 @@
     circuloPrecisao: null,
     jaEnquadrou: false,
     trilhasSujas: new Set(),
+    trechosApagados: new Map(),   // p.id → [{ de, ate }] em ms: trechos apagados da trilha de GPS (migração 071)
+    semTrechosApagados: false,
     rafTrilhas: null,
     listaSuja: false,
     abrirConvite: false,
@@ -211,6 +213,7 @@
     grupos: new Map(),          // id → grupo
     membros: new Map(),         // grupo_id → Map(participante_id → vínculo {papel, origem…})
     semGrupos: false,           // banco sem a migração 008
+    focoPessoa: null,           // id da pessoa em foco (olho da lista): o mapa mostra só ela e o que é dela. Não fica lembrado
     filtroGrupos: new Set(),    // grupos ligados no mapa (ícone de olho; vários ao mesmo tempo). Vazio = todos. Não fica lembrado
     controleGrupos: null,
     camadaDestinosGrupo: null,
@@ -316,6 +319,10 @@
     $('ficha-centralizar').addEventListener('click', function () { centralizar(est.selecionado); });
     $('ficha-trilha').addEventListener('click', function () { alternarTrilha(est.selecionado); });
     $('ficha-gravacao').addEventListener('click', function () { var p = est.participantes.get(est.selecionado); if (p) alternarGravacaoTrilha(p); });
+    $('ficha-apagar-trechos').addEventListener('click', function () { if (est.selecionado) iniciarBorrachaGps(est.selecionado); });
+    $('ficha-restaurar-trechos').addEventListener('click', function () { if (est.selecionado) restaurarTrechosGps(est.selecionado); });
+    $('menu-borracha-gps').addEventListener('click', function () { fecharMenu(false); escolherTrilhaGpsParaApagar(); });
+    $('areas-apagar-trechos').addEventListener('click', function () { escolherTrilhaGpsParaApagar(); });
     ligarMenuAcoes($('ficha-menu'));
     $('ficha-remover').addEventListener('click', removerParticipante);
     $('gps-alerta-tentar').addEventListener('click', garantirMinhaPosicao);
@@ -378,6 +385,19 @@
     $('opt-desenhadas-planejadas').addEventListener('click', function () { definirPrefMapa('tmPlanejadas', est.prefsMapa.tmPlanejadas === false); });
     $('opt-desenhadas-percorridas').addEventListener('click', function () { definirPrefMapa('tmPercorridas', est.prefsMapa.tmPercorridas === false); });
     $('opt-setores').addEventListener('click', function () { definirPrefMapa('setores', !est.prefsMapa.setores); });
+    // Preenchimento dos setores (só para este aparelho): vale para os setores que não têm opacidade própria
+    function mostrarOpacSetores() {
+      var v = est.prefsMapa.opacSetores;
+      $('opt-setores-opac').value = String(Math.round((typeof v === 'number' ? v : opacidadePadraoSetor('pendente')) * 100));
+      $('opt-setores-opac-valor').textContent = typeof v === 'number' ? Math.round(v * 100) + '%' : 'padrão';
+    }
+    $('opt-setores-opac').addEventListener('input', function () {
+      var n = Number(this.value) / 100;
+      $('opt-setores-opac-valor').textContent = Math.round(n * 100) + '%';
+      definirPrefMapa('opacSetores', n);
+    });
+    $('opt-setores-opac-padrao').addEventListener('click', function () { definirPrefMapa('opacSetores', null); mostrarOpacSetores(); });
+    mostrarOpacSetores();
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
     $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
@@ -772,7 +792,10 @@
       detalhes ? UI.el('button', { classe: 'balao-detalhes', type: 'button', id: 'balao-detalhes', texto: info.botao || 'Detalhes ›',
         title: 'Dica: dois cliques ou clicar e segurar no mapa abrem direto',
         onclick: function () { fecharBalao(); detalhes(); } }) : null,
-    ]);
+    ].concat((info.extras || []).map(function (x) {
+      return UI.el('button', { classe: 'balao-detalhes balao-secundario', type: 'button', id: x.id || null, texto: x.texto,
+        onclick: function () { fecharBalao(); x.acao(); } });
+    })));
     if (!est.balao) {
       est.balao = L.popup({ className: 'balao-mapa', closeButton: true, autoPan: true, autoPanPadding: [30, 30], maxWidth: 240, minWidth: 120, offset: [0, -8] });
     }
@@ -1483,7 +1506,7 @@
   // trilhas filtradas (GPS.trilha), grupo de cada pessoa, setores com vértices e área, e ocorrências.
   function resumoOperacao() {
     var participantes = Array.from(est.participantes.values()).map(function (p) {
-      var tr = trilhaDePontos(p.pontos, true);
+      var tr = trilhaDePontos(p.pontos, true, intervalosDe(p));
       var g = grupoDoParticipante(p);
       return {
         id: p.id, nome: nomeExibido(p), tipo: tipoDe(p.dados), grupo: g ? { id: g.id, nome: g.nome, cor: g.cor } : null,
@@ -1706,6 +1729,7 @@
     assinarAreasProibidas();
     assinarAreasSemTrilha();
     assinarDescansos();
+    assinarTrechosApagados();
     var cargasModulos = [];
     ['BuscaCenario', 'AjudaPedidos', 'RecursosEquipe', 'Briefing', 'RelatosRevisao', 'Binomio', 'ObservacoesCampo', 'Acesso'].forEach(function (nome) {
       if (window[nome]) cargasModulos.push(Promise.resolve(window[nome].iniciar()).catch(function () { /* o módulo mostra o próprio aviso */ }));
@@ -1869,7 +1893,6 @@
       if (p.toque) p.toque.remove();
       if (p.lacunas) p.lacunas.remove();
       if (p.setas) p.setas.remove();
-      if (p.horasTrilha) p.horasTrilha.remove();
     });
     limparAreasDoMapa();
     // grupos, deslocamentos e alertas também são apagados com os dados (retenção)
@@ -1881,6 +1904,7 @@
     est.vitimasLoc = new Map();
     est.fichas = new Map();
     est.permanencias = new Map();
+    est.focoPessoa = null;
     est.filtroGrupos = new Set();   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
     est.errosTrilha = new Set();
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
@@ -1919,6 +1943,7 @@
     $('menu-vitima').hidden = op.status !== 'ativa';
     $('menu-vitima-rapida').hidden = op.status !== 'ativa';
     $('menu-minha-trilha').hidden = op.status !== 'ativa';
+    $('menu-borracha-gps').hidden = !podeBorrachaGps();
     $('menu-diag-gps').hidden = op.status !== 'ativa';   // diagnóstico do GPS deste aparelho: só serve com a operação em andamento
     $('btn-excluir-op').hidden = !podeExcluir(op);
     $('menu-zona-perigo').hidden = $('btn-encerrar').hidden && $('btn-excluir-op').hidden;
@@ -2363,9 +2388,11 @@
           agrupados.forEach(function (mk) { mostrarPonto(mk, valor); });
         }
         lista.forEach(function (mk) { if (mk.options.fixo) mostrarPonto(mk, valor); });
+        if (est.focoPessoa && chave !== 'pontos') aplicarFocoPontos();
       }
       if (chave === 'legenda' && est.legenda) { if (valor) est.legenda.addTo(est.mapa); else est.legenda.remove(); }
       if (chave === 'setores' && est.camadaSetores) { if (valor) est.camadaSetores.addTo(est.mapa); else est.camadaSetores.remove(); }
+      if (chave === 'opacSetores') est.setores.forEach(function (s) { if (s.camada && s.camada.setStyle) s.camada.setStyle({ fillOpacity: estiloSetor(s.d).fillOpacity }); });
       if (chave === 'pontos' && est.camadaPontosInt) { if (valor) est.camadaPontosInt.addTo(est.mapa); else est.camadaPontosInt.remove(); }
       if (chave === 'local') desenharLocalOp();
       if (chave === 'tmPlanejadas' || chave === 'tmPercorridas') redesenharTrilhasManuais();
@@ -2640,7 +2667,7 @@
     var pts = [];
     est.participantes.forEach(function (p) {
       var pos = posicaoAtual(p);
-      if (pos && visivelNoFiltro(p)) pts.push([pos.lat, pos.lng]);
+      if (pos && visivelNoMapa(p)) pts.push([pos.lat, pos.lng]);
     });
     if (!pts.length && est.op && est.op.local_lat != null) pts.push([est.op.local_lat, est.op.local_lng]);
     if (!pts.length) {
@@ -2724,6 +2751,7 @@
       carregarPermanencias().catch(falhou),
       carregarMissoes(true).catch(falhou),
       carregarDescansos().catch(falhou),
+      carregarTrechosApagados().catch(falhou),
     ]));
     if (!ainda()) return;
     if (falhas.length) {
@@ -2800,6 +2828,7 @@
         carregarPermanencias(),
         carregarMissoes(false),
         carregarDescansos(),
+        carregarTrechosApagados(),
       ]));
       if (!mesmaOp()) return;
 
@@ -3309,7 +3338,7 @@
   function atualizarMarcador(p) {
     if (!est.mapa) return;
     var pos = posicaoAtual(p);
-    if (!pos || p.dados.removido || !visivelNoFiltro(p)) {
+    if (!pos || p.dados.removido || !visivelNoMapa(p)) {
       tirarPessoaDoMapa(p);
       return;
     }
@@ -3525,6 +3554,17 @@
       '. As outras trilhas continuam. Envie este aviso a quem cuida do sistema.', 'erro', 'fixo');
   }
 
+  // Trechos apagados da trilha de GPS (migração 071): p.id → [{ de, ate }] em ms. Os pontos ficam no banco e em p.pontos;
+  // só deixam de entrar na linha, na distância e na fadiga.
+  function intervalosDe(p) { return (p && est.trechosApagados && est.trechosApagados.get(p.id)) || null; }
+  function pontosVisiveisDe(p) {
+    var iv = intervalosDe(p);
+    if (!iv || !iv.length) return p.pontos;
+    var r = [];
+    window.TrilhaGeo.dividirPorIntervalos(p.pontos, iv).forEach(function (g) { r = r.concat(g); });
+    return r;
+  }
+
   // Trilha em ordem cronológica (p.pontos já é mantido ordenado por horário).
   // Não liga pontos imprecisos, separados por longa pausa ou por salto
   // impossível, nem desenha o vaivém de quem está parado (gps.js). Os pontos
@@ -3539,12 +3579,17 @@
     return (m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' km';
   }
 
-  function trilhaDe(p) { return trilhaDePontos(p.pontos, false); }
+  function trilhaDe(p) { return trilhaDePontos(p.pontos, false, intervalosDe(p)); }
   // Pontos na_base (entrada na base, migração 066) não entram na linha: ela se divide neles, sem "falha" nem reta atravessando a base.
-  function trilhaDePontos(pontos, objetos) {
+  // intervalos: trechos apagados com a borracha (trilhas_ocultas, migração 071): os pontos deles não entram e a linha se divide ali.
+  function trilhaDePontos(pontos, objetos, intervalos) {
     var op = { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp() };
     if (objetos) op.objetos = true;
-    var partes = window.TrilhaGeo.dividirNaBase(pontos);
+    var partes = [];
+    window.TrilhaGeo.dividirPorIntervalos(pontos, intervalos).forEach(function (g) {
+      window.TrilhaGeo.dividirNaBase(g).forEach(function (x) { partes.push(x); });
+    });
+    if (!partes.length) return { segmentos: [], lacunas: [] };
     if (partes.length === 1 && partes[0].length === pontos.length) return window.GPS.trilha(pontos, op);
     var r = { segmentos: [], lacunas: [] };
     partes.forEach(function (ps) { var t = window.GPS.trilha(ps, op); r.segmentos = r.segmentos.concat(t.segmentos); r.lacunas = r.lacunas.concat(t.lacunas || []); });
@@ -3569,7 +3614,7 @@
     return Math.max(0.6, Math.min(1, 0.6 + 0.4 * (w - 360) / (1280 - 360)));
   }
   // Estilo AlpineQuest: linha cheia e contínua (6 px de perto, mais fina de longe) com contorno escuro por baixo,
-  // setas brancas no sentido do deslocamento e a hora do início e do fim nas pontas. A selecionada fica mais grossa.
+  // e setas brancas no sentido do deslocamento. Datas, horários, distância e relevo ficam nos DETALHES da trilha (tocar nela). A selecionada fica mais grossa.
   function pesoTrilha(p) {
     var f = fatorZoomTrilha();
     return Math.max(1.5, Math.round((est.selecionado === p.id ? 7.5 : 6) * f * 10) / 10);
@@ -3585,20 +3630,7 @@
   function tracoTrilha() { return null; }
 
   /* ---------- Setas de sentido e horário nas pontas (estilo AlpineQuest) ---------- */
-  var ESPACO_SETAS_PX = 70, MAX_SETAS = 800, ZOOM_SETAS = 15, ZOOM_HORAS = 16;
-  function horaTrilha(ms) {
-    var d = new Date(ms), hoje = new Date(C.agora());
-    var h = ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2);
-    return d.toDateString() === hoje.toDateString() ? h : ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + ' ' + h;
-  }
-  // primeiro e último ponto que entram na linha (sem os da base e os imprecisos)
-  function extremosTrilha(p) {
-    var ok = function (pt) { return !pt.na_base && (pt.prec == null || pt.prec <= LIM.precisaoTrilhaM); };
-    var ini = null, fim = null;
-    for (var i = 0; i < p.pontos.length; i++) if (ok(p.pontos[i])) { ini = p.pontos[i]; break; }
-    for (var j = p.pontos.length - 1; j >= 0; j--) if (ok(p.pontos[j])) { fim = p.pontos[j]; break; }
-    return { ini: ini, fim: fim };
-  }
+  var ESPACO_SETAS_PX = 70, MAX_SETAS = 800, ZOOM_SETAS = 15;
   function desenharSetas(p) {
     var mapa = est.mapa, G = window.TrilhaGeo, segs = p.segsDesenhados;
     if (!mapa || !G || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !mapa.hasLayer(p.trilha)) {
@@ -3624,42 +3656,19 @@
     if (!mapa.hasLayer(p.setas)) p.setas.addTo(mapa);
     p.setas.bringToFront();
   }
-  function desenharHorasTrilha(p) {
-    var mapa = est.mapa;
-    var mostrar = mapa && p.segsDesenhados && p.segsDesenhados.length && mapa.hasLayer(p.trilha) &&
-      (est.selecionado ? est.selecionado === p.id : mapa.getZoom() >= ZOOM_HORAS);
-    if (!mostrar) { if (p.horasTrilha) p.horasTrilha.remove(); return; }
-    var ext = extremosTrilha(p);
-    if (!ext.ini) { if (p.horasTrilha) p.horasTrilha.remove(); return; }
-    // quem ainda está enviando: o fim da linha é onde a pessoa está (o símbolo dela já marca)
-    var aoVivo = p.dados.rastreando && !p.dados.removido && operacaoViva();
-    var chave = [ext.ini.id, aoVivo ? '' : ext.fim && ext.fim.id].join('|');
-    if (!p.horasTrilha) p.horasTrilha = L.layerGroup();
-    if (p.horasTrilha._chave !== chave) {
-      p.horasTrilha._chave = chave;
-      p.horasTrilha.clearLayers();
-      var rotulo = function (pt, classe) {
-        return L.marker([pt.lat, pt.lng], { interactive: false, keyboard: false, pane: 'rotulosSetor',
-          icon: L.divIcon({ className: 'hora-trilha ' + classe, html: '<span>' + C.esc(horaTrilha(pt.t)) + '</span>', iconSize: null, iconAnchor: [-6, 9] }) });
-      };
-      rotulo(ext.ini, 'hora-trilha-inicio').addTo(p.horasTrilha);
-      if (!aoVivo && ext.fim && ext.fim !== ext.ini) rotulo(ext.fim, 'hora-trilha-fim').addTo(p.horasTrilha);
-    }
-    if (!mapa.hasLayer(p.horasTrilha)) p.horasTrilha.addTo(mapa);
-  }
   // Refeitas ao mover ou aproximar o mapa (as setas têm tamanho e espaçamento em pixels) e ao selecionar alguém.
   function agendarDecoracoesTrilhas() {
     clearTimeout(est.timerDecoracoes);
     est.timerDecoracoes = setTimeout(function () {
       est.participantes.forEach(function (p) {
-        try { desenharSetas(p); desenharHorasTrilha(p); } catch (e) { /* enfeite: nunca impede a trilha */ }
+        try { desenharSetas(p); } catch (e) { /* enfeite: nunca impede a trilha */ }
       });
     }, 120);
   }
 
   function desenharTrilha(p) {
     if (!est.mapa) return;
-    var tr = p.trilhaVisivel && visivelNoFiltro(p) ? trilhaDe(p) : { segmentos: [], lacunas: [] };
+    var tr = (p.trilhaVisivel || est.focoPessoa === p.id) && visivelNoMapa(p) && !emBorrachaGps(p) ? trilhaDe(p) : { segmentos: [], lacunas: [] };
     var segs = recortarSegmentos(tr.segmentos);   // fora das áreas sem trilha (migração 066)
     desenharLacunas(p, tr.lacunas.filter(function (l) { return !(ponteiroDentroSemTrilha(l.de) && ponteiroDentroSemTrilha(l.ate)); }));
     p.segsDesenhados = segs;
@@ -3668,7 +3677,6 @@
       if (p.halo) p.halo.remove();
       if (p.toque) p.toque.remove();
       if (p.setas) p.setas.remove();
-      if (p.horasTrilha) p.horasTrilha.remove();
       return;
     }
     var tipo = tipoDe(p.dados);
@@ -3700,14 +3708,13 @@
       ligarCliquesMapa(p.toque, {
         noDesenho: function (ev) { aoClicarNoMapa(ev); },
         info: function (ev) { return Object.assign({ latlng: ev.latlng }, infoTrilhaGps(p)); },
-        detalhes: function () { selecionar(p.id); },
+        detalhes: function () { abrirDetalhesTrilha(p); },
       });
     } else {
       p.toque.setLatLngs(segs);
     }
     if (!est.mapa.hasLayer(p.toque)) p.toque.addTo(est.mapa);
     desenharSetas(p);
-    desenharHorasTrilha(p);
   }
 
   // Falha: intervalo maior que o limite da operação entre dois pontos seguidos
@@ -3937,16 +3944,20 @@
     var bRei = UI.el('button', { classe: 'btn btn-pequeno btn-ok btn-reincluir', type: 'button', hidden: true, 'aria-label': 'Reincluir ' + p.dados.nome + ' na operação', texto: 'Reincluir' });
     bRei.addEventListener('click', function (ev) { ev.stopPropagation(); reincluirParticipante(p.id); });
     acoes.appendChild(bRei);
+    var bOlho = UI.el('button', { classe: 'btn-olho-pessoa', type: 'button', 'aria-pressed': 'false', texto: '👁' });
+    bOlho.addEventListener('click', function (ev) { ev.stopPropagation(); focarPessoa(p.id); });
+    bOlho.addEventListener('keydown', function (ev) { ev.stopPropagation(); });
     li.appendChild(simbolo);
     li.appendChild(nome);
     li.appendChild(estado);
     li.appendChild(acoes);
+    li.appendChild(bOlho);
     li.addEventListener('click', function () { abrirDaLista(p.id); });
     li.addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); abrirDaLista(p.id); }
     });
     p.li = li;
-    p.liPartes = { simbolo: simbolo, nome: nome, estado: estado, bRei: bRei };
+    p.liPartes = { simbolo: simbolo, nome: nome, estado: estado, bRei: bRei, bOlho: bOlho };
     return li;
   }
 
@@ -4003,6 +4014,11 @@
 
     var podeReincluir = podeReincluirP(p);
     if (partes.bRei.hidden === podeReincluir) partes.bRei.hidden = !podeReincluir;
+    var emFoco = est.focoPessoa === p.id;
+    partes.bOlho.setAttribute('aria-pressed', String(emFoco));
+    partes.bOlho.title = emFoco ? 'Mostrar todos de novo' : 'Mostrar só ' + nomeExibido(p) + ' no mapa (posição, trilha, fotos, pontos e setor)';
+    partes.bOlho.setAttribute('aria-label', partes.bOlho.title);
+    p.li.classList.toggle('em-foco', emFoco);
     p.li.classList.toggle('selecionado', est.selecionado === p.id);
     p.li.classList.toggle('alerta-ajuda', Boolean(ajuda));
     p.li.classList.toggle('alerta-saida', saida && !ajuda);
@@ -4306,6 +4322,11 @@
     var bGrav = $('ficha-gravacao');
     bGrav.hidden = !podeAlterar() || d.removido;
     bGrav.textContent = d.gravar_trilha === false ? '⏺ Ligar a gravação da trilha' : '⏹ Desativar a gravação da trilha';
+    var temTrilha = pontosDesenhaveisDe(p).length >= 2;
+    var iv = intervalosDe(p);
+    $('ficha-apagar-trechos').hidden = !podeBorrachaGps() || !temTrilha;
+    $('ficha-restaurar-trechos').hidden = !podeBorrachaGps() || !(iv && iv.length);
+    $('ficha-restaurar-trechos').textContent = '↺ Restaurar trechos apagados (' + (iv ? iv.length : 0) + ')';
     $('ficha-centralizar').disabled = !pos;
     $('ficha-ir-ate').disabled = !pos;
     if ($('ficha-menu').atualizarGatilho) $('ficha-menu').atualizarGatilho();
@@ -5021,6 +5042,7 @@
       alt: cat.rotulo,
       pane: 'pontos',        // participantes ficam por cima
       tipoPonto: 'relato',
+      donoId: m.participante_id || null,
       critico: m.categoria === 'AJUDA',
       vitima: m.categoria === 'VITIMA',   // vítima localizada: agrupa como os demais, mas o grupo mostra a marca de vítima
     });
@@ -5033,7 +5055,7 @@
       detalhes: function () { abrirRelato(m.id); },
     });
     est.relatosMarc.set(m.id, mk);
-    mostrarPonto(mk, Boolean(est.prefsMapa.relatos));
+    mostrarPonto(mk, pontoVisivelPorPref(mk, 'relatos'));
   }
 
   function destacarNoMapa(grupo, mk, lat, lng) {
@@ -5428,6 +5450,7 @@
           alt: 'Foto',
           pane: 'pontos',    // participantes ficam por cima
           tipoPonto: 'foto',
+          donoId: f.participante_id || null,
         });
         ligarCliquesMapa(mk, {
           info: function () {
@@ -5437,7 +5460,7 @@
           detalhes: function () { abrirFoto(f.id); },
         });
         est.fotosMarc.set(f.id, mk);
-        mostrarPonto(mk, Boolean(est.prefsMapa.fotos));
+        mostrarPonto(mk, pontoVisivelPorPref(mk, 'fotos'));
       } else if (antiga && (antiga.lat !== f.lat || antiga.lng !== f.lng)) {
         mk.setLatLng([f.lat, f.lng]);
       }
@@ -6045,13 +6068,19 @@
   }
 
   /* ---------- Desenho dos setores ----------------------------------- */
-  // Opacidade padrão de cada situação (quando o setor não tem opacidade própria)
-  function opacidadePadraoSetor(status) { return status === 'concluido' ? 0.12 : status === 'andamento' ? 0.32 : 0.2; }
+  // Opacidade padrão do preenchimento (quando o setor não tem opacidade própria). Mais clara que antes (pendente 10%,
+  // em andamento 18%, concluído 10%) para o mapa aparecer por baixo. Em Camadas → "Preenchimento dos setores" cada responsável
+  // escolhe outro valor para este aparelho (opacSetores = o do setor pendente; em andamento 1,6x e concluído 0,6x).
+  function opacidadePadraoSetor(status) {
+    var v = est.prefsMapa.opacSetores;
+    if (typeof v === 'number') return Math.min(0.9, Math.round(v * (status === 'andamento' ? 1.6 : status === 'concluido' ? 0.6 : 1) * 100) / 100);
+    return status === 'concluido' ? 0.10 : status === 'andamento' ? 0.18 : 0.10;
+  }
 
   function estiloSetor(d) {
     // Contorno contínuo e forte (com um filete escuro por baixo, em desenharSetor) e preenchimento bem visível:
     // a situação aparece no preenchimento e no rótulo, não mais num tracejado (que parecia uma trilha).
-    return {
+    var estilo = {
       pane: 'setores',
       color: d.cor,
       weight: 3,
@@ -6061,6 +6090,8 @@
       fillOpacity: d.opacidade != null ? d.opacidade : opacidadePadraoSetor(d.status),
       className: 'setor setor-' + d.status,
     };
+    if (est.focoPessoa && d.participante_id !== est.focoPessoa) { estilo.opacity = 0.25; estilo.fillOpacity = 0.02; }
+    return estilo;
   }
 
   // A situação some de longe (o traço e o preenchimento da área já a indicam)
@@ -6129,8 +6160,8 @@
   }
   function htmlMarcaPonto(d) {
     var cat = catDoPonto(d);
-    var est_ = estiloCorPonto(cat.cor);
-    return '<div class="mk-poi poi-' + C.esc(d.categoria) + (cat.tipo ? ' poi-tipo' : '') + '"' + (est_ ? ' style="' + est_ + '"' : '') +
+    var estilo = estiloCorPonto(cat.cor);
+    return '<div class="mk-poi poi-' + C.esc(d.categoria) + (cat.tipo ? ' poi-tipo' : '') + '"' + (estilo ? ' style="' + estilo + '"' : '') +
       '><span>' + C.esc(cat.letra) + '</span></div>';
   }
   // Marca do ponto como elemento (listas, detalhes, formulário)
@@ -6527,7 +6558,7 @@
     opUsarPadrao.addEventListener('change', function () { opFaixa.disabled = opUsarPadrao.checked; opPrevia(); });
     opFaixa.addEventListener('input', function () { opUsarPadrao.checked = false; opFaixa.disabled = false; opPrevia(); });
     var opcaoOpacidade = UI.el('div', { classe: 'opacidade-setor' }, [
-      UI.el('label', { classe: 'linha-opcao', for: 'setor-opacidade-padrao' }, [opUsarPadrao, ' Usar a padrão da situação']),
+      UI.el('label', { classe: 'linha-opcao', for: 'setor-opacidade-padrao' }, [opUsarPadrao, ' Usar a padrão (a da situação ou a escolhida em Camadas)']),
       UI.el('div', { classe: 'opacidade-setor-faixa' }, [opFaixa, opTexto]),
     ]);
     var part = opcoesParticipantes(d.participante_id, true);
@@ -8080,11 +8111,13 @@
     $('qtd-setores').textContent = String(est.setores.size);
     $('qtd-pontos-int').textContent = String(est.pontosInt.size);
     $('qtd-trilhas').textContent = String(est.trilhasManuais.size);
+    $('qtd-trilhas-gps').textContent = String(participantesComTrilha().length);
     if ($('painel-areas').hidden) return;
     var editavel = podeAlterar();
     ['areas-novo-setor', 'areas-novo-ponto'].forEach(function (i) { $(i).hidden = !editavel; });
     $('areas-nova-trilha').hidden = !editavel || est.semTrilhasManuais;
     renderizarListaTrilhas();
+    renderizarListaTrilhasGps();
     ulS.innerHTML = '';
     $('setores-vazio').hidden = est.setores.size > 0;
     est.setores.forEach(function (s) {
@@ -8262,6 +8295,7 @@
     est.areasProibidas = new Map();
     encerrarAreasSemTrilha();
     encerrarDescansos();
+    encerrarTrechosApagados();
     est.semTrilhasManuais = false;
     est.erroTrilhasManuais = null;
   }
@@ -8912,7 +8946,7 @@
     // sem contato há mais de 15 min o tempo para de contar na última notícia (não se sabe o que a pessoa está fazendo)
     var ate = d.rastreando && contato && agora - contato < 15 * 60000 ? agora : (contato || agora);
     var cic = F.ciclo(rows, ate, p.pontos.length ? p.pontos[0].t : null);
-    var tr = trilhaDePontos(p.pontos, true);
+    var tr = trilhaDePontos(p.pontos, true, intervalosDe(p));
     p._ciclo = { chave: chave, ciclo: cic, km: F.kmDesde(tr.segmentos, cic.inicioMs) };
     return p._ciclo;
   }
@@ -9177,17 +9211,25 @@
     }
   }
 
-  // Balão ao tocar no rastro de GPS: de quem é a trilha.
+  // Balão ao tocar no rastro de GPS: de quem é a trilha e um resumo; "Detalhes da trilha" abre distância,
+  // tempo, datas e relevo (estatísticas completas).
   function infoTrilhaGps(p) {
     var g = grupoDoParticipante(p);
-    var pts = p.pontos.filter(function (x) { return !x.na_base; });
+    var pts = pontosVisiveisDe(p).filter(function (x) { return !x.na_base; });
     var tr = trilhaDe(p);
     var m = 0;
     tr.segmentos.forEach(function (seg) { m += comprimentoLinhaM(seg); });
     var sub = [TIPOS[tipoDe(p.dados)].rotulo, g ? g.nome : null, formatarComprimento(m),
       pts.length ? C.hora(new Date(pts[0].t).toISOString(), false) + ' – ' + C.hora(new Date(pts[pts.length - 1].t).toISOString(), false) : null,
       p.dados.gravar_trilha === false ? 'gravação desligada' : null].filter(Boolean).join(' · ');
-    return { titulo: 'Trilha de ' + nomeExibido(p), sub: sub, botao: 'Ficha ›', deslocY: -2 };
+    var extras = [{ id: 'balao-ficha', texto: 'Ficha de ' + nomeExibido(p), acao: function () { selecionar(p.id); } }];
+    if (podeBorrachaGps()) extras.push({ id: 'balao-apagar-trechos', texto: '✂ Apagar trechos', acao: function () { iniciarBorrachaGps(p.id); } });
+    return { titulo: 'Trilha de ' + nomeExibido(p), sub: sub, botao: 'Detalhes da trilha ›', deslocY: -2, extras: extras };
+  }
+
+  function abrirDetalhesTrilha(p) {
+    if (window.Ferramentas && window.Ferramentas.abrirEstatisticas) window.Ferramentas.abrirEstatisticas(p.id);
+    else selecionar(p.id);
   }
 
   /* ---------- Borracha: apagar trechos de uma trilha desenhada ou importada ---------- */
@@ -9351,6 +9393,309 @@
     dz.desligar = sair;
     aplicarModo();
     mapa.fitBounds(L.latLngBounds(pecas[0]), { padding: [60, 60], maxZoom: 18 });
+    desenhar();
+    barra();
+  }
+
+
+  /* ---------- Borracha na trilha de GPS dos participantes (migração 071) ---------- */
+  // Apaga trechos da trilha de quem está na busca (mesmo ainda ativo) SEM apagar posições: o trecho é escondido (trilhas_ocultas),
+  // para todos os responsáveis, no mapa dos participantes e no link público. Os pontos novos, fora do trecho, continuam aparecendo.
+  function podeBorrachaGps() { return Boolean(podeAlterar() && !est.semTrechosApagados && window.TrilhaGeo); }
+  function emBorrachaGps(p) { return Boolean(est.desenho && est.desenho.borrachaGpsDe === p.id); }
+  function pontosDesenhaveisDe(p) {
+    return pontosVisiveisDe(p).filter(function (pt) { return !pt.na_base && (pt.prec == null || pt.prec <= LIM.precisaoTrilhaM); });
+  }
+  function participantesComTrilha() {
+    return Array.from(est.participantes.values()).filter(function (p) { return tipoDe(p.dados) !== 'responsavel' && pontosDesenhaveisDe(p).length >= 2; })
+      .sort(function (a, b) { return nomeExibido(a).localeCompare(nomeExibido(b), 'pt-BR'); });
+  }
+
+  async function carregarTrechosApagados() {
+    if (!est.op || est.semTrechosApagados) return;
+    var opId = est.op.id;
+    try {
+      var lista = await C.consultarTudo(function () {
+        return C.cliente.from('trilhas_ocultas').select('participante_id,intervalos').eq('operacao_id', opId).order('participante_id', { ascending: true });
+      });
+      if (!est.op || est.op.id !== opId) return;
+      var mapa = new Map();
+      lista.forEach(function (r) {
+        var iv = (r.intervalos || []).map(function (i) { return { de: C.paraMs(i.de), ate: C.paraMs(i.ate) }; })
+          .filter(function (i) { return i.de != null && i.ate != null; });
+        if (iv.length) mapa.set(r.participante_id, window.TrilhaGeo.unirIntervalos(iv));
+      });
+      aplicarTrechosApagados(mapa);
+    } catch (e) {
+      if (ehTabelaAusente(e)) est.semTrechosApagados = true;
+    }
+  }
+
+  function aplicarTrechosApagados(mapa) {
+    var antes = est.trechosApagados || new Map();
+    var assin = function (iv) { return (iv || []).map(function (i) { return i.de + '-' + i.ate; }).join('|'); };
+    est.trechosApagados = mapa;
+    est.participantes.forEach(function (p) {
+      if (assin(antes.get(p.id)) === assin(mapa.get(p.id))) return;
+      p._ciclo = null;   // fadiga e distância refeitas sem o que foi apagado
+      sujarTrilha(p);
+      if (est.selecionado === p.id) atualizarFicha();
+    });
+    est.listaSuja = true;
+    renderizarAreas();
+  }
+
+  function assinarTrechosApagados() {
+    if (!est.op || est.semTrechosApagados) return;
+    var opId = est.op.id;
+    if (est.canalTrechosApagados) { try { C.cliente.removeChannel(est.canalTrechosApagados); } catch (e) { /* ignora */ } }
+    try {
+      est.canalTrechosApagados = C.cliente.channel('op-trilhas-ocultas-' + opId + '-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'trilhas_ocultas', filter: 'operacao_id=eq.' + opId }, function () {
+          clearTimeout(est.timerTrechosApagados);
+          est.timerTrechosApagados = setTimeout(carregarTrechosApagados, 400);
+        })
+        .subscribe(function (status) {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            setTimeout(function () { if (est.op && est.op.id === opId) { carregarTrechosApagados(); assinarTrechosApagados(); } }, 60000);
+          }
+        });
+    } catch (e) { /* sem tempo real: a conferência periódica atualiza */ }
+  }
+
+  function encerrarTrechosApagados() {
+    clearTimeout(est.timerTrechosApagados);
+    if (est.canalTrechosApagados) { try { C.cliente.removeChannel(est.canalTrechosApagados); } catch (e) { /* ignora */ } }
+    est.canalTrechosApagados = null;
+    est.trechosApagados = new Map();
+    est.semTrechosApagados = false;
+  }
+
+  async function salvarTrechosOcultos(p, intervalos) {
+    var r = await C.rpc('salvar_trilha_oculta', { p_participante: p.id, p_intervalos: intervalos.map(function (i) {
+      return { de: new Date(i.de).toISOString(), ate: new Date(i.ate).toISOString() };
+    }) });
+    var mapa = new Map(est.trechosApagados);
+    if (intervalos.length) mapa.set(p.id, intervalos); else mapa.delete(p.id);
+    aplicarTrechosApagados(mapa);
+    return r;
+  }
+
+  async function restaurarTrechosGps(pid) {
+    var p = est.participantes.get(pid);
+    var iv = intervalosDe(p);
+    if (!p || !podeBorrachaGps() || !iv || !iv.length) return;
+    var ok = await UI.confirmar({ titulo: 'Restaurar os trechos apagados?', texto: 'A trilha de ' + nomeExibido(p) + ' volta a aparecer inteira (' + iv.length + ' trecho' + (iv.length > 1 ? 's' : '') + ' apagado' + (iv.length > 1 ? 's' : '') + ').', ok: 'Restaurar' });
+    if (!ok) return;
+    try {
+      await salvarTrechosOcultos(p, []);
+      UI.aviso('Trilha de ' + nomeExibido(p) + ' restaurada.', 'ok');
+    } catch (e) { UI.aviso('Não foi possível restaurar: ' + e.message, 'erro', 8000); }
+  }
+
+  // Escolher de quem é a trilha (Ferramentas e lista de trilhas)
+  function escolherTrilhaGpsParaApagar() {
+    if (!est.op || !podeBorrachaGps()) {
+      if (est.semTrechosApagados) UI.aviso('O servidor ainda não tem a borracha da trilha de GPS (migração 071).', 'erro', 8000);
+      return;
+    }
+    var lista = participantesComTrilha();
+    var corpo = UI.el('div', { classe: 'escolha-trilha-gps' });
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Apagar trechos da trilha de GPS' }, [UI.dica(
+        'Escolha de quem é a trilha e passe a borracha sobre o trecho no mapa, como num app de desenho. O trecho só some do mapa: as posições continuam guardadas e dá para restaurar. Vale para todos os responsáveis, para o mapa dos participantes e para o link público.')]),
+      corpo,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]));
+    if (!lista.length) { corpo.appendChild(UI.el('p', { classe: 'muted', id: 'escolha-trilha-vazio', texto: 'Ninguém tem trilha de GPS gravada ainda.' })); return; }
+    // quem está com a ficha aberta vem primeiro
+    lista.sort(function (a, b) { return (b.id === est.selecionado) - (a.id === est.selecionado); });
+    lista.forEach(function (p) {
+      var iv = intervalosDe(p);
+      var km = 0; trilhaDe(p).segmentos.forEach(function (seg) { km += comprimentoLinhaM(seg); });
+      corpo.appendChild(UI.el('button', { classe: 'item-area', type: 'button', 'data-participante': p.id, onclick: function () { fechar(); iniciarBorrachaGps(p.id); } }, [
+        UI.el('span', { classe: 'chip-cor', style: 'background:' + corDoParticipante(p) }),
+        UI.el('span', { classe: 'item-area-txt' }, [
+          UI.el('strong', { texto: nomeExibido(p) + (p.id === est.selecionado ? ' (ficha aberta)' : '') }),
+          UI.el('small', { classe: 'muted', texto: [TIPOS[tipoDe(p.dados)].rotulo, formatarComprimento(km), p.pontos.length + ' pontos', iv && iv.length ? iv.length + ' trecho(s) apagado(s)' : null].filter(Boolean).join(' · ') }),
+        ]),
+      ]));
+    });
+  }
+
+  // Seção "Trilhas de GPS" do painel Setores, trilhas e pontos
+  function renderizarListaTrilhasGps() {
+    var ul = $('lista-trilhas-gps');
+    if (!ul) return;
+    var lista = participantesComTrilha();
+    var editavel = podeBorrachaGps();
+    $('areas-apagar-trechos').hidden = !editavel || !lista.length;
+    $('trilhas-gps-vazio').hidden = lista.length > 0;
+    ul.innerHTML = '';
+    lista.forEach(function (p) {
+      var iv = intervalosDe(p);
+      var km = 0; trilhaDe(p).segmentos.forEach(function (seg) { km += comprimentoLinhaM(seg); });
+      ul.appendChild(UI.el('li', { classe: 'item-trilha' }, [
+        UI.el('button', { classe: 'item-area', type: 'button', 'data-trilha-gps': p.id, onclick: function () { selecionar(p.id); } }, [
+          UI.el('span', { classe: 'chip-cor', style: 'background:' + corDoParticipante(p) }),
+          UI.el('span', { classe: 'item-area-txt' }, [
+            UI.el('strong', { texto: nomeExibido(p) }),
+            UI.el('small', { classe: 'muted', texto: [TIPOS[tipoDe(p.dados)].rotulo, formatarComprimento(km), p.pontos.length + ' pontos', iv && iv.length ? iv.length + ' trecho(s) apagado(s)' : null].filter(Boolean).join(' · ') }),
+          ]),
+        ]),
+        editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', 'data-apagar-trechos': p.id, texto: '✂ Apagar', title: 'Borracha na trilha desta pessoa', onclick: function () { iniciarBorrachaGps(p.id); } }) : null,
+      ]));
+    });
+  }
+
+  function iniciarBorrachaGps(pid) {
+    var p = est.participantes.get(pid);
+    if (!p || !est.mapa || !podeBorrachaGps()) return;
+    var pts = pontosDesenhaveisDe(p);
+    if (pts.length < 2) { UI.aviso(nomeExibido(p) + ' ainda não tem trilha para apagar.', 'erro'); return; }
+    var G = window.TrilhaGeo, mapa = est.mapa, cont = mapa.getContainer();
+    var h = iniciarDesenhoExterno({ aoClicar: function () { /* o toque é da borracha */ }, aoCancelar: function () { sair(); } });
+    if (!h) return;
+    var dz = est.desenho;
+    dz.borrachaGpsDe = pid;
+    var apagados = new Set(), historico = [], ativos = new Set(), gesto = null, pincel = null, mover = false, saiu = false, quadro = null;
+    desenharTrilha(p);   // a trilha normal sai do mapa enquanto a borracha trabalha nela
+
+    function pecas() {
+      var r = [], atual = [];
+      pts.forEach(function (pt) {
+        if (apagados.has(pt.id)) { if (atual.length) r.push(atual); atual = []; }
+        else atual.push([pt.lat, pt.lng]);
+      });
+      if (atual.length) r.push(atual);
+      return r;
+    }
+    function desenhar() {
+      quadro = null;
+      h.camada.clearLayers();
+      pecas().forEach(function (seg) {
+        L.polyline(seg, { color: '#0b1220', weight: 8, opacity: 0.6, interactive: false, lineJoin: 'round', lineCap: 'round' }).addTo(h.camada);
+        L.polyline(seg, { color: '#facc15', weight: 4, interactive: false, lineJoin: 'round', lineCap: 'round' }).addTo(h.camada);
+        L.circleMarker(seg[0], { radius: 4, color: '#0b1220', weight: 1.5, fillColor: '#22c55e', fillOpacity: 1, interactive: false }).addTo(h.camada);
+        L.circleMarker(seg[seg.length - 1], { radius: 4, color: '#0b1220', weight: 1.5, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(h.camada);
+      });
+      if (pincel) pincel.addTo(h.camada);
+    }
+    function agendarDesenho() { if (!quadro) quadro = requestAnimationFrame(desenhar); }
+    function barra() {
+      var mudou = historico.length > 0;
+      var iv = intervalosDe(p);
+      h.barra('Borracha na trilha de ' + nomeExibido(p) + ': arraste sobre o trecho a apagar. Apagado agora: ' + apagados.size + ' ponto(s). Os pontos continuam guardados.', null, [
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'borracha-desfazer', texto: 'Desfazer', disabled: mudou ? null : true, onclick: function () { if (historico.length) { apagados = historico.pop(); desenhar(); barra(); } } }),
+        UI.el('button', { classe: 'btn btn-pequeno' + (mover ? ' btn-ativo' : ''), type: 'button', id: 'borracha-mover', texto: mover ? '✂ Voltar à borracha' : '✋ Mover mapa', onclick: function () { mover = !mover; aplicarModo(); barra(); } }),
+        iv && iv.length ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'borracha-restaurar', texto: '↺ Restaurar apagados (' + iv.length + ')', onclick: async function () { await restaurarTrechosGps(pid); if (!(intervalosDe(p) || []).length && est.desenho === dz) h.encerrar(); } }) : null,
+        UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'borracha-concluir', texto: '✔ Concluir', disabled: mudou ? null : true, onclick: concluir }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'borracha-cancelar', texto: 'Cancelar', onclick: cancelar }),
+      ]);
+    }
+    function aplicarModo() {
+      cont.classList.toggle('desenho-livre', !mover);
+      if (mover) { mapa.dragging.enable(); mapa.doubleClickZoom.enable(); mapa.boxZoom.enable(); }
+      else { mapa.dragging.disable(); mapa.doubleClickZoom.disable(); mapa.boxZoom.disable(); }
+    }
+    function ehControle(el) { return el && el.closest && el.closest('.leaflet-control-container, .leaflet-control, .leaflet-popup, #barra-desenho'); }
+    function apagarEm(ll) {
+      var raioM = RAIO_BORRACHA_PX * metrosPorPixel(ll.lat), mexeu = false;
+      for (var i = 0; i < pts.length; i++) {
+        var pt = pts[i];
+        if (!apagados.has(pt.id) && C.distancia(ll.lat, ll.lng, pt.lat, pt.lng) <= raioM) { apagados.add(pt.id); mexeu = true; }
+      }
+      return mexeu;
+    }
+    function apagarAte(ll) {
+      // pontos intermediários: um arrasto rápido não pode deixar "buracos" sem apagar
+      var raioM = RAIO_BORRACHA_PX * metrosPorPixel(ll.lat);
+      var u = gesto.ultimo, passos = Math.max(1, Math.ceil(u.distanceTo(ll) / (raioM / 2))), mexeu = false;
+      for (var i = 1; i <= passos; i++) {
+        if (apagarEm(L.latLng(u.lat + (ll.lat - u.lat) * i / passos, u.lng + (ll.lng - u.lng) * i / passos))) mexeu = true;
+      }
+      gesto.ultimo = ll;
+      return mexeu;
+    }
+    function aoDescer(ev) {
+      if (mover || saiu || ehControle(ev.target) || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+      ativos.add(ev.pointerId);
+      if (ativos.size > 1) { gesto = null; return; }   // pinça: zoom do mapa
+      ev.preventDefault(); ev.stopPropagation();
+      try { cont.setPointerCapture(ev.pointerId); } catch (e) { /* ignora */ }
+      var ll = mapa.mouseEventToLatLng(ev);
+      gesto = { id: ev.pointerId, ultimo: ll, snapshot: new Set(apagados), registrado: false };
+      var mexeu = apagarEm(ll);
+      mostrarPincel(ll);
+      if (mexeu) { historico.push(gesto.snapshot); gesto.registrado = true; agendarDesenho(); barra(); }
+    }
+    function aoMover(ev) {
+      if (saiu) return;
+      if (!mover && !ehControle(ev.target)) mostrarPincel(mapa.mouseEventToLatLng(ev));
+      if (!gesto || ev.pointerId !== gesto.id) return;
+      ev.preventDefault();
+      var lista = ev.getCoalescedEvents ? ev.getCoalescedEvents() : [];
+      if (!lista.length) lista = [ev];
+      var mexeu = false;
+      lista.forEach(function (e2) { if (apagarAte(mapa.mouseEventToLatLng(e2))) mexeu = true; });
+      if (mexeu) {
+        if (!gesto.registrado) { historico.push(gesto.snapshot); gesto.registrado = true; }
+        agendarDesenho(); barra();
+      }
+    }
+    function aoSubir(ev) { ativos.delete(ev.pointerId); if (gesto && ev.pointerId === gesto.id) gesto = null; }
+    function mostrarPincel(ll) {
+      if (!pincel) pincel = L.circleMarker(ll, { radius: RAIO_BORRACHA_PX, color: '#f97316', weight: 1.5, fillColor: '#f97316', fillOpacity: 0.12, interactive: false });
+      pincel.setLatLng(ll);
+      if (!h.camada.hasLayer(pincel)) pincel.addTo(h.camada);
+    }
+    function sair() {
+      if (saiu) return;
+      saiu = true;
+      cancelAnimationFrame(quadro);
+      cont.removeEventListener('pointerdown', aoDescer, true);
+      cont.removeEventListener('pointermove', aoMover, true);
+      cont.removeEventListener('pointerup', aoSubir, true);
+      cont.removeEventListener('pointercancel', aoSubir, true);
+      cont.classList.remove('desenho-livre');
+      mapa.dragging.enable(); mapa.doubleClickZoom.enable(); mapa.boxZoom.enable();
+      dz.borrachaGpsDe = null;
+      sujarTrilha(p);   // a trilha volta ao mapa (já sem os trechos apagados, se foi salvo)
+    }
+    async function cancelar() {
+      if (historico.length) {
+        var ok = await UI.confirmar({ titulo: 'Descartar o que foi apagado?', texto: 'A trilha continua como estava.', ok: 'Descartar', cancelar: 'Continuar apagando' });
+        if (!ok || est.desenho !== dz) return;
+      }
+      h.encerrar();
+    }
+    async function concluir() {
+      if (!historico.length) return;
+      var btnC = $('borracha-concluir'); if (btnC) btnC.disabled = true;
+      var novos = G.intervalosApagados(pts, apagados);
+      var todos = G.unirIntervalos((intervalosDe(p) || []).concat(novos));
+      if (todos.length > 300) {
+        UI.aviso('São trechos demais (' + todos.length + '). Restaure alguns ou apague trechos maiores de uma vez.', 'erro', 9000);
+        if (btnC) btnC.disabled = false;
+        return;
+      }
+      try {
+        await salvarTrechosOcultos(p, todos);
+        var tudo = pecas().length === 0;
+        h.encerrar();
+        UI.aviso('Trechos da trilha de ' + nomeExibido(p) + ' apagados do mapa' + (tudo ? ' (a trilha inteira)' : '') + '. Os pontos continuam guardados: dá para restaurar.', 'ok', 8000);
+      } catch (e) {
+        if (btnC) btnC.disabled = false;
+        UI.aviso('Não foi possível salvar: ' + e.message + ' O que você apagou continua na tela: tente de novo.', 'erro', 9000);
+      }
+    }
+    cont.addEventListener('pointerdown', aoDescer, true);
+    cont.addEventListener('pointermove', aoMover, true);
+    cont.addEventListener('pointerup', aoSubir, true);
+    cont.addEventListener('pointercancel', aoSubir, true);
+    dz.desligar = sair;
+    aplicarModo();
+    mapa.fitBounds(L.latLngBounds(pts.map(function (pt) { return [pt.lat, pt.lng]; })), { padding: [60, 60], maxZoom: 18 });
     desenhar();
     barra();
   }
@@ -11051,6 +11396,12 @@
   // (vários grupos ao mesmo tempo). Nenhum grupo ligado = todos.
   function filtroAtivo() { return est.filtroGrupos.size > 0; }
 
+  // Foco de uma pessoa (botão de olho da lista): no mapa só ela e o que é dela.
+  function visivelNoMapa(p) {
+    if (est.focoPessoa && p.id !== est.focoPessoa) return false;
+    return visivelNoFiltro(p);
+  }
+
   function visivelNoFiltro(p) {
     if (!filtroAtivo()) return true;
     var visivel = false;
@@ -11085,6 +11436,84 @@
   function mostrarTodosGrupos() {
     est.filtroGrupos.clear();
     aplicarFiltroGrupos(false);
+  }
+
+
+  /* ---------- Foco numa pessoa (olho da lista) ---------- */
+  // A pessoa, a trilha, as fotos, os relatos, os setores e o destino dela aparecem; o resto some do mapa
+  // (setores de outros ficam bem fracos). Não fica lembrado ao recarregar.
+  function pontoVisivelPorPref(mk, chave) {
+    if (est.focoPessoa) return mk.options.donoId === est.focoPessoa;
+    return Boolean(est.prefsMapa[chave]);
+  }
+
+  function aplicarFocoPontos() {
+    ['fotos', 'relatos'].forEach(function (chave) {
+      marcadoresDe(chave).forEach(function (mk) { mostrarPonto(mk, pontoVisivelPorPref(mk, chave)); });
+    });
+    est.setores.forEach(function (s) { if (s.camada && s.camada.setStyle) s.camada.setStyle(estiloSetor(s.d)); });
+    desenharDestinosGrupo();
+  }
+
+  // Tudo que é da pessoa com posição: ela, a trilha, fotos, relatos, setores e destino.
+  function pontosDaPessoa(p) {
+    var pts = [];
+    var pos = posicaoAtual(p);
+    if (pos) pts.push([pos.lat, pos.lng]);
+    pontosDesenhaveisDe(p).forEach(function (x) { if (x.lat != null) pts.push([x.lat, x.lng]); });
+    est.fotosMarc.forEach(function (mk) { if (mk.options.donoId === p.id) { var ll = mk.getLatLng(); pts.push([ll.lat, ll.lng]); } });
+    est.relatosMarc.forEach(function (mk) { if (mk.options.donoId === p.id) { var ll = mk.getLatLng(); pts.push([ll.lat, ll.lng]); } });
+    est.setores.forEach(function (s) {
+      if (s.d.participante_id !== p.id) return;
+      if (s.d.forma === 'circulo') {
+        var dLat = s.d.raio_m / 111320, dLng = dLat / Math.max(0.01, Math.cos(s.d.centro_lat * Math.PI / 180));
+        pts.push([s.d.centro_lat - dLat, s.d.centro_lng - dLng], [s.d.centro_lat + dLat, s.d.centro_lng + dLng]);
+      } else (s.d.pontos || []).forEach(function (q) { pts.push([q[0], q[1]]); });
+    });
+    var dest = est.destinos.get(p.id);
+    if (dest) pts.push([dest.lat, dest.lng]);
+    return pts;
+  }
+
+  function enquadrarPessoa(p) {
+    if (!est.mapa) return;
+    var pts = pontosDaPessoa(p);
+    if (!pts.length) { UI.aviso(nomeExibido(p) + ' ainda não tem posição nem trilha no mapa.'); return; }
+    var caixa = L.latLngBounds(pts);
+    // zoom só se necessário: se tudo já cabe na tela, o mapa só se desloca
+    if (est.mapa.getBounds().pad(-0.05).contains(caixa) && est.mapa.getZoom() >= 13) {
+      est.mapa.panTo(caixa.getCenter());
+    } else if (pts.length === 1) {
+      est.mapa.setView(pts[0], Math.max(est.mapa.getZoom(), 16));
+    } else {
+      est.mapa.fitBounds(caixa, { padding: [60, 60], maxZoom: 17 });
+    }
+  }
+
+  function atualizarBarraFoco() {
+    var barra = $('barra-foco');
+    var p = est.focoPessoa && est.participantes.get(est.focoPessoa);
+    if (!p) { if (barra) barra.remove(); return; }
+    if (!barra) {
+      barra = UI.el('div', { id: 'barra-foco', classe: 'barra-foco', role: 'status' });
+      $('mapa').parentNode.appendChild(barra);
+    }
+    barra.innerHTML = '';
+    barra.appendChild(UI.el('span', { classe: 'barra-foco-txt', texto: '👁 Mostrando só ' + nomeExibido(p) }));
+    barra.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'foco-sair', texto: '✕ Mostrar todos', onclick: function () { focarPessoa(null); } }));
+  }
+
+  function focarPessoa(id) {
+    var alvo = id && est.participantes.get(id) ? id : null;
+    if (alvo && est.focoPessoa === alvo) alvo = null;   // clicar de novo no olho desliga
+    est.focoPessoa = alvo;
+    est.participantes.forEach(function (q) { atualizarMarcador(q); desenharTrilha(q); });
+    aplicarFocoPontos();
+    est.listaSuja = true;
+    renderizarLista();
+    atualizarBarraFoco();
+    if (est.mapa) est.mapa.invalidateSize();
+    if (alvo) enquadrarPessoa(est.participantes.get(alvo));
   }
 
   // Não fica lembrado ao recarregar (para ninguém esquecer pessoas escondidas).
@@ -11129,7 +11558,7 @@
       if (!g) return;
       membrosDe(g.id).forEach(function (x) {
         var d = est.destinos.get(x.p.id);
-        if (!d || x.p.dados.removido) return;
+        if (!d || x.p.dados.removido || !visivelNoMapa(x.p)) return;
         var nome = nomeExibido(x.p);
         L.marker([d.lat, d.lng], {
           icon: L.divIcon({ className: 'mk-destino-wrap', html: '<div class="mk-destino">🧭</div>', iconSize: [0, 0] }),
@@ -12435,8 +12864,12 @@
     participantes: function () { return Array.from(est.participantes.values()); },
     participante: function (id) { return est.participantes.get(id) || null; },
     nome: function (p) { return nomeExibido(p); },
+    grupoNome: function (p) { var g = grupoDoParticipante(p); return g ? g.nome : null; },
+    trechosApagados: function (p) { var iv = intervalosDe(p); return iv ? iv.length : 0; },
+    focar: focarPessoa,
+    abrirPessoa: function (id) { selecionar(id); },
     tipo: function (p) { return tipoDe(p.dados); },
-    trilha: function (p) { return trilhaDePontos(p.pontos, true); },
+    trilha: function (p) { return trilhaDePontos(p.pontos, true, intervalosDe(p)); },
     posicao: function (p) { return posicaoAtual(p); },
     pontosInteresse: function () { return Array.from(est.pontosInt.values()).map(function (x) { return x.d; }); },
     setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },

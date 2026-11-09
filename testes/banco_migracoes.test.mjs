@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando', '070_opacidade_setores']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando', '070_opacidade_setores', '071_trilhas_apagadas_borracha']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -3049,6 +3049,7 @@ for (let i = 0; i < 6; i++) { const o = await rpc(resp1, 'criar_operacao', { p_c
 chk(outrosCods.size === 7, 'os códigos não se repetem entre operações');
 await db.query(`update public.operacoes set codigo_acesso = null where id = $1`, [opC.id]);
 await db.exec(ler('supabase/migracoes/069_codigo_acesso_pedidos_publico_comando.sql'));
+await db.exec(ler('supabase/migracoes/071_trilhas_apagadas_borracha.sql'));   // a 069 refeita acima desfaz as funções que a 071 redefine (em produção cada migração roda uma vez, em ordem)
 const cod2 = (await db.query(`select codigo_acesso c from public.operacoes where id = $1`, [opC.id])).rows[0].c;
 chk(/^[A-HJ-NP-Z2-9]{6}$/.test(cod2), 'operação ativa que já existia (sem código) recebe um ao aplicar a migração', cod2);
 const CODIGO = cod2;
@@ -3190,5 +3191,54 @@ console.log('\nOpacidade dos setores');
   chk(/permission|denied|row-level|sem_permissao/i.test(await erroDe(como(resp2, `update public.setores set opacidade = 0.4 where id = $1`, [sO.id]))) || (await db.query(`select opacidade from public.setores where id = $1`, [sO.id])).rows[0].opacidade === 0.3, 'quem não é da operação não altera a opacidade');
 }
 
-console.log('\nMigrações 007–070 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Apagar trechos da trilha de GPS (migração 071) ---
+console.log('\nBorracha na trilha de GPS (trechos apagados do mapa)');
+{
+  const opB = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP BORRACHA', p_retencao_horas: 0 });
+  await db.query(`update public.operacoes set criada_em = now() - interval '8 hours' where id = $1`, [opB.id]);
+  const anB = [await usuario(null, true), await usuario(null, true)];
+  const pB = [];
+  for (let i = 0; i < 2; i++) pB.push(await rpc(anB[i], 'ingressar', { p_token: opB.token_civil, p_nome: 'Borracha ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+  const t0 = Date.now() - 3 * 3600e3;
+  const pts = []; for (let k = 0; k < 40; k++) pts.push(pt(9800 + k, -25.6 + k * 0.0001, -49.4, t0 + k * 15000));
+  await enviaT(anB[0], pB[0].participante_id, pts);
+  await enviaT(anB[1], pB[1].participante_id, pts.map((x, k) => pt(9900 + k, -25.7 + k * 0.0001, -49.4, t0 + k * 15000)));
+  const ate = (k) => new Date(t0 + k * 15000).toISOString();
+  const iv = [{ de: ate(10), ate: ate(19) }];
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify(iv) }))), 'responsável de fora da operação não apaga trechos');
+  chk(/permission|denied/i.test(await erroDe(como(anB[0], `select public.salvar_trilha_oculta($1, $2::jsonb)`, [pB[0].participante_id, JSON.stringify(iv)]))) || /sem_permissao/.test(await erroDe(como(anB[0], `select public.salvar_trilha_oculta($1, $2::jsonb)`, [pB[0].participante_id, JSON.stringify(iv)]))), 'o próprio participante não apaga a trilha');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify([{ de: ate(5), ate: ate(1) }]) }))), 'intervalo com início depois do fim: recusado');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify([{ de: 'ontem', ate: 'hoje' }]) }))), 'horários que não são horários: recusados');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify({ de: 1 }) }))), 'o que não é lista: recusado');
+  const gravado = await rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify(iv) });
+  chk(gravado.intervalos.length === 1, 'o responsável grava o intervalo apagado', gravado);
+  const antes = (await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [pB[0].participante_id])).rows[0].n;
+  chk(antes === 40, 'as 40 posições continuam no banco (nada é apagado)', antes);
+  chk((await como(resp1, `select count(*)::int n from public.trilhas_ocultas where operacao_id = $1`, [opB.id])).rows[0].n === 1, 'responsável da operação lê');
+  chk((await como(anB[0], `select count(*)::int n from public.trilhas_ocultas`)).rows[0].n === 0, 'participante não lê (RLS)');
+  chk(await (async () => { try { await como(resp1, `update public.trilhas_ocultas set intervalos = '[]'`); return false; } catch (e) { return /permission|row-level/i.test(String(e.message)); } })(), 'ninguém escreve direto (só pela função)');
+  // substitui a lista inteira
+  const dois = await rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify([{ de: ate(2), ate: ate(4) }, { de: ate(30), ate: ate(35) }]) });
+  chk(dois.intervalos.length === 2, 'salvar de novo troca a lista inteira');
+  // trilhas da equipe: o participante 2 vê a trilha do 1 sem os pontos apagados
+  await db.query(`update public.operacoes set criada_em = now() - interval '8 hours' where id = $1`, [opB.id]);
+  const equipe = await rpc(anB[1], 'trilhas_da_equipe', { p_participante: pB[1].participante_id });
+  const nEq = equipe.reduce((a, t) => a + t.pontos.length, 0);
+  chk(equipe.length === 1 && nEq > 0 && nEq <= 40 - 3 - 6 + 2, 'trilhas da equipe (mapa do participante) sem os pontos apagados', nEq);
+  await rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify([{ de: ate(0), ate: ate(39) }]) });
+  chk((await rpc(anB[1], 'trilhas_da_equipe', { p_participante: pB[1].participante_id })).length === 0, 'trilha toda apagada: some do mapa dos outros');
+  // link público: a lista vai junto, e as posições continuam no documento (o painel aplica o filtro)
+  const lk = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opB.id });
+  const doc = (await como(null, `select public.comando_publico($1, null) r`, [lk.token], 'anon')).rows[0].r;
+  chk(Array.isArray(doc.tabelas.trilhas_ocultas) && doc.tabelas.trilhas_ocultas.length === 1 && doc.tabelas.trilhas_ocultas[0].intervalos.length === 1, 'o link público recebe os trechos apagados', [doc.tabelas.trilhas_ocultas, Object.keys(doc.tabelas)]);
+  chk(!/atualizado_por_nome|"user_id"/.test(JSON.stringify(doc.tabelas.trilhas_ocultas)), 'sem o nome de quem apagou');
+  // restaurar
+  const rest = await rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: '[]' });
+  chk(rest.intervalos.length === 0 && (await rpc(anB[1], 'trilhas_da_equipe', { p_participante: pB[1].participante_id })).length === 1, 'lista vazia restaura tudo');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'trilha_apagada'`, [opB.id])).rows[0].n >= 4, 'apagar e restaurar entram no diário');
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: opB.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify(iv) }))), 'operação encerrada: não apaga mais trechos');
+}
+
+console.log('\nMigrações 007–071 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

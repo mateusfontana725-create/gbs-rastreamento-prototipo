@@ -803,10 +803,10 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 - **Concluído e o ×**: depois de marcar o setor como Concluído, o detalhe antigo (ainda "Pendente") ficava por baixo do novo e voltava
   a aparecer ao tocar no ×; agora o antigo é fechado antes.
 - **Opacidade do preenchimento do setor** (migração 070): no formulário do setor, **Opacidade do preenchimento** (10% a 90%) mostra
-  a prévia no mapa enquanto você mexe; **Cancelar** desfaz. Por padrão o setor segue a cor de cada situação (pendente, em andamento,
-  concluído); desmarcar **Usar a padrão da situação** deixa escolher. Fica gravada com o setor, então todos os celulares da operação
+  a prévia no mapa enquanto você mexe; **Cancelar** desfaz. Por padrão o fundo é **claro** (pendente 10%, em andamento 18%, concluído 10%); desmarcar **Usar a padrão** deixa escolher até 90%. Fica gravada com o setor, então todos os celulares da operação
   veem a mesma opacidade. **Antes de usar, rode `070_opacidade_setores.sql` no Supabase.** Não muda o contorno nem o nome. O mapa do
   participante ainda usa a padrão.
+  Para mudar **todos os setores de uma vez neste aparelho**: **Camadas → Preenchimento dos setores** (5% a 70%; "Padrão" volta ao claro). O ajuste de um setor, quando existe, vale mais que o do aparelho.
 - **Elementos sobrepostos**: os setores **menores ficam desenhados por cima** dos maiores (o contorno de quem está dentro de outro
   continua inteiro à vista). Tocar num ponto coberto por mais de um **setor ou área proibida** abre **direto o menor que contém o
   ponto**, com o contorno destacado: num círculo dentro de outro, tocar no miolo abre o de dentro e tocar no anel abre o de fora.
@@ -1096,14 +1096,33 @@ A política de conteúdo (`vercel.json`) libera as imagens do radar em `*.rainvi
 
 ### Trilhas GPS: captura, envio e desenho
 
+- **Borracha na trilha de GPS dos participantes** (migração 071): apaga trechos da trilha de quem está na busca, **mesmo ainda ativo**,
+  passando o dedo ou o mouse sobre o trecho no mapa, como num app de desenho. Onde achar:
+  - **Ferramentas → ✂ Apagar trecho de trilha de GPS** (escolhe de quem é a trilha);
+  - **tocar na trilha no mapa → ✂ Apagar trechos** (no balão);
+  - **ficha da pessoa → ⋮ Mais → ✂ Apagar trechos da trilha**;
+  - **Setores, trilhas e pontos → Trilhas de GPS dos participantes** (lista de quem tem trilha, com ✂ ao lado de cada uma).
+  Na borracha: **Desfazer**, **✋ Mover mapa**, **↺ Restaurar apagados** (no menu "…") e **✔ Concluir**. **Nada é apagado do banco**: o
+  trecho fica guardado como intervalo de horário (`trilhas_ocultas`) e some do mapa para todos os responsáveis, do mapa dos
+  participantes e do link público, e deixa de contar na distância e na fadiga. Os pontos novos que a pessoa gravar depois continuam
+  aparecendo. Dá para restaurar. Apagar e restaurar entram no diário. Só em operação ativa. Relatórios calculados no servidor ainda
+  usam todas as posições. **Antes de usar, rode `071_trilhas_apagadas_borracha.sql` no Supabase.**
+
 - **Desenho no estilo AlpineQuest** (painel do comando): linha cheia e contínua, mais grossa (6 px de perto, mais fina de longe), com
   **contorno escuro** por baixo em todas as pessoas, **setas brancas no sentido do deslocamento** (a cada ~70 px na tela, a partir do
-  zoom 15) e a **hora do início e do fim** nas pontas ("▶ 10h14", "■ 15h04"; com a data se não for hoje). Os horários aparecem de perto
-  (zoom 16 ou mais) ou para a pessoa selecionada; quem ainda está enviando não tem hora de fim (o símbolo dela marca onde está). Com
+  zoom 15). **Datas e horários não ficam desenhados no mapa** (poluíam): ficam nos **detalhes da trilha**. Com
   alguém selecionado, as outras trilhas e setas ficam apagadas. O tipo da pessoa (civil, bombeiro, responsável) continua no símbolo e no
   toque na trilha; a linha não é mais tracejada para os civis.
+- **Detalhes da trilha** (painel): tocar na trilha mostra de quem é e um resumo (distância, horário); **Detalhes da trilha ›**
+  abre pessoa/grupo, distância percorrida, **data e hora do início e do fim**, duração, tempo em movimento e parado, ritmo,
+  velocidades, **subida e descida acumuladas**, altitude mínima/máxima e o **perfil de altitude** (e quantos trechos foram apagados).
+  O balão também tem **Ficha de …** e **✂ Apagar trechos**. A mesma tela abre pela ficha ("📈 Estatísticas da trilha").
+- **Olho na lista de participantes** (painel): o botão 👁 na linha da pessoa leva o mapa até ela e mostra **só ela e o que é dela**:
+  posição, trilha (mesmo que as trilhas estejam ocultas), fotos, relatos, setores atribuídos (os dos outros ficam bem fracos) e destino.
+  O zoom só muda se tudo não couber na tela. Aparece a barra "Mostrando só X · ✕ Mostrar todos"; tocar no olho de outra pessoa troca
+  o foco e tocar de novo no mesmo desliga. A lista continua com todos e o foco não fica lembrado ao recarregar.
 - **Mesmo estilo na página do participante** (navegador e aplicativo): a **sua trilha** ganha contorno escuro, linha grossa e contínua na
-  cor do seu grupo, setas brancas no sentido em que você andou e a **hora em que começou** ("▶ 10h14", de perto). As **trilhas da
+  cor do seu grupo, setas brancas no sentido em que você andou (sem horários desenhados). As **trilhas da
   equipe** (sem nome e sem horário) também ficam com contorno escuro e setas, numa cor só; a sua fica por cima. A espessura acompanha o
   zoom e as setas só aparecem a partir do zoom 15.
 
@@ -2442,6 +2461,11 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 48d | Ficar mais de 30 min na base e voltar a campo | a fadiga volta a verde e o tempo de busca recomeça do fim do descanso |
 | 48e | Equipe andando 2 h, 4 h e 8 km, 15 km (ou grupo com média alta) | o ponto da lista passa de verde a amarelo e a vermelho; ficha e dashboard mostram o motivo (tempo, km, grupo) |
 | 48f | Abrir o **Dashboard** da operação ativa | indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso" com pessoas e grupos |
+| 50a | Com uma pessoa andando, **Ferramentas → ✂ Apagar trecho de trilha de GPS**, escolher a pessoa e arrastar sobre um trecho, **Concluir** | o trecho some do mapa (linha cortada, sem ligar por cima), os pontos novos seguem aparecendo; nos outros painéis e no mapa dos participantes também |
+| 50b | Tocar numa trilha de GPS no mapa; abrir a ficha; abrir Setores, trilhas e pontos | em todos há como apagar trechos (balão, ⋮ Mais, lista "Trilhas de GPS dos participantes") |
+| 50c | **↺ Restaurar apagados** (no menu "…" da borracha ou na ficha) | a trilha volta inteira |
+| 50d | Abrir o link público depois de apagar um trecho | o trecho apagado também não aparece lá |
+| 50e | Olhar o fundo dos setores; em **Camadas → Preenchimento dos setores** mexer no controle; em Editar setor mudar a opacidade de um | fundo claro por padrão; o controle muda todos os setores sem opacidade própria; o ajuste do setor vale mais |
 | 49a | No Android, abrir o link de civis, preencher e tocar em COMEÇAR | depois de permitir a localização, abre sozinho "Baixe o aplicativo para ajudar melhor"; "Agora não" fecha; o botão "Baixar aplicativo" continua no MENU; ao recarregar não abre de novo |
 | 49b | No aplicativo instalado e sem operação, abrir o aplicativo | aparece "Entrar na busca com o código" (servidor fixado na compilação) |
 | 49c | Digitar o código (minúsculas ou com espaço), nome e celular e pedir | tela "Aguardando os bombeiros"; no painel aparece o aviso e o botão 🔑 1 |

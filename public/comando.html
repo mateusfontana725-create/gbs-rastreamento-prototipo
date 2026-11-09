@@ -312,6 +312,7 @@
                 <button class="menu-secao-titulo" type="button" aria-expanded="true">Mapa e arquivos</button>
                 <div class="menu-secao-itens">
                 <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
+                <button class="menu-item" type="button" id="menu-borracha-gps" title="Borracha: apaga trechos da trilha de GPS de um participante (os pontos continuam guardados)"><span class="ico-item" aria-hidden="true">✂</span><span>Apagar trecho de trilha de GPS</span></button>
                 <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
                 <button class="menu-item" type="button" id="menu-medir"><span class="ico-item" aria-hidden="true">↔</span><span>Medir distância e área</span></button>
                 <button class="menu-item" type="button" id="menu-regua" aria-pressed="false"><span class="ico-item" aria-hidden="true">◎</span><span>Régua circular</span></button>
@@ -435,6 +436,14 @@
                 <button class="chip-camada" type="button" id="opt-local" aria-pressed="true"><span class="camada-sinal sinal-local" aria-hidden="true"></span><span class="chip-txt">Local da operação</span></button>
               </div>
             </div>
+            <div class="camadas-preenchimento" id="camadas-preenchimento">
+              <label for="opt-setores-opac">Preenchimento dos setores <output id="opt-setores-opac-valor" class="mono">padrão</output></label>
+              <div class="camadas-preench-linha">
+                <input id="opt-setores-opac" type="range" min="5" max="70" step="5" value="10" aria-label="Opacidade do fundo dos setores">
+                <button class="btn btn-pequeno" type="button" id="opt-setores-opac-padrao" title="Volta ao preenchimento claro padrão">Padrão</button>
+              </div>
+              <small class="muted">Do mais claro ao mais escuro. Vale para este aparelho; cada setor pode ter o seu em Editar setor.</small>
+            </div>
             <div class="grupo-camadas" role="group" aria-labelledby="gc-campo">
               <h5 id="gc-campo">Registros do campo</h5>
               <div class="chips-camadas">
@@ -551,6 +560,15 @@
             <p class="muted" id="trilhas-vazio">Nenhuma trilha desenhada.</p>
           </div>
           <div class="ficha-bloco">
+            <h3>Trilhas de GPS dos participantes (<span id="qtd-trilhas-gps">0</span>)</h3>
+            <p class="ajuda">O rastro gravado pelo celular de cada pessoa. Toque no nome para abrir a ficha. Com a <b>borracha</b> você apaga trechos do mapa; as posições continuam guardadas e dá para restaurar.</p>
+            <div class="acoes-linha">
+              <button class="btn btn-pequeno" type="button" id="areas-apagar-trechos">✂ Apagar trechos de uma trilha</button>
+            </div>
+            <ul class="lista-areas" id="lista-trilhas-gps"></ul>
+            <p class="muted" id="trilhas-gps-vazio">Ninguém tem trilha de GPS gravada ainda.</p>
+          </div>
+          <div class="ficha-bloco">
             <h3>Pontos de interesse (<span id="qtd-pontos-int">0</span>)</h3>
             <div class="acoes-linha">
               <button class="btn btn-pequeno" type="button" id="areas-novo-ponto">＋ Marcar ponto</button>
@@ -654,6 +672,8 @@
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-ir-ate" title="Traçar a rota até onde esta pessoa está (para ir até ela ou mandar apoio)">📍 Rota até ela</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-trilha" aria-pressed="true">Trilha</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-gravacao" hidden title="Liga ou desliga a gravação do caminho desta pessoa (a posição atual continua aparecendo)">⏹ Desativar a gravação da trilha</button>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-apagar-trechos" hidden title="Borracha: apaga trechos da trilha desta pessoa do mapa (os pontos continuam guardados)">✂ Apagar trechos da trilha</button>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-restaurar-trechos" hidden title="Volta a mostrar os trechos da trilha que foram apagados">↺ Restaurar trechos apagados</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
                 <a class="menu-linha-item" role="menuitem" id="ficha-ligar" href="#" hidden>📞 Ligar</a>
               </div>

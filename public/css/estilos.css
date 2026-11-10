@@ -2636,9 +2636,7 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 .espera-icone { font-size: 2.6rem; line-height: 1; margin-bottom: 4px; }
 .espera-acesso .btn { margin-top: 8px; }
 
-/* Participante militar: ferramentas (migração 072) */
-.ferramentas-militar { display: grid; gap: 8px; margin: 10px 0; padding: 10px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
-.ferramentas-militar .titulo-secao { margin: 0; }
+/* Participante militar: ferramentas (migração 072); o menu fica no fim do arquivo */
 .fm-dica:empty { display: none; }
 .popup-setor-militar { display: grid; gap: 6px; min-width: 180px; }
 .popup-setor-militar p { margin: 0; }
@@ -2698,10 +2696,6 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-sel
 /* Saída pendente: aparece sob o estado, sem ocupar a tela */
 #tela-rastreio .saida-pendente { margin: 6px 0 0; padding: 6px 8px; font-size: .74rem; line-height: 1.3; }
 
-/* Menu do militar: ações em botões de toque (44 px), uma por linha */
-.menu-acoes { display: grid; gap: 8px; margin: 8px 0 12px; }
-.menu-acoes .btn { min-height: 44px; width: 100%; justify-content: flex-start; font-size: .9rem; }
-.menu-acao-sos { background: #d62828 !important; border-color: #ff8a8a !important; color: #fff !important; font-weight: 800; }
 
 /* Janela Registrar: foto e galeria no topo, botões de toque */
 /* Desenho de setor (militar): barra compacta acima da barra de baixo, sem tapar o mapa */
@@ -2718,3 +2712,49 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-sel
 .bussola-civil.pelo-gps #bussola-direcao { color: #7dd3fc; }
 .bussola-civil.sem-rumo .bussola-rosa { opacity: .35; }
 .bussola-civil.sem-rumo #bussola-direcao { color: var(--texto-2); font-weight: 600; }
+
+/* ===== Menu do participante (militar): seções com título, uma ação por linha, botões de toque ===== */
+.folha-cabeca { padding-bottom: 10px; border-bottom: 1px solid var(--borda); }
+.folha-cabeca h2 { font-size: 1.15rem; letter-spacing: .02em; }
+.folha-corpo .quem-sou { margin: 0 0 2px; font-size: .84rem; color: var(--texto-3); }
+.menu-grupo { margin: 14px 0 0; }
+.menu-grupo-titulo { margin: 0 0 6px; font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--texto-3); }
+.menu-lista { display: grid; gap: 6px; }
+.menu-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px; margin: 0;
+  background: var(--superficie-2); color: var(--texto); border: 1px solid var(--borda); border-radius: 12px;
+  font: inherit; text-align: left; cursor: pointer; box-shadow: none;
+}
+.menu-item:hover, .menu-item:focus-visible { border-color: var(--borda-forte); outline: none; }
+.menu-item[hidden] { display: none; }
+.menu-item:disabled { opacity: .6; cursor: default; }
+.menu-item-ico {
+  flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px;
+  background: rgba(255, 255, 255, .07); font-size: 1.1rem; line-height: 1;
+}
+.menu-item-txt { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.menu-item-txt strong { font-size: .95rem; font-weight: 700; }
+.menu-item-txt small { font-size: .78rem; color: var(--texto-3); line-height: 1.25; }
+.menu-item-seta { flex: none; font-size: 1.4rem; line-height: 1; color: var(--texto-3); }
+.menu-item-sos { border-color: #ef4444; }
+.menu-item-sos .menu-item-ico { background: #d62828; color: #fff; }
+.menu-item-sos .menu-item-txt strong { color: #fecaca; font-weight: 800; }
+.menu-item-perigo { border-color: rgba(239, 68, 68, .45); }
+.menu-item-perigo .menu-item-ico { background: rgba(239, 68, 68, .15); }
+.menu-item-perigo .menu-item-txt strong { color: #fca5a5; }
+.folha-legenda { margin: 6px 0 0; }
+.folha-corpo .linha-opcao { margin-top: 4px; }
+
+/* Escolha do tipo de setor (desenhar ou círculo) */
+.opcoes-setor-p { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opcao-setor-p {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 104px; padding: 14px; margin: 0;
+  background: var(--superficie-2); color: var(--texto); border: 1px solid var(--borda); border-radius: 12px;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.opcao-setor-p:hover, .opcao-setor-p:focus-visible { border-color: var(--acento); outline: none; }
+.opcao-setor-p-ico { font-size: 1.6rem; line-height: 1; color: var(--acento); }
+.opcao-setor-p strong { font-size: .95rem; }
+.opcao-setor-p small { font-size: .8rem; color: var(--texto-3); line-height: 1.25; }
+@media (max-width: 420px) { .opcoes-setor-p { grid-template-columns: 1fr; } }
+

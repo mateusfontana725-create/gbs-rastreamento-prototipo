@@ -77,9 +77,9 @@ mapa e toca um alarme no painel.
 
 A tela do civil é propositalmente simples, para quem está nervoso procurando alguém:
 
-- **Um único aviso de situação**, em linguagem comum: "Os bombeiros estão vendo onde você está"
-  (verde), "Procurando o sinal de GPS…", "Sem internet agora — sua localização está sendo guardada"
-  (amarelo) ou "O GPS do celular está desligado" (vermelho). Sem horários, precisão ou contadores técnicos.
+- **Avisos só quando há problema**, em linguagem comum: "Procurando o sinal de GPS…", "Sem internet agora — sua localização está sendo guardada"
+  (amarelo), "O GPS do celular está desligado" (vermelho) ou "Seu caminho não está sendo gravado". Enquanto está tudo certo, não aparece
+  nenhuma caixa (nada de "Os bombeiros estão vendo você"). Sem horários, precisão ou contadores técnicos.
 - **Mapa**: mostra **você** (ponto azul, com o círculo de precisão) e os **bombeiros** da operação —
   militares de campo (quadrado vermelho **M**) e o **responsável da operação** (losango vermelho **R**, só quando ele
   está compartilhando). Civis de outros grupos **não** aparecem; quem está no **seu grupo** aparece com a
@@ -113,7 +113,8 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   RETORNE etc.) continuam abrindo o alerta em tela cheia na hora.
 - Fotos: prévia "A foto ficou boa?" sem coordenadas; "Suas fotos" mostra só miniaturas com
   "✓ Enviada" ou "Esperando internet".
-- Sair: **Quero sair da busca**, no canto inferior direito acima da barra (os bombeiros liberam a saída pelo painel).
+- **Começar** entra direto no rastreamento, sem perguntar nada, e a gravação do caminho começa junto. O **civil não tem como parar a gravação** nem
+  pedir saída pelo aparelho: não há botão de sair na tela dele. Quem para é o militar, pelo menu (abaixo).
 - **Mapa abre no satélite** (civil e militar). Um fundo escolhido pela pessoa (Camadas) fica guardado neste aparelho; enquanto ela não
   escolhe outro, o satélite vale.
 - **Link de militares só registra militar** (migração 073): o link de militares não oferece a escolha de civil; quem entra por ele é
@@ -404,14 +405,15 @@ O mapa da página do participante mostra, além dos bombeiros:
 - **Download do aplicativo**: no Android, logo depois do cadastro pelo link (ao entrar na operação), o passo a passo **"Baixe o aplicativo
   para ajudar melhor"** abre sozinho, uma vez por participação, com **Agora não**. O botão **📱 Baixar aplicativo** fica no canto
   inferior direito, acima da barra (aparece quando o aplicativo está disponível).
-- **Tela do participante voltada para o mapa** (navegador e aplicativo): durante a busca o **mapa ocupa a tela inteira**. Em cima, o estado
-  ("Os bombeiros estão vendo você", sem internet etc.) e os avisos (área de risco, destino). À direita, **📍 onde estou**, **🗺 camadas** e a
+- **Tela do participante voltada para o mapa** (navegador e aplicativo): durante a busca o **mapa ocupa a tela inteira**. Em cima, só os avisos
+  de problema (sem GPS, sem internet, caminho não gravado) e os avisos (área de risco, destino). À direita, **📍 onde estou**, **🗺 camadas** e a
   bússola. Embaixo, uma barra enxuta de toque (50 px):
   - **Civil**: **🆘 SOS** (vermelho, pede confirmação) e **＋ REGISTRAR**. Não há mais FOTO na barra nem MENU: a foto (tirar ou da
     galeria) fica dentro do **REGISTRAR**, junto com mensagem e algo encontrado. A legenda do mapa continua no mapa.
-  - **Militar**: só **☰ MENU**. Dentro dele: SOS, **＋ Registrar** (mensagem, algo encontrado, foto), quem é você, suas fotos, legenda,
-    e as **Ferramentas do militar** (setores e pontos, conforme liberado).
-  - **Quero sair da busca** e **Baixar aplicativo** ficam no canto inferior direito, acima da barra; o aviso "pedido para sair
+  - **Militar**: só **☰ MENU**. O menu tem seções com título: **Ações** (SOS, ＋ Registrar), **Ferramentas** (**Criar setor**, que abre a
+    escolha "Desenhar a área" ou "Em círculo"; e **Marcar ponto de interesse**, conforme liberado), **Busca** (**Sair da busca**: pede a saída,
+    e é aqui que o militar para a gravação) e **Mapa** (legenda). Suas fotos e o diagnóstico do GPS ficam no fim.
+  - **Baixar aplicativo** fica no canto inferior direito, acima da barra; o aviso "pedido para sair
     enviado" aparece sob o estado. A navegação até um destino vira um cartão sobre o mapa: fechado mostra a
   distância e a direção (e "Busca no setor concluída"); tocar no título abre a rota, os modos e "Encerrar navegação".
 - **Tipos de operação SARP e BREC**: na **Natureza** do cadastro, além de busca aquática e terrestre, **SARP – Aeronave remotamente
@@ -2191,7 +2193,7 @@ RETORNE, ATENÇÃO, MUDE A ROTA e PARE pedem confirmação antes do envio, e o t
 camadas (Mapa, Topográfico, Satélite), fotos e relatos ficam em **Ferramentas** (seção 1); a lista
 de participantes tem os próprios botões de ocultar/mostrar.
 
-**Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **COMEÇAR** → confirma ("Começar a enviar sua localização?") → permite
+**Participante**: abre o link → digita nome, **CPF** (opcional) e **celular** → **COMEÇAR** (sem outra confirmação; a gravação começa) → permite
 a localização. O **CPF é opcional** para todos (migração 029); se informado, é conferido pelos dígitos
 verificadores. O celular é obrigatório para civis e opcional para militares (link dos bombeiros). Deve manter a página aberta e a tela
 ligada (a opção "Manter a tela ligada" já vem marcada). Para sair, toca em **Solicitar encerramento**.
@@ -2286,7 +2288,7 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
    (OpenStreetMap) num raio de ~3 km, em zoom 10 a 16, e guarda outra área quando a pessoa se afasta mais de 1,5 km das
    já guardadas ou recebe um destino (até 4 áreas; uma nova apaga a mais antiga). Respeita a política de uso do
    tile.openstreetmap.org: no máximo 250 quadros por área em zoom ≥ 13 (aqui ≤ 240), baixados um por vez. Embaixo do
-   mapa aparece "Mapa guardado no aparelho: N área(s)…" com a conferência de quantas partes estão de fato guardadas.
+   mapa avisa só se faltar parte do mapa ("Mapa incompleto no aparelho: X de Y partes"); completo, não aparece aviso nenhum.
    Fora dessas áreas, sem internet, o mapa fica em branco; a posição continua sendo registrada normalmente.
 3. **Mensagens com a página fechada** não chegam. Com a página aberta em segundo plano, o celular
    vibra, toca um alerta e, se o participante tocou em **Ativar alertas de mensagem**, mostra uma
@@ -2491,7 +2493,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40p | Modo SCI → **Mapa operacional e setores**, depois **← Voltar** e **Operação** | o mapa aparece dentro do Modo SCI com o menu; volta para a página anterior; no modo Operação o mapa está no lugar e do tamanho certo |
 | 40q | Abrir o Modo SCI numa operação encerrada, com outro responsável | tudo visível, sem botões de alterar; sem o assistente "Estabelecer o SCI" |
 | 40r2 | Abrir uma operação no celular do responsável; a localização já aparece no mapa sem nenhum toque; depois **Ferramentas → Gravar minha trilha** → **Gravar trilha**; andar 2 min; tocar de novo → **Parar gravação** | a localização aparece logo ao abrir (sem gravar trilha); ao gravar, a trilha desenha os passos; ao parar, a trilha para e a localização continua no mapa |
-| 40r3 | No celular do civil, tocar **COMEÇAR** | aparece "Começar a enviar sua localização?"; **Agora não** não envia nada; **Começar** entra no rastreamento |
+| 40r3 | No celular do civil, tocar **COMEÇAR** | entra direto no rastreamento, sem pergunta; não há botão de sair nem de parar a gravação na tela do civil |
 | 40r4 | **Trilha → • Ponto a ponto**, tocar 4 pontos, arrastar o mapa, **Desfazer ponto**, **✔ Concluir** | os pontos aparecem ligados por retas; arrastar só move o mapa; a trilha é salva como planejada ("Trilha N · hora") sem abrir janelas |
 | 40r5 | Abrir o painel com trilhas no computador e no celular (e girar o celular) | no celular as trilhas ficam mais finas; no computador, iguais às de antes |
 | 40r6 | Ligar **☂ Meteorologia** num dia com chuva na região e afastar o mapa | o botão **Chuva** vem aceso; manchas coloridas (azul a vermelho) mostram onde chove, com a legenda em mm/h; tocar em **Chuva** tira a camada |
@@ -2572,7 +2574,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 49d | No painel, **Aceitar como civil** (ou bombeiro); em outro pedido, **Recusar** | o celular aceito segue sozinho para a tela da operação já preenchida; o recusado volta ao código com a explicação; as decisões vão ao diário |
 | 49e | Fechar o aplicativo com o pedido esperando e abrir de novo | continua esperando o mesmo pedido |
 | 49f | **Trocar código** e **Desligar entrada por código**; tentar o código antigo e o desligado | os dois são recusados ("não existe ou está desligado"); errar 8 vezes barra por 10 minutos |
-| 49g | Durante a busca, olhar a tela do participante | civil: mapa em tela cheia, SOS e REGISTRAR embaixo, sem MENU; militar: só MENU; "Quero sair da busca" no canto inferior direito; abre no satélite |
+| 49g | Durante a busca, olhar a tela do participante | civil: mapa em tela cheia, SOS e REGISTRAR embaixo, sem MENU; militar: só MENU; sem botão de sair (o militar sai pelo menu, em Busca); abre no satélite |
 | 49h | Criar operação com natureza SARP e outra BREC | o cabeçalho, a lista e os relatórios mostram o tipo |
 | 49i | **Ferramentas → Link público do painel**, criar e abrir o link numa janela anônima (sem login) | mapa ao vivo, nomes como "Participante N", sem botões de edição, mensagens, convite, Ferramentas só com visualização; marcar "Mostrar os nomes" mostra os nomes; trocar/desligar faz o link antigo mostrar "não funciona mais" |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |

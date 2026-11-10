@@ -237,7 +237,6 @@
         <div class="controles-topo" id="controles-topo">
           <button class="btn btn-pequeno btn-notif" type="button" id="btn-notif" hidden>🔔 Avisar mensagens</button>
           <button class="btn btn-pequeno btn-app" type="button" id="btn-app" hidden>📱 Baixar aplicativo</button>
-          <button class="btn btn-pequeno btn-saida" type="button" id="btn-saida">Sair da busca</button>
         </div>
 
         <!-- Barra de baixo. Civil: SOS e Registrar. Militar: só o Menu (ali estão as funções dele). -->
@@ -266,26 +265,58 @@
               <button class="btn btn-pequeno" type="button" id="folha-fechar" aria-label="Fechar o menu">✕ Fechar</button>
             </header>
             <p class="quem-sou" id="st-nome"></p>
-            <!-- Só militares: as ações que no civil ficam na barra de baixo -->
-            <section class="menu-acoes" id="menu-acoes" hidden aria-label="Ações">
-              <button class="btn menu-acao-sos" type="button" id="menu-sos">🆘 SOS: preciso de ajuda</button>
-              <button class="btn" type="button" id="menu-registrar">＋ Registrar: mensagem, achado ou foto</button>
+            <!-- Só militares: SOS e registrar (no civil ficam na barra de baixo) -->
+            <section class="menu-grupo" id="menu-acoes" hidden aria-labelledby="menu-tit-acoes">
+              <h3 class="menu-grupo-titulo" id="menu-tit-acoes">Ações</h3>
+              <div class="menu-lista">
+                <button class="menu-item menu-item-sos" type="button" id="menu-sos">
+                  <span class="menu-item-ico" aria-hidden="true">🆘</span>
+                  <span class="menu-item-txt"><strong>SOS</strong><small>Pedir ajuda aos bombeiros</small></span>
+                </button>
+                <button class="menu-item" type="button" id="menu-registrar">
+                  <span class="menu-item-ico" aria-hidden="true">＋</span>
+                  <span class="menu-item-txt"><strong>Registrar</strong><small>Mensagem, achado ou foto</small></span>
+                </button>
+              </div>
             </section>
-        <section class="fotos-civil" id="fotos-civil" hidden aria-labelledby="tit-fotos">
-          <h2 class="titulo-secao" id="tit-fotos">Suas fotos</h2>
-          <ul class="fotos-minhas" id="fotos-minhas"></ul>
-        </section>
 
             <!-- Só militares, conforme as funções liberadas pelo responsável (migração 072) -->
-            <section class="ferramentas-militar" id="ferramentas-militar" hidden aria-labelledby="tit-ferr-militar">
-              <h3 class="titulo-secao" id="tit-ferr-militar">Ferramentas do militar</h3>
-              <button class="btn" type="button" id="fm-setor" hidden>▱ Criar setor (tocar os cantos no mapa)</button>
-              <button class="btn" type="button" id="fm-setor-circulo" hidden>◯ Criar setor em círculo</button>
-              <button class="btn" type="button" id="fm-ponto" hidden>📍 Marcar ponto de interesse</button>
+            <section class="menu-grupo" id="ferramentas-militar" hidden aria-labelledby="tit-ferr-militar">
+              <h3 class="menu-grupo-titulo" id="tit-ferr-militar">Ferramentas</h3>
+              <div class="menu-lista">
+                <button class="menu-item" type="button" id="fm-setor" hidden>
+                  <span class="menu-item-ico" aria-hidden="true">▱</span>
+                  <span class="menu-item-txt"><strong>Criar setor</strong><small>Desenhar a área ou em círculo</small></span>
+                  <span class="menu-item-seta" aria-hidden="true">›</span>
+                </button>
+                <button class="menu-item" type="button" id="fm-ponto" hidden>
+                  <span class="menu-item-ico" aria-hidden="true">📍</span>
+                  <span class="menu-item-txt"><strong>Marcar ponto de interesse</strong><small>Toque no mapa onde ele fica</small></span>
+                </button>
+              </div>
               <p class="muted fm-dica" id="fm-dica"></p>
             </section>
-            <div class="folha-legenda" id="folha-legenda"></div>
-            <label class="linha-opcao" hidden><input type="checkbox" id="opt-tela" checked> Manter a tela ligada</label>
+
+            <section class="menu-grupo" id="menu-busca" aria-labelledby="menu-tit-busca">
+              <h3 class="menu-grupo-titulo" id="menu-tit-busca">Busca</h3>
+              <div class="menu-lista">
+                <button class="menu-item menu-item-perigo" type="button" id="menu-saida">
+                  <span class="menu-item-ico" aria-hidden="true">⏹</span>
+                  <span class="menu-item-txt"><strong>Sair da busca</strong><small>Pede a sua saída; os bombeiros liberam</small></span>
+                </button>
+              </div>
+            </section>
+
+            <section class="menu-grupo" id="menu-mapa" aria-labelledby="menu-tit-mapa">
+              <h3 class="menu-grupo-titulo" id="menu-tit-mapa">Mapa</h3>
+              <div class="folha-legenda" id="folha-legenda"></div>
+              <label class="linha-opcao" hidden><input type="checkbox" id="opt-tela" checked> Manter a tela ligada</label>
+            </section>
+
+            <section class="fotos-civil" id="fotos-civil" hidden aria-labelledby="tit-fotos">
+              <h2 class="titulo-secao" id="tit-fotos">Suas fotos</h2>
+              <ul class="fotos-minhas" id="fotos-minhas"></ul>
+            </section>
 
             <div class="rodape-civil">
               <button class="btn btn-pequeno btn-link" type="button" id="btn-diag" hidden>Diagnóstico do GPS</button>

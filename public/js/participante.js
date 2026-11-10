@@ -252,15 +252,14 @@
     }
 
     $('form-inicio').addEventListener('submit', aoIniciar);
-    $('btn-saida').addEventListener('click', aoSolicitarSaida);
+    $('menu-saida').addEventListener('click', function () { abrirMenuFolha(false); aoSolicitarSaida(); });
     $('form-msg').addEventListener('submit', aoEnviarMensagem);
     $('btn-registrar').addEventListener('click', abrirRegistro);
     $('btn-ampliar-mapa').addEventListener('click', function () { alternarMapaAmpliado(true); });
     // Menu (folha), foto direta e legenda do mapa dentro do menu
     $('btn-menu').addEventListener('click', function () { abrirMenuFolha(true); });
     $('folha-fechar').addEventListener('click', function () { abrirMenuFolha(false); });
-    $('fm-setor').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('setor'); });
-    $('fm-setor-circulo').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('circulo'); });
+    $('fm-setor').addEventListener('click', function () { abrirMenuFolha(false); escolherTipoSetorP(); });
     $('fm-ponto').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('ponto'); });
     $('folha-fundo').addEventListener('click', function () { abrirMenuFolha(false); });
     $('menu-sos').addEventListener('click', function () { abrirMenuFolha(false); pedirSocorro(); });
@@ -690,23 +689,7 @@
       $('ini-tel').focus();
       return;
     }
-    if (!(await confirmarInicio())) return;
     await entrarNaBusca({ nome: nome, tipo: tipo, cpf: cpf, tel: tel });
-  }
-
-  // O rastreamento só começa com o toque da pessoa e a confirmação (uma vez por abertura da página:
-  // se o navegador pedir a permissão de novo, não pergunta outra vez).
-  async function confirmarInicio() {
-    if (estado.inicioConfirmado) return true;
-    var ok = await UI.confirmar({
-      titulo: 'Começar a enviar sua localização?',
-      texto: 'Sua posição passa a aparecer para os bombeiros e o caminho que você fizer fica registrado. ' +
-        'O envio continua até os bombeiros liberarem a sua saída (toque em "Quero sair da busca" para pedir).',
-      ok: 'Começar',
-      cancelar: 'Agora não',
-    });
-    if (ok) estado.inicioConfirmado = true;
-    return Boolean(ok);
   }
 
   // Pede a localização pelo mecanismo oficial do navegador, entra na operação
@@ -868,8 +851,8 @@
     areas.forEach(function (a) { total += a.total; ok += a.guardados; });
     var raioKm = Math.round(areas[areas.length - 1].raioM / 100) / 10;
     var completo = ok >= total;
-    mostrarMapaOffline('🗺 Mapa guardado no aparelho: ' + areas.length + ' área(s) de ~' + raioKm.toLocaleString('pt-BR') + ' km em volta' +
-      (completo ? '' : ' · ' + ok + ' de ' + total + ' partes (o resto completa com internet)') + '. Sem internet, o mapa mostra só essas áreas.', !completo);
+    if (completo) { mostrarMapaOffline('', false); return; }   // tudo guardado: não precisa avisar
+    mostrarMapaOffline('🗺 Mapa incompleto no aparelho: ' + ok + ' de ' + total + ' partes. O resto completa com internet.', true);
   }
 
   function comecarRastreamento(posInicial) {
@@ -1895,7 +1878,7 @@
     if (!caixa) return;
     var algum = Boolean(perm.setores || perm.pontos || perm.situacao_setor);
     caixa.hidden = !algum;
-    $('fm-setor').hidden = $('fm-setor-circulo').hidden = !perm.setores;
+    $('fm-setor').hidden = !perm.setores;
     $('fm-ponto').hidden = !perm.pontos;
     $('fm-dica').textContent = perm.situacao_setor ? 'Toque num setor do mapa para mudar a situação dele (pendente, em andamento ou concluído).' : '';
   }
@@ -2008,6 +1991,22 @@
   }
 
   // Desenho no mapa: "setor" = tocar os cantos (3 ou mais); "circulo" e "ponto" = tocar o lugar (ou usar a minha posição).
+  // Escolha do setor (padrão do painel dos responsáveis): desenhar a área ou por círculo
+  function escolherTipoSetorP() {
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'escolha-setor-p' }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Novo setor' }),
+      UI.el('div', { classe: 'opcoes-setor-p' }, [
+        UI.el('button', { classe: 'opcao-setor-p', type: 'button', id: 'setor-p-desenhar', onclick: function () { fechar(true); iniciarDesenhoP('setor'); } }, [
+          UI.el('span', { classe: 'opcao-setor-p-ico', 'aria-hidden': 'true', texto: '▱' }),
+          UI.el('strong', { texto: 'Desenhar a área' }), UI.el('small', { texto: 'toque nos cantos do setor no mapa' })]),
+        UI.el('button', { classe: 'opcao-setor-p', type: 'button', id: 'setor-p-circulo', onclick: function () { fechar(true); iniciarDesenhoP('circulo'); } }, [
+          UI.el('span', { classe: 'opcao-setor-p-ico', 'aria-hidden': 'true', texto: '◯' }),
+          UI.el('strong', { texto: 'Em círculo' }), UI.el('small', { texto: 'toque no centro e informe o raio' })]),
+      ]),
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } })]),
+    ]));
+  }
+
   function iniciarDesenhoP(tipo) {
     if (!estado.mapa) return;
     sairDesenhoP();
@@ -3489,7 +3488,7 @@
       cancelar: 'Voltar',
     });
     if (!r) return;
-    var btn = $('btn-saida');
+    var btn = $('menu-saida');
     btn.disabled = true;
     try {
       var resp = await C.rpc('solicitar_saida', { p_participante: estado.part.participante_id, p_motivo: r.texto || '' });
@@ -3614,8 +3613,6 @@
     $('ini-tel').value = mascararTelefone(s.telefone || '');
     $('btn-iniciar').textContent = 'CONTINUAR';
     mostrarTela('inicio');
-    estado.inicioConfirmado = false;
-    if (!(await confirmarInicio())) return;
     await entrarNaBusca({ nome: s.nome, tipo: s.tipo, cpf: s.cpf, tel: s.telefone });
   }
 
@@ -3945,15 +3942,19 @@
       sub = 'Sua localização está sendo guardada e vai ser enviada quando o sinal voltar.' + (pend ? ' (' + pend + ' guardada' + (pend > 1 ? 's' : '') + ')' : '');
     } else if (net === 'conectando' && !estado.ultimoEnviadoT) {
       cod = 'sem-gps'; titulo = 'Conectando com os bombeiros…'; sub = 'Só um instante.';
+    } else if (estado.gravarTrilha === false) {
+      cod = 'sem-gps'; titulo = 'Seu caminho não está sendo gravado';
+      sub = 'Os bombeiros veem a sua posição, mas o caminho não fica registrado.';
     } else {
       cod = 'ok'; titulo = 'Os bombeiros estão vendo você';
-      sub = (NATIVO ? 'Pode bloquear a tela.' : 'Deixe esta tela aberta.') + (estado.gravarTrilha === false ? ' O seu caminho não está sendo gravado.' : '');
+      sub = '';
     }
     var acao = $('status-acao');
     var precisaAjuda = estado.rastreando && (estado.gps === 'negado' || estado.gps === 'indisponivel' ||
       (estado.gps === 'sem_sinal' && estado.ultimaLeitura == null && Date.now() - estado.watchIniciadoEm > 30000));
     if (acao.hidden === precisaAjuda) acao.hidden = !precisaAjuda;
     var caixa = $('status-civil');
+    caixa.hidden = cod === 'ok';   // tudo certo: a caixa não aparece (só os problemas)
     if (caixa.getAttribute('data-estado') !== cod) caixa.setAttribute('data-estado', cod);
     if ($('status-titulo').textContent !== titulo) $('status-titulo').textContent = titulo;
     if ($('status-sub').textContent !== sub) $('status-sub').textContent = sub;
@@ -3962,7 +3963,7 @@
     var pendente = Boolean(estado.saidaSolicitadaEm);
     $('saida-pendente').hidden = !pendente;
     if (pendente) $('saida-hora').textContent = C.hora(estado.saidaSolicitadaEm, false);
-    $('btn-saida').hidden = pendente;
+    $('menu-saida').hidden = pendente;
     $('btn-menu').classList.toggle('tem-aviso', pendente);
   }
 

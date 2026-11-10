@@ -3315,6 +3315,13 @@ console.log('\nLink público em partes, mensagem para vários, pontos em lote e 
   await rpc(anM[1], 'participante_excluir_setor', { p_participante: mil.participante_id, p_id: sM.id });
   await rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: poM.id });
   chk((await db.query(`select count(*)::int n from public.setores where id = $1`, [sM.id])).rows[0].n === 0, 'quem criou exclui o próprio setor e ponto');
+  // link público numa instalação sem a migração 050 (tabela categorias_ponto_estilo ausente): a 072 cria a tabela
+  await db.exec('drop table public.categorias_ponto_estilo cascade');
+  chk(/categorias_ponto_estilo|does not exist/.test(await erroDe(como(null, `select public.comando_publico($1, null) r`, [lk.token], 'anon'))), 'sem a tabela da 050, o link público falha (o caso relatado)');
+  await db.exec(ler('supabase/migracoes/072_base_publico_mensagens_militar.sql'));
+  const docPub = (await como(null, `select public.comando_publico($1, null) r`, [lk.token], 'anon')).rows[0].r;
+  chk(docPub && docPub.tabelas && Array.isArray(docPub.tabelas.categorias_ponto_estilo), 'com a 072, o link público volta a abrir mesmo sem a 050');
+  chk((await db.query(`select count(*)::int n from pg_tables where schemaname = 'public' and tablename = 'categorias_ponto_estilo'`)).rows[0].n === 1, 'a 072 deixa a tabela de categorias criada');
 }
 
 console.log('\nMigrações 007–072 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');

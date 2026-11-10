@@ -110,8 +110,22 @@
     };
   }
 
+  // Só para a representação (barra de cansaço): quanto de "energia" resta, de 0 a 1. Usa as mesmas estatísticas e os
+  // mesmos limites vermelhos: a que está mais perto do vermelho manda. Não muda o nível (verde, amarelo, vermelho),
+  // que continua vindo de avaliar(). Sem estatística, fica cheia (1).
+  function restante(itens, limites) {
+    var lim = limites || LIMITES;
+    var pior = 0;
+    (itens || []).forEach(function (x) {
+      var ref = x.chave === 'tempo' ? lim.tempoMin.vermelho : x.chave === 'km' ? lim.km.vermelho : x.chave === 'grupo' ? lim.kmGrupo.vermelho : null;
+      if (!ref || x.valor == null || isNaN(x.valor)) return;
+      pior = Math.max(pior, x.valor / ref);
+    });
+    return Math.max(0, 1 - Math.min(1, pior));
+  }
+
   var API = { LIMITES: LIMITES, NOMES: NOMES, ROTULOS: ROTULOS, nivelDe: nivelDe, ciclo: ciclo, kmDesde: kmDesde, mediaKm: mediaKm,
-    avaliar: avaliar, textoMinutos: textoMinutos, textoKm: textoKm, distanciaM: distanciaM };
+    avaliar: avaliar, textoMinutos: textoMinutos, textoKm: textoKm, distanciaM: distanciaM, restante: restante };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   raiz.Fadiga = API;
 })(typeof window !== 'undefined' ? window : globalThis);

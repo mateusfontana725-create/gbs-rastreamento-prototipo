@@ -2709,10 +2709,18 @@ html[data-tema="claro"] .chip-deslocamento { background: rgba(255, 255, 255, .96
 .ficha-um-grupo { display: block; margin-top: 6px; }
 
 /* ---------- Fadiga e descanso (verde, amarelo, vermelho) ---------- */
-.li-fadiga { display: inline-block; width: 10px; height: 10px; margin-left: 6px; border-radius: 50%; vertical-align: middle; border: 1.5px solid rgba(0, 0, 0, .55); flex: none; }
-.li-fadiga-verde { background: #22c55e; }
-.li-fadiga-amarelo { background: #facc15; }
-.li-fadiga-vermelho { background: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, .28); }
+/* Cansaço do participante: barra vertical (como a bateria do celular). Não é a bolinha de conexão. */
+.barra-cansaco {
+  position: relative; display: inline-block; flex: none; box-sizing: border-box; width: 9px; height: 17px;
+  margin-left: 6px; vertical-align: middle; border: 1.5px solid var(--texto-2); border-radius: 2px; background: rgba(0, 0, 0, .3);
+}
+.barra-cansaco::before {   /* a "ponta" da bateria */
+  content: ""; position: absolute; left: 2px; right: 2px; top: -4px; height: 2px; border-radius: 1px 1px 0 0; background: var(--texto-2);
+}
+.barra-cansaco i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0 0 1px 1px; }
+.barra-cansaco-verde i { background: #22c55e; }
+.barra-cansaco-amarelo i { background: #facc15; }
+.barra-cansaco-vermelho i { background: #ef4444; }
 .li-descanso { margin-left: 6px; padding: 0 5px; border-radius: 8px; font-size: .68rem; font-weight: 700; background: rgba(56, 189, 248, .16); color: #7dd3fc; white-space: nowrap; }
 html[data-tema="claro"] .li-descanso { color: #0369a1; background: rgba(2, 132, 199, .12); }
 .ficha-fadiga { margin: 6px 0 0; padding: 6px 9px; border-radius: 8px; font-size: .82rem; border-left: 5px solid #22c55e; background: rgba(34, 197, 94, .1); }

@@ -4089,7 +4089,7 @@
     var resp = grupos.some(function (g) { return g.papel === 'responsavel'; });
     var htmlNome = (resp ? '<span class="li-estrela" title="Responsável do grupo">★</span>' : '') +
       '<span class="nome-txt">' + C.esc(nomeExibido(p)) + '</span>' +
-      (fad ? '<span class="li-fadiga li-fadiga-' + fad.nivel + '" role="img" aria-label="Fadiga ' + fad.nivel + '" title="Fadiga ' + window.Fadiga.ROTULOS[fad.nivel].toLowerCase() + ': ' + C.esc(fad.texto) + '"></span>' : '') +
+      (fad ? barraCansaco(fad) : '') +
       (fad && fad.descansando ? '<span class="li-descanso" title="Descansando na base há ' + window.Fadiga.textoMinutos(fad.descansando.min) + (fad.descansando.longo ? ' (descanso longo: a contagem de fadiga foi zerada)' : '') + '">☕ ' + window.Fadiga.textoMinutos(fad.descansando.min) + '</span>' : '') +
       (ajuda ? '<span class="li-aviso li-aviso-ajuda" title="Pediu ajuda">SOS</span>' : '') +
       (saida ? '<span class="li-aviso li-aviso-saida" title="Pediu para sair">Saída</span>' : '') +
@@ -6697,21 +6697,17 @@
     }
     if (raio) raio.addEventListener('input', atualizarArea);
     var cores = UI.seletorCor({ rotulo: 'Cor do setor', valor: d.cor, padroes: window.Cores.PALETA });
-    // Opacidade do preenchimento: por padrão, a da situação; desmarcar "padrão" deixa escolher (10% a 90%)
-    var opPadrao = d.opacidade == null;
-    var opValor = Math.round((opPadrao ? opacidadePadraoSetor(d.status) : d.opacidade) * 100);
-    var opUsarPadrao = UI.el('input', { type: 'checkbox', id: 'setor-opacidade-padrao', checked: opPadrao ? true : null });
-    var opFaixa = UI.el('input', { type: 'range', id: 'setor-opacidade', min: '10', max: '90', step: '5', value: String(opValor), disabled: opPadrao ? true : null, 'aria-label': 'Opacidade do preenchimento' });
+    // Opacidade do preenchimento: um controle só, em porcentagem. Começa no valor em uso (o do setor, ou a padrão
+    // da situação). Ao salvar, o valor igual à padrão da situação fica como "padrão" (o setor segue a situação).
+    var opValor = Math.round((d.opacidade == null ? opacidadePadraoSetor(d.status) : d.opacidade) * 100);
+    var opFaixa = UI.el('input', { type: 'range', id: 'setor-opacidade', min: '10', max: '90', step: '1', value: String(opValor), 'aria-label': 'Opacidade do preenchimento' });
     var opTexto = UI.el('output', { id: 'setor-opacidade-valor', classe: 'mono', texto: opValor + '%' });
-    var opPrevia = function () {
-      opTexto.textContent = (opUsarPadrao.checked ? opacidadePadraoSetor(d.status) * 100 : opFaixa.value) + '%';
+    opFaixa.addEventListener('input', function () {
+      opTexto.textContent = opFaixa.value + '%';
       var s0 = d.id && est.setores.get(d.id);
-      if (s0 && s0.camada) desenharFundoSetor(s0, opUsarPadrao.checked ? opacidadePadraoSetor(d.status) : Number(opFaixa.value) / 100);
-    };
-    opUsarPadrao.addEventListener('change', function () { opFaixa.disabled = opUsarPadrao.checked; opPrevia(); });
-    opFaixa.addEventListener('input', function () { opUsarPadrao.checked = false; opFaixa.disabled = false; opPrevia(); });
+      if (s0 && s0.camada) desenharFundoSetor(s0, Number(opFaixa.value) / 100);
+    });
     var opcaoOpacidade = UI.el('div', { classe: 'opacidade-setor' }, [
-      UI.el('label', { classe: 'linha-opcao', for: 'setor-opacidade-padrao' }, [opUsarPadrao, ' Usar a padrão (a da situação ou a escolhida em Camadas)']),
       UI.el('div', { classe: 'opacidade-setor-faixa' }, [opFaixa, opTexto]),
     ]);
     var part = opcoesParticipantes(d.participante_id, true);
@@ -6756,7 +6752,8 @@
         status: status.value,
         observacoes: obs.value.trim(),
         visibilidade: visSetor.value,
-        opacidade: opUsarPadrao.checked ? null : Number(opFaixa.value) / 100,
+        // igual à padrão da situação escolhida: grava "padrão" (vazio), e o setor continua seguindo a situação
+        opacidade: Math.abs(Number(opFaixa.value) / 100 - opacidadePadraoSetor(status.value)) < 0.0001 ? null : Number(opFaixa.value) / 100,
       };
       if (!dados.nome) { erro.textContent = 'Informe o nome do setor.'; erro.hidden = false; return; }
       if (novo || raio) {
@@ -9160,6 +9157,16 @@
 
   // Fadiga da pessoa: { nivel: 'verde'|'amarelo'|'vermelho', itens, texto, buscaMin, km, kmGrupo, descansando, descansoTotalMin } ou null
   // (responsáveis do painel, quem saiu da operação e quem ainda não tem trilha não têm indicador).
+  // Barra vertical tipo bateria (só a apresentação): cheia e verde = pouco cansaço; média e amarela; baixa e vermelha = muito.
+  // O nível vem de avaliar(); o preenchimento acompanha as estatísticas (tempo, km próprio, média do grupo).
+  var TEXTO_CANSACO = ['baixo', 'moderado', 'elevado'];
+  function barraCansaco(fad) {
+    var resta = Math.max(0.08, window.Fadiga.restante(fad.itens));   // um fio colorido mesmo no limite
+    var pct = Math.round(resta * 100);
+    var rotulo = 'Cansaço ' + TEXTO_CANSACO[fad.indice] + ' (' + pct + '% de folga)';
+    return '<span class="barra-cansaco barra-cansaco-' + fad.nivel + '" role="img" aria-label="' + rotulo + '" title="' + rotulo + ': ' + C.esc(fad.texto) + '">' +
+      '<i style="height:' + pct + '%"></i></span>';
+  }
   function fadigaDe(p) {
     var F = window.Fadiga, d = p.dados;
     if (!F || tipoDe(d) === 'responsavel' || d.removido || d.liberado_em || !p.pontos.length) return null;

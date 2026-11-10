@@ -113,5 +113,20 @@ teste('textos', () => {
   assert.strictEqual(F.textoMinutos(131), '2 h 11 min');
   assert.strictEqual(F.textoKm(9.26), '9,3 km');
 });
+teste('barra de cansaço: folga pelo limite vermelho mais próximo (sem mudar o nível)', () => {
+  // 60 min de busca = 25% do limite vermelho (240 min) → folga 75%
+  assert.strictEqual(Math.round(F.restante([{ chave: 'tempo', valor: 60 }]) * 100), 75);
+  // o limite amarelo (120 min) cai exatamente na metade da barra
+  assert.strictEqual(Math.round(F.restante([{ chave: 'tempo', valor: 120 }]) * 100), 50);
+  // a estatística mais alta manda: 3 km (de 15) não pesa mais que 5 h (de 4 h)
+  assert.strictEqual(F.restante([{ chave: 'tempo', valor: 300 }, { chave: 'km', valor: 3 }]), 0);
+  assert.strictEqual(F.restante([{ chave: 'km', valor: 3 }]) > 0.79, true);
+  // grupo entra pelo limite do grupo
+  assert.strictEqual(Math.round(F.restante([{ chave: 'grupo', valor: 6 }]) * 100), 50);
+  // sem estatística: cheia
+  assert.strictEqual(F.restante([]), 1);
+  // o nível continua o mesmo cálculo de avaliar()
+  assert.strictEqual(F.avaliar({ buscaMin: 300, km: 1, kmGrupo: null, emDescansoLongo: false }).nivel, 'vermelho');
+});
 console.log(falhas ? falhas + ' falha(s)' : 'tudo certo');
 process.exit(falhas ? 1 : 0);

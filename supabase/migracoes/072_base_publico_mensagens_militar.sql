@@ -4,6 +4,7 @@
 --       (migração idempotente; exige a 066 (trilhas e base), a 067 (mensagem ao grupo), a 068 (zonas e descanso),
 --       a 069 (link público) e a 070 (opacidade dos setores))
 --
+--  0. Cria a tabela categorias_ponto_estilo (050) se ela não existir: o link público a lê (erro 42P01 sem ela).
 --  1. enviar_posicoes_lote grava a trilha SEMPRE, também dentro do raio de uma BASE (o ponto fica marcado na_base
 --     e o mapa não desenha esse trecho). Antes os pontos da base eram descartados, e a gravação dependia de a base
 --     ser reconhecida no momento do envio. Só a gravação desligada para a pessoa continua sem guardar.
@@ -23,6 +24,31 @@
 --     Funções: participante_salvar_setor, participante_excluir_setor, participante_salvar_ponto,
 --     participante_excluir_ponto; mapa_do_participante devolve as permissões e marca o que é dele.
 -- =====================================================================
+
+-- 0. Tabela das categorias de ponto (migração 050), que o link público lê --------------------------------
+-- Instalações em que a 050 não foi aplicada davam erro 42P01 ao abrir o link público. Aqui ela é criada
+-- (idempotente, mesmas regras da 050: só leitura pelos responsáveis; escrita pela função da 050).
+create table if not exists public.categorias_ponto_estilo (
+  categoria        text primary key check (categoria in ('ULTIMA_LOCALIZACAO', 'POSSIVEL_LOCALIZACAO', 'VESTIGIO', 'RISCO', 'ENCONTRO',
+                                                         'VITIMA_ENCONTRADA', 'BASE', 'OUTRO')),
+  icone            text check (icone is null or char_length(icone) between 1 and 8),
+  cor              text check (cor is null or cor ~ '^#[0-9a-f]{6}$'),
+  atualizado_por_nome text not null,
+  atualizado_em    timestamptz not null default now()
+);
+alter table public.categorias_ponto_estilo enable row level security;
+drop policy if exists categorias_ponto_estilo_ler on public.categorias_ponto_estilo;
+create policy categorias_ponto_estilo_ler on public.categorias_ponto_estilo for select to authenticated using (public.nome_responsavel_atual() is not null);
+revoke all on public.categorias_ponto_estilo from anon;
+revoke insert, update, delete, truncate on public.categorias_ponto_estilo from authenticated;
+grant select on public.categorias_ponto_estilo to authenticated;
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'categorias_ponto_estilo') then
+    execute 'alter publication supabase_realtime add table public.categorias_ponto_estilo';
+  end if;
+end $$;
 
 -- 1. Trilha gravada também dentro da base ----------------------------------------------------------------
 create or replace function public.enviar_posicoes_lote(p_participante uuid, p_pontos jsonb, p_gps text default null)

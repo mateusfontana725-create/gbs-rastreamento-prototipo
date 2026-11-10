@@ -353,7 +353,10 @@ O mapa da página do participante mostra, além dos bombeiros:
 - **Descanso na base**: dentro do raio de uma **Base** (padrão 50 m) a pessoa passa a **descansar** sozinha: o servidor abre o descanso no
   primeiro ponto dentro da base e fecha no primeiro ponto fora (tabela `descansos`; só os responsáveis leem). Na **lista de participantes**
   aparece "☕ 12 min" enquanto descansa, e a **ficha** mostra o descanso atual e o total na base.
-- **Indicador de fadiga** (verde, amarelo, vermelho), na **lista de participantes** (ponto ao lado do nome), na **ficha** e no **dashboard**
+- **Indicador de cansaço** na **lista de participantes**: uma **barra vertical, como a bateria do celular**, ao lado do nome. Cheia e verde
+  = cansaço baixo; média e amarela = moderado; baixa e vermelha = elevado. O preenchimento acompanha as estatísticas (quanto a pessoa
+  está perto do limite vermelho de tempo de busca, km próprio ou média do grupo); o nível de cores é o mesmo cálculo de sempre. A
+  **bolinha** ao lado do nome continua sendo só o status de conexão/atividade. Também aparecem na **ficha** e no **dashboard**
   (indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso", por pessoa e por grupo, do mais para o menos cansado). Conta, **desde o último
   descanso longo** (30 min ou mais na base, que zera a contagem), o **tempo de busca** (sem os descansos curtos), os **km da pessoa** e a
   **média de km do grupo**; o nível é o **pior dos três**. Padrões (em `public/js/fadiga.js`, `LIMITES`): amarelo a partir de **2 h**, **8 km**
@@ -803,7 +806,7 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 - **Concluído e o ×**: depois de marcar o setor como Concluído, o detalhe antigo (ainda "Pendente") ficava por baixo do novo e voltava
   a aparecer ao tocar no ×; agora o antigo é fechado antes.
 - **Opacidade do preenchimento do setor** (migração 070): no formulário do setor, **Opacidade do preenchimento** (10% a 90%) mostra
-  a prévia no mapa enquanto você mexe; **Cancelar** desfaz. Por padrão o fundo é **claro** (pendente 10%, em andamento 18%, concluído 10%); desmarcar **Usar a padrão** deixa escolher até 90%. Fica gravada com o setor, então todos os celulares da operação
+  a prévia no mapa enquanto você mexe; **Cancelar** desfaz. Por padrão o fundo é **claro** (pendente 10%, em andamento 18%, concluído 10%); o controle **Opacidade do preenchimento** vai de 10% a 90% (começa no valor em uso; sem checkbox "usar a padrão": ao salvar o valor igual à padrão da situação, o setor volta a seguir a situação). Fica gravada com o setor, então todos os celulares da operação
   veem a mesma opacidade. **Antes de usar, rode `070_opacidade_setores.sql` no Supabase.** Não muda o contorno nem o nome. O mapa do
   participante ainda usa a padrão.
   A opacidade se ajusta **só no formulário de cada setor** (**Editar setor → Opacidade do preenchimento**, 10% a 90%; "usar a padrão" volta à da situação). Não há controle geral em Camadas.
@@ -887,6 +890,7 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   menor) mostra a sua cor. O fundo se mistura com o mapa: no mapa claro e no relevo ele **tinge** sem esconder ruas e curvas de nível;
   no mapa escuro ele **clareia com a cor** (sem virar cinza); no satélite, transparência comum.
 - **Lista "Fora da operação"**: aberta, ela agora rola (antes passava da altura da lateral e ficava cortada).
+- **Link público do painel** (erro "relation categorias_ponto_estilo does not exist"): a tabela de categorias de ponto vem da migração 050; a 072 a cria também, de forma idempotente, então o link volta a abrir mesmo em banco sem a 050. Se a 050 nunca foi aplicada, aplique-a inteira depois (ícones e cores das categorias).
 - Banco: `operacoes.permissoes_militar`, funções `comando_publico_posicoes`, `enviar_mensagem_varios`, `excluir_pontos`,
   `definir_permissoes_militar`, `participante_salvar_setor`, `participante_excluir_setor`, `participante_salvar_ponto`,
   `participante_excluir_ponto`; `enviar_posicoes_lote`, `enviar_mensagem` e `mapa_do_participante` atualizadas.
@@ -2492,7 +2496,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 45b | Abrir esse setor → **✂ Dividir** → Fatias, 4 partes, ✔ Dividir | o setor vira A (original) e B, C, D novos, com cores diferentes; o mapa mostra as 4 partes |
 | 45c | Dividir outro setor com **╱ Linha de corte** (dois toques) e com **▥ Faixas** | duas partes pela linha; faixas paralelas de largura igual |
 | 45d | Marcar um setor como **Concluído** e tocar no × | fecha e o setor segue Concluído (não volta a "Pendente") |
-| 45h | Abrir um setor, desmarcar "Usar a padrão da situação", mexer na opacidade e cancelar; depois salvar outro valor | a prévia muda o preenchimento no mapa; cancelar volta; salvar fica com o valor em todos os aparelhos; marcar a padrão e salvar volta ao padrão da situação |
+| 45h | Abrir um setor, mexer no controle de opacidade (porcentagem) e cancelar; depois salvar outro valor | a prévia muda o preenchimento no mapa; cancelar volta; salvar fica com o valor em todos os aparelhos; marcar a padrão e salvar volta ao padrão da situação |
 | 45e | Criar círculos de 1, 2 e 3 km no mesmo centro e um setor desenhado por cima; tocar no miolo, no anel e de novo no mesmo lugar | o toque abre direto o menor que contém o ponto (miolo: o de dentro; anel: o de fora), com o contorno destacado; tocar de novo passa para o de baixo; duplo toque abre os detalhes |
 | 45f | No tablet na viatura, com o endereço cadastrado a alguns km, abrir a operação e deixar andar | o mapa fica no endereço e não segue a posição; ao chegar a 300 m (ou em "Cheguei ao local") volta ao normal |
 | 45g | Criar setor, grupo e trilha e olhar as cores sugeridas e o seletor | cores fortes e variadas; a cor personalizada continua disponível |
@@ -2510,6 +2514,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 48c | Entrar no raio de uma **Base** e ficar parado 5 min; sair e voltar | "☕ N min" na lista e na ficha; o descanso fecha ao sair e abre outro ao voltar |
 | 48d | Ficar mais de 30 min na base e voltar a campo | a fadiga volta a verde e o tempo de busca recomeça do fim do descanso |
 | 48e | Equipe andando 2 h, 4 h e 8 km, 15 km (ou grupo com média alta) | o ponto da lista passa de verde a amarelo e a vermelho; ficha e dashboard mostram o motivo (tempo, km, grupo) |
+| 48g | Olhar a lista de participantes | cada pessoa tem uma barra vertical de cansaço (cheia e verde = baixo, amarela = moderado, vermelha = elevado), separada da bolinha de conexão |
 | 48f | Abrir o **Dashboard** da operação ativa | indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso" com pessoas e grupos |
 | 50a | Com uma pessoa andando, **Ferramentas → ✂ Apagar trecho de trilha de GPS**, escolher a pessoa e arrastar sobre um trecho, **Concluir** | o trecho some do mapa (linha cortada, sem ligar por cima), os pontos novos seguem aparecendo; nos outros painéis e no mapa dos participantes também |
 | 50b | Tocar numa trilha de GPS no mapa; abrir a ficha; abrir Setores, trilhas e pontos | em todos há como apagar trechos (balão, ⋮ Mais, lista "Trilhas de GPS dos participantes") |

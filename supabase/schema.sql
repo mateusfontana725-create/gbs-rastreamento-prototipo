@@ -23581,6 +23581,32 @@ $$;
 revoke execute on function public.mapa_do_participante(uuid) from public, anon;
 grant execute on function public.mapa_do_participante(uuid) to authenticated;
 
+-- Local (endereço) da operação para o participante: pacote de mapa offline (migração 075).
+create or replace function public.local_da_operacao(p_participante uuid)
+returns json
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  v_part public.participantes%rowtype;
+  v_op public.operacoes%rowtype;
+begin
+  select * into v_part from public.participantes where id = p_participante and user_id = auth.uid();
+  if not found then
+    raise exception 'participante_invalido';
+  end if;
+  if v_part.liberado_em is not null then
+    raise exception 'participante_liberado';
+  end if;
+  if v_part.removido then
+    raise exception 'participante_removido';
+  end if;
+  select * into v_op from public.operacoes where id = v_part.operacao_id;
+  return json_build_object('lat', v_op.local_lat, 'lng', v_op.local_lng, 'endereco', v_op.local_endereco);
+end;
+$$;
+revoke execute on function public.local_da_operacao(uuid) from public, anon;
+grant execute on function public.local_da_operacao(uuid) to authenticated;
+
 -- =====================================================================
 -- 073 · Link de MILITAR só registra militar; a tela inicial não oferece "civil" nele
 --       (migração idempotente; exige a 069 (links e tipos) e a 072)

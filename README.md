@@ -1876,7 +1876,7 @@ rastreamento-sar/
 │       ├── binomio.js          sessão do binômio cão e condutor: indicações e confirmações independentes
 │       ├── observacoes-campo.js drone (plano, telemetria, área observada, foco térmico) e indicação na água
 │       ├── personalizar.js     Personalizar tela: botões do topo e Ferramentas (arrastar), grupos e texto
-│       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM, limite da política)
+│       ├── mapa-offline.js     mapa guardado no aparelho do participante (áreas do OSM; pacotes de 10 km do servidor próprio)
 │       ├── comando.js          lógica do painel (inclui grupos, filtro do mapa, deslocamentos e alertas)
 │       └── participante.js            lógica do participante (GPS, fila offline, mensagens, relatos, fotos)
 │   └── vendor/pdfmake/         pdfmake 0.2.23 (MIT), carregado só ao gerar o relatório
@@ -2113,6 +2113,8 @@ rastreamento-sar/
    | `SUPABASE_SECRET_KEY` | chave secret (ou service_role) — usada na limpeza diária e no cadastro de responsáveis |
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
    | `ARQUIVAR_APOS_DIAS` | (opcional) dias depois do encerramento para arquivar a operação sozinha (`/api/arquivar`, migração 055). Padrão 7; `0` arquiva no dia seguinte ao encerramento |
+   | `TILES_MAPA_URL`, `TILES_TOPO_URL`, `TILES_SATELITE_URL` | (opcional) endereço de cada camada do **servidor próprio de mapas**, com `{z}`, `{x}` e `{y}` (só `https`). Ligam o **pacote de mapa offline** (veja abaixo). Sem nenhuma delas, o app segue como antes. O servidor precisa mandar `Access-Control-Allow-Origin` |
+   | `TILES_ATRIBUICAO` | (opcional) texto de crédito mostrado no mapa |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
    | `APP_ANDROID_URL` | (opcional) endereço do APK do aplicativo Android. Padrão: o Release `app-android` deste repositório. `desligado` esconde o botão "Baixar aplicativo" |
@@ -2290,6 +2292,15 @@ Estas limitações são da plataforma web móvel, não do código, e estão comu
    tile.openstreetmap.org: no máximo 250 quadros por área em zoom ≥ 13 (aqui ≤ 240), baixados um por vez. Embaixo do
    mapa avisa só se faltar parte do mapa ("Mapa incompleto no aparelho: X de Y partes"); completo, não aparece aviso nenhum.
    Fora dessas áreas, sem internet, o mapa fica em branco; a posição continua sendo registrada normalmente.
+   **Com servidor próprio de mapas** (variáveis `TILES_*_URL`), isso muda para **pacotes**: ao entrar numa operação, o app
+   baixa um pacote de **10 km de raio** em volta do **endereço da operação** (função `local_da_operacao`, migração 075) ou,
+   sem endereço, da **primeira posição boa** do participante, com **zoom de 10 a 17** e as camadas configuradas
+   (mapa, relevo, satélite). Estimativa para as três camadas: cerca de **430 MB** por pacote (satélite ~200 MB). Baixa
+   mesmo sem Wi-Fi: mostra o progresso (com o tamanho aproximado), dá para **cancelar** e retoma de onde parou. O pacote fica no aparelho e **vale para as
+   próximas operações** que ele cobrir (a operação precisa estar a mais de 2 km da borda; senão baixa outro). Guarda até
+   **3 pacotes** (o mais antigo sai quando chega o quarto) e confere o espaço livre antes. Em **Camadas → Mapas offline**
+   aparecem os pacotes, o tamanho de cada um e o botão **Apagar**. O service worker (`sw.js`) serve esses quadros sem internet.
+   Satélite offline só com provedor que permita guardar as imagens (o Esri do app não permite).
 3. **Mensagens com a página fechada** não chegam. Com a página aberta em segundo plano, o celular
    vibra, toca um alerta e, se o participante tocou em **Ativar alertas de mensagem**, mostra uma
    notificação, desde que o navegador ainda esteja executando a página. Para entrega garantida com a
@@ -2477,7 +2488,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40b | Na ficha de um participante, **📍 Rota até ela** saindo da base, e ele andar 100 m | a rota aparece com a barra embaixo e se refaz sozinha; **Parar** apaga |
 | 40c | **Ferramentas → Personalizar tela**: arrastar **Foto** para fora do topo, arrastar **Grupos** da bandeja para o 2º lugar, arrastar o painel de grupos para o canto inferior esquerdo, texto **Maior**, **Concluir** e recarregar | Foto passa a ficar em Ferramentas e funciona de lá; Grupos aparece no topo e abre a lista de grupos; o painel de grupos fica no canto escolhido; tudo continua igual depois de recarregar; **Padrão** desfaz |
 | 40d | Abrir os modais (Encerrar, Vítima encontrada, Marcar ponto, Enviar destino, Relatório final) no computador e no celular | título com **i** e **×** no topo; ações sempre visíveis embaixo; no celular, folha de baixo sem rolagem lateral |
-| 40e | Civil entra na busca com internet e espera aparecer "Mapa guardado no aparelho"; liga o modo avião, **recarrega a página** e anda 2 min; desliga o modo avião | a página reabre direto no rastreamento, o mapa da área aparece, os pontos ficam na fila e chegam ao painel quando o sinal volta |
+| 40e | Civil entra na busca com internet e espera o mapa ser guardado (sem aviso na tela quando completo; com servidor próprio, o pacote de 10 km pode levar alguns minutos); liga o modo avião, **recarrega a página** e anda 2 min; desliga o modo avião | a página reabre direto no rastreamento, o mapa da área aparece, os pontos ficam na fila e chegam ao painel quando o sinal volta |
 | 40f | Num relato de vestígio: **Detalhes e revisão → Revisar**, escolher **Confirmado** sem justificativa; depois com justificativa e hora do fato estimada | sem justificativa não salva; salvo, o relato mostra Fato (estimado), Recebido e Revisado, "Versões da revisão (1)" e o selo **Confirmado** no feed |
 | 40g | **Ferramentas → Binômio → + Nova sessão** (cão, condutor participante, setor, artigo de odor), **Iniciar**, andar 2 min com o condutor, **⚑ Indicação**, **Confirmar por outro meio** sem método e depois com "Equipe no local" | a trilha roxa do condutor aparece no mapa só durante a sessão; I1 "em análise" no mapa; sem método não confirma; C1 "pendente" até o **Resultado** |
 | 40h | **Ferramentas → Drone e água**: importar o GPX do voo em **+ Telemetria**, marcar um **+ Foco térmico** no mapa e descartá-lo com justificativa; na aba Água, **+ Indicação na água** sem mexer na corrente | a linha do voo aparece; o foco começa "a verificar" e fica riscado ao descartar; a indicação mostra "Corrente: desconhecida" e a fonte do vento |

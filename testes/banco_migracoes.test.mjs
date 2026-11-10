@@ -3339,6 +3339,12 @@ console.log('\nLink público em partes, mensagem para vários, pontos em lote e 
   chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_salvar_setor', { p_participante: mil2.participante_id, p_id: sMeu.id, p_dados: JSON.stringify({ nome: 'Invadido' }) }))), 'outro militar não edita o nome do setor');
   await rpc(anM[1], 'participante_excluir_setor', { p_participante: mil.participante_id, p_id: sMeu.id });
   await rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: pMeu.id });
+  // 075: o participante recebe o local da operação (para o pacote de mapa offline)
+  chk((await rpc(anM[1], 'local_da_operacao', { p_participante: mil.participante_id })).lat === null, 'operação sem endereço: o local vem vazio');
+  await db.query(`update public.operacoes set local_lat = -25.43, local_lng = -49.27, local_endereco = 'Rua Teste, 100' where id = $1`, [opM.id]);
+  const loc = await rpc(anM[1], 'local_da_operacao', { p_participante: mil.participante_id });
+  chk(loc.lat === -25.43 && loc.lng === -49.27 && loc.endereco === 'Rua Teste, 100', 'participante lê o local da operação', loc);
+  chk(/participante_invalido/.test(await erroDe(rpc(anM[2], 'local_da_operacao', { p_participante: mil.participante_id }))), 'outra conta não lê o local pelo participante dos outros');
   // link público numa instalação sem a migração 050 (tabela categorias_ponto_estilo ausente): a 072 cria a tabela
   await db.exec('drop table public.categorias_ponto_estilo cascade');
   chk(/categorias_ponto_estilo|does not exist/.test(await erroDe(como(null, `select public.comando_publico($1, null) r`, [lk.token], 'anon'))), 'sem a tabela da 050, o link público falha (o caso relatado)');
@@ -3365,5 +3371,5 @@ console.log('\nLink de militares: só militar (073)');
   chk(p73c.tipo === 'civil', 'pelo link de civis nunca entra como militar', p73c.tipo);
 }
 
-console.log('\nMigrações 007–074 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–075 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

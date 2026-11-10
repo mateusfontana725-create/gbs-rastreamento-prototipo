@@ -13,6 +13,18 @@ module.exports = (req, res) => {
     supabaseKey: chave,
     configurado: Boolean(url && chave),
   };
+  // Servidor próprio de mapas (pacote offline, 10 km, zoom até 17). Cada camada é um endereço com {z}/{x}/{y}. Sem nenhuma
+  // configurada, o app segue como antes (mapas públicos, área pequena guardada). O servidor precisa mandar o cabeçalho CORS.
+  const mapaOffline = {};
+  [['osm', 'TILES_MAPA_URL'], ['topo', 'TILES_TOPO_URL'], ['satelite', 'TILES_SATELITE_URL']].forEach(([camada, nome]) => {
+    const v = (process.env[nome] || '').trim();
+    if (/^https:\/\/[^\s]+$/.test(v) && v.includes('{z}') && v.includes('{x}') && v.includes('{y}')) mapaOffline[camada] = v;
+  });
+  if (Object.keys(mapaOffline).length) {
+    config.mapaOffline = mapaOffline;
+    const atrib = (process.env.TILES_ATRIBUICAO || '').trim();
+    if (atrib) config.mapaAtribuicao = atrib.slice(0, 200);
+  }
 
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=300');

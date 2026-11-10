@@ -793,6 +793,151 @@
     });
   }
 
+  /* ---------- Pacotes de mapa offline (servidor próprio de mapas; migração 075) ---------- */
+  // Ao entrar na operação: se nenhum pacote guardado cobre o endereço dela (ou, sem endereço, a primeira posição boa do
+  // participante), baixa um pacote de 10 km em volta, com zoom até 17 e as camadas configuradas. Os pacotes ficam no aparelho
+  // (até 3) e valem para as próximas operações que eles cobrirem. Pode baixar sem Wi-Fi; mostra o progresso e dá para cancelar.
+  var CHAVE_PACOTES = 'gbs-mapa-pacotes';
+  function modelosPacote() {
+    var c = window.APP_CONFIG && window.APP_CONFIG.mapaOffline;
+    return c && Object.keys(c).length ? c : null;
+  }
+  function pacotesMapa() {
+    var r = C.local.ler(CHAVE_PACOTES, null);
+    return r && r.pacotes ? r.pacotes : [];
+  }
+  function gravarPacotes(lista) { C.local.gravar(CHAVE_PACOTES, { pacotes: lista }); }
+  function planoDoPacote(p) { return window.MapaOffline.planejarPacote(p.lat, p.lng, modelosPacote(), { raioM: p.raioM, zoomMax: p.zoomMax }); }
+
+  async function carregarLocalOperacao() {
+    if (estado.opLocalTentado || !estado.part) return;
+    estado.opLocalTentado = true;
+    try {
+      var r = await C.rpc('local_da_operacao', { p_participante: estado.part.participante_id }, 12000);
+      if (r && r.lat != null && r.lng != null) estado.opLocal = { lat: Number(r.lat), lng: Number(r.lng), endereco: r.endereco || '' };
+    } catch (e) {
+      if (e && e.rede) estado.opLocalTentado = false;   // sem rede agora: tenta de novo depois (sem a migração 075, usa a posição)
+    }
+  }
+
+  function verificarPacotes() {
+    var M = window.MapaOffline;
+    if (!M || !M.disponivel() || !estado.part || estado.finalizado || estado.mapaBaixando || estado.pacoteParado || navigator.onLine === false) return;
+    if (!estado.opLocalTentado) { carregarLocalOperacao().then(function () { if (estado.opLocalTentado) verificarPacotes(); }); return; }
+    var alvo = null, l = estado.ultimaLeitura;
+    if (estado.opLocal) alvo = { lat: estado.opLocal.lat, lng: estado.opLocal.lng, motivo: 'endereço', rotulo: estado.opLocal.endereco || 'Local da operação' };
+    else if (l && l.prec != null && l.prec <= 150) alvo = { lat: l.lat, lng: l.lng, motivo: 'posição', rotulo: 'Perto de onde você estava' };
+    if (!alvo || Date.now() - (estado.mapaFalhaEm || 0) < 120000) return;
+    var completos = pacotesMapa().filter(function (p) { return p.completo !== false; });
+    if (M.cobre(completos, alvo.lat, alvo.lng)) return;   // um pacote que já está no aparelho cobre esta operação
+    baixarPacoteMapa(alvo);
+  }
+
+  async function apagarPacoteMapa(id) {
+    var M = window.MapaOffline, todos = pacotesMapa();
+    var alvo = todos.filter(function (p) { return p.id === id; })[0];
+    if (!alvo) return;
+    var resto = todos.filter(function (p) { return p.id !== id; }), manter = {};
+    resto.forEach(function (p) { planoDoPacote(p).urls.forEach(function (u) { manter[u] = true; }); });   // o que outro pacote ainda usa fica
+    await M.apagarExceto(planoDoPacote(alvo).urls, manter);
+    gravarPacotes(resto);
+  }
+
+  async function baixarPacoteMapa(alvo) {
+    var M = window.MapaOffline, modelos = modelosPacote();
+    estado.mapaBaixando = true;
+    estado.cancelarPacote = false;
+    var cancelar = $('mapa-offline-cancelar');
+    try {
+      var plano = M.planejarPacote(alvo.lat, alvo.lng, modelos);
+      // espaço livre no aparelho (só impede quando está claramente faltando)
+      if (navigator.storage && navigator.storage.estimate) {
+        var e = await navigator.storage.estimate();
+        if (e && e.quota && e.usage != null && e.quota - e.usage < plano.mb * 1048576 * 1.1) {
+          mostrarMapaOffline('Sem espaço no celular para o mapa offline (precisa de ~' + plano.mb + ' MB livres).', true);
+          estado.pacoteParado = true;
+          return;
+        }
+      }
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () { /* o sistema decide */ });
+      var pacotes = pacotesMapa();
+      var meu = pacotes.filter(function (p) { return M.distanciaM(p.lat, p.lng, alvo.lat, alvo.lng) < 200; })[0];   // retoma o que ficou pela metade
+      while (!meu && pacotes.length >= M.PACOTE.max) {   // limite de pacotes: o mais antigo sai
+        var velho = pacotes.slice().sort(function (a, b) { return (a.em || 0) - (b.em || 0); })[0];
+        await apagarPacoteMapa(velho.id);
+        pacotes = pacotesMapa();
+      }
+      var pct = -1;
+      var texto = function (f) {
+        var p = Math.floor(f * 100 / Math.max(1, plano.total));
+        if (p === pct) return;
+        pct = p;
+        mostrarMapaOffline('Baixando o mapa para usar sem internet… ' + p + '% (~' + plano.mb + ' MB no total)', false);
+      };
+      mostrarMapaOffline('Baixando o mapa para usar sem internet… 0% (~' + plano.mb + ' MB no total)', false);
+      if (cancelar) { cancelar.hidden = false; cancelar.onclick = function () { estado.cancelarPacote = true; }; }
+      var r = await M.baixarPacote(plano.urls, { aoProgresso: texto, cancelado: function () { return estado.cancelarPacote; } });
+      var guardados = await M.contarGuardados(plano.urls);
+      var reg = { id: meu ? meu.id : Date.now().toString(36), lat: alvo.lat, lng: alvo.lng, raioM: plano.raioM, zoomMax: plano.zoomMax, camadas: plano.camadas,
+        total: plano.total, guardados: guardados, mb: plano.mb, em: Date.now(), motivo: alvo.motivo, rotulo: alvo.rotulo, completo: guardados >= plano.total };
+      pacotes = pacotesMapa().filter(function (p) { return p.id !== reg.id; });
+      if (guardados) pacotes.push(reg);
+      gravarPacotes(pacotes);
+      if (r.motivo === 'cancelado') { estado.pacoteParado = true; UI.aviso('Download do mapa cancelado. O que já foi baixado fica guardado.', 'ok', 6000); }
+      else if (r.motivo === 'cota') { estado.pacoteParado = true; UI.aviso('O celular ficou sem espaço para o mapa offline.', 'erro', 9000); }
+      else if (r.falhas) estado.mapaFalhaEm = Date.now();
+    } catch (e) {
+      estado.mapaFalhaEm = Date.now();
+    } finally {
+      estado.mapaBaixando = false;
+      if (cancelar) cancelar.hidden = true;
+      resumoPacotes();
+    }
+  }
+
+  // Só avisa quando falta parte do mapa; tudo guardado, a linha some.
+  function resumoPacotes() {
+    var M = window.MapaOffline;
+    if (!M || !M.disponivel()) { mostrarMapaOffline('Este navegador não guarda o mapa para uso sem internet.', true); return; }
+    var falta = pacotesMapa().filter(function (p) { return p.completo === false; })[0];
+    if (falta) mostrarMapaOffline('Mapa offline incompleto: ' + falta.guardados + ' de ' + falta.total + ' partes. O resto completa com internet.', true);
+    else mostrarMapaOffline('', false);
+  }
+
+  // Tela "Mapas offline": os pacotes guardados, o espaço aproximado de cada um e o botão de apagar.
+  function abrirMapasOffline() {
+    var M = window.MapaOffline;
+    var lista = UI.el('div', { classe: 'mapas-offline-lista' });
+    var resumo = UI.el('p', { classe: 'muted' });
+    function desenhar() {
+      lista.innerHTML = '';
+      var atuais = pacotesMapa(), total = 0;
+      if (!atuais.length) lista.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum mapa guardado neste aparelho ainda.' }));
+      atuais.forEach(function (p) {
+        total += p.mb || 0;
+        lista.appendChild(UI.el('div', { classe: 'mapa-pacote' }, [
+          UI.el('div', { classe: 'mapa-pacote-txt' }, [
+            UI.el('strong', { texto: p.rotulo || 'Região' }),
+            UI.el('small', { texto: '~' + (p.mb || 0) + ' MB · raio de ' + (p.raioM / 1000) + ' km · ' + (p.completo === false ? 'incompleto' : 'completo') + ' · ' + new Date(p.em || Date.now()).toLocaleDateString('pt-BR') })]),
+          UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Apagar', onclick: async function () {
+            await apagarPacoteMapa(p.id);
+            estado.pacoteParado = true;   // apagou de propósito: não baixa de novo sozinho nesta abertura
+            desenhar();
+            resumoPacotes();
+          } }),
+        ]));
+      });
+      resumo.textContent = atuais.length ? 'Total guardado: ~' + total + ' MB (o celular guarda até ' + M.PACOTE.max + ' mapas; o mais antigo sai quando chega outro).' : '';
+    }
+    desenhar();
+    var fechar = UI.abrirModal(UI.el('div', null, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Mapas offline' }),
+      UI.el('p', { classe: 'muted', texto: 'Mapa, relevo e satélite guardados no celular para usar sem internet. Cada mapa cobre 10 km em volta do local da operação.' }),
+      lista, resumo,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]));
+  }
+
   /* ---------- Mapa guardado no aparelho (js/mapa-offline.js) ---------- */
   // Guarda a área em volta da primeira posição boa, de cada lugar novo (mais de 1,5 km das áreas guardadas)
   // e do destino recebido. Uma área por vez; sem internet, espera. O estado aparece embaixo do mapa.
@@ -806,6 +951,7 @@
   }
   function verificarMapaOffline() {
     var M = window.MapaOffline;
+    if (modelosPacote()) { verificarPacotes(); return; }
     if (!M || !M.disponivel() || !estado.part || estado.finalizado || estado.mapaBaixando || navigator.onLine === false) return;
     var alvo = null, l = estado.ultimaLeitura;
     if (l && l.prec != null && l.prec <= 150 && M.precisaArea(areasMapa(), l.lat, l.lng)) alvo = { lat: l.lat, lng: l.lng, motivo: 'posição' };
@@ -846,6 +992,7 @@
   }
   // Resumo (com a conferência de quantos quadros estão de fato no aparelho)
   function resumoMapaOffline() {
+    if (modelosPacote()) { resumoPacotes(); return; }
     var areas = areasMapa();
     if (!areas.length) { mostrarMapaOffline(window.MapaOffline && window.MapaOffline.disponivel() ? '' : 'Este navegador não guarda o mapa para uso sem internet.', true); return; }
     var total = 0, ok = 0;
@@ -2143,7 +2290,7 @@
 
   // Fundo do mapa (mapa, relevo ou satélite): o mesmo conjunto do painel dos bombeiros.
   function criarBasesMapa() {
-    return {
+    var bases = {
       osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxNativeZoom: 19, maxZoom: 22,
         crossOrigin: true,   // resposta CORS: pode ser guardada para o mapa funcionar sem internet (sw.js)
@@ -2157,6 +2304,16 @@
         maxNativeZoom: 18, maxZoom: 22, attribution: 'Imagens &copy; Esri, Maxar, Earthstar Geographics',
       }),
     };
+    // Servidor próprio de mapas (APP_CONFIG.mapaOffline): as camadas configuradas vêm dele, e é isso que o pacote guarda.
+    var proprio = modelosPacote();
+    if (proprio) {
+      var atrib = (window.APP_CONFIG && window.APP_CONFIG.mapaAtribuicao) || '';
+      Object.keys(proprio).forEach(function (k) {
+        if (!bases[k]) return;
+        bases[k] = L.tileLayer(proprio[k], { maxNativeZoom: 17, maxZoom: 22, crossOrigin: true, attribution: atrib });
+      });
+    }
+    return bases;
   }
 
   function trocarBaseMapa(nome) {
@@ -2216,6 +2373,10 @@
       chave('Trilhas da equipe', 'trilhas', function (ligou) { if (ligou) { estado.trilhasEquipeEm = 0; carregarTrilhasEquipe(); } })]));
     painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Tema' }),
       seg('Tema', temaCivil(), [['escuro', 'Escuro'], ['claro', 'Claro']], aplicarTemaCivil)]));
+    if (modelosPacote()) {
+      painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Sem internet' }),
+        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'camadas-offline', texto: '🗺 Mapas offline', onclick: function () { fechar(); abrirMapasOffline(); } })]));
+    }
     botao.addEventListener('click', function () {
       var abrir = painel.hidden;
       painel.hidden = !abrir;
@@ -3808,6 +3969,7 @@
   // em volta da posição (que a página já guarda): o mapa funciona sem internet onde a busca acontece.
   function guardarMapaDaOperacao(setores, pontos) {
     var M = window.MapaOffline;
+    if (modelosPacote()) return;   // com servidor próprio de mapas, o pacote de 10 km já cobre a operação
     if (estado.mapaOperacaoFeito || !M || !M.disponivel() || estado.mapaBaixando || navigator.onLine === false) return;
     var lats = [], lngs = [];
     setores.forEach(function (st) {

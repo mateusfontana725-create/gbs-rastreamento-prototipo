@@ -2,7 +2,8 @@
  *   - notificações de mensagens no Android (o Chrome exige um service worker) e, ao tocar, volta para a página;
  *   - página guardada para abrir sem internet: arquivos do próprio site com "rede primeiro" (online sempre vem
  *     a versão nova; sem rede, a última guardada) e bibliotecas fixadas (versão no endereço) do CDN;
- *   - mapa: quadros do OpenStreetMap guardados (área baixada por js/mapa-offline.js e os já vistos).
+ *   - mapa: quadros do OpenStreetMap guardados (área baixada por js/mapa-offline.js e os já vistos) e quadros de PACOTES
+ *     baixados do servidor próprio de mapas (qualquer imagem de outra origem que esteja em CACHE_AREAS).
  * NÃO guarda chamadas ao servidor (Supabase, /api/*), nem dados pessoais. Não rastreia em segundo plano. */
 var CACHE_APP = 'gbs-app-v1';
 var CACHE_AREAS = 'gbs-mapa-areas-v1';        // áreas baixadas de propósito (js/mapa-offline.js)
@@ -55,6 +56,11 @@ function quadroDoMapa(req) {
   });
 }
 
+// Quadro de um pacote de mapa (servidor próprio): o guardado no pacote; se não está lá, a rede (sem guardar).
+function quadroDoPacote(req) {
+  return caches.open(CACHE_AREAS).then(function (c) { return c.match(req.url); }).then(function (g) { return g || fetch(req); });
+}
+
 // Arquivos do site: rede primeiro; sem rede, o último guardado (a página abre sem internet).
 function redePrimeiro(req) {
   return fetch(req).then(function (r) {
@@ -87,6 +93,7 @@ self.addEventListener('fetch', function (ev) {
   if (req.method !== 'GET') return;
   var url = req.url;
   if (url.indexOf(QUADROS) === 0) { ev.respondWith(quadroDoMapa(req)); return; }
+  if (req.destination === 'image' && url.indexOf(self.location.origin) !== 0) { ev.respondWith(quadroDoPacote(req)); return; }
   if (CDN.some(function (p) { return url.indexOf(p) === 0; })) { ev.respondWith(guardadoPrimeiro(req)); return; }
   var u = new URL(url);
   if (u.origin !== self.location.origin) return;                                   // Supabase e outros: direto, sem guardar

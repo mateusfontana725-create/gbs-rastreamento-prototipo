@@ -8,6 +8,8 @@
  *     em zoom 13 ou maior (aqui: até 240), um por vez, sem repetir o que já está guardado.
  *   - Guarda no máximo AREAS_MAX áreas; uma área nova apaga os quadros da mais antiga.
  *   - "Integridade": confere quantos quadros da área estão de fato no aparelho.
+ * Com servidor próprio de mapas (APP_CONFIG.mapaOffline), o app guarda PACOTES de 10 km em volta do endereço da operação
+ * (zoom até 17, camadas mapa/topo/satélite), reaproveitados nas próximas operações (veja a seção "Pacotes" abaixo).
  * Sem internet, o mapa mostra o que foi guardado; o registro da trilha não depende do mapa.
  * ===================================================================== */
 (function (global) {
@@ -106,10 +108,114 @@
     for (var i = 0; i < urls.length; i++) await cache.delete(urls[i]);
   }
 
+  /* ---------- Pacotes de mapa (servidor próprio de mapas) ----------
+   * Um pacote é um círculo de PACOTE.raioM em volta do endereço da operação (ou da primeira posição boa do participante),
+   * com as camadas configuradas (mapa, topográfico, satélite) do zoom 10 ao 17. O pacote fica no aparelho e vale para as
+   * próximas operações que ele cobrir: só baixa outro quando a nova operação não está bem dentro de nenhum (margem). */
+  var PACOTE = { raioM: 10000, zoomMin: 10, zoomMax: 17, margemM: 2000, max: 3, paralelo: 6 };
+  var KB_QUADRO = { osm: 15, topo: 25, satelite: 35 };   // média aproximada de cada quadro (só para a estimativa de tamanho)
+
+  // Quadros que tocam o círculo (o centro do quadro a até raio + meia diagonal dele), do zoom zMin ao zMax.
+  function quadrosDoCirculo(lat, lng, raioM, zMin, zMax) {
+    var dLat = raioM / 111320, dLng = raioM / (111320 * Math.cos(lat * Math.PI / 180));
+    var lista = [];
+    for (var z = zMin; z <= zMax; z++) {
+      var n = Math.pow(2, z);
+      var a = quadro(lat + dLat, lng - dLng, z), b = quadro(lat - dLat, lng + dLng, z);
+      for (var x = a.x; x <= b.x; x++) {
+        for (var y = a.y; y <= b.y; y++) {
+          var cLng = (x + 0.5) / n * 360 - 180;
+          var cLat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 0.5) / n))) * 180 / Math.PI;
+          var ladoM = 40075016 * Math.cos(cLat * Math.PI / 180) / n;
+          if (distanciaM(cLat, cLng, lat, lng) <= raioM + ladoM * 0.7072) lista.push({ z: z, x: x, y: y });
+        }
+      }
+    }
+    return lista;
+  }
+
+  function urlDoQuadro(modelo, q) {
+    return modelo.replace('{z}', q.z).replace('{x}', q.x).replace('{y}', q.y);
+  }
+
+  // modelos: { osm: 'https://…/{z}/{x}/{y}.png', topo: …, satelite: … } (só as camadas que existem).
+  // Devolve { raioM, zoomMax, camadas, quadros, total, urls, mb } (mb: estimativa de tamanho).
+  function planejarPacote(lat, lng, modelos, opc) {
+    opc = opc || {};
+    var raio = opc.raioM || PACOTE.raioM, zMin = opc.zoomMin || PACOTE.zoomMin, zMax = opc.zoomMax || PACOTE.zoomMax;
+    var camadas = Object.keys(modelos || {}).filter(function (c) { return modelos[c]; });
+    var quadros = quadrosDoCirculo(lat, lng, raio, zMin, zMax), urls = [], kb = 0;
+    camadas.forEach(function (c) {
+      quadros.forEach(function (q) { urls.push(urlDoQuadro(modelos[c], q)); });
+      kb += quadros.length * (KB_QUADRO[c] || 25);
+    });
+    return { raioM: raio, zoomMax: zMax, camadas: camadas, quadros: quadros.length, total: urls.length, urls: urls, mb: Math.round(kb / 1024) };
+  }
+
+  // O novo ponto está bem dentro de algum pacote guardado? (margem: o pacote não pode ter o ponto na borda)
+  function cobre(pacotes, lat, lng, margemM) {
+    var m = margemM == null ? PACOTE.margemM : margemM;
+    return (pacotes || []).some(function (p) { return distanciaM(p.lat, p.lng, lat, lng) <= p.raioM - m; });
+  }
+
+  // Baixa os quadros que faltam, vários ao mesmo tempo. opc: { paralelo, aoProgresso(feitos, total), cancelado() }.
+  // Retoma de onde parou (o que já está guardado não é baixado de novo). Para com "sem rede", "cota" cheia ou cancelamento.
+  async function baixarPacote(urls, opc) {
+    opc = opc || {};
+    var cache = await global.caches.open(CACHE_AREAS);
+    var proximo = 0, feitos = 0, falhas = 0, parar = false, motivo = null;
+    async function trabalhador() {
+      while (!parar) {
+        var k = proximo++;
+        if (k >= urls.length) return;
+        if (opc.cancelado && opc.cancelado()) { parar = true; motivo = 'cancelado'; return; }
+        if (global.navigator && global.navigator.onLine === false) { parar = true; motivo = 'sem_rede'; return; }
+        try {
+          if (!(await cache.match(urls[k]))) {
+            var r;
+            try { r = await global.fetch(urls[k], { mode: 'cors', credentials: 'omit' }); if (!r.ok) throw new Error('HTTP ' + r.status); }
+            catch (e1) { r = await global.fetch(urls[k], { mode: 'cors', credentials: 'omit' }); if (!r.ok) throw new Error('HTTP ' + r.status); }   // uma nova tentativa
+            await cache.put(urls[k], r);
+          }
+          feitos++;
+        } catch (e) {
+          falhas++;
+          if (e && e.name === 'QuotaExceededError') { parar = true; motivo = 'cota'; return; }
+        }
+        if (opc.aoProgresso) opc.aoProgresso(feitos, urls.length);
+      }
+    }
+    var ts = [];
+    for (var i = 0; i < (opc.paralelo || PACOTE.paralelo); i++) ts.push(trabalhador());
+    await Promise.all(ts);
+    return { feitos: feitos, falhas: falhas, total: urls.length, motivo: motivo };
+  }
+
+  // Quantos quadros da lista estão de fato guardados (uma só leitura da lista do cache, rápida mesmo com milhares).
+  async function contarGuardados(urls) {
+    if (!disponivel()) return 0;
+    var cache = await global.caches.open(CACHE_AREAS);
+    var chaves = await cache.keys(), tem = {};
+    chaves.forEach(function (r) { tem[r.url] = true; });
+    var n = 0;
+    for (var i = 0; i < urls.length; i++) if (tem[urls[i]]) n++;
+    return n;
+  }
+
+  // Apaga os quadros da lista, menos os que outro pacote ainda usa (manter: objeto { url: true }).
+  async function apagarExceto(urls, manter) {
+    if (!disponivel()) return 0;
+    var cache = await global.caches.open(CACHE_AREAS), n = 0;
+    for (var i = 0; i < urls.length; i++) if (!(manter && manter[urls[i]]) && await cache.delete(urls[i])) n++;
+    return n;
+  }
+
   var API = {
     CACHE_AREAS: CACHE_AREAS, AREAS_MAX: AREAS_MAX, NOVA_AREA_A_M: NOVA_AREA_A_M, MAX_QUADROS_Z13: MAX_QUADROS_Z13, RAIO_PADRAO_M: RAIO_PADRAO_M,
     quadro: quadro, quadrosDaArea: quadrosDaArea, planejarArea: planejarArea, precisaArea: precisaArea, distanciaM: distanciaM,
     disponivel: disponivel, baixar: baixar, contar: contar, apagar: apagar,
+    PACOTE: PACOTE, quadrosDoCirculo: quadrosDoCirculo, planejarPacote: planejarPacote, cobre: cobre, baixarPacote: baixarPacote,
+    contarGuardados: contarGuardados, apagarExceto: apagarExceto,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   global.MapaOffline = API;

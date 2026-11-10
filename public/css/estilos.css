@@ -2764,3 +2764,10 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-sel
   .civil-em-rastreio #tela-rastreio .acoes-civil { left: 50%; right: auto; width: min(560px, calc(100% - 20px)); transform: translateX(-50%); }
 }
 
+/* Mapas offline (pacotes de 10 km): botão de cancelar o download e lista na tela de gerenciar */
+.mapa-offline-cancelar { margin-top: 4px; }
+.mapas-offline-lista { display: grid; gap: 6px; margin: 10px 0; }
+.mapa-pacote { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--borda); border-radius: 12px; background: var(--superficie-2); }
+.mapa-pacote-txt { display: grid; gap: 2px; min-width: 0; }
+.mapa-pacote-txt small { color: var(--texto-3); font-size: .78rem; line-height: 1.25; }
+

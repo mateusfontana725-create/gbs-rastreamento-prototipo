@@ -2758,3 +2758,9 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-sel
 .opcao-setor-p small { font-size: .8rem; color: var(--texto-3); line-height: 1.25; }
 @media (max-width: 420px) { .opcoes-setor-p { grid-template-columns: 1fr; } }
 
+/* Barra do civil em tablet e computador: centralizada na tela (SOS e REGISTRAR visíveis).
+   Fica no fim do arquivo para valer sobre a regra da barra que zera left/right. */
+@media (min-width: 700px) {
+  .civil-em-rastreio #tela-rastreio .acoes-civil { left: 50%; right: auto; width: min(560px, calc(100% - 20px)); transform: translateX(-50%); }
+}
+

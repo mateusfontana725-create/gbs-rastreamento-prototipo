@@ -114,7 +114,7 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 - Fotos: prévia "A foto ficou boa?" sem coordenadas; "Suas fotos" mostra só miniaturas com
   "✓ Enviada" ou "Esperando internet".
 - **Começar** entra direto no rastreamento, sem perguntar nada, e a gravação do caminho começa junto. O **civil não tem como parar a gravação** nem
-  pedir saída pelo aparelho: não há botão de sair na tela dele. Quem para é o militar, pelo menu (abaixo).
+  parar a gravação: o botão **Quero sair da busca** só faz um pedido (os bombeiros liberam a saída pelo painel). Quem para a gravação de vez é o militar, pelo menu (Busca).
 - **Mapa abre no satélite** (civil e militar). Um fundo escolhido pela pessoa (Camadas) fica guardado neste aparelho; enquanto ela não
   escolhe outro, o satélite vale.
 - **Link de militares só registra militar** (migração 073): o link de militares não oferece a escolha de civil; quem entra por ele é
@@ -413,7 +413,7 @@ O mapa da página do participante mostra, além dos bombeiros:
   - **Militar**: só **☰ MENU**. O menu tem seções com título: **Ações** (SOS, ＋ Registrar), **Ferramentas** (**Criar setor**, que abre a
     escolha "Desenhar a área" ou "Em círculo"; e **Marcar ponto de interesse**, conforme liberado), **Busca** (**Sair da busca**: pede a saída,
     e é aqui que o militar para a gravação) e **Mapa** (legenda). Suas fotos e o diagnóstico do GPS ficam no fim.
-  - **Baixar aplicativo** fica no canto inferior direito, acima da barra; o aviso "pedido para sair
+  - **Quero sair da busca** (pedido) e **Baixar aplicativo** ficam no canto inferior direito, acima da barra; o aviso "pedido para sair
     enviado" aparece sob o estado. A navegação até um destino vira um cartão sobre o mapa: fechado mostra a
   distância e a direção (e "Busca no setor concluída"); tocar no título abre a rota, os modos e "Encerrar navegação".
 - **Tipos de operação SARP e BREC**: na **Natureza** do cadastro, além de busca aquática e terrestre, **SARP – Aeronave remotamente
@@ -2574,7 +2574,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 49d | No painel, **Aceitar como civil** (ou bombeiro); em outro pedido, **Recusar** | o celular aceito segue sozinho para a tela da operação já preenchida; o recusado volta ao código com a explicação; as decisões vão ao diário |
 | 49e | Fechar o aplicativo com o pedido esperando e abrir de novo | continua esperando o mesmo pedido |
 | 49f | **Trocar código** e **Desligar entrada por código**; tentar o código antigo e o desligado | os dois são recusados ("não existe ou está desligado"); errar 8 vezes barra por 10 minutos |
-| 49g | Durante a busca, olhar a tela do participante | civil: mapa em tela cheia, SOS e REGISTRAR embaixo, sem MENU; militar: só MENU; sem botão de sair (o militar sai pelo menu, em Busca); abre no satélite |
+| 49g | Durante a busca, olhar a tela do participante | civil: mapa em tela cheia, SOS e REGISTRAR embaixo, sem MENU; militar: só MENU; **Quero sair da busca** (só pedido; o militar para pelo menu, em Busca); abre no satélite |
 | 49h | Criar operação com natureza SARP e outra BREC | o cabeçalho, a lista e os relatórios mostram o tipo |
 | 49i | **Ferramentas → Link público do painel**, criar e abrir o link numa janela anônima (sem login) | mapa ao vivo, nomes como "Participante N", sem botões de edição, mensagens, convite, Ferramentas só com visualização; marcar "Mostrar os nomes" mostra os nomes; trocar/desligar faz o link antigo mostrar "não funciona mais" |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |

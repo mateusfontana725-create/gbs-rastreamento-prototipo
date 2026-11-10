@@ -252,6 +252,7 @@
     }
 
     $('form-inicio').addEventListener('submit', aoIniciar);
+    $('btn-saida').addEventListener('click', aoSolicitarSaida);
     $('menu-saida').addEventListener('click', function () { abrirMenuFolha(false); aoSolicitarSaida(); });
     $('form-msg').addEventListener('submit', aoEnviarMensagem);
     $('btn-registrar').addEventListener('click', abrirRegistro);
@@ -3488,8 +3489,8 @@
       cancelar: 'Voltar',
     });
     if (!r) return;
-    var btn = $('menu-saida');
-    btn.disabled = true;
+    var botoesSaida = [$('btn-saida'), $('menu-saida')];
+    botoesSaida.forEach(function (b) { b.disabled = true; });
     try {
       var resp = await C.rpc('solicitar_saida', { p_participante: estado.part.participante_id, p_motivo: r.texto || '' });
       estado.saidaSolicitadaEm = resp && resp.saida_solicitada_em ? resp.saida_solicitada_em : new Date().toISOString();
@@ -3498,7 +3499,7 @@
     } catch (e) {
       if (!tratarErroFatal(e)) UI.aviso(e.rede ? 'Sem internet: não deu para enviar o pedido. Tente de novo.' : e.message, 'erro', 7000);
     } finally {
-      btn.disabled = false;
+      botoesSaida.forEach(function (b) { b.disabled = false; });
       atualizarUI();
     }
   }
@@ -3963,6 +3964,7 @@
     var pendente = Boolean(estado.saidaSolicitadaEm);
     $('saida-pendente').hidden = !pendente;
     if (pendente) $('saida-hora').textContent = C.hora(estado.saidaSolicitadaEm, false);
+    $('btn-saida').hidden = pendente;
     $('menu-saida').hidden = pendente;
     $('btn-menu').classList.toggle('tem-aviso', pendente);
   }

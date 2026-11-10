@@ -428,6 +428,7 @@
     $('ficha-enviar-destino').addEventListener('click', function () { if (est.selecionado) escolherDestino([est.selecionado]); });
     $('ficha-ir-ate').addEventListener('click', function () { if (est.selecionado) abrirRotaAte(est.selecionado); });
     $('barra-apoio-parar').addEventListener('click', pararRotaApoio);
+    $('barra-apoio-fechar').addEventListener('click', function () { est.rotaApoioFechada = est.rotaApoio; renderizarBarraApoio(); });
     $('barra-apoio-ver').addEventListener('click', verRotaApoio);
     $('ficha-renomear').addEventListener('click', function () { var p = est.participantes.get(est.selecionado); if (p) renomearParticipante(p); });
     $('ficha-vitima').addEventListener('click', function () { if (est.selecionado) abrirRegistroVitima({ encontrou: est.selecionado, onde: 'quem' }); });
@@ -7040,7 +7041,10 @@
   function atualizarChipDeslocamento() {
     var mapaEl = $('mapa');
     var chip = $('chip-deslocamento');
-    var mostrar = Boolean(est.mapa && mapaEl && emDeslocamento());
+    var emDesl = Boolean(est.mapa && mapaEl && emDeslocamento());
+    // fechado no × vale até sair do deslocamento (aí o aviso volta na próxima vez)
+    if (!emDesl) est.deslocamentoFechado = false;
+    var mostrar = emDesl && !est.deslocamentoFechado;
     if (!mostrar) { if (chip) chip.hidden = true; return; }
     if (!chip) {
       chip = UI.el('div', { id: 'chip-deslocamento', classe: 'chip-deslocamento', role: 'status' }, [
@@ -7051,6 +7055,8 @@
           else UI.aviso('Sem a sua posição ainda.', 'erro');
         } }),
         UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'deslocamento-cheguei', texto: 'Cheguei ao local', onclick: function () { marcarChegadaAoLocal('manual'); } }),
+        UI.el('button', { classe: 'pilha-x', type: 'button', id: 'deslocamento-fechar', 'aria-label': 'Fechar o aviso de deslocamento', title: 'Fechar', texto: '×',
+          onclick: function () { est.deslocamentoFechado = true; chip.hidden = true; } }),
       ]);
       ($('pilha-topo') || mapaEl).appendChild(chip);
       if (window.L && L.DomEvent) { L.DomEvent.disableClickPropagation(chip); L.DomEvent.disableScrollPropagation(chip); }
@@ -8222,7 +8228,8 @@
   function renderizarBarraApoio() {
     var r = est.rotaApoio, barra = $('barra-apoio');
     if (!barra) return;
-    if (!r) { barra.hidden = true; return; }
+    // × fecha só a barra desta rota; uma rota nova (outro objeto) mostra a barra de novo
+    if (!r || r === est.rotaApoioFechada) { barra.hidden = true; return; }
     var p = est.participantes.get(r.alvo);
     var vista = p ? C.paraMs(p.dados.ultima_posicao_em) : 0;
     var velha = vista && Date.now() - vista > 5 * 60000;

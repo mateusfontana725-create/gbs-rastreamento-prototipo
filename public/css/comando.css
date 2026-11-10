@@ -2942,3 +2942,14 @@ body:has(.barra-apoio:not([hidden])) #avisos { bottom: 88px; }
 /* "Fora da operação (N)": o título é texto corrido (no celular uma regra antiga o virava flex e quebrava o número) */
 .grupo-removidos > summary { display: block; line-height: 1.35; padding: 10px 12px; }
 .grupo-removidos > summary small { display: inline; }
+
+/* × de fechar nos avisos flutuantes (deslocamento, rota de apoio, tempo): mesmo tamanho e lugar em todos */
+.pilha-x {
+  flex: none; margin-left: auto; width: 28px; height: 28px; min-width: 28px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; line-height: 1;
+  background: transparent; color: inherit; border: 1px solid currentColor; opacity: .75; cursor: pointer;
+}
+.pilha-x:hover, .pilha-x:focus-visible { opacity: 1; outline: none; background: rgba(255, 255, 255, .12); }
+html[data-tema="claro"] .pilha-x:hover, html[data-tema="claro"] .pilha-x:focus-visible { background: rgba(0, 0, 0, .06); }
+.barra-apoio .pilha-x { margin-left: 4px; }
+.meteo-aviso .pilha-x { margin-left: 4px; }

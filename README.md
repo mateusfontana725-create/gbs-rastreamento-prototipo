@@ -877,6 +877,10 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   Num dia passado, cada pessoa aparece **onde estava no fim daquele dia**, e as trilhas só mostram os trechos do dia. Os detalhes da trilha
   (distância, tempo, relevo) seguem o filtro. Uma barra no alto do mapa mostra o filtro ("📅 08/11/2026 (ontem) · 👁 Mostrando só Ana");
   tocar nela muda o filtro e **✕ Mostrar todos** limpa. Os alertas continuam chegando. O filtro não fica lembrado ao recarregar.
+- **Avisos flutuantes com ×**: tudo que aparece sobre o mapa tem um **×** para fechar, para a tela não acumular avisos (principalmente no celular):
+  os avisos rápidos (canto inferior, no máximo três, somem sozinhos, exceto alertas de segurança), a barra de desenho (× = cancelar), o
+  **Em deslocamento** (× esconde; volta só depois de sair do deslocamento), a **barra da rota de apoio** (× esconde só a barra, a rota
+  continua no mapa; **Parar** encerra a rota), o aviso de **tempo** (× = ocultar) e o **✕ Mostrar todos** da barra do filtro, que limpa o filtro.
 - **Cabeçalho compacto no tablet**: de 601 a 1440 px de largura os botões de ação do topo (Marcar ponto, Foto, Setor, Trilha, Régua, POA/POD,
   Dashboard, Mensagens, Convidar) ficam só com o **ícone** (o nome aparece ao segurar ou passar o mouse). No tablet deitado ficam **na mesma
   linha do título** (cabeçalho de ~50 px, antes ~108 px); no tablet em pé, numa faixa de ícones de 32 px. No celular e acima de 1440 px nada mudou.

@@ -806,7 +806,7 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   a prévia no mapa enquanto você mexe; **Cancelar** desfaz. Por padrão o fundo é **claro** (pendente 10%, em andamento 18%, concluído 10%); desmarcar **Usar a padrão** deixa escolher até 90%. Fica gravada com o setor, então todos os celulares da operação
   veem a mesma opacidade. **Antes de usar, rode `070_opacidade_setores.sql` no Supabase.** Não muda o contorno nem o nome. O mapa do
   participante ainda usa a padrão.
-  Para mudar **todos os setores de uma vez neste aparelho**: **Camadas → Preenchimento dos setores** (5% a 70%; "Padrão" volta ao claro). O ajuste de um setor, quando existe, vale mais que o do aparelho.
+  A opacidade se ajusta **só no formulário de cada setor** (**Editar setor → Opacidade do preenchimento**, 10% a 90%; "usar a padrão" volta à da situação). Não há controle geral em Camadas.
 - **Elementos sobrepostos**: os setores **menores ficam desenhados por cima** dos maiores (o contorno de quem está dentro de outro
   continua inteiro à vista). Tocar num ponto coberto por mais de um **setor ou área proibida** abre **direto o menor que contém o
   ponto**, com o contorno destacado: num círculo dentro de outro, tocar no miolo abre o de dentro e tocar no anel abre o de fora.
@@ -852,7 +852,7 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 
 ### Filtros, mensagens para vários, pontos, abertura no local e funções dos militares (migração 072)
 
-- **Filtrar por dia ou pessoa** (**Ferramentas → 📅 Filtrar por dia ou pessoa**): escolha um **dia** (a lista mostra os dias com
+- **Filtrar por dia ou pessoa** (botão **📅 Dia** sobre o mapa, ao lado de **Camadas**; mostra o dia e a pessoa filtrados e acende enquanto há filtro): escolha um **dia** (a lista mostra os dias com
   registros e quantas posições; dá para escolher outro no calendário) e/ou uma **pessoa**. O mapa mostra só o que foi feito nesse dia:
   as trilhas só com os trechos do dia, as fotos e relatos do dia e quem esteve em campo — num dia passado, cada pessoa aparece **onde
   estava no fim daquele dia**. Duas opções: **Mostrar todos os setores, de qualquer dia** e **Mostrar todos os pontos de interesse, de
@@ -2515,7 +2515,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 50b | Tocar numa trilha de GPS no mapa; abrir a ficha; abrir Setores, trilhas e pontos | em todos há como apagar trechos (balão, ⋮ Mais, lista "Trilhas de GPS dos participantes") |
 | 50c | **↺ Restaurar apagados** (no menu "…" da borracha ou na ficha) | a trilha volta inteira |
 | 50d | Abrir o link público depois de apagar um trecho | o trecho apagado também não aparece lá |
-| 50e | Olhar o fundo dos setores; em **Camadas → Preenchimento dos setores** mexer no controle; em Editar setor mudar a opacidade de um | fundo claro por padrão; o controle muda todos os setores sem opacidade própria; o ajuste do setor vale mais |
+| 50e | Olhar o fundo dos setores; em **Camadas** não há mais controle de preenchimento; em Editar setor mudar a opacidade de um | fundo claro por padrão; a opacidade muda só o setor editado (os outros seguem a padrão) |
 | 49a | No Android, abrir o link de civis, preencher e tocar em COMEÇAR | depois de permitir a localização, abre sozinho "Baixe o aplicativo para ajudar melhor"; "Agora não" fecha; o botão "Baixar aplicativo" continua no MENU; ao recarregar não abre de novo |
 | 49b | No aplicativo instalado e sem operação, abrir o aplicativo | aparece "Entrar na busca com o código" (servidor fixado na compilação) |
 | 49c | Digitar o código (minúsculas ou com espaço), nome e celular e pedir | tela "Aguardando os bombeiros"; no painel aparece o aviso e o botão 🔑 1 |

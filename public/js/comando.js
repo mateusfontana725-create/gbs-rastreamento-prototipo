@@ -381,7 +381,7 @@
     $('menu-msg-varios').addEventListener('click', function () { fecharMenu(); abrirMensagemVarios(null); });
     $('central-msg-varios').addEventListener('click', function () { abrirMensagemVarios(null); });
     $('menu-areas').addEventListener('click', abrirAreas);
-    $('menu-filtro-mapa').addEventListener('click', function () { abrirFiltroMapa(); });
+    $('btn-filtro-mapa').addEventListener('click', function () { abrirFiltroMapa(); });
     $('menu-perm-militar').addEventListener('click', function () { fecharMenu(false); abrirPermissoesMilitar(); });
     $('areas-selecionar-pontos').addEventListener('click', function () {
       est.selPontos = est.selPontos ? null : new Set();
@@ -401,19 +401,6 @@
     $('opt-desenhadas-planejadas').addEventListener('click', function () { definirPrefMapa('tmPlanejadas', est.prefsMapa.tmPlanejadas === false); });
     $('opt-desenhadas-percorridas').addEventListener('click', function () { definirPrefMapa('tmPercorridas', est.prefsMapa.tmPercorridas === false); });
     $('opt-setores').addEventListener('click', function () { definirPrefMapa('setores', !est.prefsMapa.setores); });
-    // Preenchimento dos setores (só para este aparelho): vale para os setores que não têm opacidade própria
-    function mostrarOpacSetores() {
-      var v = est.prefsMapa.opacSetores;
-      $('opt-setores-opac').value = String(Math.round((typeof v === 'number' ? v : opacidadePadraoSetor('pendente')) * 100));
-      $('opt-setores-opac-valor').textContent = typeof v === 'number' ? Math.round(v * 100) + '%' : 'padrão';
-    }
-    $('opt-setores-opac').addEventListener('input', function () {
-      var n = Number(this.value) / 100;
-      $('opt-setores-opac-valor').textContent = Math.round(n * 100) + '%';
-      definirPrefMapa('opacSetores', n);
-    });
-    $('opt-setores-opac-padrao').addEventListener('click', function () { definirPrefMapa('opacSetores', null); mostrarOpacSetores(); });
-    mostrarOpacSetores();
     $('opt-pontos').addEventListener('click', function () { definirPrefMapa('pontos', !est.prefsMapa.pontos); });
     $('menu-3d').addEventListener('click', abrirRelevo3D);
     $('menu-regua').addEventListener('click', function () { fecharMenu(false); alternarRegua(); });
@@ -2464,7 +2451,6 @@
       }
       if (chave === 'legenda' && est.legenda) { if (valor) est.legenda.addTo(est.mapa); else est.legenda.remove(); }
       if (chave === 'setores' && est.camadaSetores) { if (valor) est.camadaSetores.addTo(est.mapa); else est.camadaSetores.remove(); }
-      if (chave === 'opacSetores') est.setores.forEach(function (s) { desenharFundoSetor(s); });
       if (chave === 'pontos' && est.camadaPontosInt) { if (valor) est.camadaPontosInt.addTo(est.mapa); else est.camadaPontosInt.remove(); }
       if (chave === 'local') desenharLocalOp();
       if (chave === 'tmPlanejadas' || chave === 'tmPercorridas') redesenharTrilhasManuais();
@@ -2688,6 +2674,22 @@
     $('camadas-resumo').textContent = (nomesBase[est.camadaAtual] || '') +
       (!filtrado ? '' : modo ? ' · só ' + MODOS_MAPA[modo].rotulo.toLowerCase() : ' · personalizado');
     $('btn-camadas').setAttribute('aria-label', 'Camadas do mapa: ' + $('camadas-resumo').textContent);
+    atualizarBotaoFiltro();
+  }
+
+  // Botão "Dia" no mapa (como Camadas): mostra o dia e a pessoa filtrados; aceso enquanto há filtro.
+  function atualizarBotaoFiltro() {
+    var b = $('btn-filtro-mapa');
+    if (!b) return;
+    var f = est.filtroDia;
+    var p = est.focoPessoa && est.participantes.get(est.focoPessoa);
+    var partes = [];
+    if (f) { var x = f.dia.split('-'); partes.push(x[2] + '/' + x[1]); }
+    if (p) partes.push(nomeExibido(p));
+    var ativo = Boolean(f || p);
+    b.classList.toggle('camadas-filtrado', ativo);
+    $('filtro-resumo').textContent = partes.join(' · ');
+    b.setAttribute('aria-label', 'Filtrar o mapa' + (ativo ? ': ' + partes.join(', ') : ''));
   }
 
   /* ---------- Lista lateral: ocultar e reabrir ----------------------- */
@@ -6164,13 +6166,10 @@
   }
 
   /* ---------- Desenho dos setores ----------------------------------- */
-  // Opacidade padrão do preenchimento (quando o setor não tem opacidade própria). Mais clara que antes (pendente 10%,
-  // em andamento 18%, concluído 10%) para o mapa aparecer por baixo. Em Camadas → "Preenchimento dos setores" cada responsável
-  // escolhe outro valor para este aparelho (opacSetores = o do setor pendente; em andamento 1,6x e concluído 0,6x).
+  // Opacidade padrão do preenchimento, para o setor que não tem opacidade própria. Ela se muda só no formulário
+  // do setor (Editar setor → Opacidade do preenchimento), setor a setor; não há mais controle geral no mapa.
   function opacidadePadraoSetor(status) {
-    var v = est.prefsMapa.opacSetores;
-    if (typeof v === 'number') return Math.min(0.9, Math.round(v * (status === 'andamento' ? 1.6 : status === 'concluido' ? 0.6 : 1) * 100) / 100);
-    return status === 'concluido' ? 0.10 : status === 'andamento' ? 0.18 : 0.10;
+    return status === 'andamento' ? 0.18 : 0.10;
   }
 
   function estiloSetor(d) {
@@ -11836,6 +11835,7 @@
       est.filtroDia = null;
     }
     est.participantes.forEach(function (q) { q._dia = null; atualizarMarcador(q); desenharTrilha(q); });
+    atualizarBotaoFiltro();
     aplicarFocoPontos();
     est.setores.forEach(function (x) { desenharSetor(x); });
     est.pontosInt.forEach(function (x) { x._assinatura = null; desenharPontoInt(x); });
@@ -11992,6 +11992,7 @@
     est.listaSuja = true;
     renderizarLista();
     atualizarBarraFoco();
+    atualizarBotaoFiltro();
     if (est.mapa) est.mapa.invalidateSize();
     if (alvo) enquadrarPessoa(est.participantes.get(alvo));
   }

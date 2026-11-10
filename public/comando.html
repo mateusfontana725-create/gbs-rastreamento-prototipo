@@ -313,7 +313,6 @@
               <section class="menu-secao" data-secao="mapa">
                 <button class="menu-secao-titulo" type="button" aria-expanded="true">Mapa e arquivos</button>
                 <div class="menu-secao-itens">
-                <button class="menu-item" type="button" id="menu-filtro-mapa" title="Ver no mapa só o que foi feito num dia, ou só uma pessoa"><span class="ico-item" aria-hidden="true">📅</span><span>Filtrar por dia ou pessoa</span></button>
                 <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
                 <button class="menu-item" type="button" id="menu-borracha-gps" title="Borracha: apaga trechos da trilha de GPS de um participante (os pontos continuam guardados)"><span class="ico-item" aria-hidden="true">✂</span><span>Apagar trecho de trilha de GPS</span></button>
                 <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
@@ -389,6 +388,9 @@
 
       <!-- Mapa e camadas: tipo de mapa, modo de visualização e camadas operacionais (sempre à mão, fora do menu) -->
       <div class="camadas-mapa" id="camadas-mapa">
+        <button class="camadas-botao camadas-filtro" type="button" id="btn-filtro-mapa" aria-haspopup="dialog" title="Ver no mapa só um dia ou uma pessoa">
+          <span class="ico-filtro" aria-hidden="true">📅</span><span class="camadas-rotulo">Dia</span><small class="camadas-resumo" id="filtro-resumo"></small>
+        </button>
         <button class="camadas-botao" type="button" id="btn-camadas" aria-expanded="false" aria-controls="camadas-painel" title="Tipo de mapa, relevo 3D e camadas">
           <span class="ico-camadas" aria-hidden="true"></span><span class="camadas-rotulo">Camadas</span><small class="camadas-resumo" id="camadas-resumo"></small>
         </button>
@@ -438,14 +440,6 @@
                 <button class="chip-camada" type="button" id="opt-pontos" aria-pressed="true"><span class="camada-sinal sinal-ponto" aria-hidden="true"></span><span class="chip-txt">Pontos de interesse</span></button>
                 <button class="chip-camada" type="button" id="opt-local" aria-pressed="true"><span class="camada-sinal sinal-local" aria-hidden="true"></span><span class="chip-txt">Local da operação</span></button>
               </div>
-            </div>
-            <div class="camadas-preenchimento" id="camadas-preenchimento">
-              <label for="opt-setores-opac">Preenchimento dos setores <output id="opt-setores-opac-valor" class="mono">padrão</output></label>
-              <div class="camadas-preench-linha">
-                <input id="opt-setores-opac" type="range" min="5" max="70" step="5" value="10" aria-label="Opacidade do fundo dos setores">
-                <button class="btn btn-pequeno" type="button" id="opt-setores-opac-padrao" title="Volta ao preenchimento claro padrão">Padrão</button>
-              </div>
-              <small class="muted">Do mais claro ao mais escuro. Vale para este aparelho; cada setor pode ter o seu em Editar setor.</small>
             </div>
             <div class="grupo-camadas" role="group" aria-labelledby="gc-campo">
               <h5 id="gc-campo">Registros do campo</h5>

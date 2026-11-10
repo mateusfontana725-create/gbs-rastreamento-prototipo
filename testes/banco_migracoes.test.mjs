@@ -3345,6 +3345,29 @@ console.log('\nLink público em partes, mensagem para vários, pontos em lote e 
   const loc = await rpc(anM[1], 'local_da_operacao', { p_participante: mil.participante_id });
   chk(loc.lat === -25.43 && loc.lng === -49.27 && loc.endereco === 'Rua Teste, 100', 'participante lê o local da operação', loc);
   chk(/participante_invalido/.test(await erroDe(rpc(anM[2], 'local_da_operacao', { p_participante: mil.participante_id }))), 'outra conta não lê o local pelo participante dos outros');
+  // 076: o responsável da operação apaga relatos (com o ponto criado a partir deles) e fotos dos participantes
+  const relA = await rpc(anM[1], 'participante_enviar_mensagem', { p_participante: mil.participante_id, p_categoria: 'PISTA', p_texto: 'Pegada recente', p_lat: -25.6, p_lng: -49.4, p_client_id: uid(7001) });
+  const ptRel = await rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ categoria: 'VESTIGIO', titulo: 'Do relato', lat: -25.6, lng: -49.4 }) });
+  await db.query(`update public.pontos_interesse set mensagem_id = $1 where id = $2`, [relA.id, ptRel.id]);
+  chk(/sem_permissao/.test(await erroDe(rpc(anM[1], 'excluir_relato', { p_id: relA.id }))), 'o participante não exclui o próprio relato pela função do responsável');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'excluir_relato', { p_id: relA.id }))), 'responsável de fora da operação não exclui relato');
+  const saidaR = await rpc(resp1, 'enviar_mensagem', { p_participante: mil.participante_id, p_tipo: 'ATENCAO', p_texto: 'Atenção' });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp1, 'excluir_relato', { p_id: saidaR.id }))), 'mensagem do responsável para o participante não é relato: não exclui por aqui');
+  const exR = await rpc(resp12, 'excluir_relato', { p_id: relA.id });
+  chk(exR.pontos_excluidos === 1, 'responsável da operação (adicionado) exclui o relato e o ponto criado a partir dele', exR);
+  chk((await db.query(`select (select count(*)::int from public.mensagens where id = $1) m, (select count(*)::int from public.pontos_interesse where id = $2) p`, [relA.id, ptRel.id])).rows[0].m === 0, 'o relato some do banco');
+  const relB = await rpc(anM[1], 'participante_enviar_mensagem', { p_participante: mil.participante_id, p_categoria: 'AJUDA', p_texto: 'Preciso de ajuda', p_lat: -25.6, p_lng: -49.4, p_client_id: uid(7002) });
+  const ptB = await rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ categoria: 'OUTRO', titulo: 'Do relato B', lat: -25.6, lng: -49.4 }) });
+  await db.query(`update public.pontos_interesse set mensagem_id = $1 where id = $2`, [relB.id, ptB.id]);
+  const exB = await rpc(resp1, 'excluir_relato', { p_id: relB.id, p_com_ponto: false });
+  chk(exB.pontos_excluidos === 0 && (await db.query(`select count(*)::int n from public.pontos_interesse where id = $1`, [ptB.id])).rows[0].n === 1, 'sem pedir para apagar o ponto, ele fica (só o vínculo se desfaz)');
+  const cidFoto = uid(7003);
+  await como(anM[1], `insert into storage.objects (bucket_id, name) values ('fotos', $1)`, [opM.id + '/' + mil.participante_id + '/' + cidFoto + '.jpg']);
+  const fotoM = await rpc(anM[1], 'registrar_foto', { p_participante: mil.participante_id, p_client_id: cidFoto, p_origem: 'nenhuma', p_lat: null, p_lng: null, p_precisao: null, p_posicao_em: null, p_capturada_em: new Date().toISOString(), p_legenda: '', p_bytes: 1000, p_largura: 800, p_altura: 600 });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'excluir_foto', { p_id: fotoM.id }))), 'responsável de fora da operação não exclui foto');
+  await rpc(resp12, 'excluir_foto', { p_id: fotoM.id });
+  chk((await db.query(`select count(*)::int n from public.fotos where id = $1`, [fotoM.id])).rows[0].n === 0, 'responsável da operação exclui a foto do participante');
+  chk((await db.query(`select count(*)::int n from public.arquivos_pendentes where caminho = $1`, [opM.id + '/' + mil.participante_id + '/' + cidFoto + '.jpg'])).rows[0].n === 1, 'o arquivo da foto entra na fila para sair do Storage');
   // link público numa instalação sem a migração 050 (tabela categorias_ponto_estilo ausente): a 072 cria a tabela
   await db.exec('drop table public.categorias_ponto_estilo cascade');
   chk(/categorias_ponto_estilo|does not exist/.test(await erroDe(como(null, `select public.comando_publico($1, null) r`, [lk.token], 'anon'))), 'sem a tabela da 050, o link público falha (o caso relatado)');
@@ -3371,5 +3394,5 @@ console.log('\nLink de militares: só militar (073)');
   chk(p73c.tipo === 'civil', 'pelo link de civis nunca entra como militar', p73c.tipo);
 }
 
-console.log('\nMigrações 007–075 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–076 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

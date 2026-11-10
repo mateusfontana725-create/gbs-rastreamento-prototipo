@@ -23607,6 +23607,53 @@ $$;
 revoke execute on function public.local_da_operacao(uuid) from public, anon;
 grant execute on function public.local_da_operacao(uuid) to authenticated;
 
+-- Responsável apaga relatos e fotos dos participantes (migração 076).
+create or replace function public.excluir_relato(p_id uuid, p_com_ponto boolean default true)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v public.mensagens%rowtype;
+  v_pontos integer := 0;
+begin
+  select * into v from public.mensagens where id = p_id;
+  if not found or v.direcao <> 'entrada' or not public.dono_operacao(v.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  if (select status from public.operacoes where id = v.operacao_id) <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  if coalesce(p_com_ponto, true) then
+    delete from public.pontos_interesse where mensagem_id = p_id;
+    get diagnostics v_pontos = row_count;
+  end if;
+  delete from public.mensagens where id = p_id;
+  return json_build_object('pontos_excluidos', v_pontos);
+end;
+$$;
+revoke execute on function public.excluir_relato(uuid, boolean) from public, anon;
+grant execute on function public.excluir_relato(uuid, boolean) to authenticated;
+
+create or replace function public.excluir_foto(p_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v public.fotos%rowtype;
+begin
+  select * into v from public.fotos where id = p_id;
+  if not found or not public.dono_operacao(v.operacao_id) then
+    raise exception 'sem_permissao';
+  end if;
+  if (select status from public.operacoes where id = v.operacao_id) <> 'ativa' then
+    raise exception 'operacao_encerrada';
+  end if;
+  delete from public.fotos where id = p_id;
+end;
+$$;
+revoke execute on function public.excluir_foto(uuid) from public, anon;
+grant execute on function public.excluir_foto(uuid) to authenticated;
+
 -- =====================================================================
 -- 073 · Link de MILITAR só registra militar; a tela inicial não oferece "civil" nele
 --       (migração idempotente; exige a 069 (links e tipos) e a 072)

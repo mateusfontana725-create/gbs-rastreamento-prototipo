@@ -124,6 +124,10 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   item). O **militar** edita e exclui **só o que ele criou**: setor (nome e observações, pelo popup do setor) e ponto de interesse (tipo,
   título e descrição, pelo popup do ponto: **✎ Editar ponto**). Ele **não edita trilha**. A situação de um setor (pendente, em andamento,
   concluído) continua podendo ser mudada por quem tem a função de situação, como antes.
+  **Tudo que os participantes criam** o responsável da operação também apaga (migração 076): **relatos** (botão **Excluir** no relato, dentro
+  de "⋮ Mais"; apaga junto o ponto de interesse criado a partir dele; o pedido de ajuda continua registrado) e **fotos** (botão **Excluir**
+  no visor; o arquivo sai do armazenamento em seguida), além dos pontos de interesse de qualquer tipo e dos setores. A exclusão aparece na
+  hora para todos os responsáveis. Operação encerrada não permite excluir.
 - **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
 ### Mapa do participante: setores, pontos, camadas, tema e trilhas (migração 065)

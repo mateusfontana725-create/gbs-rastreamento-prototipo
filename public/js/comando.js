@@ -2952,6 +2952,7 @@
         if (ev.new && ev.new.id) adicionarPonto(ev.new);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mensagens', filter: filtro }, function (ev) {
+        if (ev.eventType === 'DELETE') { if (ev.old && ev.old.id) removerMensagem(ev.old.id); return; }
         if (ev.new && ev.new.id) receberMensagem(ev.new, false);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fotos', filter: filtro }, function (ev) {
@@ -5305,9 +5306,42 @@
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); verRelatoNoMapa(m); } }),
         p ? UI.el('button', { classe: 'btn' + (revisavel && podeAlterar() ? '' : ' btn-escuro'), type: 'button', texto: 'Abrir conversa', onclick: function () { abrirConversa(m.participante_id); } }) : null,
         podeAlterar() ? UI.el('button', { classe: 'btn', type: 'button', id: 'relato-ponto', texto: 'Registrar como ponto de interesse', onclick: function () { fechar(); pontoDoRelato(m); } }) : null,
+        podeAlterar() ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'relato-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirRelato(m); } }) : null,
         UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
     ]));
+  }
+
+  // O responsável apaga o relato de um participante (e o ponto de interesse criado a partir dele, se houver).
+  async function excluirRelato(m) {
+    var comPonto = Array.from(est.pontosInt.values()).some(function (x) { return x.d.mensagem_id === m.id; });
+    var r = await UI.confirmar({
+      titulo: 'Excluir este relato?',
+      texto: 'O relato some do painel de todos os responsáveis' + (comPonto ? ', junto com o ponto de interesse criado a partir dele' : '') + '. Não dá para desfazer.',
+      ok: 'Excluir relato',
+      perigo: true,
+    });
+    if (!r) return;
+    try {
+      await C.rpc('excluir_relato', { p_id: m.id, p_com_ponto: true });
+      removerMensagem(m.id);
+      agendarAreas();
+      UI.aviso('Relato excluído.', 'ok');
+    } catch (e) {
+      UI.aviso(e.message, 'erro');
+    }
+  }
+
+  // Tira a mensagem/relato da tela (apagado por mim ou por outro responsável).
+  function removerMensagem(id) {
+    var mk = est.relatosMarc.get(id);
+    if (mk) { mostrarPonto(mk, false); est.relatosMarc.delete(id); }
+    est.mensagens.delete(id);
+    if (est.vitimasLoc && est.vitimasLoc.delete) est.vitimasLoc.delete(id);
+    est.assinaturaConversa = '';
+    est.listaSuja = true;
+    agendarCentral();
+    if (est.selecionado) atualizarFicha();
   }
 
   /* ---------- Conversa na ficha ------------------------------------ */
@@ -5736,10 +5770,30 @@
           destacarNoMapa(est.camadaPontos, est.fotosMarc.get(f.id), f.lat, f.lng);   // fotos sempre no agrupamento
         } }) : null,
         p ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Ficha de ' + p.dados.nome, onclick: function () { fechar(); selecionar(p.id); } }) : null,
+        podeAlterar() ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'foto-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirFotoPainel(f); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ])),
     ]), { aoFechar: fecharLightbox });
     carregar();
+  }
+
+  // O responsável apaga a foto de um participante (o arquivo sai do armazenamento em seguida).
+  async function excluirFotoPainel(f) {
+    var r = await UI.confirmar({
+      titulo: 'Excluir esta foto?',
+      texto: 'A foto some do painel de todos os responsáveis e o arquivo é apagado. Não dá para desfazer.',
+      ok: 'Excluir foto',
+      perigo: true,
+    });
+    if (!r) return;
+    try {
+      await C.rpc('excluir_foto', { p_id: f.id });
+      removerFoto(f.id);
+      limparArquivosPendentes();   // apaga o arquivo do Storage (sem esperar)
+      UI.aviso('Foto excluída.', 'ok');
+    } catch (e) {
+      UI.aviso(e.message, 'erro');
+    }
   }
 
   // Imagem em tela cheia. Toque na imagem: tamanho real (com rolagem); fora dela: fecha.

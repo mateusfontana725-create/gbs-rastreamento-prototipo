@@ -118,6 +118,11 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   escolhe outro, o satélite vale.
 - **Link de militares só registra militar** (migração 073): o link de militares não oferece a escolha de civil; quem entra por ele é
   sempre militar. O link de civis segue só para civis. A escolha de tipo só aparece no link de grupo que permite militar.
+- **Quem exclui e quem edita** (migração 074): o **administrador** e os **responsáveis da operação** (criador ou adicionados) excluem
+  **qualquer** item dela no painel: pontos de interesse, setores, trilhas, grupos, áreas e vítimas (antes só excluía quem tinha criado o
+  item). O **militar** edita e exclui **só o que ele criou**: setor (nome e observações, pelo popup do setor) e ponto de interesse (tipo,
+  título e descrição, pelo popup do ponto: **✎ Editar ponto**). Ele **não edita trilha**. A situação de um setor (pendente, em andamento,
+  concluído) continua podendo ser mudada por quem tem a função de situação, como antes.
 - **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
 ### Mapa do participante: setores, pontos, camadas, tema e trilhas (migração 065)

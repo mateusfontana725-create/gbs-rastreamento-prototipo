@@ -1869,6 +1869,7 @@
         UI.el('strong', { texto: nomeCat + ': ' + pt.titulo }),
         pt.descricao ? UI.el('p', { texto: pt.descricao }) : null,
         pt.publico !== false ? UI.el('button', { classe: 'btn btn-pequeno btn-primario', type: 'button', texto: '🧭 Rota até aqui', onclick: function () { estado.mapa.closePopup(); rotaAtePonto(pt); } }) : null,
+        pt.meu_criado && perm.pontos ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar ponto', onclick: function () { estado.mapa.closePopup(); editarPontoMilitar(pt); } }) : null,
         pt.meu_criado && perm.pontos ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: '🗑 Excluir ponto', onclick: function () { estado.mapa.closePopup(); excluirPontoMilitar(pt); } }) : null,
       ]);
       L.marker([pt.lat, pt.lng], {
@@ -1909,6 +1910,7 @@
       });
     }
     if (perm.setores && st.meu_criado) {
+      botoes.push(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✎ Editar setor', onclick: function () { estado.mapa.closePopup(); editarSetorMilitar(st); } }));
       botoes.push(UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: '🗑 Excluir setor', onclick: function () { estado.mapa.closePopup(); excluirSetorMilitar(st); } }));
     }
     return UI.el('div', { classe: 'popup-setor-militar' }, [
@@ -1940,6 +1942,61 @@
       recarregarMapaMilitar();
     } catch (e) { erroMilitar(e); }
   }
+  // Edição do que o militar criou (migração 074): ponto (tipo, título, descrição) e setor (nome, observações).
+  // Trilhas não são editadas pelo militar. O servidor confere de novo que foi ele quem criou.
+  function editarPontoMilitar(pt) {
+    var cats = CATS_PONTO_MILITAR.indexOf(pt.categoria) >= 0 ? CATS_PONTO_MILITAR : CATS_PONTO_MILITAR.concat([pt.categoria]);
+    var cat = UI.el('select', { classe: 'campo', id: 'em-ponto-cat' }, cats.map(function (k) { return UI.el('option', { value: k, texto: NOME_PONTO[k] || k }); }));
+    cat.value = pt.categoria;
+    var titulo = UI.el('input', { classe: 'campo', id: 'em-ponto-titulo', maxlength: '80' });
+    titulo.value = pt.titulo || '';
+    var desc = UI.el('textarea', { classe: 'campo', id: 'em-ponto-desc', rows: '3', maxlength: '1000' });
+    desc.value = pt.descricao || '';
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var fechar = UI.abrirModal(UI.el('form', { classe: 'form-padrao', novalidate: true, onsubmit: async function (ev) {
+      ev.preventDefault();
+      var t = titulo.value.trim();
+      if (!t) { erro.textContent = 'Informe o título do ponto.'; erro.hidden = false; return; }
+      try {
+        await C.rpc('participante_editar_ponto', { p_participante: estado.part.participante_id, p_id: pt.id, p_dados: { categoria: cat.value, titulo: t, descricao: desc.value.trim() } }, 20000);
+        UI.aviso('Ponto salvo.', 'ok', 6000);
+        fechar();
+        recarregarMapaMilitar();
+      } catch (e) { erroMilitar(e); }
+    } }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Editar ponto' }),
+      UI.campo('Tipo', cat, { para: 'em-ponto-cat' }),
+      UI.campo('Título', titulo, { para: 'em-ponto-titulo' }),
+      UI.campo('Descrição', desc, { para: 'em-ponto-desc' }),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'em-ponto-salvar', texto: 'Salvar' })]),
+    ]));
+    setTimeout(function () { try { titulo.focus(); } catch (e) { /* */ } }, 50);
+  }
+
+  function editarSetorMilitar(st) {
+    var nome = UI.el('input', { classe: 'campo', id: 'em-setor-nome', maxlength: '60' });
+    nome.value = st.nome || '';
+    var obs = UI.el('textarea', { classe: 'campo', id: 'em-setor-obs', rows: '3', maxlength: '500' });
+    obs.value = st.observacoes || '';
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var fechar = UI.abrirModal(UI.el('form', { classe: 'form-padrao', novalidate: true, onsubmit: async function (ev) {
+      ev.preventDefault();
+      var n = nome.value.trim();
+      if (!n) { erro.textContent = 'Informe o nome do setor.'; erro.hidden = false; return; }
+      if (await salvarSetorMilitar(st.id, { nome: n, observacoes: obs.value.trim() }, 'Setor salvo.')) fechar();
+    } }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Editar setor' }),
+      UI.campo('Nome do setor', nome, { para: 'em-setor-nome' }),
+      UI.campo('Observações', obs, { para: 'em-setor-obs' }),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'em-setor-salvar', texto: 'Salvar' })]),
+    ]));
+    setTimeout(function () { try { nome.focus(); } catch (e) { /* */ } }, 50);
+  }
+
   async function excluirPontoMilitar(pt) {
     var ok = await UI.confirmar({ titulo: 'Excluir o ponto "' + pt.titulo + '"?', texto: 'Ele some do mapa de todos. Só dá para excluir os pontos que você marcou.', ok: 'Excluir ponto', perigo: true });
     if (!ok) return;

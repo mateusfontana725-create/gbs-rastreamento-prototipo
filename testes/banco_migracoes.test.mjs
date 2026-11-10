@@ -3315,6 +3315,30 @@ console.log('\nLink público em partes, mensagem para vários, pontos em lote e 
   await rpc(anM[1], 'participante_excluir_setor', { p_participante: mil.participante_id, p_id: sM.id });
   await rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: poM.id });
   chk((await db.query(`select count(*)::int n from public.setores where id = $1`, [sM.id])).rows[0].n === 0, 'quem criou exclui o próprio setor e ponto');
+  // 074: quem é responsável da operação exclui qualquer registro dela (mesmo sem ter criado); o militar edita só o que marcou
+  const resp12 = await usuario('r12@cbm', false);
+  await db.query(`insert into public.responsaveis (user_id, nome) values ($1, 'Sgt Doze')`, [resp12]);
+  const pDoResp = await rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ categoria: 'OUTRO', titulo: 'Do responsável', lat: -25.62, lng: -49.4 }) });
+  const sDoResp = await rpc(resp1, 'salvar_setor', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: 'Setor do responsável', forma: 'poligono', pontos: [[-25.63, -49.41], [-25.63, -49.40], [-25.64, -49.40]] }) });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp12, 'excluir_ponto', { p_id: pDoResp.id }))), 'quem não é responsável da operação não exclui ponto');
+  await db.query(`insert into public.operacao_responsaveis (operacao_id, user_id) values ($1, $2)`, [opM.id, resp12]);
+  await rpc(resp12, 'excluir_ponto', { p_id: pDoResp.id });
+  chk((await db.query(`select count(*)::int n from public.pontos_interesse where id = $1`, [pDoResp.id])).rows[0].n === 0, 'responsável adicionado exclui ponto que não criou');
+  await rpc(resp12, 'excluir_setor', { p_id: sDoResp.id });
+  chk((await db.query(`select count(*)::int n from public.setores where id = $1`, [sDoResp.id])).rows[0].n === 0, 'responsável adicionado exclui setor que não criou');
+  const pMeu = await rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ categoria: 'VESTIGIO', titulo: 'Pegada 2', lat: -25.606, lng: -49.396 }) });
+  const editado = await rpc(anM[1], 'participante_editar_ponto', { p_participante: mil.participante_id, p_id: pMeu.id, p_dados: JSON.stringify({ titulo: 'Pegada revisada', categoria: 'RISCO' }) });
+  chk(editado.titulo === 'Pegada revisada' && editado.categoria === 'RISCO' && /militar/.test(editado.atualizado_por_nome), 'militar edita o ponto que marcou', editado);
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_editar_ponto', { p_participante: mil2.participante_id, p_id: pMeu.id, p_dados: JSON.stringify({ titulo: 'x' }) }))), 'outro militar não edita o ponto');
+  const pDoRespVivo = await rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ categoria: 'OUTRO', titulo: 'Do responsável vivo', lat: -25.621, lng: -49.4 }) });
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[1], 'participante_editar_ponto', { p_participante: mil.participante_id, p_id: pDoRespVivo.id, p_dados: JSON.stringify({ titulo: 'x' }) }))), 'militar não edita ponto do responsável');
+  chk(/nome_invalido/.test(await erroDe(rpc(anM[1], 'participante_editar_ponto', { p_participante: mil.participante_id, p_id: pMeu.id, p_dados: JSON.stringify({ titulo: '  ' }) }))), 'militar: título vazio é recusado');
+  const sMeu = await rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: null, p_dados: JSON.stringify(forma) });
+  const sRen = await rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: sMeu.id, p_dados: JSON.stringify({ nome: 'Setor renomeado', observacoes: 'obs' }) });
+  chk(sRen.nome === 'Setor renomeado' && sRen.observacoes === 'obs', 'militar edita o nome e as observações do setor que criou', sRen);
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_salvar_setor', { p_participante: mil2.participante_id, p_id: sMeu.id, p_dados: JSON.stringify({ nome: 'Invadido' }) }))), 'outro militar não edita o nome do setor');
+  await rpc(anM[1], 'participante_excluir_setor', { p_participante: mil.participante_id, p_id: sMeu.id });
+  await rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: pMeu.id });
   // link público numa instalação sem a migração 050 (tabela categorias_ponto_estilo ausente): a 072 cria a tabela
   await db.exec('drop table public.categorias_ponto_estilo cascade');
   chk(/categorias_ponto_estilo|does not exist/.test(await erroDe(como(null, `select public.comando_publico($1, null) r`, [lk.token], 'anon'))), 'sem a tabela da 050, o link público falha (o caso relatado)');
@@ -3341,5 +3365,5 @@ console.log('\nLink de militares: só militar (073)');
   chk(p73c.tipo === 'civil', 'pelo link de civis nunca entra como militar', p73c.tipo);
 }
 
-console.log('\nMigrações 007–073 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–074 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

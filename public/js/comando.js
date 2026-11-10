@@ -6190,13 +6190,11 @@
       fillOpacity: 0,      // o fundo colorido fica numa camada própria (fundoSetor), sem somar com os vizinhos
       className: 'setor setor-' + d.status,
     };
-    if (est.focoPessoa && d.participante_id !== est.focoPessoa) estilo.opacity = 0.25;
     return estilo;
   }
 
   // Intensidade do fundo do setor (0 a 1). Foco numa pessoa: os setores dos outros ficam quase sem fundo.
   function opacidadeFundoSetor(d, previa) {
-    if (est.focoPessoa && d.participante_id !== est.focoPessoa) return 0.02;
     if (previa != null) return previa;
     return d.opacidade != null ? d.opacidade : opacidadePadraoSetor(d.status);
   }
@@ -6255,7 +6253,7 @@
     if (s.camada) { s.camada.remove(); s.camada = null; }
     if (s.filete) { s.filete.remove(); s.filete = null; }
     if (est.desenho && est.desenho.tipo === 'ajuste' && est.desenho.id === d.id) return;   // sendo ajustado
-    if (!setorNoFiltro(d)) return;   // filtro por dia: setor de outro dia
+    if (!setorNoFiltro(d) || !setorDoFoco(d)) return;   // filtro por dia: setor de outro dia; olho numa pessoa: só os dela
     // filete escuro por baixo do contorno colorido: separa a área do fundo do mapa e de outras áreas
     var forma = { pane: 'setores', color: '#0b1220', weight: 6, opacity: 0.45, fill: false, interactive: false, lineJoin: 'round', className: 'setor-filete' };
     s.filete = (d.forma === 'circulo' ? L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, forma)) : L.polygon(d.pontos, forma)).addTo(est.camadaSetores);
@@ -6345,7 +6343,7 @@
     if (p.marcador && p._assinatura === assinatura) return;
     tirarPontoInt(p);
     p._assinatura = assinatura;
-    if (!poiNoFiltro(d)) return;   // filtro por dia: ponto marcado em outro dia
+    if (!poiNoFiltro(d) || !poiDoFoco(d)) return;   // filtro por dia: ponto de outro dia; olho numa pessoa: só os dela
     // Área de risco: círculo do alarme de proximidade (quem entra é avisado).
     if (d.categoria === 'RISCO') {
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 1.5, opacity: 0.7, dashArray: '6 6',
@@ -8417,7 +8415,7 @@
     var d = t.d;
     if (est.desenho && est.desenho.tipo === 'trilha' && est.desenho.trilhaId === d.id) return;   // traçado sendo editado
     if (est.desenho && est.desenho.borrachaDe === d.id) return;   // sendo apagada com a borracha
-    if (!trilhaManualVisivel(d) || !trilhaManualNoFiltro(d) || !Array.isArray(d.pontos) || d.pontos.length < 2) return;
+    if (!trilhaManualVisivel(d) || !trilhaManualNoFiltro(d) || !trilhaManualDoFoco(d) || !Array.isArray(d.pontos) || d.pontos.length < 2) return;
     var partes = recortarSegmentos([d.pontos]);   // fora das áreas sem trilha (migração 066)
     if (!partes.length) return;
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
@@ -11998,11 +11996,34 @@
     return Boolean(est.prefsMapa[chave]);
   }
 
+  // O que é de cada pessoa (olho da lista). Setor: destino dela, criado por ela ou concluído por ela (o militar
+  // grava os próprios registros como "Nome (militar)"). Pontos: criados por ela ou relatados por ela.
+  // Áreas de risco e proibidas continuam sempre (segurança). A última posição do desaparecido (ULV) não é da equipe: some.
+  function rotuloMilitarDe(p) { return p && p.dados ? p.dados.nome + ' (militar)' : ''; }
+  function setorDeP(p, d) {
+    var rot = rotuloMilitarDe(p);
+    return d.participante_id === p.id || d.criado_por_nome === rot || (d.status === 'concluido' && d.atualizado_por_nome === rot);
+  }
+  function trilhaManualDeP(p, d) {
+    var rot = rotuloMilitarDe(p);
+    return d.participante_id === p.id || d.criado_por_nome === rot || (d.estado === 'percorrida' && d.percorrida_por_nome === rot);
+  }
+  function poiDeP(p, d) {
+    if (d.ulv) return false;
+    return d.criado_por_nome === rotuloMilitarDe(p) || (Boolean(d.relatado_por_nome) && d.relatado_por_nome === p.dados.nome);
+  }
+  function pessoaDoFoco() { return est.focoPessoa ? est.participantes.get(est.focoPessoa) || null : null; }
+  function setorDoFoco(d) { var p = pessoaDoFoco(); return !p || setorDeP(p, d); }
+  function trilhaManualDoFoco(d) { var p = pessoaDoFoco(); return !p || trilhaManualDeP(p, d); }
+  function poiDoFoco(d) { var p = pessoaDoFoco(); return !p || d.categoria === 'RISCO' || poiDeP(p, d); }
+
   function aplicarFocoPontos() {
     ['fotos', 'relatos'].forEach(function (chave) {
       marcadoresDe(chave).forEach(function (mk) { mostrarPonto(mk, pontoVisivelPorPref(mk, chave)); });
     });
-    est.setores.forEach(function (s) { if (s.camada && s.camada.setStyle) s.camada.setStyle(estiloSetor(s.d)); desenharFundoSetor(s); });
+    est.setores.forEach(function (s) { desenharSetor(s); });
+    est.pontosInt.forEach(function (x) { x._assinatura = null; desenharPontoInt(x); });
+    est.trilhasManuais.forEach(function (t) { desenharTrilhaManual(t); });
     desenharDestinosGrupo();
   }
 
@@ -12015,12 +12036,13 @@
     est.fotosMarc.forEach(function (mk) { if (mk.options.donoId === p.id) { var ll = mk.getLatLng(); pts.push([ll.lat, ll.lng]); } });
     est.relatosMarc.forEach(function (mk) { if (mk.options.donoId === p.id) { var ll = mk.getLatLng(); pts.push([ll.lat, ll.lng]); } });
     est.setores.forEach(function (s) {
-      if (s.d.participante_id !== p.id) return;
+      if (!setorDeP(p, s.d)) return;
       if (s.d.forma === 'circulo') {
         var dLat = s.d.raio_m / 111320, dLng = dLat / Math.max(0.01, Math.cos(s.d.centro_lat * Math.PI / 180));
         pts.push([s.d.centro_lat - dLat, s.d.centro_lng - dLng], [s.d.centro_lat + dLat, s.d.centro_lng + dLng]);
       } else (s.d.pontos || []).forEach(function (q) { pts.push([q[0], q[1]]); });
     });
+    est.pontosInt.forEach(function (x) { if (x.d.lat != null && poiDeP(p, x.d)) pts.push([x.d.lat, x.d.lng]); });
     var dest = est.destinos.get(p.id);
     if (dest) pts.push([dest.lat, dest.lng]);
     return pts;

@@ -107,7 +107,12 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   RETORNE etc.) continuam abrindo o alerta em tela cheia na hora.
 - Fotos: prévia "A foto ficou boa?" sem coordenadas; "Suas fotos" mostra só miniaturas com
   "✓ Enviada" ou "Esperando internet".
-- Sair: o link discreto **Quero sair da busca** (os bombeiros liberam a saída pelo painel).
+- Sair: **Quero sair da busca**, no canto inferior direito acima da barra (os bombeiros liberam a saída pelo painel).
+- **Mapa abre no satélite** (civil e militar). Um fundo escolhido pela pessoa (Camadas) fica guardado neste aparelho; enquanto ela não
+  escolhe outro, o satélite vale.
+- **Link de militares só registra militar** (migração 073): o link de militares não oferece a escolha de civil; quem entra por ele é
+  sempre militar. O link de civis segue só para civis. A escolha de tipo só aparece no link de grupo que permite militar.
+- **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
 ### Mapa do participante: setores, pontos, camadas, tema e trilhas (migração 065)
 
@@ -384,12 +389,17 @@ O mapa da página do participante mostra, além dos bombeiros:
   **Aceitar como bombeiro** e **Recusar**. Aceito não volta atrás (para tirar a pessoa, remova o participante); recusado pode ser aceito
   depois. Cada decisão entra no **diário**.
 - **Download do aplicativo**: no Android, logo depois do cadastro pelo link (ao entrar na operação), o passo a passo **"Baixe o aplicativo
-  para ajudar melhor"** abre sozinho, uma vez por participação, com **Agora não**. O botão **📱 Baixar aplicativo** continua no **MENU**.
+  para ajudar melhor"** abre sozinho, uma vez por participação, com **Agora não**. O botão **📱 Baixar aplicativo** fica no canto
+  inferior direito, acima da barra (aparece quando o aplicativo está disponível).
 - **Tela do participante voltada para o mapa** (navegador e aplicativo): durante a busca o **mapa ocupa a tela inteira**. Em cima, o estado
   ("Os bombeiros estão vendo você", sem internet etc.) e os avisos (área de risco, destino). À direita, **📍 onde estou**, **🗺 camadas** e a
-  bússola. Embaixo, uma barra com **SOS** (vermelho, grande, pede confirmação), **📷 FOTO** (grande, abre a câmera direto; a prévia e a
-  localização seguem como antes), **＋ REGISTRAR** (mensagem, algo encontrado, foto da galeria) e **☰ MENU** (quem é você, suas fotos,
-  legenda do mapa, aplicativo, avisos, "Quero sair da busca"). A navegação até um destino vira um cartão sobre o mapa: fechado mostra a
+  bússola. Embaixo, uma barra enxuta de toque (50 px):
+  - **Civil**: **🆘 SOS** (vermelho, pede confirmação) e **＋ REGISTRAR**. Não há mais FOTO na barra nem MENU: a foto (tirar ou da
+    galeria) fica dentro do **REGISTRAR**, junto com mensagem e algo encontrado. A legenda do mapa continua no mapa.
+  - **Militar**: só **☰ MENU**. Dentro dele: SOS, **＋ Registrar** (mensagem, algo encontrado, foto), quem é você, suas fotos, legenda,
+    e as **Ferramentas do militar** (setores e pontos, conforme liberado).
+  - **Quero sair da busca** e **Baixar aplicativo** ficam no canto inferior direito, acima da barra; o aviso "pedido para sair
+    enviado" aparece sob o estado. A navegação até um destino vira um cartão sobre o mapa: fechado mostra a
   distância e a direção (e "Busca no setor concluída"); tocar no título abre a rota, os modos e "Encerrar navegação".
 - **Tipos de operação SARP e BREC**: na **Natureza** do cadastro, além de busca aquática e terrestre, **SARP – Aeronave remotamente
   pilotada** e **BREC – Busca e resgate em estruturas colapsadas** (tipos `sarp` e `brec`). Para acrescentar outro tipo: `NATUREZAS` e
@@ -891,6 +901,7 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   no mapa escuro ele **clareia com a cor** (sem virar cinza); no satélite, transparência comum.
 - **Lista "Fora da operação"**: aberta, ela agora rola (antes passava da altura da lateral e ficava cortada).
 - **Link público do painel** (erro "relation categorias_ponto_estilo does not exist"): a tabela de categorias de ponto vem da migração 050; a 072 a cria também, de forma idempotente, então o link volta a abrir mesmo em banco sem a 050. Se a 050 nunca foi aplicada, aplique-a inteira depois (ícones e cores das categorias).
+- **Migração 073** (link de militares): `info_operacao` devolve só `militar` no link de militares; `ingressar` registra militar nesse link. **Antes de usar, rode `073_link_militar_so_militar.sql` no Supabase.**
 - Banco: `operacoes.permissoes_militar`, funções `comando_publico_posicoes`, `enviar_mensagem_varios`, `excluir_pontos`,
   `definir_permissoes_militar`, `participante_salvar_setor`, `participante_excluir_setor`, `participante_salvar_ponto`,
   `participante_excluir_ponto`; `enviar_posicoes_lote`, `enviar_mensagem` e `mapa_do_participante` atualizadas.
@@ -2527,7 +2538,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 49d | No painel, **Aceitar como civil** (ou bombeiro); em outro pedido, **Recusar** | o celular aceito segue sozinho para a tela da operação já preenchida; o recusado volta ao código com a explicação; as decisões vão ao diário |
 | 49e | Fechar o aplicativo com o pedido esperando e abrir de novo | continua esperando o mesmo pedido |
 | 49f | **Trocar código** e **Desligar entrada por código**; tentar o código antigo e o desligado | os dois são recusados ("não existe ou está desligado"); errar 8 vezes barra por 10 minutos |
-| 49g | Durante a busca, olhar a tela do participante | mapa em tela cheia; SOS e FOTO grandes embaixo; FOTO abre a câmera; MENU tem fotos, legenda, aplicativo e "Quero sair da busca" |
+| 49g | Durante a busca, olhar a tela do participante | civil: mapa em tela cheia, SOS e REGISTRAR embaixo, sem MENU; militar: só MENU; "Quero sair da busca" no canto inferior direito; abre no satélite |
 | 49h | Criar operação com natureza SARP e outra BREC | o cabeçalho, a lista e os relatórios mostram o tipo |
 | 49i | **Ferramentas → Link público do painel**, criar e abrir o link numa janela anônima (sem login) | mapa ao vivo, nomes como "Participante N", sem botões de edição, mensagens, convite, Ferramentas só com visualização; marcar "Mostrar os nomes" mostra os nomes; trocar/desligar faz o link antigo mostrar "não funciona mais" |
 | 41 | Pôr o celular do civil em modo avião por 3 min andando, recarregar a página ainda sem internet e depois religar | os pontos continuam guardados (diagnóstico `&diag=1`: "guardados em: indexeddb"); ao voltar a internet, chegam todos, na ordem, sem duplicar |

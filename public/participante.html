@@ -183,6 +183,10 @@
           </div>
           <button class="btn btn-pequeno status-acao" type="button" id="status-acao" hidden>Como resolver</button>
         </div>
+          <div class="saida-pendente" id="saida-pendente" role="status" hidden>
+            <strong>Pedido para sair enviado às <span id="saida-hora"></span>.</strong>
+            Aguarde os bombeiros liberarem. Até lá, deixe esta tela aberta.
+          </div>
           <!-- Pontos pendentes, gravação no aparelho, última sincronização confirmada e falhas (js/fila-estado.js) -->
           <div class="fila-estado" id="fila-estado" hidden></div>
           <div class="aviso-fundo" id="aviso-fundo" hidden></div>
@@ -229,25 +233,25 @@
           </div>
         </section>
 
-        <!-- Barra de baixo: ajuda (SOS), foto, registrar e menu -->
+        <!-- Controles do canto superior direito: sair da busca, baixar o aplicativo e avisar mensagens -->
+        <div class="controles-topo" id="controles-topo">
+          <button class="btn btn-pequeno btn-notif" type="button" id="btn-notif" hidden>🔔 Avisar mensagens</button>
+          <button class="btn btn-pequeno btn-app" type="button" id="btn-app" hidden>📱 Baixar aplicativo</button>
+          <button class="btn btn-pequeno btn-saida" type="button" id="btn-saida">Sair da busca</button>
+        </div>
+
+        <!-- Barra de baixo. Civil: SOS e Registrar. Militar: só o Menu (ali estão as funções dele). -->
         <div class="acoes-civil" role="toolbar" aria-label="Ações">
           <button class="acao acao-sos" type="button" id="btn-sos" aria-haspopup="dialog" aria-label="SOS: preciso de ajuda">
             <span class="acao-icone" aria-hidden="true">🆘</span>
             <span class="acao-texto">SOS</span>
           </button>
-          <!-- Foto direto: abre a câmera; a prévia e a localização seguem o fluxo de sempre -->
-          <label class="acao acao-foto" for="foto-rapida" id="btn-foto" aria-label="Tirar uma foto">
-            <span class="acao-icone" aria-hidden="true">📷</span>
-            <span class="acao-texto">FOTO</span>
-            <input id="foto-rapida" class="sr-only" type="file" accept="image/*" capture="environment">
-          </label>
-          <!-- Mensagem, algo encontrado ou foto da galeria (as opções abrem em "Registrar informação") -->
           <button class="acao acao-registrar" type="button" id="btn-registrar" aria-haspopup="dialog" aria-controls="painel-conversa">
             <span class="acao-icone" aria-hidden="true">＋</span>
             <span class="acao-texto">REGISTRAR</span>
             <span class="contador acao-contador" id="falar-contador" hidden>0</span>
           </button>
-          <button class="acao acao-menu" type="button" id="btn-menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="folha-menu">
+          <button class="acao acao-menu" type="button" id="btn-menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="folha-menu" hidden>
             <span class="acao-icone" aria-hidden="true">☰</span>
             <span class="acao-texto">MENU</span>
           </button>
@@ -262,6 +266,11 @@
               <button class="btn btn-pequeno" type="button" id="folha-fechar" aria-label="Fechar o menu">✕ Fechar</button>
             </header>
             <p class="quem-sou" id="st-nome"></p>
+            <!-- Só militares: as ações que no civil ficam na barra de baixo -->
+            <section class="menu-acoes" id="menu-acoes" hidden aria-label="Ações">
+              <button class="btn menu-acao-sos" type="button" id="menu-sos">🆘 SOS: preciso de ajuda</button>
+              <button class="btn" type="button" id="menu-registrar">＋ Registrar: mensagem, achado ou foto</button>
+            </section>
         <section class="fotos-civil" id="fotos-civil" hidden aria-labelledby="tit-fotos">
           <h2 class="titulo-secao" id="tit-fotos">Suas fotos</h2>
           <ul class="fotos-minhas" id="fotos-minhas"></ul>
@@ -276,16 +285,9 @@
               <p class="muted fm-dica" id="fm-dica"></p>
             </section>
             <div class="folha-legenda" id="folha-legenda"></div>
-            <button class="btn btn-notif" type="button" id="btn-notif" hidden>🔔 Avisar quando os bombeiros mandarem mensagem</button>
             <label class="linha-opcao" hidden><input type="checkbox" id="opt-tela" checked> Manter a tela ligada</label>
 
             <div class="rodape-civil">
-              <div class="saida-pendente" id="saida-pendente" role="status" hidden>
-                <strong>Pedido para sair enviado às <span id="saida-hora"></span>.</strong>
-                Aguarde os bombeiros liberarem. Até lá, deixe esta tela aberta.
-              </div>
-              <button class="btn btn-app" type="button" id="btn-app" hidden>📱 Baixar aplicativo</button>
-              <button class="btn btn-saida" type="button" id="btn-saida">Quero sair da busca</button>
               <button class="btn btn-pequeno btn-link" type="button" id="btn-diag" hidden>Diagnóstico do GPS</button>
             </div>
           </div>

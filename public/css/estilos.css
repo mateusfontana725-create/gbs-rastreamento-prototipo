@@ -2651,3 +2651,65 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 }
 .barra-desenho-p-txt { flex: 1 1 160px; }
 .desenhando-p { cursor: crosshair; }
+
+/* ===== Participante no celular: barra de baixo enxuta, cantos sem botões grandes (fim do arquivo = vale por último) ===== */
+:root { --barra-h: 74px; }
+
+/* Barra de baixo: civil = SOS e Registrar, lado a lado; militar = só o Menu, à direita */
+.civil-em-rastreio #tela-rastreio .acoes-civil {
+  position: absolute; z-index: 1300; left: 0; right: 0; bottom: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center;
+  height: var(--barra-h); padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); pointer-events: none;
+  background: linear-gradient(to top, rgba(6, 8, 10, .72), rgba(6, 8, 10, 0));
+}
+body.militar-em-rastreio #tela-rastreio .acoes-civil { grid-template-columns: 1fr auto; }
+body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-self: end; }
+.civil-em-rastreio #tela-rastreio .acao {
+  pointer-events: auto; position: relative; min-height: 50px; width: 100%; padding: 4px 10px; gap: 8px;
+  flex-direction: row; justify-content: center; border-radius: 14px; border-width: 2px;
+  font-size: .82rem; font-weight: 800; letter-spacing: .05em; line-height: 1.1;
+  background: #1f2832; border-color: #3d4a57; color: #e8edf2; box-shadow: 0 3px 10px rgba(0, 0, 0, .5);
+}
+.civil-em-rastreio #tela-rastreio .acao-icone { font-size: 1.2rem; font-weight: 900; }
+.civil-em-rastreio #tela-rastreio .acao-sos { background: #d62828; border-color: #ff8a8a; color: #fff; animation: none; }
+.civil-em-rastreio #tela-rastreio .acao-registrar { flex-direction: row; }
+.civil-em-rastreio #tela-rastreio .acao-contador { position: absolute; top: -6px; right: -4px; min-width: 22px; height: 22px; font-size: .72rem; border-radius: 11px; }
+.civil-em-rastreio #tela-rastreio .acao-menu { width: 128px; flex: none; }
+.civil-em-rastreio #tela-rastreio .acao-menu.tem-novas::after,
+.civil-em-rastreio #tela-rastreio .acao-menu.tem-aviso::after { top: 4px; right: 6px; width: 10px; height: 10px; }
+.civil-em-rastreio #tela-rastreio .acao-menu.tem-novas { box-shadow: 0 0 0 3px rgba(6, 182, 212, .6), 0 3px 10px rgba(0, 0, 0, .5); }
+@media (max-width: 340px) { .civil-em-rastreio #tela-rastreio .acao { font-size: .72rem; padding: 4px 6px; } }
+
+/* Botões do mapa (Onde estou, Camadas): círculos menores */
+.civil-em-rastreio #tela-rastreio .btn-onde-estou,
+.civil-em-rastreio #tela-rastreio .btn-camadas { width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 50%; }
+.civil-em-rastreio #tela-rastreio .btn-camadas { top: calc(56px + env(safe-area-inset-top)); }
+.civil-em-rastreio #tela-rastreio .btn-onde-estou { top: calc(8px + env(safe-area-inset-top)); }
+.civil-em-rastreio #tela-rastreio .btn-onde-estou::before { font-size: 1.2rem; }
+.civil-em-rastreio #tela-rastreio .btn-camadas::before { font-size: 1.15rem; }
+
+/* Canto inferior direito, acima da barra: sair da busca, baixar o aplicativo, avisar mensagens (a bússola fica no alto) */
+#tela-rastreio .controles-topo {
+  position: absolute; z-index: 1210; right: 8px; bottom: calc(var(--barra-h) + env(safe-area-inset-bottom) + 10px);
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 60%;
+}
+#tela-rastreio .controles-topo .btn { width: auto; margin: 0; min-height: 32px; padding: 0 10px; font-size: .74rem; white-space: nowrap; }
+
+/* Saída pendente: aparece sob o estado, sem ocupar a tela */
+#tela-rastreio .saida-pendente { margin: 6px 0 0; padding: 6px 8px; font-size: .74rem; line-height: 1.3; }
+
+/* Menu do militar: ações em botões de toque (44 px), uma por linha */
+.menu-acoes { display: grid; gap: 8px; margin: 8px 0 12px; }
+.menu-acoes .btn { min-height: 44px; width: 100%; justify-content: flex-start; font-size: .9rem; }
+.menu-acao-sos { background: #d62828 !important; border-color: #ff8a8a !important; color: #fff !important; font-weight: 800; }
+
+/* Janela Registrar: foto e galeria no topo, botões de toque */
+/* Desenho de setor (militar): barra compacta acima da barra de baixo, sem tapar o mapa */
+.barra-desenho-p {
+  top: auto; bottom: calc(var(--barra-h) + env(safe-area-inset-bottom) + 6px); left: 8px; right: 8px; transform: none;
+  max-width: none; padding: 6px 8px; gap: 6px; border-width: 1.5px; border-radius: 10px; font-size: .76rem;
+}
+.barra-desenho-p-txt { flex: 1 1 100%; font-size: .76rem; line-height: 1.25; }
+.barra-desenho-p .btn { min-height: 34px; padding: 0 10px; font-size: .76rem; }
+.civil-em-rastreio #tela-rastreio .camadas-civil { top: calc(56px + env(safe-area-inset-top)); right: 56px; }
+#tela-rastreio .controles-topo .btn-saida { border-style: solid; background: #1f2832; border-color: #3d4a57; color: #e8edf2; }

@@ -131,6 +131,7 @@
   function mostrarTela(nome) {
     TELAS.forEach(function (t) { $('tela-' + t).hidden = t !== nome; });
     document.body.classList.toggle('civil-em-rastreio', nome === 'rastreio');   // o mapa ocupa a tela toda
+    if (nome === 'rastreio') aplicarTipoUI();
     if (nome !== 'rastreio') fecharMenuFolha();
     window.scrollTo(0, 0);
     if (nome === 'rastreio' && estado.mapa) setTimeout(function () { estado.mapa.invalidateSize(); }, 60);
@@ -194,8 +195,11 @@
     $('ini-operacao').textContent = estado.info.operacao;
     $('ini-grupo-caixa').hidden = !estado.info.grupo;
     $('ini-grupo').textContent = estado.info.grupo || '';
-    var permiteMilitar = (estado.info.tipos_permitidos || []).indexOf('militar') !== -1;
-    $('ini-tipo-escolha').hidden = !permiteMilitar;
+    // Só aparece a escolha quando o link deixa escolher (grupo que permite militar). O link de militares
+    // devolve só "militar" e o de civis só "civil": nesses casos não há escolha nenhuma.
+    var tipos = estado.info.tipos_permitidos || [];
+    var permiteMilitar = tipos.indexOf('militar') !== -1;
+    $('ini-tipo-escolha').hidden = !(permiteMilitar && tipos.indexOf('civil') !== -1);
 
     var salvo = C.local.ler(CHAVE_PART, null);
     estado.convite = lerCodigoConvite();
@@ -255,9 +259,11 @@
     $('fm-setor-circulo').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('circulo'); });
     $('fm-ponto').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('ponto'); });
     $('folha-fundo').addEventListener('click', function () { abrirMenuFolha(false); });
-    $('foto-rapida').addEventListener('change', function (ev) { aoEscolherFoto(ev, true); });
+    $('menu-sos').addEventListener('click', function () { abrirMenuFolha(false); pedirSocorro(); });
+    $('menu-registrar').addEventListener('click', function () { abrirMenuFolha(false); abrirRegistro(); });
+    // a legenda do mapa fica no mapa (civil) ou no menu (militar): ver aplicarTipoUI
     var legendaMapa = document.querySelector('.legenda-civil');
-    if (legendaMapa) { legendaMapa.removeAttribute('aria-hidden'); $('folha-legenda').appendChild(legendaMapa); }
+    if (legendaMapa) { legendaMapa.removeAttribute('aria-hidden'); estado.legendaEl = legendaMapa; }
     document.querySelector('#navegacao .nav-topo').addEventListener('click', function () { $('navegacao').classList.toggle('nav-aberta'); });
     $('btn-fechar-mapa').addEventListener('click', function () { alternarMapaAmpliado(false); });
     $('bussola-ativar').addEventListener('click', pedirBussola);
@@ -481,7 +487,25 @@
 
   function tipoEscolhido() {
     var marcado = document.querySelector('input[name="tipo"]:checked');
-    return !$('ini-tipo-escolha').hidden && marcado ? marcado.value : 'civil';
+    if (!$('ini-tipo-escolha').hidden && marcado) return marcado.value;
+    var tipos = (estado.info && estado.info.tipos_permitidos) || [];
+    return tipos.length === 1 && tipos[0] === 'militar' ? 'militar' : 'civil';
+  }
+
+  // Barra de baixo por tipo: o civil tem SOS e Registrar; o militar só o Menu (com SOS, mensagens e fotos dentro).
+  function aplicarTipoUI() {
+    var militar = Boolean(estado.part && estado.part.tipo === 'militar');
+    document.body.classList.toggle('militar-em-rastreio', militar);
+    $('btn-sos').hidden = militar;
+    $('btn-registrar').hidden = militar;
+    $('btn-menu').hidden = !militar;
+    $('menu-acoes').hidden = !militar;
+    // legenda: no menu do militar (que não tem o mapa com a legenda ao lado); no mapa, para o civil
+    var leg = estado.legendaEl;
+    if (leg) {
+      var destino = militar ? $('folha-legenda') : document.querySelector('.mapa-civil-caixa');
+      if (destino && leg.parentNode !== destino) destino.appendChild(leg);
+    }
   }
 
   // CPF: opcional para todos. Celular: obrigatório para civis, opcional para militares.
@@ -1403,6 +1427,7 @@
     c.textContent = String(n);
     c.hidden = !n;
     $('btn-registrar').classList.toggle('tem-novas', n > 0);
+    $('btn-menu').classList.toggle('tem-novas', n > 0);   // militar: as mensagens estão no Menu
   }
 
   /* ------------------------------------------------------------------ */
@@ -2034,12 +2059,16 @@
   /* ------------------------------------------------------------------ */
   var CHAVE_PREFS_CIVIL = 'gbs-civil-mapa';
   var CHAVE_TEMA_CIVIL = 'gbs-civil-tema';
-  var PADRAO_PREFS = { base: 'osm', setores: true, pontos: true, proibidas: true, trilhas: true };
+  var PADRAO_PREFS = { base: 'satelite', setores: true, pontos: true, proibidas: true, trilhas: true };
   var COR_TRILHA_EQUIPE = '#8aa0b8';   // única cor para as trilhas dos outros; a sua usa a cor do grupo (ou azul)
 
   function lerPrefsMapa() {
-    try { return Object.assign({}, PADRAO_PREFS, JSON.parse(localStorage.getItem(CHAVE_PREFS_CIVIL) || 'null') || {}); }
-    catch (e) { return Object.assign({}, PADRAO_PREFS); }
+    var salvo = {};
+    try { salvo = JSON.parse(localStorage.getItem(CHAVE_PREFS_CIVIL) || 'null') || {}; } catch (e) { salvo = {}; }
+    var p = Object.assign({}, PADRAO_PREFS, salvo);
+    // o satélite abre sempre; um fundo guardado só vale se a pessoa escolheu outro de propósito
+    if (!salvo.baseEscolhida) p.base = PADRAO_PREFS.base;
+    return p;
   }
   function gravarPrefsMapa() {
     try { localStorage.setItem(CHAVE_PREFS_CIVIL, JSON.stringify(estado.prefs)); } catch (e) { /* sem armazenamento: vale nesta tela */ }
@@ -2074,6 +2103,7 @@
     estado.bases[nome].addTo(estado.mapa).bringToBack();
     estado.baseAtual = nome;
     estado.prefs.base = nome;
+    estado.prefs.baseEscolhida = true;
     gravarPrefsMapa();
   }
 
@@ -3716,6 +3746,7 @@
   /* ------------------------------------------------------------------ */
   function atualizarUI() {
     if (!estado.part || estado.finalizado) return;
+    aplicarTipoUI();
     var grupos = (estado.grupos || []).map(function (g) { return 'Grupo ' + g.nome + (g.papel === 'responsavel' ? ' (responsável)' : ''); });
     var quem = [estado.part.nome, estado.part.operacao].concat(grupos).join(' · ');
     if ($('st-nome').textContent !== quem) $('st-nome').textContent = quem;

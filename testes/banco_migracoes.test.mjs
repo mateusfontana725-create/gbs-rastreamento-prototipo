@@ -3324,5 +3324,22 @@ console.log('\nLink público em partes, mensagem para vários, pontos em lote e 
   chk((await db.query(`select count(*)::int n from pg_tables where schemaname = 'public' and tablename = 'categorias_ponto_estilo'`)).rows[0].n === 1, 'a 072 deixa a tabela de categorias criada');
 }
 
-console.log('\nMigrações 007–072 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Migração 073: link de militares só registra militar ---
+console.log('\nLink de militares: só militar (073)');
+{
+  await db.exec(ler('supabase/migracoes/073_link_militar_so_militar.sql'));
+  const op73 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 073', p_retencao_horas: 0 });
+  const info73 = (await como(null, `select public.info_operacao($1) r`, [op73.token_militar], 'anon')).rows[0].r;
+  chk(JSON.stringify(info73.tipos_permitidos) === '["militar"]', 'o link de militares devolve só "militar" (sem a escolha de civil)', info73.tipos_permitidos);
+  const infoC73 = (await como(null, `select public.info_operacao($1) r`, [op73.token_civil], 'anon')).rows[0].r;
+  chk(JSON.stringify(infoC73.tipos_permitidos) === '["civil"]', 'o link de civis devolve só "civil"', infoC73.tipos_permitidos);
+  const an73 = await usuario(null, true);
+  const p73 = await rpc(an73, 'ingressar', { p_token: op73.token_militar, p_nome: 'Sd Link', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  chk(p73.tipo === 'militar', 'pelo link de militares entra como militar, mesmo que a tela envie civil', p73.tipo);
+  const an73c = await usuario(null, true);
+  const p73c = await rpc(an73c, 'ingressar', { p_token: op73.token_civil, p_nome: 'Civil Link', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  chk(p73c.tipo === 'civil', 'pelo link de civis nunca entra como militar', p73c.tipo);
+}
+
+console.log('\nMigrações 007–073 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -98,6 +98,22 @@ teste('só conta o que veio depois do instante (depois do descanso longo)', () =
   const km = F.kmDesde([s], T0 + 50 * 10000);
   assert.ok(Math.abs(km - 0.49) < 0.005, km);
 });
+teste('km até um instante final (dia já passado): o que veio depois não conta', () => {
+  const s = seg(100, T0, 10, 10000);
+  const km = F.kmDesde([s], T0, T0 + 49 * 10000);
+  assert.ok(Math.abs(km - 0.49) < 0.005, km);
+});
+teste('ciclo do dia: começa no fim da noite (descanso de ontem não conta hoje)', () => {
+  // descanso longo que terminou ontem à noite: hoje a busca começa do primeiro ponto do dia
+  const ontemFim = T0 - 10 * H;
+  const c = F.ciclo([{ inicio: ontemFim - H, fim: ontemFim }], T0 + 2 * H, T0);
+  assert.strictEqual(c.inicioMs, T0);
+  assert.ok(Math.abs(c.buscaMin - 120) < 0.01, c.buscaMin);
+});
+teste('ciclo do dia: descanso longo dentro do dia zera a contagem daquele ponto em diante', () => {
+  const c = F.ciclo([{ inicio: T0 + H, fim: T0 + H + 40 * MIN }], T0 + 3 * H, T0);
+  assert.strictEqual(c.inicioMs, T0 + H + 40 * MIN);
+});
 teste('segmentos separados (falhas) não são ligados por uma reta', () => {
   const a = seg(10, T0, 10, 10000), b = seg(10, T0 + 3600000, 10, 10000).map((p) => Object.assign({}, p, { lat: p.lat + 0.05 }));
   const km = F.kmDesde([a, b], T0);

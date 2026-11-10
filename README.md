@@ -374,7 +374,9 @@ O mapa da página do participante mostra, além dos bombeiros:
   está perto do limite vermelho de tempo de busca, km próprio ou média do grupo); o nível de cores é o mesmo cálculo de sempre. A
   **bolinha** ao lado do nome continua sendo só o status de conexão/atividade. Também aparecem na **ficha** e no **dashboard**
   (indicador "Fadiga (vermelho)" e cartão "Fadiga e descanso", por pessoa e por grupo, do mais para o menos cansado). Conta, **desde o último
-  descanso longo** (30 min ou mais na base, que zera a contagem), o **tempo de busca** (sem os descansos curtos), os **km da pessoa** e a
+  descanso longo** (30 min ou mais na base, que zera a contagem) **dentro do dia**: a contagem é **por dia** (o dia de hoje, ou o dia
+  escolhido no filtro do mapa), então quem descansou de um dia para o outro começa zerado. Conta o **tempo de busca** (a partir do primeiro
+  ponto do dia; sem os descansos curtos), os **km da pessoa** no dia e a
   **média de km do grupo**; o nível é o **pior dos três**. Padrões (em `public/js/fadiga.js`, `LIMITES`): amarelo a partir de **2 h**, **8 km**
   ou média do grupo de **7 km**; vermelho a partir de **4 h**, **15 km** ou **12 km**. Quem descansa há 30 min ou mais fica verde. É
   **indicação para o comando decidir a troca da equipe**, não um limite médico. Sem contato há mais de 15 min o tempo para de contar na
@@ -887,8 +889,9 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   **Em deslocamento** (× esconde; volta só depois de sair do deslocamento), a **barra da rota de apoio** (× esconde só a barra, a rota
   continua no mapa; **Parar** encerra a rota), o aviso de **tempo** (× = ocultar) e o **✕ Mostrar todos** da barra do filtro, que limpa o filtro.
 - **Cabeçalho compacto no tablet**: de 601 a 1440 px de largura os botões de ação do topo (Marcar ponto, Foto, Setor, Trilha, Régua, POA/POD,
-  Dashboard, Mensagens, Convidar) ficam só com o **ícone** (o nome aparece ao segurar ou passar o mouse). No tablet deitado ficam **na mesma
-  linha do título** (cabeçalho de ~50 px, antes ~108 px); no tablet em pé, numa faixa de ícones de 32 px. No celular e acima de 1440 px nada mudou.
+  Dashboard, Mensagens, Convidar) têm o **ícone e o nome em letra pequena** embaixo, para saber a função de cada um sem ocupar muito espaço.
+  No tablet deitado ficam **na mesma linha do título** (cabeçalho de ~55 px); no tablet em pé, numa faixa de 40 px que rola de lado se não couber.
+  No celular e acima de 1440 px nada mudou.
 - **Avisos e janelas do topo**: o aviso de meteorologia, a barra de desenho e a barra do filtro ficam numa **pilha única**
   (`#pilha-topo`), um abaixo do outro, sem se sobrepor; as notificações (`#avisos`) sobem acima da barra de apoio quando ela aparece.
 - **Lista de participantes**: cada linha tem duas fileiras — o **nome inteiro** (até duas linhas) e, embaixo, estado do GPS, idade do

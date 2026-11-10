@@ -9146,21 +9146,37 @@
     est.zonasNoServidor = false;
   }
 
-  // Ciclo de esforço do participante (com cache de 1 minuto: refazer a trilha de todos a cada redesenho da lista seria caro).
+  // Dia de referência da fadiga: o dia escolhido no filtro do mapa, ou hoje. A contagem é por dia: quem descansou
+  // de um dia para o outro chega zerado. Dentro do dia, o descanso longo na base ainda zera a contagem.
+  function diaDaFadiga(agora) {
+    var f = est.filtroDia;
+    var l = limitesDoDia(f && f.dia ? f.dia : chaveDia(agora));
+    return { de: l.de, ate: l.ate, passado: l.ate <= agora };
+  }
+
+  // Ciclo de esforço do participante no dia de referência (com cache de 1 minuto: refazer a trilha de todos a cada
+  // redesenho da lista seria caro).
   function cicloDoParticipante(p) {
     var F = window.Fadiga;
     var agora = C.agora();
+    var dia = diaDaFadiga(agora);
     var ultimo = p.pontos.length ? p.pontos[p.pontos.length - 1] : null;
     var rows = est.descansos.get(p.id) || [];
-    var chave = [Math.floor(agora / 60000), p.pontos.length, ultimo ? ultimo.id : 0, rows.length, rows.length ? rows[rows.length - 1].fim : 0].join('|');
+    var chave = [Math.floor(agora / 60000), dia.de, p.pontos.length, ultimo ? ultimo.id : 0, rows.length, rows.length ? rows[rows.length - 1].fim : 0].join('|');
     if (p._ciclo && p._ciclo.chave === chave) return p._ciclo;
     var d = p.dados;
     var contato = d.ultimo_contato_em ? C.paraMs(d.ultimo_contato_em) : (ultimo ? ultimo.t : null);
     // sem contato há mais de 15 min o tempo para de contar na última notícia (não se sabe o que a pessoa está fazendo)
     var ate = d.rastreando && contato && agora - contato < 15 * 60000 ? agora : (contato || agora);
-    var cic = F.ciclo(rows, ate, p.pontos.length ? p.pontos[0].t : null);
+    var fim = dia.passado ? dia.ate : ate;   // dia já passado: a conta vai até o fim dele
+    // o tempo de busca começa no primeiro ponto DO DIA (sem pontos no dia: zero)
+    var inicioDia = null;
+    p.pontos.forEach(function (x) { if (x.t >= dia.de && x.t < dia.ate && (inicioDia == null || x.t < inicioDia)) inicioDia = x.t; });
+    // descansos que tocam o dia (os de outros dias não entram no tempo nem no total do dia)
+    var doDia = rows.filter(function (r) { return r.inicio < dia.ate && (r.fim == null || r.fim > dia.de); });
+    var cic = F.ciclo(doDia, fim, inicioDia != null ? inicioDia : fim);
     var tr = trilhaDePontos(p.pontos, true, intervalosDe(p));
-    p._ciclo = { chave: chave, ciclo: cic, km: F.kmDesde(tr.segmentos, cic.inicioMs) };
+    p._ciclo = { chave: chave, ciclo: cic, km: F.kmDesde(tr.segmentos, cic.inicioMs, fim) };
     return p._ciclo;
   }
 

@@ -1,7 +1,8 @@
 /* =====================================================================
  * fadiga.js — indicador de fadiga (verde, amarelo, vermelho) e descanso na base
  *
- * Considera, desde o último DESCANSO LONGO (na base), três coisas:
+ * Conta por DIA (quem descansou de um dia para o outro chega zerado) e, dentro do dia, desde o último
+ * DESCANSO LONGO (na base). São três coisas:
  *   · tempo de busca (tempo em campo, sem contar os descansos curtos);
  *   · quilometragem individual;
  *   · quilometragem do grupo (média por integrante).
@@ -74,11 +75,12 @@
   }
 
   // Quilômetros percorridos a partir de um instante. segmentos: [[{ lat, lng, t }, …], …] (a trilha já filtrada).
-  function kmDesde(segmentos, desdeMs) {
-    var m = 0;
+  // ateMs (opcional): só conta até esse instante (dia já passado).
+  function kmDesde(segmentos, desdeMs, ateMs) {
+    var m = 0, fim = ateMs == null ? Infinity : ateMs;
     (segmentos || []).forEach(function (seg) {
       for (var i = 1; i < seg.length; i++) {
-        if (seg[i].t >= desdeMs && seg[i - 1].t >= desdeMs) m += distanciaM(seg[i - 1].lat, seg[i - 1].lng, seg[i].lat, seg[i].lng);
+        if (seg[i].t >= desdeMs && seg[i - 1].t >= desdeMs && seg[i].t <= fim && seg[i - 1].t <= fim) m += distanciaM(seg[i - 1].lat, seg[i - 1].lng, seg[i].lat, seg[i].lng);
       }
     });
     return m / 1000;

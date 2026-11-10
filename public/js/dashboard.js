@@ -941,7 +941,7 @@
         vazio: 'Ninguém com trilha ainda.',
         nota: 'Amarelo: ' + raiz.Fadiga.textoMinutos(raiz.Fadiga.LIMITES.tempoMin.amarelo) + ' de busca, ' + raiz.Fadiga.LIMITES.km.amarelo + ' km ou média do grupo de ' + raiz.Fadiga.LIMITES.kmGrupo.amarelo +
           ' km. Vermelho: ' + raiz.Fadiga.textoMinutos(raiz.Fadiga.LIMITES.tempoMin.vermelho) + ', ' + raiz.Fadiga.LIMITES.km.vermelho + ' km ou ' + raiz.Fadiga.LIMITES.kmGrupo.vermelho +
-          ' km. Um descanso de ' + raiz.Fadiga.LIMITES.descansoLongoMin + ' min ou mais na base zera a contagem. É indicação para o comando decidir a troca da equipe.',
+          ' km. Um descanso de ' + raiz.Fadiga.LIMITES.descansoLongoMin + ' min ou mais na base zera a contagem. A contagem é por dia: cada dia começa do zero. É indicação para o comando decidir a troca da equipe.',
       });
     }
     function detalheSetor(st) {
@@ -1134,7 +1134,7 @@
           }), function (j) { var p = fadiga.pessoas[j]; if (acoes.verPessoa) acoes.verPessoa(p.id); }),
         fadiga.pessoas.length > 12 ? el('p', { classe: 'muted', texto: 'Mostrando as 12 mais cansadas. Toque no indicador "Fadiga" no topo para ver todas.' }) : null,
       ]) : el('p', { classe: 'muted', texto: 'Ninguém com trilha ainda.' })],
-      nota: fadiga.descansoDisponivel ? 'Limites padrão: amarelo a partir de 2 h de busca, 8 km ou média do grupo de 7 km; vermelho a partir de 4 h, 15 km ou 12 km. Um descanso de 30 min ou mais na base zera a contagem.'
+      nota: fadiga.descansoDisponivel ? 'Limites padrão: amarelo a partir de 2 h de busca, 8 km ou média do grupo de 7 km; vermelho a partir de 4 h, 15 km ou 12 km. Um descanso de 30 min ou mais na base zera a contagem. A contagem é por dia: cada dia começa do zero.'
         : 'O descanso na base precisa da migração 068 no banco; sem ela a contagem não é zerada.',
     }) : null;
     var cSet = cartao({

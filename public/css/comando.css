@@ -1608,13 +1608,13 @@ html[data-tema="claro"] .btn-meteo-mapa { background: #ffffff; color: var(--text
 .btn-acao-topo .ico-acao { font-size: 1rem; line-height: 1; }
 .btn-acao-topo .ico-camera { flex: none; }
 .acoes-topo[hidden], .btn-acao-topo[hidden] { display: none !important; }
-/* Tablet e notebook (861–1440 px): as ações ficam na MESMA linha do título, só com o ícone (o nome aparece ao segurar/passar o mouse
-   e a lista completa está em Ferramentas). Antes desciam para uma faixa própria de ~50 px, com o nome embaixo do ícone. */
+/* Tablet e notebook (861–1440 px): as ações ficam na MESMA linha do título, com o ícone e o nome em letra pequena embaixo
+   (para saber a função de cada botão, sem ocupar muito espaço). */
 @media (min-width: 861px) and (max-width: 1440px) {
-  .acoes-topo { gap: 4px; }
-  .acoes-topo .btn-acao-topo { flex-direction: column; justify-content: center; position: relative; width: 38px; min-width: 0; min-height: 32px; height: 32px; padding: 0; }
-  .acoes-topo .btn-acao-topo .rotulo-acao { display: none; }
-  .acoes-topo .btn-acao-topo .ico-acao { font-size: 1.05rem; }
+  .acoes-topo { gap: 3px; }
+  .acoes-topo .btn-acao-topo { flex: 0 0 auto; flex-direction: column; justify-content: center; position: relative; min-width: 0; min-height: 40px; height: 40px; padding: 2px 4px; gap: 1px; line-height: 1; white-space: nowrap; }
+  .acoes-topo .btn-acao-topo .rotulo-acao { display: inline; font-size: .5rem; letter-spacing: .03em; text-transform: uppercase; }
+  .acoes-topo .btn-acao-topo .ico-acao { font-size: .95rem; }
   .acoes-topo .btn-acao-topo .contador { position: absolute; top: -5px; right: -5px; }
 }
 @media (max-width: 860px) {
@@ -2408,12 +2408,12 @@ html.topo-oculto .btn-mostrar-topo { display: inline-flex; }
   .acoes-topo .btn-acao-topo .ico-msg { height: 13px; margin: 1.5px 0; }
   body.personalizando .acoes-topo { -webkit-mask-image: none; mask-image: none; flex-wrap: wrap; }
 }
-/* Tablet em pé (601–860 px): a faixa de ações fica só com ícones, mais baixa (nome ao segurar/passar o mouse) */
+/* Tablet em pé (601–860 px): a faixa de ações com o ícone e o nome em letra pequena embaixo; rola de lado se não couber */
 @media (min-width: 601px) and (max-width: 860px) {
-  .acoes-topo { display: flex; gap: 6px; padding-right: 0; -webkit-mask-image: none; mask-image: none; overflow-x: auto; }
-  .acoes-topo .btn-acao-topo { flex: 0 0 52px; min-width: 0; max-width: none; min-height: 32px; height: 32px; padding: 0; position: relative; }
-  .acoes-topo .btn-acao-topo .rotulo-acao { display: none; }
-  .acoes-topo .btn-acao-topo .ico-acao { font-size: 1rem; }
+  .acoes-topo { display: flex; gap: 3px; padding-right: 0; -webkit-mask-image: none; mask-image: none; overflow-x: auto; }
+  .acoes-topo .btn-acao-topo { flex: 0 0 auto; flex-direction: column; justify-content: center; min-width: 0; max-width: none; min-height: 40px; height: 40px; padding: 2px 4px; gap: 1px; line-height: 1; white-space: nowrap; position: relative; }
+  .acoes-topo .btn-acao-topo .rotulo-acao { display: inline; font-size: .5rem; letter-spacing: .03em; text-transform: uppercase; }
+  .acoes-topo .btn-acao-topo .ico-acao { font-size: .95rem; }
   .acoes-topo .btn-acao-topo .contador { position: absolute; top: -5px; right: -5px; }
 }
 @media (max-width: 600px) {

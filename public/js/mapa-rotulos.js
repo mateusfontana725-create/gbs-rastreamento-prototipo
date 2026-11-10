@@ -10,7 +10,9 @@
 
   var ZOOM_MEDIO = 15;   // a partir daqui aparecem os nomes
   var ZOOM_PERTO = 17;   // a partir daqui aparece tudo (idade da posição, situação do setor)
-  var ZOOM_SEM_AGRUPAR = 19;   // a partir daqui (escala de ~25 m) ninguém fica agrupado; de 200 m e de 100 m ainda agrupa
+  // A partir daqui ninguém fica agrupado (pessoas, pontos, fotos e relatos): zoom 18 = a escala do mapa passa a mostrar
+  // "50 m" (100 px ≈ 54 m no Paraná). O agrupamento só vale além disso: escala de 100 m (zoom 17) ou mais longe.
+  var ZOOM_SEM_AGRUPAR = 18;
   var NIVEIS = ['zoom-longe', 'zoom-medio', 'zoom-perto'];
 
   // Tamanho dos símbolos pelo zoom (1 = tamanho cheio): de longe tudo diminui para o mapa não ficar

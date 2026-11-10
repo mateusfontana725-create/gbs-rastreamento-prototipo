@@ -198,7 +198,8 @@ body.gaveta .lateral-cabeca { border-radius: 6px 6px 0 0; }
 /* lista oculta: o botão "Participantes" ocupa o canto; Camadas fica logo abaixo */
 body.lateral-oculta:not(.gaveta) .camadas-mapa { top: 58px; max-height: calc(100% - 68px); }
 /* lista da gaveta em tela cheia: nada sobre ela */
-body.gaveta .painel-corpo[data-gaveta="cheia"] .camadas-mapa { visibility: hidden; }
+body.gaveta .painel-corpo[data-gaveta="cheia"] .camadas-mapa,
+body.gaveta .painel-corpo[data-gaveta="cheia"] .filtro-mapa { visibility: hidden; }
 
 /* os controles do canto direito do mapa (Grupos) descem para não ficar sob o botão */
 #mapa .leaflet-top.leaflet-right { top: 48px; }
@@ -2869,3 +2870,65 @@ body.modo-publico .btn-olho-pessoa { display: inline-block; }
 
 /* Botão "Dia" sobre o mapa, na mesma coluna de Camadas */
 .ico-filtro { font-size: .95rem; line-height: 1; }
+
+/* Botão do filtro (📅 Dia): canto superior esquerdo, ao lado do zoom do Leaflet */
+.filtro-mapa { position: absolute; z-index: 1120; top: 10px; left: 56px; max-width: calc(100% - 200px); }
+.filtro-mapa .camadas-botao { max-width: 100%; }
+.filtro-mapa .camadas-resumo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) { .filtro-mapa { left: 66px; } }
+
+/* Pilha de avisos do topo do mapa: desenho em andamento, deslocamento, filtro e tempo ficam um abaixo do outro
+   (antes todos usavam top: 10px no centro e se sobrepunham). */
+.pilha-topo {
+  position: absolute; z-index: 1180; top: 28px; left: 50%; transform: translateX(-50%);   /* abaixo da aba "Esconder cabeçalho" */
+  width: min(680px, calc(100% - 420px)); display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.pilha-topo > * { pointer-events: auto; }
+.pilha-topo > .barra-desenho, .pilha-topo > .chip-deslocamento, .pilha-topo > .meteo-aviso, .pilha-topo > .barra-foco {
+  position: relative; top: auto; left: auto; right: auto; bottom: auto; transform: none; width: auto; max-width: none; margin: 0; z-index: auto;
+}
+.pilha-topo > .barra-desenho { order: 1; }
+.pilha-topo > .chip-deslocamento { order: 2; }
+.pilha-topo > .barra-foco { order: 3; justify-content: space-between; border-radius: 12px; }
+.pilha-topo > .meteo-aviso { order: 4; }
+html.topo-oculto .pilha-topo { top: 38px; }   /* a etiqueta "Mostrar cabeçalho" fica no centro, no alto */
+/* Tablet e computador: a lista fica à direita, então a pilha se centra só na área do mapa (como Camadas, que acompanha a borda) */
+@media (min-width: 861px), (orientation: landscape) and (max-height: 540px) {
+  body:not(.lateral-oculta) .pilha-topo { left: calc((100% - var(--larg-lateral, 320px)) / 2); width: min(680px, calc(100% - var(--larg-lateral, 320px) - 400px)); }
+}
+/* Tela estreita: a pilha ocupa a largura toda, por cima dos botões do canto enquanto houver aviso */
+@media (max-width: 860px) {
+  .pilha-topo { width: auto; left: 8px; right: 8px; transform: none; top: 28px; }
+}
+
+/* Linha do participante em DUAS linhas: em cima o nome (até 2 linhas, sem cortar); embaixo a bolinha de conexão, a idade,
+   a barra de cansaço, o descanso e os avisos. O olho e o "Reincluir" ficam na coluna da direita. */
+.lista-item {
+  grid-template-columns: 22px minmax(0, 1fr) auto auto; grid-template-rows: auto auto; gap: 2px 8px; align-items: center;
+  padding: 7px 10px; min-height: 48px;
+}
+.li-simbolo { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+.li-nome { grid-column: 2; grid-row: 1; display: block; overflow: hidden; font-size: .88rem; line-height: 1.2; }
+.li-nome .nome-txt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow: hidden; text-overflow: ellipsis; overflow-wrap: anywhere; }
+.li-nome .li-estrela { margin-right: 4px; }
+.li-estado { grid-column: 2; grid-row: 2; flex-wrap: wrap; gap: 3px 7px; white-space: normal; min-width: 0; }
+.li-idade { min-width: 0; text-align: left; }
+.li-estado .barra-cansaco { margin-left: 0; }
+.li-acoes { grid-column: 3; grid-row: 1 / span 2; }
+.lista-item > .btn-olho-pessoa { grid-column: 4; grid-row: 1 / span 2; }
+
+/* Filtro do mapa: data única, atalhos e escolha do que mostrar */
+.form-filtro-mapa input[type="date"] { width: 100%; }
+.filtro-atalhos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.filtro-dia-resumo { margin: 6px 0 0; }
+.filtro-cat { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 8px; align-items: center; padding: 3px 0; }
+.filtro-cat-rotulo { font-size: .88rem; line-height: 1.25; }
+.filtro-cat select { min-height: 36px; }
+@media (max-width: 359px) { .filtro-cat { grid-template-columns: 1fr; gap: 2px; padding: 5px 0; } }
+.filtro-cat select { padding-right: 24px; }
+/* os toasts sobem quando a barra "ir até o participante" está aberta (ficam no mesmo lugar embaixo) */
+body:has(.barra-apoio:not([hidden])) #avisos { bottom: 88px; }
+
+/* "Fora da operação (N)": o título é texto corrido (no celular uma regra antiga o virava flex e quebrava o número) */
+.grupo-removidos > summary { display: block; line-height: 1.35; padding: 10px 12px; }
+.grupo-removidos > summary small { display: inline; }

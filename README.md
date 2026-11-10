@@ -871,13 +871,16 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
 
 ### Filtros, mensagens para vários, pontos, abertura no local e funções dos militares (migração 072)
 
-- **Filtrar por dia ou pessoa** (botão **📅 Dia** sobre o mapa, ao lado de **Camadas**; mostra o dia e a pessoa filtrados e acende enquanto há filtro): escolha um **dia** (a lista mostra os dias com
-  registros e quantas posições; dá para escolher outro no calendário) e/ou uma **pessoa**. O mapa mostra só o que foi feito nesse dia:
-  as trilhas só com os trechos do dia, as fotos e relatos do dia e quem esteve em campo — num dia passado, cada pessoa aparece **onde
-  estava no fim daquele dia**. Duas opções: **Mostrar todos os setores, de qualquer dia** e **Mostrar todos os pontos de interesse, de
-  qualquer dia** (ligadas por padrão; desligadas, só ficam os criados no dia). Os detalhes da trilha (distância, tempo, relevo) seguem
-  o filtro. Uma barra no alto do mapa mostra o filtro ("📅 08/11/2026 (ontem) · 👁 Mostrando só Ana"); tocar nela muda o filtro e
-  **✕ Mostrar todos** limpa. Os alertas continuam chegando. O filtro não fica lembrado ao recarregar.
+- **Filtrar por dia ou pessoa** (botão **📅 Dia** no **canto superior esquerdo** do mapa, separado de **Camadas** e dos **Grupos**; acende enquanto há filtro): o modal abre **já no dia de hoje**, com **um só campo de data** (calendário de verdade, não pode ser
+  futuro) e atalhos **Hoje** e **Ontem**. Para cada tipo de coisa você escolhe **Do dia**, **Todos os dias** ou **Ocultar**: **Pessoas e trilhas**,
+  **Fotos**, **Relatos**, **Setores**, **Pontos de interesse**, **Trilhas manuais** e **Áreas proibidas**. Dá também para ver só **uma pessoa**.
+  Num dia passado, cada pessoa aparece **onde estava no fim daquele dia**, e as trilhas só mostram os trechos do dia. Os detalhes da trilha
+  (distância, tempo, relevo) seguem o filtro. Uma barra no alto do mapa mostra o filtro ("📅 08/11/2026 (ontem) · 👁 Mostrando só Ana");
+  tocar nela muda o filtro e **✕ Mostrar todos** limpa. Os alertas continuam chegando. O filtro não fica lembrado ao recarregar.
+- **Avisos e janelas do topo**: o aviso de meteorologia, a barra de desenho e a barra do filtro ficam numa **pilha única**
+  (`#pilha-topo`), um abaixo do outro, sem se sobrepor; as notificações (`#avisos`) sobem acima da barra de apoio quando ela aparece.
+- **Lista de participantes**: cada linha tem duas fileiras — o **nome inteiro** (até duas linhas) e, embaixo, estado do GPS, idade do
+  último ponto, barra de cansaço e avisos (SOS, saída, mensagem) — para o nome não ser cortado, inclusive no celular.
 - **Mensagem para todos ou grupos** (**Ferramentas → ✉ Mensagem para todos ou grupos**, ou o botão no alto de **Comunicação**): a mesma
   mensagem (livre ou orientação rápida) vai de uma vez para **todos os participantes de campo** da operação ou para os integrantes
   dos **grupos marcados** (vários ao mesmo tempo; quem está em mais de um grupo recebe uma vez só). A tela mostra quem vai receber e
@@ -1298,8 +1301,8 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     críticos como vítima, risco, base e última localização, pessoas, demais pontos, setores). Se o lado direito estiver
     ocupado, o nome tenta a esquerda, em cima ou embaixo; sem espaço, some até aproximar. Passar o mouse (ou focar) no
     marcador mostra o nome escondido. O nome do setor fica abaixo das pessoas e dos pontos, sem cobri-los.
-  - **Pessoas próximas agrupadas** (até o zoom 18, ou seja, já na escala de **200 m** e de **100 m**; só de muito perto, 25 m ou
-    menos, ficam soltas): um círculo com o número de pessoas e um anel com as cores dos
+  - **Pessoas próximas agrupadas** (**só até o zoom 17**: agrupam nas escalas de **200 m** e de **100 m**; a partir da escala de **50 m**,
+    zoom 18, ficam todas soltas): um círculo com o número de pessoas e um anel com as cores dos
     grupos; passar o mouse lista os nomes e tocar aproxima. Quem pede ajuda, pediu saída, está selecionado ou é você
     nunca entra no agrupamento. Fica **sempre ligado** (não há opção para desligar).
   - **Resumo de longe** (`public/js/mapa-resumo.js`): pessoas e pontos/relatos/fotos agrupavam cada um por conta própria
@@ -1370,8 +1373,8 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
     no mesmo agrupamento quando está perto. O grupo é um **quadrado arredondado** (as pessoas agrupadas são
     círculos) com o número e um anel com a cor de cada tipo (azul-claro pontos de interesse, laranja relatos, roxo
     fotos); um **!** vermelho avisa que há área de risco ou pedido de ajuda dentro. Passar o mouse diz quantos de
-    cada; tocar aproxima; vários no mesmo lugar abrem em leque. O agrupamento já funciona na escala de 200 m e de 100 m (raio de
-    40 a 50 px) e só diminui de muito perto (zoom 19+).
+    cada; tocar aproxima; vários no mesmo lugar abrem em leque. O agrupamento acontece nas escalas de 200 m e de 100 m (raio de
+    40 a 50 px) e **termina na escala de 50 m (zoom 18)**: dali para perto nada se agrupa.
     **Vítima encontrada** (ponto ou relato) agrupa como os demais, mas o grupo fica inconfundível: **borda verde
     pulsante**, um **+ verde** no canto com a quantidade (**+2**) e a etiqueta **VÍTIMA** / **2 VÍTIMAS** ao lado, visível
     em qualquer zoom (relato e ponto da mesma vítima, a menos de 30 m, contam como uma); de perto ela diminui junto com os outros
@@ -2465,7 +2468,7 @@ Use dois celulares Android com Chrome atualizado e dados móveis (de preferênci
 | 40j | Tocar no marcador da vítima localizada; depois **O que aconteceu ›** | o balão mostra o nome da vítima, a condição, quem encontrou e o local; a janela mostra setor, distância do ULV, quem encontrou e quem estava a até 300 m |
 | 40k | **Ferramentas → Cadastro rápido de vítima**: só **Idoso**, **Feminino** e a roupa → **Salvar e novo**; depois só o nome → Enter | duas fichas "completar" na lista de vítimas; abrir uma e tocar em **Completar a ficha** tira a marca ao salvar |
 | 40l | **Novo grupo**: tocar em **＋**, escolher uma cor pelo tom/claridade, **Guardar em "Minhas cores"**, criar outro grupo e reutilizá-la; repetir no **Setor** | a cor escolhida aparece no marcador, na trilha e na lista; "Minhas cores" aparece nos dois formulários |
-| 40m | Aproximar o mapa de uma equipe de 3 pessoas a ~15 m uma da outra, do zoom 16 até o 20 | até o zoom 18 ficam num círculo com o número; a partir do 19 se separam; os ícones diminuem do 17 em diante e a vítima localizada continua grande |
+| 40m | Aproximar o mapa de uma equipe de 3 pessoas a ~15 m uma da outra, do zoom 16 até o 20 | até o zoom 17 ficam num círculo com o número; a partir do 18 (escala de 50 m) se separam; os ícones diminuem do 17 em diante e a vítima localizada continua grande |
 | 40n | **Convidar → ✉ Convidar por e-mail** com nome e e-mail reais; abrir o e-mail no celular e o link | o e-mail chega com o botão; a página abre com o nome preenchido; ao começar, o convite passa a **Entrou**; sem `RESEND_API_KEY`, aparecem **Abrir no meu e-mail** e **Copiar link** |
 | 40n2 | No painel, tocar em **SCI** (seletor ao lado do título) numa operação nova | abre **Estabelecer o SCI**; concluir os 4 passos leva ao Resumo com o comando, a informação NÃO CONFIRMADA e o 1º período; **Operação** volta ao mapa como estava |
 | 40n3 | No celular de campo, **Encontrei a vítima**; no Modo SCI → **Vítimas e ACV** | a vítima aparece em **Conciliação mapa × quadro**; **Trazer para o quadro** → V-01 plotada; iniciar remoção com uma equipe, check-in na ACV, entrega com destino; cada passo no diário |

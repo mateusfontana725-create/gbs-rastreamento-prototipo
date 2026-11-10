@@ -386,11 +386,15 @@
     <div class="painel-corpo" id="painel-corpo">
       <div id="mapa" role="region" aria-label="Mapa dos participantes"></div>
 
-      <!-- Mapa e camadas: tipo de mapa, modo de visualização e camadas operacionais (sempre à mão, fora do menu) -->
-      <div class="camadas-mapa" id="camadas-mapa">
+      <!-- Filtro por dia e pessoa: canto superior esquerdo, ao lado do zoom (o canto direito é de Camadas e Grupos) -->
+      <div class="filtro-mapa" id="filtro-mapa">
         <button class="camadas-botao camadas-filtro" type="button" id="btn-filtro-mapa" aria-haspopup="dialog" title="Ver no mapa só um dia ou uma pessoa">
           <span class="ico-filtro" aria-hidden="true">📅</span><span class="camadas-rotulo">Dia</span><small class="camadas-resumo" id="filtro-resumo"></small>
         </button>
+      </div>
+
+      <!-- Mapa e camadas: tipo de mapa, modo de visualização e camadas operacionais (sempre à mão, fora do menu) -->
+      <div class="camadas-mapa" id="camadas-mapa">
         <button class="camadas-botao" type="button" id="btn-camadas" aria-expanded="false" aria-controls="camadas-painel" title="Tipo de mapa, relevo 3D e camadas">
           <span class="ico-camadas" aria-hidden="true"></span><span class="camadas-rotulo">Camadas</span><small class="camadas-resumo" id="camadas-resumo"></small>
         </button>
@@ -454,12 +458,21 @@
 
 
       <!-- Meteorologia (js/meteo.js): aviso no mapa e painel com radar, previsão e alertas -->
-      <div class="meteo-aviso" id="meteo-aviso" role="status" hidden>
-        <span id="meteo-aviso-texto"></span>
-        <span class="meteo-aviso-botoes">
-          <button class="btn btn-pequeno" type="button" id="meteo-aviso-ver">Ver</button>
-          <button class="btn btn-pequeno" type="button" id="meteo-aviso-ocultar">Ocultar</button>
-        </span>
+      <!-- Avisos do topo do mapa, EMPILHADOS (nunca um em cima do outro): desenho em andamento, deslocamento, filtro e tempo -->
+      <div class="pilha-topo" id="pilha-topo">
+        <!-- Barra do modo de desenho (setores, pontos, destino) -->
+        <div class="barra-desenho" id="barra-desenho" role="status" hidden>
+          <span class="barra-desenho-texto" id="barra-desenho-texto"></span>
+          <span class="barra-desenho-extra" id="barra-desenho-extra"></span>
+          <span class="barra-desenho-botoes" id="barra-desenho-botoes"></span>
+        </div>
+        <div class="meteo-aviso" id="meteo-aviso" role="status" hidden>
+          <span id="meteo-aviso-texto"></span>
+          <span class="meteo-aviso-botoes">
+            <button class="btn btn-pequeno" type="button" id="meteo-aviso-ver">Ver</button>
+            <button class="btn btn-pequeno" type="button" id="meteo-aviso-ocultar">Ocultar</button>
+          </span>
+        </div>
       </div>
       <section class="meteo-painel" id="meteo-painel" role="region" aria-label="Meteorologia" hidden>
         <div class="meteo-cabeca">
@@ -515,12 +528,6 @@
         <p class="meteo-nota">Orientação de cautela. Não substitui os alertas oficiais nem a decisão do comando. Raios e granizo não são medidos aqui.</p>
       </section>
 
-      <!-- Barra do modo de desenho (setores, pontos, destino) -->
-      <div class="barra-desenho" id="barra-desenho" role="status" hidden>
-        <span class="barra-desenho-texto" id="barra-desenho-texto"></span>
-        <span class="barra-desenho-extra" id="barra-desenho-extra"></span>
-        <span class="barra-desenho-botoes" id="barra-desenho-botoes"></span>
-      </div>
 
       <!-- Rota até um participante (ir até a pessoa / mandar apoio), atualizada enquanto ela anda -->
       <div class="barra-apoio" id="barra-apoio" role="status" hidden>

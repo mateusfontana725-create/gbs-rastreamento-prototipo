@@ -213,7 +213,7 @@
     grupos: new Map(),          // id → grupo
     membros: new Map(),         // grupo_id → Map(participante_id → vínculo {papel, origem…})
     semGrupos: false,           // banco sem a migração 008
-    filtroDia: null,            // { dia, de, ate, setoresSempre, pontosSempre }: o mapa mostra só o que aconteceu nesse dia. Não fica lembrado
+    filtroDia: null,            // { dia, de, ate, modos: { pessoas, fotos, relatos, setores, pontos, trilhasManuais, proibidas } (dia | todos | oculto) }: o mapa mostra só o que aconteceu nesse dia. Não fica lembrado
     focoPessoa: null,           // id da pessoa em foco (olho da lista): o mapa mostra só ela e o que é dela. Não fica lembrado
     filtroGrupos: new Set(),    // grupos ligados no mapa (ícone de olho; vários ao mesmo tempo). Vazio = todos. Não fica lembrado
     controleGrupos: null,
@@ -2206,8 +2206,9 @@
     return L.markerClusterGroup({
       clusterPane: 'pontos',
       showCoverageOnHover: false,
-      // agrupa já na escala de 200 m e de 100 m (zoom 16 e 17); só bem de perto o raio diminui
-      maxClusterRadius: function (z) { return z >= 19 ? 26 : z >= 17 ? 40 : 50; },
+      // agrupa na escala de 200 m e de 100 m (zoom 16 e 17); a partir da escala de 50 m (zoom 18) não agrupa mais
+      maxClusterRadius: function (z) { return z >= 17 ? 40 : 50; },
+      disableClusteringAtZoom: window.MapaRotulos ? window.MapaRotulos.ZOOM_SEM_AGRUPAR : 18,
       spiderfyOnMaxZoom: true,
       zoomToBoundsOnClick: true,
       iconCreateFunction: function (grupo) {
@@ -4087,14 +4088,17 @@
 
     // Avisos só quando existem (ícone curto; a descrição completa vai no title e na ficha)
     var resp = grupos.some(function (g) { return g.papel === 'responsavel'; });
+    // Linha de cima: só o nome (nada disputa o espaço dele). Linha de baixo (li-estado): bolinha de conexão, idade,
+    // barra de cansaço, descanso e avisos.
     var htmlNome = (resp ? '<span class="li-estrela" title="Responsável do grupo">★</span>' : '') +
-      '<span class="nome-txt">' + C.esc(nomeExibido(p)) + '</span>' +
+      '<span class="nome-txt">' + C.esc(nomeExibido(p)) + '</span>';
+    if (partes.nome.innerHTML !== htmlNome) partes.nome.innerHTML = htmlNome;
+    var htmlAvisos =
       (fad ? barraCansaco(fad) : '') +
       (fad && fad.descansando ? '<span class="li-descanso" title="Descansando na base há ' + window.Fadiga.textoMinutos(fad.descansando.min) + (fad.descansando.longo ? ' (descanso longo: a contagem de fadiga foi zerada)' : '') + '">☕ ' + window.Fadiga.textoMinutos(fad.descansando.min) + '</span>' : '') +
       (ajuda ? '<span class="li-aviso li-aviso-ajuda" title="Pediu ajuda">SOS</span>' : '') +
       (saida ? '<span class="li-aviso li-aviso-saida" title="Pediu para sair">Saída</span>' : '') +
       (novas ? '<span class="li-aviso li-aviso-msg" title="' + (novas === 1 ? 'Mensagem nova' : novas + ' mensagens novas') + '">✉' + (novas > 1 ? novas : '') + '</span>' : '');
-    if (partes.nome.innerHTML !== htmlNome) partes.nome.innerHTML = htmlNome;
 
     var dica = e.rot + (gpsRuim ? ' · ' + textoGps(d.gps_estado) : '') +
       (pend ? ' · ' + pend + ' mensagem(ns) aguardando confirmação' : '') + (aguardandoRetorno(p) ? ' · reincluído' : '') +
@@ -4102,7 +4106,7 @@
       (grupos.length ? ' · ' + grupos.map(function (g) { return (g.papel === 'responsavel' ? 'resp. ' : '') + g.nome; }).join(', ') : '');
     var htmlEstado = '<span class="ponto ponto-' + e.cod + '"></span>' +
       (gpsRuim ? '<span class="li-gps" aria-hidden="true">GPS</span>' : '') +
-      '<span class="li-idade">' + (pos ? C.esc(idadeCurta(pos.t)) : '—') + '</span>';
+      '<span class="li-idade">' + (pos ? C.esc(idadeCurta(pos.t)) : '—') + '</span>' + htmlAvisos;
     if (partes.estado.innerHTML !== htmlEstado) partes.estado.innerHTML = htmlEstado;
     if (p.li.title !== dica) { p.li.title = dica; p.li.setAttribute('aria-label', nomeExibido(p) + ': ' + dica); }
 
@@ -7048,7 +7052,7 @@
         } }),
         UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'deslocamento-cheguei', texto: 'Cheguei ao local', onclick: function () { marcarChegadaAoLocal('manual'); } }),
       ]);
-      mapaEl.appendChild(chip);
+      ($('pilha-topo') || mapaEl).appendChild(chip);
       if (window.L && L.DomEvent) { L.DomEvent.disableClickPropagation(chip); L.DomEvent.disableScrollPropagation(chip); }
     }
     chip.hidden = false;
@@ -8406,7 +8410,7 @@
     var d = t.d;
     if (est.desenho && est.desenho.tipo === 'trilha' && est.desenho.trilhaId === d.id) return;   // traçado sendo editado
     if (est.desenho && est.desenho.borrachaDe === d.id) return;   // sendo apagada com a borracha
-    if (!trilhaManualVisivel(d) || !Array.isArray(d.pontos) || d.pontos.length < 2) return;
+    if (!trilhaManualVisivel(d) || !trilhaManualNoFiltro(d) || !Array.isArray(d.pontos) || d.pontos.length < 2) return;
     var partes = recortarSegmentos([d.pontos]);   // fora das áreas sem trilha (migração 066)
     if (!partes.length) return;
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
@@ -9931,7 +9935,7 @@
   var ESTILO_PROIBIDA = { color: '#dc2626', weight: 2, opacity: 0.9, fillColor: '#dc2626', fillOpacity: 0.18, dashArray: '6 4' };
   function desenharAreaProibida(a) {
     if (a.camada) { a.camada.remove(); a.camada = null; }
-    if (!est.mapa || !est.camadaAreasProibidas || !Array.isArray(a.d.pontos) || a.d.pontos.length < 3) return;
+    if (!est.mapa || !est.camadaAreasProibidas || !Array.isArray(a.d.pontos) || a.d.pontos.length < 3 || !areaProibidaNoFiltro(a.d)) return;
     var pol = L.polygon(a.d.pontos, Object.assign({ pane: 'trilhasDesenhadas', className: 'area-proibida' }, ESTILO_PROIBIDA));
     ligarCliquesMapa(pol, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },
@@ -11686,7 +11690,7 @@
   // Foco de uma pessoa (botão de olho da lista): no mapa só ela e o que é dela.
   function visivelNoMapa(p) {
     if (est.focoPessoa && p.id !== est.focoPessoa) return false;
-    if (est.filtroDia && !temAtividadeNoDia(p)) return false;
+    if (est.filtroDia && !temAtividadeNoDia(p)) return false;   // inclui "Ocultar" e "Todos os dias"
     return visivelNoFiltro(p);
   }
 
@@ -11772,39 +11776,56 @@
   }
 
   /* ---------- Filtro por dia (e pessoa) no mapa ---------- */
-  // Mostra no mapa só o que aconteceu num dia: trilhas (só os pontos do dia), fotos e relatos do dia, quem teve
-  // posição no dia (num dia passado, na última posição daquele dia) e, se escolhido, só os setores e pontos de
-  // interesse criados no dia. A pessoa (opcional) usa o mesmo foco do olho da lista.
+  // Mostra no mapa o que aconteceu (ou foi criado) num dia. Para cada tipo de item a pessoa escolhe: "Do dia",
+  // "Todos os dias" ou "Ocultar". Tipos: pessoas e trilhas de GPS (trechos do dia; num dia passado, cada pessoa
+  // aparece onde estava no fim daquele dia), fotos, relatos, setores, pontos de interesse, trilhas desenhadas e áreas
+  // proibidas (os criados no dia). A pessoa (opcional) usa o mesmo foco do olho da lista.
+  var CATEGORIAS_FILTRO = [
+    { chave: 'pessoas', rotulo: 'Pessoas e trilhas de GPS' },
+    { chave: 'fotos', rotulo: 'Fotos' },
+    { chave: 'relatos', rotulo: 'Relatos' },
+    { chave: 'setores', rotulo: 'Setores' },
+    { chave: 'pontos', rotulo: 'Pontos de interesse' },
+    { chave: 'trilhasManuais', rotulo: 'Trilhas desenhadas ou importadas' },
+    { chave: 'proibidas', rotulo: 'Áreas proibidas' },
+  ];
+  var MODOS_FILTRO = { dia: 'Do dia', todos: 'Todos os dias', oculto: 'Ocultar' };
+  function modosPadraoFiltro() { var m = {}; CATEGORIAS_FILTRO.forEach(function (c) { m[c.chave] = 'dia'; }); return m; }
+  function modoFiltro(cat) { var f = est.filtroDia; return f ? (f.modos[cat] || 'dia') : 'todos'; }
+
   function noDia(ms) { var f = est.filtroDia; return !f || (ms != null && ms >= f.de && ms < f.ate); }
+  // Cria/feito no dia, para o tipo de item (respeita "Todos os dias" e "Ocultar").
+  function itemNoFiltro(cat, ms) {
+    var m = modoFiltro(cat);
+    return m === 'todos' || (m === 'dia' && noDia(ms));
+  }
   function pontosDoDia(p) {
     var f = est.filtroDia;
-    if (!f) return p.pontos;
+    if (!f || modoFiltro('pessoas') !== 'dia') return p.pontos;
     if (p._dia && p._dia.chave === f.dia && p._dia.n === p.pontos.length) return p._dia.pts;
     var r = p.pontos.filter(function (x) { return x.t >= f.de && x.t < f.ate; });
     p._dia = { chave: f.dia, n: p.pontos.length, pts: r };
     return r;
   }
   function temAtividadeNoDia(p) {
+    var m = modoFiltro('pessoas');
+    if (m === 'todos') return true;
+    if (m === 'oculto') return false;
     if (pontosDoDia(p).length) return true;
     var pos = posicaoAtual(p);
     return Boolean(pos && noDia(pos.t));
   }
   function posicaoNoMapa(p) {
-    var f = est.filtroDia;
     var pos = posicaoAtual(p);
-    if (!f || !pos || noDia(pos.t)) return pos;
+    if (!est.filtroDia || modoFiltro('pessoas') !== 'dia' || !pos || noDia(pos.t)) return pos;
     var pts = pontosDoDia(p).filter(function (x) { return !x.na_base; });
     var u = pts[pts.length - 1];
     return u ? { lat: u.lat, lng: u.lng, prec: u.prec, t: u.t } : pos;
   }
-  function setorNoFiltro(d) {
-    var f = est.filtroDia;
-    return !f || f.setoresSempre || noDia(C.paraMs(d.criado_em));
-  }
-  function poiNoFiltro(d) {
-    var f = est.filtroDia;
-    return !f || f.pontosSempre || d.ulv || noDia(C.paraMs(d.criado_em));
-  }
+  function setorNoFiltro(d) { return itemNoFiltro('setores', C.paraMs(d.criado_em)); }
+  function poiNoFiltro(d) { return d.ulv ? modoFiltro('pontos') !== 'oculto' : itemNoFiltro('pontos', C.paraMs(d.criado_em)); }
+  function trilhaManualNoFiltro(d) { return itemNoFiltro('trilhasManuais', C.paraMs(d.criado_em)); }
+  function areaProibidaNoFiltro(d) { return itemNoFiltro('proibidas', C.paraMs(d.criado_em)); }
 
   function chaveDia(ms) {
     var d = new Date(ms);
@@ -11817,27 +11838,46 @@
     var semana = dia.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
     return p[2] + '/' + p[1] + '/' + p[0] + ' (' + (chave === hoje ? 'hoje' : chave === ontem ? 'ontem' : semana) + ')';
   }
-  // Dias com algo registrado: posições, fotos, relatos, pontos e setores (com a contagem de posições).
+  function limitesDoDia(chave) {
+    var p = chave.split('-').map(Number);
+    return { de: new Date(p[0], p[1] - 1, p[2]).getTime(), ate: new Date(p[0], p[1] - 1, p[2] + 1).getTime() };
+  }
+  // Quantos itens de cada tipo existem num dia (para mostrar ao lado de cada opção).
+  function contagensDoDia(chave) {
+    var l = limitesDoDia(chave), n = {};
+    function dentro(ms) { return ms != null && !isNaN(ms) && ms >= l.de && ms < l.ate; }
+    n.pessoas = 0;
+    est.participantes.forEach(function (p) {
+      if (p.pontos.some(function (x) { return dentro(x.t); })) n.pessoas++;
+    });
+    n.fotos = marcadoresDe('fotos').filter(function (mk) { return dentro(mk.options.quando); }).length;
+    n.relatos = marcadoresDe('relatos').filter(function (mk) { return dentro(mk.options.quando); }).length;
+    n.setores = Array.from(est.setores.values()).filter(function (x) { return dentro(C.paraMs(x.d.criado_em)); }).length;
+    n.pontos = Array.from(est.pontosInt.values()).filter(function (x) { return !x.d.ulv && dentro(C.paraMs(x.d.criado_em)); }).length;
+    n.trilhasManuais = Array.from(est.trilhasManuais.values()).filter(function (x) { return dentro(C.paraMs(x.d.criado_em)); }).length;
+    n.proibidas = Array.from(est.areasProibidas.values()).filter(function (x) { return dentro(C.paraMs(x.d.criado_em)); }).length;
+    return n;
+  }
+  // Dias com algo registrado, do mais recente para o mais antigo.
   function diasComAtividade() {
     var dias = {};
-    function soma(ms, k) { if (ms == null || isNaN(ms)) return; var c = chaveDia(ms); dias[c] = dias[c] || { pos: 0, outros: 0 }; dias[c][k]++; }
+    function marca(ms) { if (ms == null || isNaN(ms)) return; dias[chaveDia(ms)] = true; }
     est.participantes.forEach(function (p) {
       var ult = null;
-      p.pontos.forEach(function (x) { var c = chaveDia(x.t); if (c !== ult) { dias[c] = dias[c] || { pos: 0, outros: 0 }; ult = c; } dias[c].pos++; });
+      p.pontos.forEach(function (x) { var c = chaveDia(x.t); if (c !== ult) { dias[c] = true; ult = c; } });
     });
-    est.fotosMarc.forEach(function (mk) { soma(mk.options.quando, 'outros'); });
-    est.relatosMarc.forEach(function (mk) { soma(mk.options.quando, 'outros'); });
-    est.pontosInt.forEach(function (x) { if (!x.d.ulv) soma(C.paraMs(x.d.criado_em), 'outros'); });
-    est.setores.forEach(function (x) { soma(C.paraMs(x.d.criado_em), 'outros'); });
-    return Object.keys(dias).sort().reverse().map(function (k) { return { dia: k, pos: dias[k].pos, outros: dias[k].outros }; });
+    marcadoresDe('fotos').concat(marcadoresDe('relatos')).forEach(function (mk) { marca(mk.options.quando); });
+    est.pontosInt.forEach(function (x) { if (!x.d.ulv) marca(C.paraMs(x.d.criado_em)); });
+    est.setores.forEach(function (x) { marca(C.paraMs(x.d.criado_em)); });
+    est.trilhasManuais.forEach(function (x) { marca(C.paraMs(x.d.criado_em)); });
+    est.areasProibidas.forEach(function (x) { marca(C.paraMs(x.d.criado_em)); });
+    return Object.keys(dias).sort().reverse();
   }
 
   function definirFiltroDia(f) {
     if (f && f.dia) {
-      var p = f.dia.split('-');
-      var de = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).getTime();
-      var ate = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + 1).getTime();
-      est.filtroDia = { dia: f.dia, de: de, ate: ate, setoresSempre: f.setoresSempre !== false, pontosSempre: f.pontosSempre !== false };
+      var l = limitesDoDia(f.dia);
+      est.filtroDia = { dia: f.dia, de: l.de, ate: l.ate, modos: Object.assign(modosPadraoFiltro(), f.modos || {}) };
     } else {
       est.filtroDia = null;
     }
@@ -11846,13 +11886,15 @@
     aplicarFocoPontos();
     est.setores.forEach(function (x) { desenharSetor(x); });
     est.pontosInt.forEach(function (x) { x._assinatura = null; desenharPontoInt(x); });
+    est.trilhasManuais.forEach(function (x) { desenharTrilhaManual(x); });
+    est.areasProibidas.forEach(function (x) { desenharAreaProibida(x); });
     est.listaSuja = true;
     renderizarLista();
     atualizarBarraFoco();
     if (est.mapa) est.mapa.invalidateSize();
   }
 
-  // Enquadra o que ficou à vista com o filtro (trilhas e fotos/relatos do dia).
+  // Enquadra o que ficou à vista com o filtro (pessoas, trilhas, fotos, relatos, setores, pontos e trilhas desenhadas).
   function enquadrarFiltro() {
     if (!est.mapa) return;
     var pts = [];
@@ -11863,6 +11905,11 @@
       trilhaDe(q).segmentos.forEach(function (seg) { seg.forEach(function (x) { pts.push(Array.isArray(x) ? [x[0], x[1]] : [x.lat, x.lng]); }); });
     });
     ['fotos', 'relatos'].forEach(function (k) { marcadoresDe(k).forEach(function (mk) { if (pontoVisivelPorPref(mk, k)) { var ll = mk.getLatLng(); pts.push([ll.lat, ll.lng]); } }); });
+    if (est.filtroDia) {
+      est.setores.forEach(function (x) { if (setorNoFiltro(x.d) && modoFiltro('setores') === 'dia') verticesSetor(x.d).forEach(function (q) { pts.push([q[0], q[1]]); }); });
+      est.pontosInt.forEach(function (x) { if (!x.d.ulv && poiNoFiltro(x.d) && modoFiltro('pontos') === 'dia') pts.push([x.d.lat, x.d.lng]); });
+      est.trilhasManuais.forEach(function (x) { if (trilhaManualNoFiltro(x.d) && modoFiltro('trilhasManuais') === 'dia') (x.d.pontos || []).forEach(function (q) { pts.push([q[0], q[1]]); }); });
+    }
     if (!pts.length) { UI.aviso('Nada registrado no mapa com este filtro.'); return; }
     if (pts.length === 1) est.mapa.setView(pts[0], Math.max(est.mapa.getZoom(), 16));
     else est.mapa.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 17 });
@@ -11871,44 +11918,58 @@
   function abrirFiltroMapa() {
     if (!est.op) return;
     fecharMenu(false);
-    var f = est.filtroDia || { setoresSempre: true, pontosSempre: true };
-    var dias = diasComAtividade();
-    var selDia = UI.el('select', { classe: 'campo', id: 'filtro-dia' }, [UI.el('option', { value: '', texto: 'Todos os dias' })].concat(dias.map(function (x) {
-      return UI.el('option', { value: x.dia, texto: rotuloDia(x.dia) + ' · ' + (x.pos ? x.pos.toLocaleString('pt-BR') + ' posições' : 'sem trilha') + (x.outros ? ' · ' + x.outros + ' registro(s)' : '') });
-    })));
-    if (f.dia && !dias.some(function (x) { return x.dia === f.dia; })) selDia.appendChild(UI.el('option', { value: f.dia, texto: rotuloDia(f.dia) }));
-    selDia.value = f.dia || '';
-    var outroDia = UI.el('input', { type: 'date', classe: 'campo', id: 'filtro-dia-outro', 'aria-label': 'Outro dia' });
-    outroDia.addEventListener('change', function () {
-      if (!outroDia.value) return;
-      if (!Array.prototype.some.call(selDia.options, function (o) { return o.value === outroDia.value; })) selDia.appendChild(UI.el('option', { value: outroDia.value, texto: rotuloDia(outroDia.value) }));
-      selDia.value = outroDia.value;
+    var ativo = est.filtroDia;
+    var hoje = chaveDia(Date.now());
+    // Abre sempre no dia de hoje (ou no dia que já está filtrado)
+    var data = UI.el('input', { type: 'date', classe: 'campo', id: 'filtro-data', value: ativo ? ativo.dia : hoje, max: hoje });
+    var modos = Object.assign(modosPadraoFiltro(), ativo ? ativo.modos : {});
+    var selects = {}, rotulos = {};
+    var linhas = CATEGORIAS_FILTRO.map(function (c) {
+      var sel = UI.el('select', { classe: 'campo', id: 'filtro-cat-' + c.chave, 'aria-label': c.rotulo }, Object.keys(MODOS_FILTRO).map(function (k) {
+        return UI.el('option', { value: k, texto: MODOS_FILTRO[k], selected: modos[c.chave] === k ? true : null });
+      }));
+      selects[c.chave] = sel;
+      rotulos[c.chave] = UI.el('span', { classe: 'filtro-cat-nome', texto: c.rotulo });
+      return UI.el('div', { classe: 'filtro-cat' }, [UI.el('label', { classe: 'filtro-cat-rotulo', for: 'filtro-cat-' + c.chave }, [rotulos[c.chave]]), sel]);
     });
+    var resumo = UI.el('p', { classe: 'muted filtro-dia-resumo', id: 'filtro-dia-resumo' });
+    function atualizarContagens() {
+      var dia = data.value;
+      var n = dia ? contagensDoDia(dia) : null;
+      CATEGORIAS_FILTRO.forEach(function (c) {
+        rotulos[c.chave].textContent = c.rotulo + (n ? ' · ' + n[c.chave] + ' neste dia' : '');
+        selects[c.chave].disabled = !dia;
+      });
+      resumo.textContent = dia ? rotuloDia(dia) : 'Sem data: o mapa mostra todos os dias (o filtro de pessoa continua valendo).';
+    }
+    data.addEventListener('input', atualizarContagens);
+    data.addEventListener('change', atualizarContagens);
+    function atalho(rotulo, valor, id) {
+      return UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: id, texto: rotulo, onclick: function () { data.value = valor; atualizarContagens(); } });
+    }
+    var recentes = diasComAtividade().filter(function (d) { return d !== hoje; }).slice(0, 5);
+    var atalhos = UI.el('div', { classe: 'filtro-atalhos' }, [atalho('Hoje', hoje, 'filtro-hoje'), atalho('Ontem', chaveDia(Date.now() - 864e5), 'filtro-ontem')]
+      .concat(recentes.filter(function (d) { return d !== chaveDia(Date.now() - 864e5); }).map(function (d) { return atalho(d.slice(8) + '/' + d.slice(5, 7), d); }))
+      .concat([atalho('Todos os dias', '', 'filtro-todos-dias')]));
     var pessoas = Array.from(est.participantes.values()).sort(ordemLista);
     var selPessoa = UI.el('select', { classe: 'campo', id: 'filtro-pessoa' }, [UI.el('option', { value: '', texto: 'Todas as pessoas' })].concat(pessoas.map(function (q) {
       return UI.el('option', { value: q.id, texto: nomeExibido(q) + (q.dados.removido ? ' (fora da operação)' : '') });
     })));
     selPessoa.value = est.focoPessoa || '';
-    var cbSetores = UI.el('input', { type: 'checkbox', id: 'filtro-setores-sempre', checked: f.setoresSempre !== false ? true : null });
-    var cbPontos = UI.el('input', { type: 'checkbox', id: 'filtro-pontos-sempre', checked: f.pontosSempre !== false ? true : null });
     var fechar = UI.abrirModal(UI.el('form', { classe: 'form-padrao form-filtro-mapa', novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
       fechar();
       var pid = selPessoa.value || null;
       if ((est.focoPessoa || null) !== pid) { if (pid) focarPessoa(pid); else if (est.focoPessoa) focarPessoa(null); }
-      definirFiltroDia(selDia.value ? { dia: selDia.value, setoresSempre: cbSetores.checked, pontosSempre: cbPontos.checked } : null);
-      if (selDia.value || pid) enquadrarFiltro();
+      var escolhidos = {};
+      CATEGORIAS_FILTRO.forEach(function (c) { escolhidos[c.chave] = selects[c.chave].value; });
+      definirFiltroDia(data.value ? { dia: data.value, modos: escolhidos } : null);
+      if (data.value || pid) enquadrarFiltro();
     } }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Filtrar o mapa' }, [UI.dica('Escolha um dia para ver só o que foi feito nele: trilhas (só os trechos do dia), fotos, relatos e quem esteve em campo (num dia passado, cada pessoa aparece onde estava no fim daquele dia). Os alertas continuam chegando normalmente. O filtro não fica lembrado ao recarregar.')]),
-      UI.grade([
-        UI.campo('Dia', selDia, { para: 'filtro-dia' }),
-        UI.campo('Outro dia', outroDia, { para: 'filtro-dia-outro' }),
-        UI.campo('Pessoa', selPessoa, { para: 'filtro-pessoa' }),
-      ]),
-      UI.secao('Com um dia escolhido', [
-        UI.el('label', { classe: 'opcao-check' }, [cbSetores, ' Mostrar todos os setores, de qualquer dia']),
-        UI.el('label', { classe: 'opcao-check' }, [cbPontos, ' Mostrar todos os pontos de interesse, de qualquer dia']),
-      ]),
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Filtrar o mapa' }, [UI.dica('Escolha o dia e, para cada tipo de item, se o mapa mostra só o que foi feito ou criado nesse dia, todos os dias, ou nada. Num dia passado, cada pessoa aparece onde estava no fim daquele dia. Os alertas continuam chegando normalmente. O filtro não fica lembrado ao recarregar.')]),
+      UI.secao('Dia', [data, atalhos, resumo]),
+      UI.secao('O que mostrar', linhas),
+      UI.campo('Pessoa', selPessoa, { para: 'filtro-pessoa' }),
       UI.rodape([
         UI.el('button', { classe: 'btn', type: 'button', id: 'filtro-limpar', texto: 'Limpar filtros', onclick: function () {
           fechar();
@@ -11918,13 +11979,14 @@
         UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'filtro-aplicar', texto: 'Aplicar' }),
       ]),
     ]));
+    atualizarContagens();
   }
 
   /* ---------- Foco numa pessoa (olho da lista) ---------- */
   // A pessoa, a trilha, as fotos, os relatos, os setores e o destino dela aparecem; o resto some do mapa
   // (setores de outros ficam bem fracos). Não fica lembrado ao recarregar.
   function pontoVisivelPorPref(mk, chave) {
-    if (est.filtroDia && mk.options.quando != null && !noDia(mk.options.quando)) return false;
+    if (est.filtroDia && (chave === 'fotos' || chave === 'relatos') && !itemNoFiltro(chave, mk.options.quando)) return false;
     if (est.focoPessoa) return mk.options.donoId === est.focoPessoa;
     return Boolean(est.prefsMapa[chave]);
   }
@@ -11979,7 +12041,7 @@
     if (!p && !f) { if (barra) barra.remove(); return; }
     if (!barra) {
       barra = UI.el('div', { id: 'barra-foco', classe: 'barra-foco', role: 'status' });
-      $('mapa').parentNode.appendChild(barra);
+      ($('pilha-topo') || $('mapa').parentNode).appendChild(barra);
     }
     barra.innerHTML = '';
     var txt = (f ? '📅 ' + rotuloDia(f.dia) : '') + (f && p ? ' · ' : '') + (p ? '👁 Mostrando só ' + nomeExibido(p) : '');

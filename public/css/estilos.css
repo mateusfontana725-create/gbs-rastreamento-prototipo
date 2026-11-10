@@ -1462,6 +1462,13 @@ body.conversa-aberta { overflow: hidden; }
 .visao-3d-mapa { flex: 1; min-height: 0; background: #0e1318; }
 .visao-3d-nota { flex: none; margin: 0; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); font-size: .82rem; color: var(--texto-2); background: var(--superficie); border-top: 1px solid var(--borda); }
 .mk3d { cursor: default; }
+/* Visão 3D: itens juntos na tela, agrupados (a partir de 50 m de altura da câmera) */
+.mk3d-grupo {
+  min-width: 30px; height: 30px; padding: 0 8px; border-radius: 15px; border: 2px solid #0b1220; cursor: pointer;
+  background: var(--acento); color: #0a0d10; font: 800 .8rem/26px var(--fonte); text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+}
+.mk3d-grupo:hover, .mk3d-grupo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .mk3d .simbolo { width: 22px; height: 22px; font-size: 0.6875rem; }
 .mk3d.antigo .simbolo { opacity: .5; filter: grayscale(.7); }
 .mk3d-poi .mk-poi { position: relative; }

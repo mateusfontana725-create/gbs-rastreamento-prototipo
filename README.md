@@ -1245,6 +1245,12 @@ zigue-zague com a pessoa parada. A versão atual junta as duas coisas:
   a tela do 3D explica e o mapa normal continua funcionando. **Plano 2D** fica marcado enquanto o 3D está
   fechado. O mapa principal (Leaflet) não foi trocado.
 
+- **Agrupamento na visão 3D**: a partir de **50 m de altura da câmera**, pessoas e pontos que ficam juntos na tela viram um **selo com
+  a contagem** (um círculo com o número); tocar nele aproxima o suficiente para os itens voltarem a aparecer sozinhos. Abaixo de 50 m,
+  cada pessoa e cada ponto aparece separado. A altura é estimada pelo zoom, pela inclinação e pela latitude (campo de visão de 36,87°,
+  como o MapLibre): olhando de cima, 50 m corresponde a cerca de zoom 20,7; com a câmera inclinada a 60°, a cerca de zoom 19,7.
+  Ao girar ou inclinar, os selos se atualizam. Módulo `public/js/agrupar-3d.js` (testes em `testes/agrupar_3d.test.js`).
+
 ### Organização do painel
 
 - **Identidade visual** do Comando (`public/css/comando.css`, só na página `comando.html`):

@@ -10242,7 +10242,14 @@
       attributionControl: { compact: true },
     });
     mapa3d.addControl(new window.maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-    est.visao3d = { mapa: mapa3d, marcadores: [], popup: null };
+    est.visao3d = { mapa: mapa3d, marcadores: [], itens: [], assinatura: null, popup: null, agendado: false };
+    var v3d = est.visao3d;
+    // a câmera muda de altura ao girar, inclinar ou dar zoom: os itens se agrupam (ou se separam) na hora
+    mapa3d.on('move', function () {
+      if (v3d.agendado) return;
+      v3d.agendado = true;
+      requestAnimationFrame(function () { v3d.agendado = false; desenharVisao3D(false); });
+    });
     mapa3d.on('load', function () {
       if (!est.visao3d || est.visao3d.mapa !== mapa3d) return;
       adicionarDados3D();
@@ -10296,24 +10303,69 @@
       m.addLayer({ id: 'trilhas-halo', type: 'line', source: 'trilhas', paint: { 'line-color': '#ffffff', 'line-width': 6, 'line-opacity': 0.5 } });
       m.addLayer({ id: 'trilhas', type: 'line', source: 'trilhas', paint: { 'line-color': ['get', 'cor'], 'line-width': 3.5 } });
     }
-    v.marcadores.forEach(function (mk) { mk.remove(); });
-    v.marcadores = [];
+    v.itens = [];
     est.participantes.forEach(function (p) {
       var pos = posicaoAtual(p);
       if (!pos || p.dados.removido) return;
-      var el = document.createElement('div');
-      el.className = 'mk3d' + (posicaoAntiga(p) ? ' antigo' : '');
-      el.innerHTML = htmlSimbolo(p);
-      el.title = nomeExibido(p) + ' — posição ' + C.idade(pos.t);
-      v.marcadores.push(new window.maplibregl.Marker({ element: el }).setLngLat([pos.lng, pos.lat]).addTo(m));
+      v.itens.push({ lng: pos.lng, lat: pos.lat, tipo: 'pessoa', nome: nomeExibido(p),
+        titulo: nomeExibido(p) + ' — posição ' + C.idade(pos.t), html: htmlSimbolo(p), antigo: posicaoAntiga(p) });
     });
     est.pontosInt.forEach(function (pi) {
       var d = pi.d, cat = catDoPonto(d);
-      var el = document.createElement('div');
-      el.className = 'mk3d mk3d-poi';
-      el.innerHTML = htmlMarcaPonto(d);
-      el.title = cat.rotulo + ': ' + d.titulo;
-      v.marcadores.push(new window.maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([d.lng, d.lat]).addTo(m));
+      v.itens.push({ lng: d.lng, lat: d.lat, tipo: 'ponto', nome: d.titulo, titulo: cat.rotulo + ': ' + d.titulo, html: htmlMarcaPonto(d) });
+    });
+    desenharVisao3D(true);
+  }
+
+  // Visão 3D: a partir de 50 m de altura da câmera, os itens que ficam juntos na tela viram um selo com a contagem
+  // (tocar aproxima e ele se abre). Abaixo disso, cada pessoa e cada ponto aparece sozinho, como antes.
+  function desenharVisao3D(forcar) {
+    var v = est.visao3d;
+    if (!v || !v.mapa || !window.Agrupar3D) return;
+    var m = v.mapa;
+    var c = m.getCenter();
+    var altura = window.Agrupar3D.alturaCameraM({ lat: c.lat, zoom: m.getZoom(), pitchGraus: m.getPitch(), alturaTelaPx: m.getContainer().clientHeight });
+    var agrupar = altura >= window.Agrupar3D.ALTURA_AGRUPAR_M;
+    var grupos;
+    if (agrupar) {
+      var projetados = v.itens.map(function (it, i) { var q = m.project([it.lng, it.lat]); return { x: q.x, y: q.y, i: i }; });
+      grupos = window.Agrupar3D.agruparPorTela(projetados, 36);
+    } else {
+      grupos = v.itens.map(function (it, i) { return { membros: [i] }; });
+    }
+    var assinatura = grupos.map(function (g) { return g.membros.join('.'); }).join('|');
+    if (!forcar && assinatura === v.assinatura) return;   // mesma composição: não recria os marcadores
+    v.assinatura = assinatura;
+    v.marcadores.forEach(function (mk) { mk.remove(); });
+    v.marcadores = [];
+    grupos.forEach(function (g) {
+      var itens = g.membros.map(function (i) { return v.itens[i]; });
+      if (itens.length === 1) {
+        var it = itens[0];
+        var el = document.createElement('div');
+        el.className = it.tipo === 'pessoa' ? 'mk3d' + (it.antigo ? ' antigo' : '') : 'mk3d mk3d-poi';
+        el.innerHTML = it.html;
+        el.title = it.titulo;
+        v.marcadores.push(new window.maplibregl.Marker({ element: el, anchor: it.tipo === 'ponto' ? 'bottom' : 'center' }).setLngLat([it.lng, it.lat]).addTo(m));
+        return;
+      }
+      var lng = 0, lat = 0;
+      itens.forEach(function (it) { lng += it.lng; lat += it.lat; });
+      lng /= itens.length; lat /= itens.length;
+      var nomes = itens.map(function (it) { return it.nome; });
+      var selo = document.createElement('button');
+      selo.type = 'button';
+      selo.className = 'mk3d-grupo';
+      selo.textContent = String(itens.length);
+      selo.title = itens.length + ' itens aqui: ' + nomes.slice(0, 8).join(', ') + (nomes.length > 8 ? '…' : '') + ' · toque para aproximar';
+      selo.setAttribute('aria-label', selo.title);
+      selo.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        // aproxima o suficiente para os itens voltarem a aparecer sozinhos
+        var dz = Math.max(1, Math.ceil(Math.log2(altura / (window.Agrupar3D.ALTURA_AGRUPAR_M * 0.9))));
+        m.easeTo({ center: [lng, lat], zoom: m.getZoom() + dz, duration: 600 });
+      });
+      v.marcadores.push(new window.maplibregl.Marker({ element: selo }).setLngLat([lng, lat]).addTo(m));
     });
   }
 
@@ -13317,6 +13369,7 @@
   /* ------------------------------------------------------------------ */
   window.Painel = {
     mapa: function () { return est.mapa; },
+    mapa3d: function () { return est.visao3d ? est.visao3d.mapa : null; },
     controleGrupos: function () { return est.controleGrupos; },
     fecharMenu: function () { fecharMenu(false); },
     compactarAcoes: compactarAcoes,

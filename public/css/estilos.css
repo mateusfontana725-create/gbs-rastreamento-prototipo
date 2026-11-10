@@ -2713,3 +2713,8 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-sel
 .barra-desenho-p .btn { min-height: 34px; padding: 0 10px; font-size: .76rem; }
 .civil-em-rastreio #tela-rastreio .camadas-civil { top: calc(56px + env(safe-area-inset-top)); right: 56px; }
 #tela-rastreio .controles-topo .btn-saida { border-style: solid; background: #1f2832; border-color: #3d4a57; color: #e8edf2; }
+/* Bússola: direção pelo GPS (andando) e sem direção ainda */
+.bussola-civil.pelo-gps .bussola-rosa { opacity: .8; }
+.bussola-civil.pelo-gps #bussola-direcao { color: #7dd3fc; }
+.bussola-civil.sem-rumo .bussola-rosa { opacity: .35; }
+.bussola-civil.sem-rumo #bussola-direcao { color: var(--texto-2); font-weight: 600; }

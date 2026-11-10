@@ -3,7 +3,7 @@
  *   - coordenadas do ponto tocado (toque longo / botão direito) e altitude
  *   - ir para coordenada (decimal, GMS, GMD, UTM, MGRS)
  *   - medir distância, rumo, área e perímetro
- *   - exportar GPX/KML/GeoJSON/CSV · importar GPX/KML/KMZ/GeoJSON/CSV
+ *   - exportar GPX/KML/GeoJSON/CSV · importar GPX/KML/KMZ/GeoJSON/CSV e LDK/TRK do AlpineQuest
  *   - estatísticas e perfil de altitude da trilha
  *   - alarmes de proximidade: saiu do setor / entrou em área de risco
  *   - anéis de distância em torno de um ponto
@@ -309,15 +309,30 @@
         UI.el('span', null, [UI.el('strong', { texto: f[1] }), UI.el('small', { texto: f[2] })])]);
     }));
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var baixar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'exp-baixar', texto: 'Baixar arquivo' });
+    var baixar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'exp-baixar', texto: 'Salvar arquivo' });
+    // Onde o arquivo vai ficar: a pasta "app busca gbs" (Chrome/Edge no computador) ou Downloads (outros)
+    var linhaPasta = UI.el('p', { classe: 'nota pasta-exportacoes', id: 'exp-pasta' });
+    function mostrarPasta() {
+      var A = window.Arquivos;
+      A.infoPasta().then(function (i) {
+        linhaPasta.innerHTML = '';
+        if (!i.suportada) { linhaPasta.textContent = '📁 Os arquivos vão para Downloads, com o nome começando por "' + A.NOME_PASTA + '" (este navegador não deixa criar pastas).'; return; }
+        linhaPasta.appendChild(document.createTextNode(i.pasta ? '📁 Salva na pasta "' + i.pasta + '". ' : '📁 Na primeira vez você escolhe onde criar a pasta "' + A.NOME_PASTA + '". '));
+        if (i.pasta) linhaPasta.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'exp-trocar-pasta', texto: 'Trocar o local', onclick: function () {
+          A.trocarPasta().then(function (n) { UI.aviso('As exportações vão para a pasta "' + n + '".', 'ok'); mostrarPasta(); }).catch(function () { /* janela fechada */ });
+        } }));
+      });
+    }
+    mostrarPasta();
     var form = UI.el('form', { novalidate: true, classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Exportar' }, [UI.dica('O arquivo tem a localização de pessoas: guarde e compartilhe com o mesmo cuidado dos dados da operação.')]),
       gTrilhas.elemento, gPontos.elemento, gSetores.elemento,
       UI.campo('Formato', radios, { largo: true }),
+      linhaPasta,
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), baixar]),
     ]);
-    form.addEventListener('submit', function (ev) {
+    form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       var fmt = form.querySelector('input[name="exp-formato"]:checked').value;
       var dados = dadosParaExportar({ trilhas: gTrilhas.ids(), pontos: gPontos.ids(), setores: gSetores.ids() });
@@ -327,10 +342,12 @@
         return;
       }
       var nome = (P.op().codigo + '-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_') + '.' + fmt;
-      window.Arquivos.baixar(nome, window.Arquivos.exportar(fmt, dados), fmt);
-      window.__ultimaExportacao = { nome: nome, formato: fmt, dados: dados };   // para conferência/testes
+      var A = window.Arquivos;
+      baixar.disabled = true;
+      var salvo = await A.salvar(nome, new Blob([A.exportar(fmt, dados)], { type: A.TIPOS_MIME[fmt] || 'application/octet-stream' }));
+      window.__ultimaExportacao = { nome: nome, formato: fmt, dados: dados, salvo: salvo };   // para conferência/testes
       fechar();
-      UI.aviso('Arquivo "' + nome + '" gerado.', 'ok');
+      UI.aviso(A.textoSalvo(salvo), 'ok', 9000);
     });
     var fechar = UI.abrirModal(form);
   }
@@ -387,7 +404,7 @@
     ]);
   }
 
-  var FORMATO_NOME = { gpx: 'GPX', kml: 'KML', kmz: 'KMZ', geojson: 'GeoJSON', csv: 'CSV' };
+  var FORMATO_NOME = { gpx: 'GPX', kml: 'KML', kmz: 'KMZ', geojson: 'GeoJSON', csv: 'CSV', ldk: 'LDK (AlpineQuest)', trk: 'TRK (AlpineQuest)', wpt: 'WPT (AlpineQuest)', set: 'SET (AlpineQuest)', rte: 'RTE (AlpineQuest)', are: 'ARE (AlpineQuest)' };
   function dataHoraCurta(isoTxt) {
     var t = Date.parse(isoTxt);
     return isNaN(t) ? '' : new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -494,7 +511,7 @@
   }
 
   function abrirImportar() {
-    var entrada = UI.el('input', { type: 'file', id: 'imp-arquivo', multiple: true, accept: '.gpx,.kml,.kmz,.geojson,.json,.csv,.txt,.png,.jpg,.jpeg,.jgw,.pgw,.wld', classe: 'campo' });
+    var entrada = UI.el('input', { type: 'file', id: 'imp-arquivo', multiple: true, accept: '.gpx,.kml,.kmz,.geojson,.json,.csv,.txt,.ldk,.trk,.wpt,.set,.rte,.are,.png,.jpg,.jpeg,.jgw,.pgw,.wld', classe: 'campo' });
     var lista = UI.el('ul', { classe: 'lista-importados' });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     atualizarListaImportados = function () { desenharListaImportados(lista); };
@@ -510,7 +527,7 @@
     render();
     var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
       UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Importar mapa' },
-        [UI.dica('Arraste os arquivos para o mapa ou escolha aqui. GPX, KML, KMZ, GeoJSON e CSV entram sozinhos. Imagens (PNG ou JPG) precisam do arquivo de posição com o mesmo nome (.jgw, .pgw ou .wld), ou de um KMZ. Áreas viram setores da operação; pontos viram pontos de interesse; linhas viram trilhas. Todos os responsáveis veem.')]),
+        [UI.dica('Arraste os arquivos para o mapa ou escolha aqui. GPX, KML, KMZ, GeoJSON, CSV e os arquivos do AlpineQuest (LDK, TRK, WPT, SET, RTE, ARE) entram sozinhos. Imagens (PNG ou JPG) precisam do arquivo de posição com o mesmo nome (.jgw, .pgw ou .wld), ou de um KMZ. Áreas viram setores da operação; pontos viram pontos de interesse; linhas viram trilhas. Todos os responsáveis veem.')]),
       UI.campo('Arquivos', entrada, { para: 'imp-arquivo', largo: true }),
       UI.el('label', { classe: 'linha-opcao' }, [
         UI.el('input', { type: 'checkbox', id: 'imp-concluidos', checked: importarComoConcluidos() ? true : null, onchange: function () { C.local.gravar(CHAVE_IMP_CONCLUIDOS, this.checked); } }),

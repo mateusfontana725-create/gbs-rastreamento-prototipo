@@ -95,8 +95,14 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 - **Mapa ampliado**: o botão **⛶** no mapa abre o mapa em tela cheia dentro do site (não é o modo tela
   cheia do navegador); **✕ Fechar mapa** ou Esc voltam. Os controles de zoom e **📍 Onde estou** continuam.
 - **Bússola no mapa** (canto inferior direito, só em celular): o disco gira com o aparelho e a seta fixa
-  mostra para onde ele aponta, com o rumo em graus. No Android funciona sem permissão; no iPhone toque em
-  **Ativar bússola** (o iOS pede permissão de movimento). Sem sensor de direção, a bússola não aparece.
+  mostra para onde ele aponta, com o rumo em graus. Fontes, da melhor para a pior: o sensor de orientação
+  absoluta do navegador (no Android, `deviceorientationabsolute` ou `deviceorientation` com Norte); se ele não
+  responder em 2 s, o sensor de orientação do Chrome; e, sem sensor que funcione, o **rumo pelo GPS** enquanto a
+  pessoa anda (aparece "· GPS" ao lado do rumo). Em vez de ficar parada em "Procurando…", depois de alguns
+  segundos sem nada a bússola diz **"Ande alguns passos"**. O navegador que pede permissão para os sensores
+  (iPhone e as versões novas do Chrome) recebe o pedido ao abrir; só se ele exigir um toque aparece **Ativar
+  bússola**. (Antes, nesse caso o Android escutava só a orientação relativa, sem Norte, e a bússola não saía de
+  "Procurando…".)
 - **Tela enxuta**: durante a busca o cabeçalho encolhe e o mapa ocupa o espaço livre. Textos de rota e setor
   em frases curtas ("Confira o terreno.", "Siga a linha dos bombeiros."). O bloco técnico do
   envio (fila de pontos) só aparece quando há risco de perder pontos; o resto fica no quadro de estado.
@@ -974,8 +980,8 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
    Se a pessoa sair da rota (mais de 50 m por 3 leituras), a rota é **recalculada** a partir de onde ela
    está (no máximo 1 vez a cada 30 s). Sem rota (serviço fora, sem internet, sem caminho mapeado), volta
    a mostrar a distância e a direção em linha reta e diz o motivo.
-   - **Bússola**: no Android (Chrome) a seta gira com o celular ("siga a seta"). No iPhone, a bússola do
-     mapa pede a permissão (**Ativar bússola**). Sem bússola confiável, a seta aponta em relação ao
+   - **Bússola**: a seta gira com o celular ("siga a seta"), com a mesma direção da bússola do mapa (sensor ou,
+     andando, o rumo pelo GPS). No iPhone, a bússola do mapa pede a permissão (**Ativar bússola**). Sem direção, a seta aponta em relação ao
      **Norte (N)** — e o texto diz isso.
    - **Sem GPS**: mostra "Sem GPS" e não calcula nada. **GPS impreciso** (± 50 m ou pior): avisa que a
      distância e a direção são aproximadas. Ao chegar (a até 15 m ou dentro da precisão): "Você chegou".
@@ -1451,7 +1457,16 @@ Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na 
   (Garmin, AlpineQuest, OsmAnd, Locus), **KML** (Google Earth), **GeoJSON** (QGIS/ArcGIS) ou **CSV**
   (planilha, separador `;`). As trilhas saem com horário e precisão de cada ponto e as **lacunas** do sinal
   ficam como segmentos separados. Bom para relatórios e para levar a busca para outro aplicativo.
-- **Importar**: **GPX, KML, KMZ, GeoJSON ou CSV** (até 8 MB) — por exemplo, trilhas conhecidas da região,
+- **Pasta "app busca gbs"** (exportações e relatórios em PDF): no **Chrome e no Edge do computador**, na primeira
+  exportação você escolhe onde criar a pasta (por exemplo, em Documentos); a pasta **app busca gbs** é criada
+  sozinha e as próximas exportações vão direto para ela (o navegador pode pedir de novo a permissão em outra
+  sessão). A tela de exportar mostra a pasta e tem **Trocar o local**. No **celular, Safari e Firefox** o navegador
+  não deixa um site criar pastas: o arquivo vai para **Downloads** com o nome começando por **"app busca gbs - "**
+  e o aviso diz isso (procure por "app busca gbs" no gerenciador de arquivos).
+- **Importar**: **GPX, KML, KMZ, GeoJSON, CSV** e os arquivos do **AlpineQuest**: **LDK** (pacote com pastas),
+  **TRK** (trilha), **WPT** (ponto), **SET** (pontos), **RTE** (rota) e **ARE** (áreas) — até 8 MB. O LDK é lido
+  pelas especificações publicadas pela Psyberia (formatos novo e antigo, anterior ao AlpineQuest 2.2.8); o nome da
+  pasta vai para a descrição; fotos e anexos dentro do pacote são ignorados, com aviso. Por exemplo, trilhas conhecidas da região,
   limites de parque ou pontos levantados por outra equipe. O conteúdo aparece como **camada de referência**
   apenas **neste aparelho** e fica lembrado nele, **com as propriedades do arquivo**: KML/KMZ (cor, espessura e
   opacidade do estilo, inclusive `StyleMap`, descrição e horários de `gx:Track`), GeoJSON ("simplestyle":
@@ -1822,7 +1837,8 @@ rastreamento-sar/
 │       ├── gps.js              filtro das leituras do GPS, montagem das trilhas, permissão e diagnóstico
 │       ├── rotas.js            geração de rotas: por caminhos (/api/rota) e desenhada (trajeto), progresso e simplificação
 │       ├── coords.js           formatos de coordenadas (decimal, GMS, UTM, MGRS), rumo, nascer/pôr do sol
-│       ├── arquivos.js         exportar e importar GPX, KML/KMZ, GeoJSON e CSV
+│       ├── arquivos.js         exportar e importar GPX, KML/KMZ, GeoJSON e CSV; pasta "app busca gbs"
+│       ├── alpinequest.js      leitura dos arquivos do AlpineQuest (LDK, TRK, WPT, SET, RTE, ARE)
 │       ├── ferramentas.js      ferramentas de mapa do painel (medir, ir para coordenada, estatísticas…)
 │       ├── trilha-local.js     fila offline dos pontos (IndexedDB) e envio com confirmação por ponto
 │       ├── app-nativo.js       ligação com o aplicativo Android (ponte GBSNativo) e links "Abrir no aplicativo"

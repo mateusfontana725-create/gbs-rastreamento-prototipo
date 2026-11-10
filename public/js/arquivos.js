@@ -1,5 +1,5 @@
 /* =====================================================================
- * arquivos.js — exportar e importar GPX, KML/KMZ, GeoJSON e CSV
+ * arquivos.js — exportar e importar GPX, KML/KMZ, GeoJSON e CSV (e importar LDK/TRK/WPT/SET/RTE/ARE do AlpineQuest)
  * (os formatos usados pelo AlpineQuest, Google Earth, Garmin e SIGs).
  *
  *   exportar: trilhas (com horário e precisão), pontos de interesse, setores
@@ -159,16 +159,114 @@
     return f(dados);
   }
 
-  function baixar(nomeArquivo, conteudo, formato) {
-    var blob = new Blob([conteudo], { type: TIPOS_MIME[formato] || 'application/octet-stream' });
+  function baixarBlob(nomeArquivo, blob) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
     a.download = nomeArquivo;
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
-    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 2000);
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
   }
+  function baixar(nomeArquivo, conteudo, formato) {
+    baixarBlob(nomeArquivo, new Blob([conteudo], { type: TIPOS_MIME[formato] || 'application/octet-stream' }));
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Pasta das exportações: "app busca gbs"                               */
+  /* ------------------------------------------------------------------ */
+  // Navegadores que deixam o site gravar numa pasta (Chrome e Edge no computador): na primeira exportação a pessoa
+  // escolhe onde fica a pasta "app busca gbs" (criada sozinha, ex.: em Documentos) e as próximas vão direto para ela.
+  // Nos outros (celular, Safari, Firefox) o navegador não deixa criar pastas: o arquivo vai para Downloads com o nome
+  // começando por "app busca gbs", e o aviso diz onde procurar.
+  var NOME_PASTA = 'app busca gbs';
+  var BANCO = 'gbs-arquivos', LOJA = 'pastas', CHAVE_PASTA = 'exportacoes';
+  var pastaMemoria = null;   // nesta sessão (o IndexedDB guarda para as próximas)
+
+  function pastaSuportada() { return typeof global.showDirectoryPicker === 'function' && global.isSecureContext !== false; }
+  function idb(modo, fazer) {
+    return new Promise(function (ok, falha) {
+      if (!global.indexedDB) { falha(new Error('sem IndexedDB')); return; }
+      var r = global.indexedDB.open(BANCO, 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore(LOJA); };
+      r.onerror = function () { falha(r.error); };
+      r.onsuccess = function () {
+        var db = r.result, req;
+        try { var tx = db.transaction(LOJA, modo); req = fazer(tx.objectStore(LOJA)); }
+        catch (e) { db.close(); falha(e); return; }
+        tx.oncomplete = function () { db.close(); ok(req && req.result); };
+        tx.onerror = function () { db.close(); falha(tx.error); };
+      };
+    });
+  }
+  async function lerPasta() {
+    if (pastaMemoria) return pastaMemoria;
+    try { pastaMemoria = (await idb('readonly', function (s) { return s.get(CHAVE_PASTA); })) || null; } catch (e) { pastaMemoria = null; }
+    return pastaMemoria;
+  }
+  async function guardarPasta(h) {
+    pastaMemoria = h;
+    try { await idb('readwrite', function (s) { return h ? s.put(h, CHAVE_PASTA) : s.delete(CHAVE_PASTA); }); } catch (e) { /* fica só nesta sessão */ }
+  }
+  // Escolhe onde fica a pasta e cria "app busca gbs" dentro (se a pessoa já escolheu a própria pasta, usa ela).
+  async function escolherPasta() {
+    var pai = await global.showDirectoryPicker({ id: 'gbs-exportacoes', mode: 'readwrite', startIn: 'documents' });
+    var pasta = pai.name === NOME_PASTA ? pai : await pai.getDirectoryHandle(NOME_PASTA, { create: true });
+    await guardarPasta(pasta);
+    return pasta;
+  }
+  function confirmar(o) { return global.UI && global.UI.confirmar ? global.UI.confirmar(o) : Promise.resolve(true); }
+  // A pasta guardada, com permissão de gravar. A permissão volta a ser pedida em cada sessão do navegador e
+  // precisa de um toque: se o pedido direto não passar, um botão pede de novo.
+  async function pastaComPermissao() {
+    var h = await lerPasta();
+    if (!h) return null;
+    try { if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return h; } catch (e) { return null; }
+    try { if ((await h.requestPermission({ mode: 'readwrite' })) === 'granted') return h; } catch (e) { /* sem o toque: pede abaixo */ }
+    var sim = await confirmar({ titulo: 'Salvar na pasta "' + NOME_PASTA + '"?', ok: 'Permitir', cancelar: 'Baixar só desta vez',
+      texto: 'O navegador pede de novo a permissão para gravar na pasta das exportações.' });
+    if (!sim) return false;
+    try { return (await h.requestPermission({ mode: 'readwrite' })) === 'granted' ? h : false; } catch (e) { return false; }
+  }
+
+  // Salva o arquivo e diz onde ficou: { onde: 'pasta' | 'downloads', nome, pasta? }.
+  async function salvar(nomeArquivo, blob) {
+    if (pastaSuportada()) {
+      try {
+        var pasta = await pastaComPermissao();
+        if (pasta === null) {
+          var quer = await confirmar({ titulo: 'Pasta das exportações', ok: 'Escolher o local', cancelar: 'Baixar só desta vez',
+            texto: 'Escolha onde criar a pasta "' + NOME_PASTA + '" (por exemplo, em Documentos). As próximas exportações vão direto para ela.' });
+          pasta = quer ? await escolherPasta() : false;
+        }
+        if (pasta) {
+          var arq = await pasta.getFileHandle(nomeArquivo, { create: true });
+          var w = await arq.createWritable();
+          await w.write(blob);
+          await w.close();
+          return { onde: 'pasta', nome: nomeArquivo, pasta: pasta.name };
+        }
+      } catch (e) {
+        // pasta apagada ou movida: esquece e baixa; janela fechada (AbortError) ou outro erro: só baixa
+        if (e && (e.name === 'NotFoundError' || e.name === 'InvalidStateError')) await guardarPasta(null);
+      }
+    }
+    var nome = NOME_PASTA + ' - ' + nomeArquivo;
+    baixarBlob(nome, blob);
+    return { onde: 'downloads', nome: nome };
+  }
+  function textoSalvo(r) {
+    return r.onde === 'pasta'
+      ? 'Salvo na pasta "' + r.pasta + '": ' + r.nome + '.'
+      : 'Baixado em Downloads como "' + r.nome + '". Este navegador não deixa criar pastas: procure por "' + NOME_PASTA + '" nos arquivos do aparelho.';
+  }
+  async function infoPasta() {
+    if (!pastaSuportada()) return { suportada: false };
+    var h = await lerPasta();
+    return { suportada: true, pasta: h ? h.name : null };
+  }
+  async function trocarPasta() { return (await escolherPasta()).name; }
 
   /* ------------------------------------------------------------------ */
   /* Importar                                                             */
@@ -481,9 +579,34 @@
   }
 
   // Lê um File (ou { name, text }) e devolve os objetos encontrados.
+  // Conta os vértices e confere o limite e se veio alguma coisa.
+  function conferirLido(r, texto) {
+    var vert = r.pontos.length;
+    r.linhas.forEach(function (l) { vert += l.pts.length; });
+    r.areas.forEach(function (a) { vert += a.pts.length; });
+    if (vert > LIMITE_VERTICES) throw new Error('Arquivo com pontos demais (' + vert + '). O limite é ' + LIMITE_VERTICES + '.');
+    if (!r.pontos.length && !r.linhas.length && !r.areas.length && !r.imagens.length) throw new Error('Nenhum ponto, trilha ou área encontrado no arquivo.' + (texto != null ? resumoTags(texto) : ''));
+    r.vertices = vert;
+    return r;
+  }
+
+  // Arquivos binários do AlpineQuest (LDK, TRK, WPT, SET, RTE, ARE): ver js/alpinequest.js.
+  async function talvezAlpineQuest(arquivo, nome) {
+    var AQ = global.AlpineQuest;
+    if (!AQ || typeof arquivo.slice !== 'function' || typeof arquivo.arrayBuffer !== 'function') return null;   // { name, text }: só texto
+    var inicio = new Uint8Array(await arquivo.slice(0, 4).arrayBuffer());
+    if (!AQ.ehAlpineQuest(inicio, nome)) return null;
+    var r;
+    try { r = AQ.ler(await arquivo.arrayBuffer(), nome); }
+    catch (e) { throw new Error('Não foi possível ler o arquivo do AlpineQuest: ' + e.message + '.'); }
+    return conferirLido(r, null);
+  }
+
   async function importarVetor(arquivo) {
     if (arquivo.size > LIMITE_BYTES) throw new Error('Arquivo grande demais (máximo de 8 MB).');
     var nome = String(arquivo.name || '').toLowerCase();
+    var aq = await talvezAlpineQuest(arquivo, nome);
+    if (aq) return aq;
     var texto, r;
     var formato = /\.kmz$/.test(nome) ? 'kmz' : null;
     if (/\.kmz$/.test(nome)) texto = await kmlDeKmz(await arquivo.arrayBuffer());
@@ -499,14 +622,9 @@
       var raiz = doc.documentElement.localName;
       if (raiz === 'gpx') r = lerGpx(doc);
       else if (raiz === 'kml') r = lerKml(doc);
-      else throw new Error('Formato não reconhecido (use GPX, KML, KMZ, GeoJSON ou CSV).');
+      else throw new Error('Formato não reconhecido (use GPX, KML, KMZ, GeoJSON, CSV ou LDK/TRK do AlpineQuest).');
     }
-    var vert = r.pontos.length;
-    r.linhas.forEach(function (l) { vert += l.pts.length; });
-    r.areas.forEach(function (a) { vert += a.pts.length; });
-    if (vert > LIMITE_VERTICES) throw new Error('Arquivo com pontos demais (' + vert + '). O limite é ' + LIMITE_VERTICES + '.');
-    if (!r.pontos.length && !r.linhas.length && !r.areas.length && !r.imagens.length) throw new Error('Nenhum ponto, trilha ou área encontrado no arquivo.' + resumoTags(texto));
-    r.vertices = vert;
+    conferirLido(r, texto);
     r.formato = formato || (r.linhas[0] || r.areas[0] || {}).formato || (/\.(geo)?json$/.test(nome) ? 'geojson' : /\.csv$|\.txt$/.test(nome) ? 'csv' : /\.gpx$/.test(nome) ? 'gpx' : 'kml');
     return r;
   }
@@ -523,6 +641,7 @@
 
   global.Arquivos = {
     exportar: exportar, baixar: baixar, importar: importar, importarImagem: importarImagem, circulo: circulo,
+    salvar: salvar, textoSalvo: textoSalvo, infoPasta: infoPasta, trocarPasta: trocarPasta, NOME_PASTA: NOME_PASTA, TIPOS_MIME: TIPOS_MIME,
     _ler: { gpx: function (t) { return lerGpx(new DOMParser().parseFromString(t, 'application/xml')); },
       kml: function (t) { return lerKml(new DOMParser().parseFromString(t, 'application/xml')); }, geojson: lerGeojson, csv: lerCsv },
   };

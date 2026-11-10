@@ -100,6 +100,10 @@
     linhaDestino: null,
     rumo: null,               // direção para onde o celular aponta (bússola), em graus
     rumoEm: 0,
+    rumoGps: null,            // direção em que a pessoa anda, pelo GPS (quando o celular não tem sensor de direção)
+    rumoGpsEm: 0,
+    refRumoGps: null,         // última posição usada para calcular o rumo pelo GPS
+    bussolaDesde: 0,          // quando a bússola começou a procurar
     ouvindoBussola: false,
     rafNav: null,
     destinoConfirmado: null,  // id do destino cuja chegada já foi confirmada ao servidor
@@ -950,6 +954,7 @@
       var a = r.atual;
       estado.ultimaLeitura = { lat: a.lat, lng: a.lng, prec: a.prec, recebidaEm: a.recebidaEm, t: a.t };
       estado.gps = a.prec != null && a.prec > 50 ? 'fraco' : 'ok';
+      atualizarRumoGps(pos, a);
       atualizarMeuMarcador();
       agendarNavegacao();
       if (a.prec == null || a.prec <= 150) verificarRisco(a);
@@ -2518,10 +2523,11 @@
     }
     $('nav-dist').textContent = chegou ? 'Você chegou' : formatarDistancia(prog ? prog.restante + (naRota ? 0 : prog.distanciaDaRota) : dist);
     var dir = DIRECOES[Math.round(rumoReta / 45) % 8];
-    var bussolaOk = estado.rumo != null && Date.now() - estado.rumoEm < 3000;
-    var giro = bussolaOk ? rumo - estado.rumo : rumo;
+    var ra = rumoAtual();
+    var bussolaOk = Boolean(ra);
+    var giro = bussolaOk ? rumo - ra.graus : rumo;
     $('nav-seta').style.transform = 'rotate(' + Math.round(giro) + 'deg)';
-    $('nav-norte').style.transform = 'rotate(' + Math.round(bussolaOk ? -estado.rumo : 0) + 'deg) translateY(-34px)';
+    $('nav-norte').style.transform = 'rotate(' + Math.round(bussolaOk ? -ra.graus : 0) + 'deg) translateY(-34px)';
     $('nav-bussola').classList.toggle('com-bussola', bussolaOk);
     $('nav-dir').textContent = chegou ? 'Destino a menos de ' + Math.round(Math.max(15, l.prec || 0)) + ' m.'
       : dir + ' · ' + Math.round(rumoReta) + '°' + (bussolaOk ? ' · siga a seta' : '');
@@ -2529,18 +2535,86 @@
       (prog ? (rota.fixa ? 'Siga a linha dos bombeiros.' : 'Confira o terreno.') : 'Linha reta: confira o terreno.');
   }
 
-  // Bússola: Android (deviceorientationabsolute) ou iPhone (webkitCompassHeading, com permissão).
-  // A bússola do mapa e a seta da navegação usam a mesma leitura (estado.rumo).
-  function aoGirar(ev) {
-    var r = null;
-    if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) r = ev.webkitCompassHeading;
-    else if (ev.absolute && typeof ev.alpha === 'number') r = 360 - ev.alpha;
-    if (r == null) return;
-    var ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
-    estado.rumo = (r + ang + 360) % 360;
+  // Bússola. Fontes, da melhor para a pior:
+  //   1. evento de orientação ABSOLUTA (Android: deviceorientationabsolute, ou deviceorientation com absolute=true;
+  //      iPhone: webkitCompassHeading, com permissão);
+  //   2. sensor de orientação do Chrome (AbsoluteOrientationSensor), se os eventos não chegarem;
+  //   3. rumo pelo GPS enquanto a pessoa anda (celular sem sensor de direção, ou sensor que não responde).
+  // A bússola do mapa e a seta da navegação usam a mesma leitura (rumoAtual()).
+  var FRESCO_SENSOR_MS = 3000, FRESCO_GPS_MS = 30000;
+  function guardarRumoSensor(graus) {
+    if (graus == null || !isFinite(graus)) return;
+    estado.rumo = (graus % 360 + 360) % 360;
     estado.rumoEm = Date.now();
     agendarNavegacao();
     agendarBussola();
+  }
+  function anguloTela() {
+    return (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
+  }
+  function aoGirar(ev) {
+    var r = null;
+    if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) r = ev.webkitCompassHeading;
+    else if ((ev.type === 'deviceorientationabsolute' || ev.absolute === true) && typeof ev.alpha === 'number' && !isNaN(ev.alpha)) r = 360 - ev.alpha;
+    if (r == null) return;
+    estado.fonteSensor = 'evento';
+    guardarRumoSensor(r + anguloTela());
+  }
+
+  // Direção de um quaternion (aparelho → Terra: x leste, y norte, z para cima). Com o celular deitado vale o topo
+  // da tela; em pé (tela virada para a pessoa), vale para onde a traseira aponta.
+  function rumoDoQuaternion(q) {
+    var x = q[0], y = q[1], z = q[2], w = q[3];
+    var topoLeste = 2 * (x * y - z * w), topoNorte = 1 - 2 * (x * x + z * z), topoCima = 2 * (y * z + x * w);
+    var e = topoLeste, n = topoNorte;
+    if (Math.abs(topoCima) > 0.7) { e = -2 * (x * z + y * w); n = -2 * (y * z - x * w); }
+    if (Math.abs(e) < 1e-6 && Math.abs(n) < 1e-6) return null;
+    return Math.atan2(e, n) * 180 / Math.PI;
+  }
+  function ligarSensorGenerico() {
+    if (estado.sensorOrientacao || typeof window.AbsoluteOrientationSensor !== 'function') return;
+    try {
+      var sensor = new window.AbsoluteOrientationSensor({ frequency: 10, referenceFrame: 'screen' });
+      sensor.addEventListener('reading', function () {
+        if (estado.rumoEm && estado.fonteSensor === 'evento' && Date.now() - estado.rumoEm < FRESCO_SENSOR_MS) return;   // os eventos já respondem
+        var r = sensor.quaternion ? rumoDoQuaternion(sensor.quaternion) : null;
+        if (r == null) return;
+        estado.fonteSensor = 'sensor';
+        guardarRumoSensor(r);
+      });
+      sensor.addEventListener('error', function () { estado.sensorOrientacao = null; });
+      sensor.start();
+      estado.sensorOrientacao = sensor;
+    } catch (e) { estado.sensorOrientacao = null; }
+  }
+
+  // Rumo pelo GPS: direção do deslocamento (o GPS informa quando há velocidade; senão, entre duas leituras a 8 m
+  // ou mais uma da outra). Só com o GPS bom: com erro grande, a direção sairia errada.
+  function atualizarRumoGps(pos, a) {
+    var c = pos && pos.coords ? pos.coords : {};
+    var agora = Date.now();
+    if (a.prec != null && a.prec > 30) return;
+    if (typeof c.heading === 'number' && isFinite(c.heading) && typeof c.speed === 'number' && c.speed >= 0.7) {
+      estado.rumoGps = c.heading; estado.rumoGpsEm = agora; estado.refRumoGps = { lat: a.lat, lng: a.lng };
+      agendarBussola(); agendarNavegacao();
+      return;
+    }
+    var ref = estado.refRumoGps;
+    if (!ref) { estado.refRumoGps = { lat: a.lat, lng: a.lng }; return; }
+    var dist = C.distancia(ref.lat, ref.lng, a.lat, a.lng);
+    if (dist < 8) return;
+    var f1 = ref.lat * Math.PI / 180, f2 = a.lat * Math.PI / 180, dl = (a.lng - ref.lng) * Math.PI / 180;
+    var r = Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)) * 180 / Math.PI;
+    estado.rumoGps = (r + 360) % 360; estado.rumoGpsEm = agora; estado.refRumoGps = { lat: a.lat, lng: a.lng };
+    agendarBussola(); agendarNavegacao();
+  }
+
+  // A melhor direção disponível agora: { graus, fonte: 'sensor' | 'gps' } ou nula.
+  function rumoAtual() {
+    var agora = Date.now();
+    if (estado.rumo != null && agora - estado.rumoEm < FRESCO_SENSOR_MS) return { graus: estado.rumo, fonte: 'sensor' };
+    if (estado.rumoGps != null && agora - estado.rumoGpsEm < FRESCO_GPS_MS) return { graus: estado.rumoGps, fonte: 'gps' };
+    return null;
   }
 
   var DIRECAO_CURTA = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -2549,64 +2623,97 @@
     estado.rafBussola = requestAnimationFrame(function () { estado.rafBussola = null; atualizarBussola(); });
   }
   // O disco gira para o Norte ficar em cima do N; a seta fixa mostra para onde o aparelho aponta.
+  // Pelo GPS, mostra para onde a pessoa está andando (com "GPS" ao lado).
   function atualizarBussola() {
-    if (estado.rumo == null || Date.now() - estado.rumoEm > 3000) return;
-    $('bussola-civil').hidden = false;
-    $('bussola-rosa').style.transform = 'rotate(' + Math.round(-estado.rumo) + 'deg)';
-    var txt = DIRECAO_CURTA[Math.round(estado.rumo / 45) % 8] + ' ' + (Math.round(estado.rumo) % 360) + '°';
-    if ($('bussola-direcao').textContent !== txt) $('bussola-direcao').textContent = txt;
-    $('bussola-ativar').hidden = true;
-  }
-
-  // Ao abrir a página: no Android a bússola já funciona; no iPhone pede um toque (permissão de movimento).
-  // Sem sensor de direção (ex.: computador), a bússola fica escondida.
-  function iniciarBussola() {
-    // computador (sem tela de toque) não tem sensor de direção: nem mostra a bússola
-    if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
-    if (!('ondeviceorientationabsolute' in window) && !('ondeviceorientation' in window)) return;
-    if (typeof DeviceOrientationEvent === 'undefined') return;
     var caixa = $('bussola-civil');
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-      caixa.hidden = false;
-      $('bussola-direcao').textContent = 'Toque para ativar';
-      $('bussola-ativar').hidden = false;
+    var r = rumoAtual();
+    if (!r) {
+      // sem nada ainda: depois de alguns segundos procurando, diz o que fazer (em vez de ficar em "Procurando…")
+      if (estado.ouvindoBussola && estado.bussolaDesde && Date.now() - estado.bussolaDesde > 8000) {
+        caixa.hidden = false;
+        caixa.classList.remove('pelo-gps');
+        caixa.classList.add('sem-rumo');
+        var t0 = 'Ande alguns passos';
+        if ($('bussola-direcao').textContent !== t0) $('bussola-direcao').textContent = t0;
+        caixa.title = 'O sensor de direção do celular não respondeu. Andando, a direção vem do GPS.';
+      }
       return;
     }
-    ligarBussola();
     caixa.hidden = false;
-    $('bussola-direcao').textContent = 'Procurando…';
-    setTimeout(function () { if (!estado.rumoEm) caixa.hidden = true; }, 5000);
+    caixa.classList.remove('sem-rumo');
+    caixa.classList.toggle('pelo-gps', r.fonte === 'gps');
+    caixa.title = r.fonte === 'gps' ? 'Direção em que você está andando (pelo GPS: o celular não tem sensor de direção ou ele não respondeu).' : 'Para onde o celular está apontado.';
+    $('bussola-rosa').style.transform = 'rotate(' + Math.round(-r.graus) + 'deg)';
+    var txt = DIRECAO_CURTA[Math.round(r.graus / 45) % 8] + ' ' + (Math.round(r.graus) % 360) + '°' + (r.fonte === 'gps' ? ' · GPS' : '');
+    if ($('bussola-direcao').textContent !== txt) $('bussola-direcao').textContent = txt;
+    if (r.fonte === 'sensor') $('bussola-ativar').hidden = true;   // pelo GPS, o botão continua para ligar o sensor
   }
 
+  // Ao abrir a página. Alguns navegadores pedem permissão para os sensores de movimento (iPhone e, nas versões
+  // novas, também o Chrome): pede logo; se o navegador exigir um toque, aparece "Ativar bússola". Antes, quem
+  // tinha esse pedido era tratado como iPhone e só escutava a orientação RELATIVA, que no Android não tem o Norte:
+  // a bússola ficava em "Procurando…" para sempre. Sem tela de toque (computador), fica escondida.
+  function precisaPermissaoBussola() {
+    return typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
+  }
+  function iniciarBussola() {
+    if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
+    $('bussola-civil').hidden = false;
+    $('bussola-direcao').textContent = 'Procurando…';
+    estado.bussolaDesde = Date.now();
+    clearInterval(estado.timerBussola);
+    estado.timerBussola = setInterval(agendarBussola, 2000);   // troca "Procurando…" por "Ande alguns passos" se nada chegar
+    ligarBussola();
+  }
+
+  function mostrarAtivarBussola() {
+    $('bussola-civil').hidden = false;
+    $('bussola-ativar').hidden = false;
+    if (!rumoAtual()) $('bussola-direcao').textContent = 'Toque para ativar';
+  }
+
+  // Liga as fontes de direção (ver o começo desta parte). Com o pedido de permissão, tenta sem toque primeiro.
   function ligarBussola() {
     if (estado.ouvindoBussola) return;
-    if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      if (!estado.ouvindoBussola) { $('bussola-civil').hidden = false; $('bussola-ativar').hidden = false; }   // iPhone: precisa de um toque
+    if (precisaPermissaoBussola() && !estado.permissaoBussola) {
+      try {
+        DeviceOrientationEvent.requestPermission().then(function (r) {
+          if (r === 'granted') { estado.permissaoBussola = true; ligarOuvintesBussola(); }
+          else mostrarAtivarBussola();
+        }).catch(mostrarAtivarBussola);
+      } catch (e) { mostrarAtivarBussola(); }
       return;
     }
-    if ('ondeviceorientationabsolute' in window) {
-      window.addEventListener('deviceorientationabsolute', aoGirar);
-      estado.ouvindoBussola = true;
-    } else if ('ondeviceorientation' in window) {
-      window.addEventListener('deviceorientation', aoGirar);
-      estado.ouvindoBussola = true;
-    }
+    ligarOuvintesBussola();
   }
 
+  function ligarOuvintesBussola() {
+    if (estado.ouvindoBussola) return;
+    estado.ouvindoBussola = true;
+    estado.bussolaDesde = Date.now();
+    if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', aoGirar);
+    if ('ondeviceorientation' in window) window.addEventListener('deviceorientation', aoGirar);
+    // se os eventos não responderem em 2 s, tenta o sensor do Chrome
+    setTimeout(function () { if (!estado.rumoEm) ligarSensorGenerico(); }, 2000);
+  }
+
+  // Botão "Ativar bússola" (o toque que o navegador exige para liberar os sensores).
   function pedirBussola() {
-    DeviceOrientationEvent.requestPermission().then(function (r) {
+    var pedido;
+    try { pedido = DeviceOrientationEvent.requestPermission(); } catch (e) { pedido = Promise.reject(e); }
+    pedido.then(function (r) {
       if (r === 'granted') {
-        window.addEventListener('deviceorientation', aoGirar);
-        estado.ouvindoBussola = true;
+        estado.permissaoBussola = true;
         $('bussola-ativar').hidden = true;
-        $('bussola-direcao').textContent = 'Procurando…';
+        if (!rumoAtual()) $('bussola-direcao').textContent = 'Procurando…';
+        ligarOuvintesBussola();
       } else {
         $('bussola-direcao').textContent = 'Sem permissão';
-        UI.aviso('Sem permissão para a bússola. Libere o acesso a movimento e orientação nas configurações do navegador.', 'erro', 7000);
+        UI.aviso('Sem permissão para a bússola. Libere o acesso a movimento e orientação nas configurações do navegador. Andando, a direção vem do GPS.', 'erro', 8000);
       }
     }).catch(function () {
       $('bussola-direcao').textContent = 'Indisponível';
-      UI.aviso('Bússola indisponível neste celular.', 'erro');
+      UI.aviso('Bússola indisponível neste celular. Andando, a direção vem do GPS.', 'erro');
     });
   }
 

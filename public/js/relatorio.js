@@ -671,13 +671,19 @@
     } catch (e) { return null; }
   }
 
+  // Salva na pasta "app busca gbs" (ou em Downloads, com o nome começando por ela) e avisa onde ficou.
   function baixarBlob(blob, nome) {
+    var A = window.Arquivos;
+    if (A && A.salvar) {
+      return A.salvar(nome, blob).then(function (r) { UI.aviso(A.textoSalvo(r), 'ok', 9000); return r; });
+    }
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url; a.download = nome; a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
+    return Promise.resolve({ onde: 'downloads', nome: nome });
   }
 
   function nomeArquivo(op, quando) {

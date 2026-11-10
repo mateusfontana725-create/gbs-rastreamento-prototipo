@@ -250,7 +250,7 @@
     // Arquivo de telemetria
     var arquivo = null;
     if (tipo === 'telemetria') {
-      arquivo = el('input', { classe: 'campo', id: 'obs-arquivo', type: 'file', accept: '.gpx,.kml,.kmz,.geojson,.json,.csv,.txt' });
+      arquivo = el('input', { classe: 'campo', id: 'obs-arquivo', type: 'file', accept: '.gpx,.kml,.kmz,.geojson,.json,.csv,.txt,.ldk,.trk' });
       arquivo.addEventListener('change', async function () {
         var f = arquivo.files && arquivo.files[0];
         if (!f) return;

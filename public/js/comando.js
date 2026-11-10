@@ -2191,7 +2191,7 @@
     mapa.on('moveend', agendarDecoracoesTrilhas);
     $('mapa').classList.toggle('esconder-rotulos', !est.prefsMapa.nomesMapa);
     atualizarMenu();
-    setTimeout(function () { mapa.invalidateSize(); }, 50);
+    setTimeout(function () { if (est.mapa === mapa) mapa.invalidateSize(); }, 50);   // o painel pode ter fechado nesse meio-tempo
   }
 
   // Agrupamento único de tudo que é ponto no mapa: pontos de interesse, relatos e fotos.
@@ -2588,7 +2588,7 @@
     atualizarMisturaSetores();
     try { localStorage.setItem(CHAVE_TEMA, valor); } catch (e) { /* sem armazenamento: vale só nesta página */ }
     atualizarBotoesTema();
-    if (est.mapa) setTimeout(function () { est.mapa.invalidateSize({ pan: false }); }, 60);
+    if (est.mapa) setTimeout(function () { if (est.mapa) est.mapa.invalidateSize({ pan: false }); }, 60);
   }
 
   function atualizarBotoesTema() {

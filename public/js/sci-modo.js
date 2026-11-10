@@ -253,8 +253,15 @@
     clearInterval(est.relogio); clearTimeout(est.timer);
     pararCanal();
     sincronizarSeletor();
-    var m = Pn() && Pn().mapa();
-    if (m) setTimeout(function () { m.invalidateSize(); }, 60);
+    ajustarMapa(60);
+  }
+  // Reajusta o mapa do painel depois de mudar o lugar dele. O mapa é buscado de novo na hora: se o painel fechou
+  // a operação nesse meio-tempo (Voltar), o mapa antigo já foi removido e não pode mais ser mexido.
+  function ajustarMapa(ms) {
+    setTimeout(function () {
+      var m = Pn() && Pn().mapa();
+      if (m && m._mapPane) m.invalidateSize();
+    }, ms);
   }
   function sincronizarSeletor() {
     var a = $('modo-operacao'), b = $('modo-sci');
@@ -278,16 +285,14 @@
     if (!mapa || !host.isConnected) return;
     if (!est.mapaMovido) est.mapaMovido = { pai: mapa.parentNode, depois: mapa.nextSibling };
     host.appendChild(mapa);
-    var m = Pn().mapa();
-    if (m) setTimeout(function () { m.invalidateSize(); }, 30);
+    ajustarMapa(30);
   }
   function devolverMapa() {
     if (!est.mapaMovido) return;
     var mapa = $('mapa'), v = est.mapaMovido;
     est.mapaMovido = null;
     if (mapa) v.pai.insertBefore(mapa, v.depois && v.depois.parentNode === v.pai ? v.depois : v.pai.firstChild);
-    var m = Pn() && Pn().mapa();
-    if (m) setTimeout(function () { m.invalidateSize(); }, 30);
+    ajustarMapa(30);
   }
   function verNoMapa(lat, lng) { ir('mapa'); setTimeout(function () { if (Pn().irPara) Pn().irPara(lat, lng); }, 120); }
 

@@ -15,6 +15,7 @@ module.exports = (req, res) => {
   };
   // Servidor próprio de mapas (pacote offline, 10 km, zoom até 17). Cada camada é um endereço com {z}/{x}/{y}. Sem nenhuma
   // configurada, o app segue como antes (mapas públicos, área pequena guardada). O servidor precisa mandar o cabeçalho CORS.
+  // O domínio do servidor também tem de entrar no img-src e no connect-src da CSP (vercel.json), senão o navegador bloqueia.
   const mapaOffline = {};
   [['osm', 'TILES_MAPA_URL'], ['topo', 'TILES_TOPO_URL'], ['satelite', 'TILES_SATELITE_URL']].forEach(([camada, nome]) => {
     const v = (process.env[nome] || '').trim();

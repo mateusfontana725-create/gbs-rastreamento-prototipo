@@ -2117,7 +2117,7 @@ rastreamento-sar/
    | `SUPABASE_SECRET_KEY` | chave secret (ou service_role) — usada na limpeza diária e no cadastro de responsáveis |
    | `CRON_SECRET` | um texto aleatório longo — gere com `openssl rand -hex 32` |
    | `ARQUIVAR_APOS_DIAS` | (opcional) dias depois do encerramento para arquivar a operação sozinha (`/api/arquivar`, migração 055). Padrão 7; `0` arquiva no dia seguinte ao encerramento |
-   | `TILES_MAPA_URL`, `TILES_TOPO_URL`, `TILES_SATELITE_URL` | (opcional) endereço de cada camada do **servidor próprio de mapas**, com `{z}`, `{x}` e `{y}` (só `https`). Ligam o **pacote de mapa offline** (veja abaixo). Sem nenhuma delas, o app segue como antes. O servidor precisa mandar `Access-Control-Allow-Origin` |
+   | `TILES_MAPA_URL`, `TILES_TOPO_URL`, `TILES_SATELITE_URL` | (opcional) endereço de cada camada do **servidor próprio de mapas**, com `{z}`, `{x}` e `{y}` (só `https`). Ligam o **pacote de mapa offline** (veja abaixo). Sem nenhuma delas, o app segue como antes. O servidor precisa mandar `Access-Control-Allow-Origin`. **Também é preciso incluir o domínio do servidor de mapas no `img-src` e no `connect-src` da CSP em `vercel.json`**; sem isso, o navegador bloqueia os quadros e o download |
    | `TILES_ATRIBUICAO` | (opcional) texto de crédito mostrado no mapa |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |

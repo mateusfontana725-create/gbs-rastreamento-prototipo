@@ -877,6 +877,9 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   Num dia passado, cada pessoa aparece **onde estava no fim daquele dia**, e as trilhas só mostram os trechos do dia. Os detalhes da trilha
   (distância, tempo, relevo) seguem o filtro. Uma barra no alto do mapa mostra o filtro ("📅 08/11/2026 (ontem) · 👁 Mostrando só Ana");
   tocar nela muda o filtro e **✕ Mostrar todos** limpa. Os alertas continuam chegando. O filtro não fica lembrado ao recarregar.
+- **Cabeçalho compacto no tablet**: de 601 a 1440 px de largura os botões de ação do topo (Marcar ponto, Foto, Setor, Trilha, Régua, POA/POD,
+  Dashboard, Mensagens, Convidar) ficam só com o **ícone** (o nome aparece ao segurar ou passar o mouse). No tablet deitado ficam **na mesma
+  linha do título** (cabeçalho de ~50 px, antes ~108 px); no tablet em pé, numa faixa de ícones de 32 px. No celular e acima de 1440 px nada mudou.
 - **Avisos e janelas do topo**: o aviso de meteorologia, a barra de desenho e a barra do filtro ficam numa **pilha única**
   (`#pilha-topo`), um abaixo do outro, sem se sobrepor; as notificações (`#avisos`) sobem acima da barra de apoio quando ela aparece.
 - **Lista de participantes**: cada linha tem duas fileiras — o **nome inteiro** (até duas linhas) e, embaixo, estado do GPS, idade do

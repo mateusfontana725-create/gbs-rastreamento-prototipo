@@ -45,6 +45,15 @@ const pts = [{ id: 1 }, { id: 2 }, { id: 3, na_base: true }, { id: 4, na_base: t
 const dv = G.dividirNaBase(pts);
 chk(dv.length === 2 && dv[0].length === 2 && dv[1].length === 1 && dv[1][0].id === 5, 'os pontos na_base saem do rastro e o dividem', dv.map((x) => x.length));
 chk(G.dividirNaBase([]).length === 0 && G.dividirNaBase([{ id: 1 }])[0].length === 1, 'sem pontos / sem marcação');
+{
+  // migração 072: pontos dentro do raio de uma base (mesmo sem na_base, ex.: base criada depois) também saem do desenho
+  const base = { lat: ponto(0, 0)[0], lng: ponto(0, 0)[1], raio_m: 50 };
+  const rastro = [[0, 200], [0, 80], [0, 30], [0, 10], [0, 70], [0, 150]].map(([y, x], i) => { const q = ponto(x, y); return { id: i + 1, lat: q[0], lng: q[1] }; });
+  const pb = G.dividirNaBase(rastro, [base]);
+  chk(pb.length === 2 && pb[0].map((x) => x.id).join() === '1,2' && pb[1].map((x) => x.id).join() === '5,6', 'pontos dentro do raio da base ficam fora do desenho e dividem a linha', pb.map((x) => x.map((y) => y.id)));
+  chk(G.dividirNaBase(rastro, [Object.assign({}, base, { raio_m: null })]).length === 2, 'base sem raio: usa 50 m');
+  chk(G.dividirNaBase(rastro, []).length === 1, 'sem bases: a linha inteira');
+}
 console.log('Pertinência');
 chk(G.dentroDeAlgum(...ponto(10, 0), [circ(0, 50)]) && !G.dentroDeAlgum(...ponto(80, 0), [circ(0, 50)]), 'dentro e fora do círculo');
 

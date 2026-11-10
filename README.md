@@ -840,13 +840,57 @@ Ferramenta separada do desenho de setores (setor = área; trilha desenhada = **l
   de 5 m a 5.000 m, com nome opcional e liga/desliga). Dentro do círculo (contorno discreto) o painel **não desenha** as trilhas, nem
   as de GPS nem as desenhadas; nada é apagado e é só o desenho. Vale para todos os responsáveis da operação.
 - **Base com raio de 50 m** (ponto de interesse **Base**; raio editável, 10 m a 5 km): o círculo aparece bem discreto (no painel e
-  no celular do participante) e **dentro dele a trilha não é gravada**. Para o controle de retorno continuar funcionando, o servidor
-  guarda só o **ponto de entrada** (marcado `na_base`, que não entra na linha desenhada); os demais pontos dentro do raio são
-  confirmados ao aparelho e descartados, e a posição atual da pessoa continua aparecendo. Fora do raio tudo funciona normalmente.
+  no celular do participante) e **dentro dele a trilha não é desenhada**. Desde a migração 072 a trilha é **gravada sempre**, também
+  dentro do raio (os pontos ficam marcados `na_base`): antes eles eram descartados, e a gravação dependia de a base ser reconhecida
+  no momento do envio (com o celular sem internet, ou com a base criada depois, o caminho se perdia). Agora só o desenho esconde: o
+  painel e a página do participante cortam a linha dentro do raio de **qualquer base atual** (inclusive uma criada ou movida depois)
+  e o trecho volta a aparecer se a base for excluída.
 - **Fechar o aplicativo** (Android): arrastar da lista de recentes **para o registro**; tela apagada, aplicativo minimizado ou botão
   voltar **não** (ver "Aplicativo Android do participante").
 - Banco: `participantes.gravar_trilha`, `posicoes.na_base`, tabela `areas_sem_trilha`, funções `definir_gravacao_trilha`,
   `salvar_area_sem_trilha`, `excluir_area_sem_trilha` e `app_parar_rastreio`. **Antes de usar, rode `066_trilhas_gravacao_base.sql` no Supabase.**
+
+### Filtros, mensagens para vários, pontos, abertura no local e funções dos militares (migração 072)
+
+- **Filtrar por dia ou pessoa** (**Ferramentas → 📅 Filtrar por dia ou pessoa**): escolha um **dia** (a lista mostra os dias com
+  registros e quantas posições; dá para escolher outro no calendário) e/ou uma **pessoa**. O mapa mostra só o que foi feito nesse dia:
+  as trilhas só com os trechos do dia, as fotos e relatos do dia e quem esteve em campo — num dia passado, cada pessoa aparece **onde
+  estava no fim daquele dia**. Duas opções: **Mostrar todos os setores, de qualquer dia** e **Mostrar todos os pontos de interesse, de
+  qualquer dia** (ligadas por padrão; desligadas, só ficam os criados no dia). Os detalhes da trilha (distância, tempo, relevo) seguem
+  o filtro. Uma barra no alto do mapa mostra o filtro ("📅 08/11/2026 (ontem) · 👁 Mostrando só Ana"); tocar nela muda o filtro e
+  **✕ Mostrar todos** limpa. Os alertas continuam chegando. O filtro não fica lembrado ao recarregar.
+- **Mensagem para todos ou grupos** (**Ferramentas → ✉ Mensagem para todos ou grupos**, ou o botão no alto de **Comunicação**): a mesma
+  mensagem (livre ou orientação rápida) vai de uma vez para **todos os participantes de campo** da operação ou para os integrantes
+  dos **grupos marcados** (vários ao mesmo tempo; quem está em mais de um grupo recebe uma vez só). A tela mostra quem vai receber e
+  quem está sem conexão. **✉ Mensagem ao grupo** (em Grupos) abre a mesma tela com o grupo já marcado. Envio para todos pede
+  confirmação. O envio em massa não esbarra no limite de 60 mensagens por minuto (há um limite de 6 envios em massa por minuto).
+- **Excluir pontos de interesse**: tocar num ponto no mapa mostra **✎ Editar** e **🗑 Excluir** direto no balão. Em **Setores, trilhas e
+  pontos**, **☑ Selecionar para excluir** mostra caixas em cada ponto, com **Todos** e **🗑 Excluir marcados** (um pedido só). Excluem
+  quem marcou o ponto, quem criou a operação e os administradores; os outros são contados no aviso.
+- **Abrir no local da operação**: ao abrir uma operação o mapa vai direto para o **ponto do cadastro** (zoom 16) e fica lá, mesmo com os
+  participantes chegando (**Ver todos** enquadra as pessoas). Sem ponto cadastrado, vai para a **posição de quem abriu**; sem as duas,
+  enquadra os participantes como antes. Ao **criar** uma operação, o ponto já começa com a **posição atual do responsável** (dá para
+  trocar no mapa ou tirar). O link público abre no local, quando há.
+- **Funções dos militares** (**Ferramentas → Equipes → 🎖 Funções dos militares**): o responsável liga ou desliga, por operação, o que os
+  participantes **militares** podem fazer pela página/aplicativo deles: **criar setores** (tocando os cantos no mapa ou em círculo, com
+  nome e raio; ele ajusta e exclui só os que criou), **mudar a situação dos setores** (pendente, em andamento, concluído), **marcar
+  pontos de interesse** (vestígio, possível localização, risco, encontro, base ou outro; aparecem para a equipe; exclui só os dele) e
+  **ver todos os setores** da operação. Padrão: tudo ligado. No celular, as ferramentas ficam no **☰ Menu → Ferramentas do militar** e
+  tocar num setor abre os botões de situação. **O link de civil continua simples**: nada disso aparece para civis. Tudo o que o
+  militar cria fica com o nome dele ("Cb Silva (militar)") e entra no diário.
+- **Link público sem "sem conexão"**: em operações grandes o link público carregava todas as posições num pedido só, que passava do
+  tempo-limite do servidor para visitantes e aparecia como "sem conexão". Agora o documento vem sem as posições e elas chegam em
+  partes de 5.000 (mostrando o progresso), com novas tentativas automáticas se o servidor demorar. Sem a migração 072 o link volta
+  ao modo antigo.
+- **Opacidade dos setores sem acinzentar e sem somar**: o fundo colorido de cada setor fica numa camada própria, com a transparência
+  aplicada na camada inteira. Assim, setores sobrepostos ou vizinhos **não escurecem** a região (a cor não soma) e o setor de cima (o
+  menor) mostra a sua cor. O fundo se mistura com o mapa: no mapa claro e no relevo ele **tinge** sem esconder ruas e curvas de nível;
+  no mapa escuro ele **clareia com a cor** (sem virar cinza); no satélite, transparência comum.
+- **Lista "Fora da operação"**: aberta, ela agora rola (antes passava da altura da lateral e ficava cortada).
+- Banco: `operacoes.permissoes_militar`, funções `comando_publico_posicoes`, `enviar_mensagem_varios`, `excluir_pontos`,
+  `definir_permissoes_militar`, `participante_salvar_setor`, `participante_excluir_setor`, `participante_salvar_ponto`,
+  `participante_excluir_ponto`; `enviar_posicoes_lote`, `enviar_mensagem` e `mapa_do_participante` atualizadas.
+  **Antes de usar, rode `072_base_publico_mensagens_militar.sql` no Supabase.**
 
 ### Trajeto desenhado enviado como destino
 

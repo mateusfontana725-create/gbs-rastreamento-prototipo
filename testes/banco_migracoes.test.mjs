@@ -47,7 +47,7 @@ console.log('Instalação');
 const schema = ler('supabase/schema.sql');
 try { await db.exec(schema); chk(true, 'schema.sql completo executa num banco novo'); } catch (e) { chk(false, 'schema.sql num banco novo', e.message); process.exit(1); }
 try { await db.exec(schema); chk(true, 'schema.sql executa de novo por cima (idempotente)'); } catch (e) { chk(false, 'schema.sql de novo', e.message); process.exit(1); }
-for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando', '070_opacidade_setores', '071_trilhas_apagadas_borracha']) {
+for (const m of ['007_cadastro_operacao_vitimas', '008_grupos', '009_trilha_offline', '010_missoes_alertas', '011_vitima_localizada', '012_diario_relatorio', '013_permanencia_setor', '014_fotos_localizacao', '015_grupos_no_mapa_civil', '016_admin_todas_operacoes', '017_excluir_responsavel', '018_pedido_acesso_responsavel', '019_ipo_operacao', '020_admin_excluir_sem_restricao', '021_ipo_no_cadastro', '022_cadastro_inicial', '023_estudos_perfil_distancia', '024_admin_excluir_relatorio', '025_responsavel_registra_vitima', '026_operacao_encerrada_somente_leitura', '027_dados_so_saem_ao_excluir', '028_trilhas_manuais', '029_nomes_painel_cpf_opcional', '030_percursos_trajetos', '031_vitima_encontrada_detalhes', '032_controle_tempo_missoes', '033_cenario_busca_pod_poa', '034_poa_pod_guia', '035_pedidos_ajuda', '036_recursos_equipes', '037_briefing_comando', '038_poa_fora_origem', '039_missoes_busca_pos', '040_retencao_criar_operacao', '041_excluir_operacao_com_registros', '042_proveniencia_binomio_drone', '043_qualidade_estudos', '044_cadastro_rapido_convites', '045_sci', '046_sci_integrado', '047_convites_categorias_tipos_ponto', '048_dashboard_publico_vitimas', '049_relatorios_diario_passagem', '050_icones_grupos_categorias', '051_aplicativo_android', '052_relatorio_comando', '053_convite_responsavel', '054_relatorio_imprensa', '055_arquivamento_operacoes', '056_mensagens_app', '057_sci_posto_comando', '058_localizacao_responsavel', '059_cenario_operacao', '060_arquivamento_cenarios', '061_areas_proibidas', '062_ulv_por_vitima', '063_ulv_do_dashboard', '064_ponto_concluido', '065_mapa_participante', '066_trilhas_gravacao_base', '067_grupos_mensagem_e_unico', '068_zonas_perigo_descanso', '069_codigo_acesso_pedidos_publico_comando', '070_opacidade_setores', '071_trilhas_apagadas_borracha', '072_base_publico_mensagens_militar']) {
   try { await db.exec(ler('supabase/migracoes/' + m + '.sql')); chk(true, 'migração ' + m + ' executa de novo (idempotente)'); }
   catch (e) { chk(false, 'migração ' + m, e.message); }
 }
@@ -1330,6 +1330,7 @@ console.log('\nPedidos de ajuda: estados, prioridade, histórico e escalação �
   await db.query(`delete from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id]);
   await db.exec(ler('supabase/migracoes/035_pedidos_ajuda.sql'));
   await db.exec(ler('supabase/migracoes/068_zonas_perigo_descanso.sql'));   // a 035 recria a lista de tipos de alerta sem os mais novos: reaplica a 068 por cima (em produção cada migração roda uma vez, em ordem)
+  await db.exec(ler('supabase/migracoes/072_base_publico_mensagens_militar.sql'));   // a 068 refeita acima volta o envio de posições antigo
   const legado = (await db.query(`select estado, resolucao, resolucao_texto from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows;
   chk(legado.length === 1 && legado[0].estado === 'resolvido' && /anterior ao fluxo/.test(legado[0].resolucao_texto), 'pedido antigo (mais de 24 h) entra resolvido, marcado como registro anterior ao fluxo', legado);
   chk((await db.query(`select count(*)::int n from public.pedidos_ajuda where mensagem_id = $1`, [msgVelha.rows[0].id])).rows[0].n === 1, 'reexecutar a migração não duplica');
@@ -2874,20 +2875,20 @@ const mT = 1 / 111320;
 const enviaT = (an, pid, pts) => rpc(an, 'enviar_posicoes_lote', { p_participante: pid, p_gps: 'ok', p_pontos: JSON.stringify(pts) });
 const rT = await enviaT(anT1, pT1.participante_id, [
   pt(9001, -25.5 + 120 * mT, -49.3, tT(1)),   // fora (120 m)
-  pt(9002, -25.5 + 10 * mT, -49.3, tT(2)),    // dentro: ponto de entrada (guardado)
-  pt(9003, -25.5 + 5 * mT, -49.3, tT(3)),     // dentro: descartado
-  pt(9004, -25.5 + 8 * mT, -49.3, tT(4)),     // dentro: descartado
+  pt(9002, -25.5 + 10 * mT, -49.3, tT(2)),    // dentro: gravado e marcado na_base
+  pt(9003, -25.5 + 5 * mT, -49.3, tT(3)),     // dentro: gravado (072) e marcado na_base
+  pt(9004, -25.5 + 8 * mT, -49.3, tT(4)),     // dentro: gravado (072) e marcado na_base
   pt(9005, -25.5 + 90 * mT, -49.3, tT(5)),    // fora: guardado
 ]);
 const gravT = (await db.query(`select client_id, na_base from public.posicoes where participante_id = $1 order by registrado_em`, [pT1.participante_id])).rows;
-chk(gravT.map((r) => r.client_id).join() === [9001, 9002, 9005].map(uid).join(), 'dentro do raio da base só o ponto de entrada fica gravado', gravT.map((r) => r.client_id.slice(-4)));
-chk(gravT.map((r) => r.na_base).join() === 'false,true,false', 'o ponto de entrada fica marcado na_base', gravT);
+chk(gravT.map((r) => r.client_id).join() === [9001, 9002, 9003, 9004, 9005].map(uid).join(), 'dentro do raio da base a trilha também é gravada (072)', gravT.map((r) => r.client_id.slice(-4)));
+chk(gravT.map((r) => r.na_base).join() === 'false,true,true,true,false', 'os pontos dentro da base ficam marcados na_base (fora do desenho)', gravT);
 chk(rT.confirmados.length === 5 && [9001, 9002, 9003, 9004, 9005].every((n) => rT.confirmados.includes(uid(n))), 'todos os pontos são confirmados ao aparelho (inclusive os descartados)', rT.confirmados.length);
-chk(rT.inseridos === 3, 'inseridos conta só os gravados', rT.inseridos);
+chk(rT.inseridos === 5, 'inseridos conta todos os gravados', rT.inseridos);
 const rT2 = await enviaT(anT1, pT1.participante_id, [pt(9006, -25.5 + 3 * mT, -49.3, tT(10)), pt(9007, -25.5 + 2 * mT, -49.3, tT(11))]);
-chk(rT2.inseridos === 1 && rT2.confirmados.length === 2, 'voltou à base: um novo ponto de entrada; o resto é descartado', rT2);
+chk(rT2.inseridos === 2 && rT2.confirmados.length === 2, 'voltou à base: os pontos continuam sendo gravados', rT2);
 const upT = (await db.query(`select ultima_lat, rastreando, gps_estado from public.participantes where id = $1`, [pT1.participante_id])).rows[0];
-chk(Math.abs(upT.ultima_lat - (-25.5 + 2 * mT)) < 1e-9 && upT.gps_estado === 'ok', 'a posição atual segue o último ponto, mesmo o descartado', upT);
+chk(Math.abs(upT.ultima_lat - (-25.5 + 2 * mT)) < 1e-9 && upT.gps_estado === 'ok', 'a posição atual segue o último ponto (na base)', upT);
 // gravação desligada para uma pessoa
 chk(/sem_permissao/.test(await erroDe(rpc(anT2, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false }))), 'participante não liga nem desliga a gravação');
 chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'definir_gravacao_trilha', { p_participante: pT2.participante_id, p_gravar: false }))), 'responsável de outra operação não mexe na gravação');
@@ -3050,6 +3051,7 @@ chk(outrosCods.size === 7, 'os códigos não se repetem entre operações');
 await db.query(`update public.operacoes set codigo_acesso = null where id = $1`, [opC.id]);
 await db.exec(ler('supabase/migracoes/069_codigo_acesso_pedidos_publico_comando.sql'));
 await db.exec(ler('supabase/migracoes/071_trilhas_apagadas_borracha.sql'));   // a 069 refeita acima desfaz as funções que a 071 redefine (em produção cada migração roda uma vez, em ordem)
+await db.exec(ler('supabase/migracoes/072_base_publico_mensagens_militar.sql'));
 const cod2 = (await db.query(`select codigo_acesso c from public.operacoes where id = $1`, [opC.id])).rows[0].c;
 chk(/^[A-HJ-NP-Z2-9]{6}$/.test(cod2), 'operação ativa que já existia (sem código) recebe um ao aplicar a migração', cod2);
 const CODIGO = cod2;
@@ -3240,5 +3242,80 @@ console.log('\nBorracha na trilha de GPS (trechos apagados do mapa)');
   chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'salvar_trilha_oculta', { p_participante: pB[0].participante_id, p_intervalos: JSON.stringify(iv) }))), 'operação encerrada: não apaga mais trechos');
 }
 
-console.log('\nMigrações 007–071 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Migração 072: link público em partes, mensagem para vários, exclusão em lote, militar ---
+console.log('\nLink público em partes, mensagem para vários, pontos em lote e funções do militar (072)');
+{
+  const opM = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 072', p_retencao_horas: 0 });
+  await db.query(`update public.operacoes set criada_em = now() - interval '8 hours' where id = $1`, [opM.id]);
+  const anM = [await usuario(null, true), await usuario(null, true), await usuario(null, true)];
+  const civ = await rpc(anM[0], 'ingressar', { p_token: opM.token_civil, p_nome: 'Civil 72', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const mil = await rpc(anM[1], 'ingressar', { p_token: opM.token_militar, p_nome: 'Cb 72', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  const mil2 = await rpc(anM[2], 'ingressar', { p_token: opM.token_militar, p_nome: 'Sd 72', p_tipo: 'militar', p_cpf: cpf, p_telefone: tel });
+  // link público: posições em partes
+  const t0 = Date.now() - 3 * 3600e3;
+  const muitos = []; for (let k = 0; k < 120; k++) muitos.push(pt(72000 + k, -25.6 + k * 0.0001, -49.4, t0 + k * 15000));
+  await rpc(anM[0], 'enviar_posicoes_lote', { p_participante: civ.participante_id, p_gps: 'ok', p_pontos: JSON.stringify(muitos) });
+  const lk = await rpc(resp1, 'comando_publico_gerar', { p_operacao: opM.id });
+  const p1 = (await como(null, `select public.comando_publico_posicoes($1, 0, 50) r`, [lk.token], 'anon')).rows[0].r;
+  chk(p1.posicoes.length === 50 && p1.fim === false && p1.ultimo === p1.posicoes[49].id, 'link público: primeira parte das posições (visitante sem login)', [p1.posicoes.length, p1.fim]);
+  let todas = p1.posicoes.length, ult = p1.ultimo, fim = p1.fim;
+  while (!fim) { const pp = (await como(null, `select public.comando_publico_posicoes($1, $2, 50) r`, [lk.token, ult], 'anon')).rows[0].r; todas += pp.posicoes.length; ult = pp.ultimo; fim = pp.fim; }
+  chk(todas === 120, 'as partes juntas trazem todas as posições', todas);
+  chk(/link_publico_comando_invalido/.test(await erroDe(como(null, `select public.comando_publico_posicoes($1, 0, 50) r`, ['f'.repeat(48)], 'anon'))), 'token errado: recusado');
+  chk(!/user_id|cpf|telefone/.test(JSON.stringify(p1.posicoes[0])), 'as posições do link não trazem dados pessoais');
+  // mensagem para todos e para grupos
+  const gM = await rpc(resp1, 'salvar_grupo', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ nome: 'Alfa 72', cor: '#ff6a00' }) });
+  await rpc(resp1, 'definir_membro', { p_grupo: gM.id, p_participante: mil.participante_id, p_papel: 'membro' });
+  const todosR = await rpc(resp1, 'enviar_mensagem_varios', { p_operacao: opM.id, p_tipo: 'ATENCAO', p_texto: 'Atenção todos', p_grupos: null });
+  chk(todosR.total === 3 && todosR.enviadas === 3, 'mensagem para todos os participantes de campo da operação', todosR);
+  const grR = await rpc(resp1, 'enviar_mensagem_varios', { p_operacao: opM.id, p_tipo: 'PERSONALIZADA', p_texto: 'Só o Alfa', p_grupos: '{' + gM.id + '}' });
+  chk(grR.total === 1 && grR.mensagens[0].participante_id === mil.participante_id, 'mensagem só para os integrantes dos grupos escolhidos', grR.total);
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'enviar_mensagem_varios', { p_operacao: opM.id, p_tipo: 'ATENCAO', p_texto: 'x', p_grupos: null }))), 'responsável de fora da operação não envia');
+  chk(/texto_obrigatorio/.test(await erroDe(rpc(resp1, 'enviar_mensagem_varios', { p_operacao: opM.id, p_tipo: 'PERSONALIZADA', p_texto: '  ', p_grupos: null }))), 'mensagem livre vazia: recusada');
+  chk(/grupo_invalido/.test(await erroDe(rpc(resp1, 'enviar_mensagem_varios', { p_operacao: opM.id, p_tipo: 'ATENCAO', p_texto: 'x', p_grupos: '{' + uid(1) + '}' }))), 'grupo de outra operação: recusado');
+  // excluir pontos em lote
+  const pa = await rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ categoria: 'VESTIGIO', titulo: 'P1', lat: -25.6, lng: -49.4 }) });
+  const pb = await rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ categoria: 'OUTRO', titulo: 'P2', lat: -25.61, lng: -49.4 }) });
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'excluir_pontos', { p_ids: '{' + pa.id + ',' + pb.id + '}' }))), 'quem não pode excluir não exclui em lote');
+  const ex = await rpc(resp1, 'excluir_pontos', { p_ids: '{' + pa.id + ',' + pb.id + '}' });
+  chk(ex.excluidos === 2 && (await db.query(`select count(*)::int n from public.pontos_interesse where id in ($1, $2)`, [pa.id, pb.id])).rows[0].n === 0, 'exclui vários pontos de uma vez', ex);
+  // militar: permissões
+  const perm0 = (await db.query(`select permissoes_militar p from public.operacoes where id = $1`, [opM.id])).rows[0].p;
+  chk(perm0.setores === true && perm0.pontos === true && perm0.ver_setores === true && perm0.situacao_setor === true, 'operação nova: funções do militar ligadas', perm0);
+  const mapaM = await rpc(anM[1], 'mapa_do_participante', { p_participante: mil.participante_id });
+  const mapaC = await rpc(anM[0], 'mapa_do_participante', { p_participante: civ.participante_id });
+  chk(mapaM.permissoes.setores === true && Object.keys(mapaC.permissoes).length === 0, 'o mapa entrega as permissões ao militar e nada ao civil', [mapaM.permissoes, mapaC.permissoes]);
+  const forma = { nome: 'Setor do Cb', forma: 'poligono', pontos: [[-25.6, -49.4], [-25.6, -49.39], [-25.61, -49.39]] };
+  chk(/so_militar/.test(await erroDe(rpc(anM[0], 'participante_salvar_setor', { p_participante: civ.participante_id, p_id: null, p_dados: JSON.stringify(forma) }))), 'civil não cria setor');
+  const sM = await rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: null, p_dados: JSON.stringify(forma) });
+  chk(sM.nome === 'Setor do Cb' && /Cb 72 \(militar\)/.test(sM.criado_por_nome), 'militar cria setor (fica registrado quem criou)', sM.criado_por_nome);
+  chk(/area_invalida/.test(await erroDe(rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: null, p_dados: JSON.stringify({ nome: 'X', forma: 'circulo', centro_lat: -25.6, centro_lng: -49.4, raio_m: 1 }) }))), 'círculo com raio inválido: recusado');
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_salvar_setor', { p_participante: mil2.participante_id, p_id: sM.id, p_dados: JSON.stringify({ nome: 'Outro nome' }) }))), 'outro militar não ajusta o setor de quem criou');
+  const st = await rpc(anM[2], 'participante_salvar_setor', { p_participante: mil2.participante_id, p_id: sM.id, p_dados: JSON.stringify({ status: 'andamento' }) });
+  chk(st.status === 'andamento', 'outro militar muda a situação (permissão situacao_setor)', st.status);
+  const vistos2 = (await rpc(anM[2], 'mapa_do_participante', { p_participante: mil2.participante_id })).setores.map((x) => x.id);
+  chk(vistos2.includes(sM.id), 'com "ver todos os setores", os outros militares veem o setor');
+  const vistosC = (await rpc(anM[0], 'mapa_do_participante', { p_participante: civ.participante_id })).setores.map((x) => x.id);
+  chk(!vistosC.includes(sM.id), 'o civil não vê o setor privado');
+  const poM = await rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ categoria: 'VESTIGIO', titulo: 'Pegada', lat: -25.605, lng: -49.395 }) });
+  chk(poM.visibilidade === 'publico' && /militar/.test(poM.criado_por_nome), 'militar marca ponto de interesse (público para a equipe)', poM);
+  chk(/dados_invalidos/.test(await erroDe(rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ categoria: 'VITIMA_ENCONTRADA', titulo: 'x', lat: -25.6, lng: -49.4 }) }))), 'categoria de vítima não (usa o relato de vítima)');
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_excluir_ponto', { p_participante: mil2.participante_id, p_id: poM.id }))), 'outro militar não exclui o ponto');
+  // responsável desliga
+  chk(/sem_permissao/.test(await erroDe(rpc(anM[1], 'definir_permissoes_militar', { p_operacao: opM.id, p_permissoes: JSON.stringify({ setores: true }) }))), 'militar não muda as próprias permissões');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'definir_permissoes_militar', { p_operacao: opM.id, p_permissoes: JSON.stringify({ setores: 'sim' }) }))), 'valor que não é sim/não: recusado');
+  const pn = await rpc(resp1, 'definir_permissoes_militar', { p_operacao: opM.id, p_permissoes: JSON.stringify({ setores: false, situacao_setor: false, pontos: false, ver_setores: false }) });
+  chk(pn.setores === false && pn.ver_setores === false, 'responsável desliga as funções', pn);
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: null, p_dados: JSON.stringify(forma) }))), 'desligado: não cria mais setor');
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_salvar_setor', { p_participante: mil2.participante_id, p_id: sM.id, p_dados: JSON.stringify({ status: 'concluido' }) }))), 'desligado: não muda a situação');
+  chk(!(await rpc(anM[2], 'mapa_do_participante', { p_participante: mil2.participante_id })).setores.some((x) => x.id === sM.id), 'desligado "ver todos": o setor some para os outros');
+  chk((await rpc(anM[1], 'mapa_do_participante', { p_participante: mil.participante_id })).setores.some((x) => x.id === sM.id && x.meu_criado), 'quem criou continua vendo o setor dele');
+  chk((await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'permissoes_militar'`, [opM.id])).rows[0].n === 1, 'a mudança entra no diário');
+  await rpc(resp1, 'definir_permissoes_militar', { p_operacao: opM.id, p_permissoes: JSON.stringify({ setores: true, pontos: true }) });
+  await rpc(anM[1], 'participante_excluir_setor', { p_participante: mil.participante_id, p_id: sM.id });
+  await rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: poM.id });
+  chk((await db.query(`select count(*)::int n from public.setores where id = $1`, [sM.id])).rows[0].n === 0, 'quem criou exclui o próprio setor e ponto');
+}
+
+console.log('\nMigrações 007–072 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

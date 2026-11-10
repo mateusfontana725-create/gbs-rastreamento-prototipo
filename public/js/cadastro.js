@@ -196,6 +196,15 @@
       mostrarLocal();
     } });
     var btnLimpar = UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Tirar o ponto', onclick: function () { local = null; coordTxt.value = ''; coordAviso.textContent = ''; mostrarLocal(); } });
+    // Operação nova sem ponto: começa com a posição atual de quem está criando (dá para trocar ou tirar).
+    if (inicial && !local && !op.local_endereco) {
+      minhaPosicao().then(function (p) {
+        if (!p || local || coordTxt.value.trim()) return;
+        local = { lat: p.lat, lng: p.lng };
+        coordAviso.textContent = 'Sua posição atual' + (p.prec ? ' (± ' + Math.round(p.prec) + ' m)' : '') + ': confira ou escolha outro ponto no mapa.';
+        mostrarLocal();
+      });
+    }
     var avisoLegado = op.local_endereco && local
       ? UI.el('p', { classe: 'nota', texto: 'Este cadastro também tinha um endereço escrito ("' + op.local_endereco + '"). Ao salvar com o ponto no mapa, o endereço é retirado.' })
       : null;

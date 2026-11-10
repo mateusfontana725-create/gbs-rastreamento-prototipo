@@ -251,6 +251,9 @@
     // Menu (folha), foto direta e legenda do mapa dentro do menu
     $('btn-menu').addEventListener('click', function () { abrirMenuFolha(true); });
     $('folha-fechar').addEventListener('click', function () { abrirMenuFolha(false); });
+    $('fm-setor').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('setor'); });
+    $('fm-setor-circulo').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('circulo'); });
+    $('fm-ponto').addEventListener('click', function () { abrirMenuFolha(false); iniciarDesenhoP('ponto'); });
     $('folha-fundo').addEventListener('click', function () { abrirMenuFolha(false); });
     $('foto-rapida').addEventListener('change', function (ev) { aoEscolherFoto(ev, true); });
     var legendaMapa = document.querySelector('.legenda-civil');
@@ -1490,13 +1493,24 @@
     var segs = estado.trilhaMinha = estado.trilhaMinha || [];
     var tempos = estado.temposMinha = estado.temposMinha || [];   // horário de cada ponto, na mesma forma de segs
     var falhas = estado.falhasMinha = estado.falhasMinha || [];
+    var G = window.TrilhaGeo;
     pontos.forEach(function (p) {
+      // dentro do raio de uma base: o ponto fica guardado e é enviado, mas a linha não passa por ali
+      if (G && estado.basesTrilha && estado.basesTrilha.length && !G.dividirNaBase([p], estado.basesTrilha).length) {
+        if (segs.length && segs[segs.length - 1].length) { segs.push([]); tempos.push([]); }
+        estado.ultimoTMinha = null;
+        return;
+      }
       var seg = segs[segs.length - 1];
+      if (seg && !seg.length) seg = null;
       if (seg && estado.ultimoTMinha != null && p.t - estado.ultimoTMinha > lacunaMs) {
         falhas.push([seg[seg.length - 1], [p.lat, p.lng]]);
         seg = null;
       }
-      if (!seg) { seg = []; segs.push(seg); tempos.push([]); }
+      if (!seg) {
+        if (segs.length && !segs[segs.length - 1].length) { seg = segs[segs.length - 1]; }
+        else { seg = []; segs.push(seg); tempos.push([]); }
+      }
       seg.push([p.lat, p.lng]);
       tempos[tempos.length - 1].push(p.t);
       estado.ultimoTMinha = p.t;
@@ -1622,6 +1636,8 @@
       return;
     }
     if (!estado.mapa || !dados) return;
+    estado.permissoes = estado.part && estado.part.tipo === 'militar' && dados.permissoes ? dados.permissoes : {};
+    atualizarFerramentasMilitar();
     desenharEquipe(dados.equipe || []);
     desenharExtras(dados.setores || [], dados.pontos || [], dados.areas_proibidas || []);
     if (Date.now() - (estado.trilhasEquipeEm || 0) > 60000) { estado.trilhasEquipeEm = Date.now(); carregarTrilhasEquipe(); }
@@ -1785,18 +1801,19 @@
     estado.camSetores.clearLayers();
     estado.camPontos.clearLayers();
     estado.camProibidas.clearLayers();
+    var perm = estado.permissoes || {};
     setores.forEach(function (st) {
       var meu = st.meu === undefined ? true : st.meu;   // servidor antigo: só vinham os atribuídos a mim
       var estilo = meu
         ? { color: st.cor, weight: 3.5, opacity: 1, lineJoin: 'round', fillColor: st.cor, fillOpacity: st.status === 'concluido' ? 0.08 : 0.16 }   // contorno contínuo e forte (não parece trilha)
         : { color: st.cor, weight: 2.5, opacity: 0.9, lineJoin: 'round', fillColor: st.cor, fillOpacity: 0.10 };
       var camada = st.forma === 'circulo' ? L.circle([st.centro_lat, st.centro_lng], Object.assign({ radius: st.raio_m }, estilo)) : L.polygon(st.pontos || [], estilo);
-      if (meu) {
-        camada.options.interactive = false;
-        camada.bindTooltip('Seu setor: ' + C.esc(st.nome), { permanent: true, direction: 'center', className: 'rotulo-setor' });
-      } else {
-        camada.bindPopup('Setor: ' + C.esc(st.nome) + (st.status === 'concluido' ? ' · concluído' : ''));
-      }
+      var gerencia = perm.situacao_setor || (perm.setores && st.meu_criado);
+      if (meu) camada.bindTooltip('Seu setor: ' + C.esc(st.nome), { permanent: true, direction: 'center', className: 'rotulo-setor' });
+      else if (st.meu_criado) camada.bindTooltip(C.esc(st.nome), { permanent: true, direction: 'center', className: 'rotulo-setor' });
+      if (gerencia) camada.bindPopup(function () { return corpoSetorMilitar(st); });
+      else if (meu) camada.options.interactive = false;
+      else camada.bindPopup('Setor: ' + C.esc(st.nome) + (st.status === 'concluido' ? ' · concluído' : ''));
       camada.addTo(estado.camSetores);
     });
     estado.areasProibidas = proibidas || [];
@@ -1811,7 +1828,8 @@
     estado.pontosRisco.forEach(function (pt) {
       L.circle([pt.lat, pt.lng], { radius: pt.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 2, dashArray: '6 6', fillColor: '#ef4444', fillOpacity: 0.1, interactive: false, className: 'circulo-risco' }).addTo(estado.camPontos);
     });
-    // Base: o raio (padrão 50 m) aparece bem discreto; dentro dele o caminho não é gravado.
+    // Base: o raio (padrão 50 m) aparece bem discreto; dentro dele o caminho continua gravado, mas não é desenhado.
+    estado.basesTrilha = pontos.filter(function (pt) { return pt.categoria === 'BASE'; }).map(function (pt) { return { lat: pt.lat, lng: pt.lng, raio_m: pt.raio_m || 50 }; });
     pontos.filter(function (pt) { return pt.categoria === 'BASE'; }).forEach(function (pt) {
       L.circle([pt.lat, pt.lng], { radius: pt.raio_m || 50, color: '#0ea5e9', weight: 1, opacity: 0.35, dashArray: '2 6', fill: false, interactive: false, className: 'circulo-base-participante' }).addTo(estado.camPontos);
     });
@@ -1821,6 +1839,7 @@
         UI.el('strong', { texto: nomeCat + ': ' + pt.titulo }),
         pt.descricao ? UI.el('p', { texto: pt.descricao }) : null,
         pt.publico !== false ? UI.el('button', { classe: 'btn btn-pequeno btn-primario', type: 'button', texto: '🧭 Rota até aqui', onclick: function () { estado.mapa.closePopup(); rotaAtePonto(pt); } }) : null,
+        pt.meu_criado && perm.pontos ? UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: '🗑 Excluir ponto', onclick: function () { estado.mapa.closePopup(); excluirPontoMilitar(pt); } }) : null,
       ]);
       L.marker([pt.lat, pt.lng], {
         icon: L.divIcon({ className: 'mk-poi-wrap', html: '<div class="mk-poi poi-' + C.esc(pt.categoria) + '"><span>' + (LETRA_PONTO[pt.categoria] || '•') + '</span></div><div class="mk-poi-rotulo">' + C.esc(pt.titulo) + '</div>', iconSize: [0, 0] }),
@@ -1829,6 +1848,185 @@
     });
     var lgP = $('lg-proibida');
     if (lgP) lgP.hidden = !estado.areasProibidas.length || !estado.prefs.proibidas;
+  }
+
+
+  /* ------------------------------------------------------------------ */
+  /* Ferramentas do militar (migração 072): criar setores, situação dos   */
+  /* setores e pontos de interesse, conforme o responsável liberar.       */
+  /* ------------------------------------------------------------------ */
+  var STATUS_SETOR_P = { pendente: 'Pendente', andamento: 'Em andamento', concluido: 'Concluído' };
+  var CATS_PONTO_MILITAR = ['VESTIGIO', 'POSSIVEL_LOCALIZACAO', 'RISCO', 'ENCONTRO', 'BASE', 'OUTRO'];
+
+  function atualizarFerramentasMilitar() {
+    var perm = estado.permissoes || {};
+    var caixa = $('ferramentas-militar');
+    if (!caixa) return;
+    var algum = Boolean(perm.setores || perm.pontos || perm.situacao_setor);
+    caixa.hidden = !algum;
+    $('fm-setor').hidden = $('fm-setor-circulo').hidden = !perm.setores;
+    $('fm-ponto').hidden = !perm.pontos;
+    $('fm-dica').textContent = perm.situacao_setor ? 'Toque num setor do mapa para mudar a situação dele (pendente, em andamento ou concluído).' : '';
+  }
+
+  function corpoSetorMilitar(st) {
+    var perm = estado.permissoes || {};
+    var botoes = [];
+    if (perm.situacao_setor) {
+      Object.keys(STATUS_SETOR_P).forEach(function (k) {
+        botoes.push(UI.el('button', { classe: 'btn btn-pequeno' + (st.status === k ? ' btn-ativo' : ''), type: 'button', 'data-status': k, disabled: st.status === k ? true : null,
+          texto: STATUS_SETOR_P[k], onclick: function () { estado.mapa.closePopup(); salvarSetorMilitar(st.id, { status: k }, 'Situação do setor: ' + STATUS_SETOR_P[k] + '.'); } }));
+      });
+    }
+    if (perm.setores && st.meu_criado) {
+      botoes.push(UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: '🗑 Excluir setor', onclick: function () { estado.mapa.closePopup(); excluirSetorMilitar(st); } }));
+    }
+    return UI.el('div', { classe: 'popup-setor-militar' }, [
+      UI.el('strong', { texto: 'Setor ' + st.nome }),
+      UI.el('p', { classe: 'muted', texto: 'Situação: ' + (STATUS_SETOR_P[st.status] || st.status) + (st.meu_criado ? ' · criado por você' : '') }),
+      UI.el('div', { classe: 'popup-botoes' }, botoes),
+    ]);
+  }
+
+  function erroMilitar(e) {
+    UI.aviso(e && e.codigo === 'funcao_ausente' ? 'O servidor ainda não tem esta função (migração 072).' : ((e && e.message) || 'Erro inesperado.'), 'erro', 8000);
+  }
+  function recarregarMapaMilitar() { estado.assinaturaExtras = null; carregarEquipe(); }
+
+  async function salvarSetorMilitar(id, dados, msg) {
+    try {
+      await C.rpc('participante_salvar_setor', { p_participante: estado.part.participante_id, p_id: id || null, p_dados: dados }, 20000);
+      UI.aviso(msg || 'Setor salvo.', 'ok', 6000);
+      recarregarMapaMilitar();
+      return true;
+    } catch (e) { erroMilitar(e); return false; }
+  }
+  async function excluirSetorMilitar(st) {
+    var ok = await UI.confirmar({ titulo: 'Excluir o setor "' + st.nome + '"?', texto: 'Ele some do mapa de todos. Só dá para excluir os setores que você criou.', ok: 'Excluir setor', perigo: true });
+    if (!ok) return;
+    try {
+      await C.rpc('participante_excluir_setor', { p_participante: estado.part.participante_id, p_id: st.id }, 20000);
+      UI.aviso('Setor excluído.', 'ok');
+      recarregarMapaMilitar();
+    } catch (e) { erroMilitar(e); }
+  }
+  async function excluirPontoMilitar(pt) {
+    var ok = await UI.confirmar({ titulo: 'Excluir o ponto "' + pt.titulo + '"?', texto: 'Ele some do mapa de todos. Só dá para excluir os pontos que você marcou.', ok: 'Excluir ponto', perigo: true });
+    if (!ok) return;
+    try {
+      await C.rpc('participante_excluir_ponto', { p_participante: estado.part.participante_id, p_id: pt.id }, 20000);
+      UI.aviso('Ponto excluído.', 'ok');
+      recarregarMapaMilitar();
+    } catch (e) { erroMilitar(e); }
+  }
+
+  // Desenho no mapa: "setor" = tocar os cantos (3 ou mais); "circulo" e "ponto" = tocar o lugar (ou usar a minha posição).
+  function iniciarDesenhoP(tipo) {
+    if (!estado.mapa) return;
+    sairDesenhoP();
+    var d = estado.desenhoP = { tipo: tipo, pts: [], camada: L.layerGroup().addTo(estado.mapa) };
+    var caixa = document.querySelector('.mapa-civil-caixa') || estado.mapa.getContainer().parentNode;
+    var texto = UI.el('span', { classe: 'barra-desenho-p-txt' });
+    var bDesfazer = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dp-desfazer', texto: '↶ Desfazer', onclick: function () { d.pts.pop(); redesenhar(); } });
+    var bAqui = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dp-aqui', texto: '📍 Minha posição', onclick: function () {
+      var l = estado.ultimaLeitura;
+      if (!l) { UI.aviso('Sem a sua posição ainda. Toque no mapa.', 'erro'); return; }
+      tocar({ latlng: L.latLng(l.lat, l.lng) });
+    } });
+    var bOk = UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', id: 'dp-concluir', texto: '✔ Concluir', onclick: function () { concluir(); } });
+    var bSair = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dp-cancelar', texto: '✕', 'aria-label': 'Cancelar', onclick: function () { sairDesenhoP(); } });
+    d.barra = UI.el('div', { classe: 'barra-desenho-p', id: 'barra-desenho-p', role: 'status' }, [texto, tipo === 'setor' ? bDesfazer : bAqui, tipo === 'setor' ? bOk : null, bSair]);
+    caixa.appendChild(d.barra);
+    estado.mapa.getContainer().classList.add('desenhando-p');
+    function redesenhar() {
+      d.camada.clearLayers();
+      d.pts.forEach(function (q) { L.circleMarker(q, { radius: 6, color: '#0b1220', weight: 2, fillColor: '#f59e0b', fillOpacity: 1, interactive: false }).addTo(d.camada); });
+      if (d.pts.length >= 2) L.polygon(d.pts, { color: '#f59e0b', weight: 3, fillOpacity: 0.12, dashArray: d.pts.length < 3 ? '6 6' : null, interactive: false }).addTo(d.camada);
+      texto.textContent = tipo === 'setor' ? (d.pts.length < 3 ? 'Toque os cantos do setor no mapa (' + d.pts.length + ' de pelo menos 3)' : d.pts.length + ' cantos · toque Concluir')
+        : tipo === 'circulo' ? 'Toque no mapa o centro do setor' : 'Toque no mapa onde fica o ponto';
+      bDesfazer.disabled = !d.pts.length;
+      bOk.disabled = d.pts.length < 3;
+    }
+    function tocar(ev) {
+      if (estado.desenhoP !== d) return;
+      var q = [Math.round(ev.latlng.lat * 1e7) / 1e7, Math.round(ev.latlng.lng * 1e7) / 1e7];
+      if (tipo === 'setor') { if (d.pts.length < 300) d.pts.push(q); redesenhar(); return; }
+      d.pts = [q];
+      redesenhar();
+      concluir();
+    }
+    d.aoClicar = tocar;
+    estado.mapa.on('click', tocar);
+    redesenhar();
+    async function concluir() {
+      if (tipo === 'setor') {
+        if (d.pts.length < 3) return;
+        var nome = await UI.confirmar({ titulo: 'Novo setor', ok: 'Criar setor', texto: d.pts.length + ' cantos marcados. O setor aparece para os responsáveis no painel.',
+          campo: { rotulo: 'Nome do setor', valor: '', max: 60, obrigatorio: true } });
+        if (!nome) return;
+        if (await salvarSetorMilitar(null, { nome: nome.texto.trim(), forma: 'poligono', pontos: d.pts }, 'Setor "' + nome.texto.trim() + '" criado.')) sairDesenhoP();
+      } else if (tipo === 'circulo') {
+        formCirculo(d.pts[0]);
+      } else {
+        formPontoMilitar(d.pts[0]);
+      }
+    }
+  }
+
+  function sairDesenhoP() {
+    var d = estado.desenhoP;
+    if (!d) return;
+    estado.desenhoP = null;
+    if (estado.mapa) { estado.mapa.off('click', d.aoClicar); estado.mapa.getContainer().classList.remove('desenhando-p'); }
+    if (d.camada) d.camada.remove();
+    if (d.barra) d.barra.remove();
+  }
+
+  function formCirculo(centro) {
+    var nome = UI.el('input', { classe: 'campo', id: 'fm-circ-nome', maxlength: '60', required: true });
+    var raio = UI.el('input', { classe: 'campo', id: 'fm-circ-raio', type: 'number', min: '5', max: '50000', step: '5', value: '200', inputmode: 'numeric' });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var fechar = UI.abrirModal(UI.el('form', { classe: 'form-padrao', novalidate: true, onsubmit: async function (ev) {
+      ev.preventDefault();
+      var n = nome.value.trim(), r = Number(raio.value);
+      if (!n) { erro.textContent = 'Informe o nome do setor.'; erro.hidden = false; return; }
+      if (!(r >= 5 && r <= 50000)) { erro.textContent = 'O raio vai de 5 a 50000 m.'; erro.hidden = false; return; }
+      if (await salvarSetorMilitar(null, { nome: n, forma: 'circulo', centro_lat: centro[0], centro_lng: centro[1], raio_m: r }, 'Setor "' + n + '" criado.')) { fechar(); sairDesenhoP(); }
+    } }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Novo setor em círculo' }),
+      UI.campo('Nome do setor', nome, { para: 'fm-circ-nome' }),
+      UI.campo('Raio (m)', raio, { para: 'fm-circ-raio' }),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'fm-circ-salvar', texto: 'Criar setor' })]),
+    ]));
+    setTimeout(function () { try { nome.focus(); } catch (e) { /* */ } }, 50);
+  }
+
+  function formPontoMilitar(local) {
+    var cat = UI.el('select', { classe: 'campo', id: 'fm-ponto-cat' }, CATS_PONTO_MILITAR.map(function (k) { return UI.el('option', { value: k, texto: NOME_PONTO[k] || k }); }));
+    var titulo = UI.el('input', { classe: 'campo', id: 'fm-ponto-titulo', maxlength: '80' });
+    var desc = UI.el('textarea', { classe: 'campo', id: 'fm-ponto-desc', rows: '3', maxlength: '1000' });
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var fechar = UI.abrirModal(UI.el('form', { classe: 'form-padrao', novalidate: true, onsubmit: async function (ev) {
+      ev.preventDefault();
+      var t = titulo.value.trim() || (NOME_PONTO[cat.value] || 'Ponto');
+      try {
+        await C.rpc('participante_salvar_ponto', { p_participante: estado.part.participante_id, p_dados: { categoria: cat.value, titulo: t, descricao: desc.value.trim(), lat: local[0], lng: local[1] } }, 20000);
+        fechar();
+        sairDesenhoP();
+        UI.aviso('Ponto "' + t + '" marcado. A equipe e os responsáveis já veem.', 'ok', 6000);
+        recarregarMapaMilitar();
+      } catch (e) { erro.textContent = e.codigo === 'funcao_ausente' ? 'O servidor ainda não tem esta função (migração 072).' : ((e && e.message) || 'Erro inesperado.'); erro.hidden = false; }
+    } }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'Marcar ponto de interesse' }),
+      UI.campo('Tipo', cat, { para: 'fm-ponto-cat' }),
+      UI.campo('Nome', titulo, { para: 'fm-ponto-titulo' }),
+      UI.campo('Descrição (opcional)', desc, { para: 'fm-ponto-desc' }),
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'fm-ponto-salvar', texto: 'Marcar ponto' })]),
+    ]));
   }
 
   /* ------------------------------------------------------------------ */

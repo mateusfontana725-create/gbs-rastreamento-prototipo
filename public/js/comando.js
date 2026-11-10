@@ -213,6 +213,7 @@
     grupos: new Map(),          // id → grupo
     membros: new Map(),         // grupo_id → Map(participante_id → vínculo {papel, origem…})
     semGrupos: false,           // banco sem a migração 008
+    filtroDia: null,            // { dia, de, ate, setoresSempre, pontosSempre }: o mapa mostra só o que aconteceu nesse dia. Não fica lembrado
     focoPessoa: null,           // id da pessoa em foco (olho da lista): o mapa mostra só ela e o que é dela. Não fica lembrado
     filtroGrupos: new Set(),    // grupos ligados no mapa (ícone de olho; vários ao mesmo tempo). Vazio = todos. Não fica lembrado
     controleGrupos: null,
@@ -377,7 +378,22 @@
     $('menu-trilha').addEventListener('click', function () { iniciarDesenhoTrilha(); });
     $('menu-ponto').addEventListener('click', function () { iniciarDesenho('ponto'); });
     $('menu-destino').addEventListener('click', function () { escolherDestino([]); });
+    $('menu-msg-varios').addEventListener('click', function () { fecharMenu(); abrirMensagemVarios(null); });
+    $('central-msg-varios').addEventListener('click', function () { abrirMensagemVarios(null); });
     $('menu-areas').addEventListener('click', abrirAreas);
+    $('menu-filtro-mapa').addEventListener('click', function () { abrirFiltroMapa(); });
+    $('menu-perm-militar').addEventListener('click', function () { fecharMenu(false); abrirPermissoesMilitar(); });
+    $('areas-selecionar-pontos').addEventListener('click', function () {
+      est.selPontos = est.selPontos ? null : new Set();
+      renderizarAreas();
+    });
+    $('pontos-sel-todos').addEventListener('change', function () {
+      if (!est.selPontos) return;
+      var marcar = $('pontos-sel-todos').checked;
+      est.pontosInt.forEach(function (p, id) { if (id.indexOf('ulv:') !== 0) { if (marcar) est.selPontos.add(id); else est.selPontos.delete(id); } });
+      renderizarAreas();
+    });
+    $('pontos-excluir-sel').addEventListener('click', function () { excluirPontosSelecionados(); });
     $('areas-fechar').addEventListener('click', fecharAreas);
     $('areas-novo-setor').addEventListener('click', escolherTipoSetor);
     $('areas-novo-ponto').addEventListener('click', function () { iniciarDesenho('ponto'); });
@@ -1311,9 +1327,49 @@
     await abrirPainelPublico();
   }
 
+  // Chamada ao servidor com novas tentativas quando ele demora ou a conexão oscila (o link público é aberto por
+  // visitantes, com tempo-limite curto no servidor).
+  async function rpcPublico(nome, args) {
+    var ultimo;
+    for (var i = 0; i < 4; i++) {
+      try { return await C.rpc(nome, args, 60000); }
+      catch (e) {
+        ultimo = e;
+        if (!e || !e.rede) throw e;
+        await new Promise(function (ok) { setTimeout(ok, 1500 * (i + 1)); });
+      }
+    }
+    throw ultimo;
+  }
+
+  var SEM_POSICOES = 9007199254740991;   // "depois do maior id possível": o documento vem sem posições
   async function carregarDocPublico(primeira) {
     var pub = est.publico;
-    var doc = await C.rpc('comando_publico', { p_token: pub.token, p_desde: primeira ? null : pub.posicoesAte }, 90000);
+    var doc;
+    if (primeira && !pub.semPartes) {
+      // Migração 072: o documento vem sem posições e elas chegam em partes (operações grandes passavam do
+      // tempo-limite do servidor numa carga só e o link aparecia como "sem conexão").
+      doc = await rpcPublico('comando_publico', { p_token: pub.token, p_desde: SEM_POSICOES });
+      if (!doc || !doc.tabelas || !doc.operacao) throw C.criarErro({ message: 'link_publico_comando_invalido' });
+      var lista = [], depois = 0, ate = Number(doc.posicoes_ate) || 0;
+      try {
+        while (depois < ate) {
+          var parte = await rpcPublico('comando_publico_posicoes', { p_token: pub.token, p_depois_de: depois, p_limite: 5000 });
+          if (!parte || !Array.isArray(parte.posicoes)) throw C.criarErro({ message: 'funcao_ausente' });
+          parte.posicoes.forEach(function (x) { lista.push(x); });
+          depois = Number(parte.ultimo) || ate;
+          textoCarregandoPublico(lista.length, ate);
+          if (parte.fim) break;
+        }
+        doc.tabelas.posicoes = lista;
+        doc.incremental = false;
+      } catch (e) {
+        if (e.codigo !== 'funcao_ausente') throw e;
+        pub.semPartes = true;   // banco sem a 072: carga de uma vez, como antes
+        doc = null;
+      }
+    }
+    if (!doc) doc = await rpcPublico('comando_publico', { p_token: pub.token, p_desde: primeira ? null : pub.posicoesAte });
     if (!doc || !doc.tabelas || !doc.operacao) throw C.criarErro({ message: 'link_publico_comando_invalido' });
     if (doc.agora) C.definirRelogioServidor(C.paraMs(doc.agora));
     pub.nomes = Boolean(doc.nomes);
@@ -1329,11 +1385,18 @@
     return doc;
   }
 
+  function textoCarregandoPublico(n, total) {
+    var c = $('painel-carregando');
+    var t = c && c.querySelector('.painel-carregando-txt');
+    if (t) t.textContent = 'Carregando as trilhas… ' + n.toLocaleString('pt-BR') + ' posições';
+  }
+
   function mostrarErroPublico(e) {
     var pub = est.publico;
     if (pub && pub.timer) clearInterval(pub.timer);
     var invalido = e && (e.codigo === 'link_publico_comando_invalido' || /link_publico_comando_invalido/.test(String(e.message)));
     $('publico-erro-texto').textContent = invalido ? C.traduzirErro({ message: 'link_publico_comando_invalido' })
+      : e && e.codigo === 'servidor_demorou' ? 'O servidor demorou demais para montar o painel (a internet está funcionando). Recarregue a página em instantes.'
       : (e && e.rede ? 'Sem conexão com a internet. Conecte-se e recarregue a página.' : 'Não foi possível abrir este link agora: ' + ((e && e.message) || 'erro desconhecido') + '.');
     mostrarTela('publico-erro');
   }
@@ -1349,6 +1412,7 @@
     renderizarCabecalho();
     criarMapa();
     desenharLocalOp();
+    enquadrarAoAbrir(false);
     atualizarChipDeslocamento();
     await carregarTudo();
     est.tempoReal = 'ok';
@@ -1717,6 +1781,7 @@
     renderizarCabecalho();
     criarMapa();
     desenharLocalOp();
+    enquadrarAoAbrir(true);
     atualizarChipDeslocamento();
     aplicarIntervaloGpsMeu();
     await carregarTudo();
@@ -1794,6 +1859,7 @@
     clearTimeout(est.timerAreas);
     est.setores = new Map();
     est.pontosInt = new Map();
+    est.assinaturaBases = null;
     est.destinos = new Map();
     est.camadaSetores = est.camadaPontosInt = est.linhaDestino = est.marcaDestino = null;
     est.rotasFicha = new Map();
@@ -1905,6 +1971,8 @@
     est.fichas = new Map();
     est.permanencias = new Map();
     est.focoPessoa = null;
+    est.filtroDia = null;
+    est.selPontos = null;
     est.filtroGrupos = new Set();   // sem redesenhar: as trilhas e marcadores acabaram de ser removidos
     est.errosTrilha = new Set();
     if (est.camadaDestinosGrupo) est.camadaDestinosGrupo.clearLayers();
@@ -1937,6 +2005,8 @@
     $('menu-grupos').hidden = Boolean(op.dados_apagados_em);
     $('menu-missoes').hidden = Boolean(op.dados_apagados_em);
     $('menu-destino').hidden = op.status !== 'ativa';
+    $('menu-msg-varios').hidden = $('central-msg-varios').hidden = op.status !== 'ativa' || Boolean(est.publico);
+    $('menu-perm-militar').hidden = op.status !== 'ativa' || Boolean(est.publico);
     $('btn-encerrar').hidden = op.status !== 'ativa';
     $('btn-convite').hidden = op.status !== 'ativa';
     $('btn-registrar-foto').hidden = op.status !== 'ativa';
@@ -1997,6 +2067,7 @@
     est.camadasBase = { osm: osm, topo: topo, satelite: satelite };
     est.camadaAtual = est.camadasBase[est.prefsMapa.camada] ? est.prefsMapa.camada : 'osm';
     est.camadasBase[est.camadaAtual].addTo(mapa);
+    setTimeout(atualizarMisturaSetores, 0);
     L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(mapa);
 
     // Controle essencial de orientação que fica sempre no mapa: enquadrar todos.
@@ -2355,6 +2426,7 @@
       est.camadasBase[nome].addTo(est.mapa);
       est.camadaAtual = nome;
     }
+    atualizarMisturaSetores();
     definirPrefMapa('camada', nome);
     aplicarBase3D(nome);   // se o 3D estiver aberto, troca o fundo dele também
   }
@@ -2388,11 +2460,11 @@
           agrupados.forEach(function (mk) { mostrarPonto(mk, valor); });
         }
         lista.forEach(function (mk) { if (mk.options.fixo) mostrarPonto(mk, valor); });
-        if (est.focoPessoa && chave !== 'pontos') aplicarFocoPontos();
+        if ((est.focoPessoa || est.filtroDia) && chave !== 'pontos') aplicarFocoPontos();
       }
       if (chave === 'legenda' && est.legenda) { if (valor) est.legenda.addTo(est.mapa); else est.legenda.remove(); }
       if (chave === 'setores' && est.camadaSetores) { if (valor) est.camadaSetores.addTo(est.mapa); else est.camadaSetores.remove(); }
-      if (chave === 'opacSetores') est.setores.forEach(function (s) { if (s.camada && s.camada.setStyle) s.camada.setStyle({ fillOpacity: estiloSetor(s.d).fillOpacity }); });
+      if (chave === 'opacSetores') est.setores.forEach(function (s) { desenharFundoSetor(s); });
       if (chave === 'pontos' && est.camadaPontosInt) { if (valor) est.camadaPontosInt.addTo(est.mapa); else est.camadaPontosInt.remove(); }
       if (chave === 'local') desenharLocalOp();
       if (chave === 'tmPlanejadas' || chave === 'tmPercorridas') redesenharTrilhasManuais();
@@ -2525,6 +2597,7 @@
   function definirTema(tema) {
     var valor = tema === 'claro' ? 'claro' : 'escuro';
     document.documentElement.setAttribute('data-tema', valor);
+    atualizarMisturaSetores();
     try { localStorage.setItem(CHAVE_TEMA, valor); } catch (e) { /* sem armazenamento: vale só nesta página */ }
     atualizarBotoesTema();
     if (est.mapa) setTimeout(function () { est.mapa.invalidateSize({ pan: false }); }, 60);
@@ -3337,7 +3410,7 @@
 
   function atualizarMarcador(p) {
     if (!est.mapa) return;
-    var pos = posicaoAtual(p);
+    var pos = posicaoNoMapa(p);
     if (!pos || p.dados.removido || !visivelNoMapa(p)) {
       tirarPessoaDoMapa(p);
       return;
@@ -3579,21 +3652,40 @@
     return (m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' km';
   }
 
-  function trilhaDe(p) { return trilhaDePontos(p.pontos, false, intervalosDe(p)); }
+  function trilhaDe(p) { return trilhaDePontos(pontosDoDia(p), false, intervalosDe(p)); }
   // Pontos na_base (entrada na base, migração 066) não entram na linha: ela se divide neles, sem "falha" nem reta atravessando a base.
   // intervalos: trechos apagados com a borracha (trilhas_ocultas, migração 071): os pontos deles não entram e a linha se divide ali.
   function trilhaDePontos(pontos, objetos, intervalos) {
     var op = { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp() };
     if (objetos) op.objetos = true;
     var partes = [];
+    var bases = basesDaTrilha();
     window.TrilhaGeo.dividirPorIntervalos(pontos, intervalos).forEach(function (g) {
-      window.TrilhaGeo.dividirNaBase(g).forEach(function (x) { partes.push(x); });
+      window.TrilhaGeo.dividirNaBase(g, bases).forEach(function (x) { partes.push(x); });
     });
     if (!partes.length) return { segmentos: [], lacunas: [] };
     if (partes.length === 1 && partes[0].length === pontos.length) return window.GPS.trilha(pontos, op);
     var r = { segmentos: [], lacunas: [] };
     partes.forEach(function (ps) { var t = window.GPS.trilha(ps, op); r.segmentos = r.segmentos.concat(t.segmentos); r.lacunas = r.lacunas.concat(t.lacunas || []); });
     return r;
+  }
+
+  // Bases da operação (raio padrão 50 m): a trilha não é desenhada dentro delas (as posições continuam guardadas).
+  function basesDaTrilha() {
+    var r = [];
+    est.pontosInt.forEach(function (x) { if (x.d && x.d.categoria === 'BASE' && x.d.lat != null) r.push({ lat: x.d.lat, lng: x.d.lng, raio_m: x.d.raio_m || RAIO_BASE_PADRAO }); });
+    return r;
+  }
+  function assinaturaBases() {
+    return basesDaTrilha().map(function (b) { return b.lat.toFixed(6) + ',' + b.lng.toFixed(6) + ',' + b.raio_m; }).sort().join(';');
+  }
+  // Base criada, movida, com raio novo ou excluída: redesenha as trilhas.
+  function conferirBasesTrilha() {
+    var a = assinaturaBases();
+    if (a === est.assinaturaBases) return;
+    var primeira = est.assinaturaBases == null;
+    est.assinaturaBases = a;
+    if (!primeira || a) est.participantes.forEach(function (p) { desenharTrilha(p); });
   }
 
   // Limite de falha da operação (s sem ponto entre dois pontos seguidos); padrão do gps.js sem a migração 009.
@@ -5043,6 +5135,7 @@
       pane: 'pontos',        // participantes ficam por cima
       tipoPonto: 'relato',
       donoId: m.participante_id || null,
+      quando: C.paraMs(m.criada_em),
       critico: m.categoria === 'AJUDA',
       vitima: m.categoria === 'VITIMA',   // vítima localizada: agrupa como os demais, mas o grupo mostra a marca de vítima
     });
@@ -5451,6 +5544,7 @@
           pane: 'pontos',    // participantes ficam por cima
           tipoPonto: 'foto',
           donoId: f.participante_id || null,
+          quando: C.paraMs(f.capturada_em || f.registrada_em),
         });
         ligarCliquesMapa(mk, {
           info: function () {
@@ -5825,7 +5919,7 @@
     BASE: { rotulo: 'Base da operação', letra: 'B' },
     OUTRO: { rotulo: 'Outro ponto', letra: '•' },
   };
-  var RAIO_BASE_PADRAO = 50;   // m — raio da base sem valor definido (chegada ao grupo e sem gravação de trilha, migração 066)
+  var RAIO_BASE_PADRAO = 50;   // m — raio da base sem valor definido (chegada do grupo; trilha gravada mas não desenhada dentro dele, migrações 066 e 072)
   var FAIXA_COBERTURA_M = 25;   // meia-largura de varredura considerada em volta de cada rastro
   var URL_DEM = 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
 
@@ -5908,6 +6002,7 @@
       });
     }
     renderizarAreas();
+    conferirBasesTrilha();
   }
 
   // Último local visto de cada vítima (migração 062): aparece no mapa como "Última localização", com o mesmo
@@ -5965,6 +6060,7 @@
     est.trilhasManuais.forEach(function (t) { if (t.camada) t.camada.remove(); });
     est.setores = new Map();
     est.pontosInt = new Map();
+    est.assinaturaBases = null;
     est.destinos = new Map();
     est.trilhasManuais = new Map();
     est.areasProibidas.forEach(function (a) { if (a.camada) a.camada.remove(); });
@@ -6087,11 +6183,54 @@
       opacity: 1,
       lineJoin: 'round',
       fillColor: d.cor,
-      fillOpacity: d.opacidade != null ? d.opacidade : opacidadePadraoSetor(d.status),
+      fillOpacity: 0,      // o fundo colorido fica numa camada própria (fundoSetor), sem somar com os vizinhos
       className: 'setor setor-' + d.status,
     };
-    if (est.focoPessoa && d.participante_id !== est.focoPessoa) { estilo.opacity = 0.25; estilo.fillOpacity = 0.02; }
+    if (est.focoPessoa && d.participante_id !== est.focoPessoa) estilo.opacity = 0.25;
     return estilo;
+  }
+
+  // Intensidade do fundo do setor (0 a 1). Foco numa pessoa: os setores dos outros ficam quase sem fundo.
+  function opacidadeFundoSetor(d, previa) {
+    if (est.focoPessoa && d.participante_id !== est.focoPessoa) return 0.02;
+    if (previa != null) return previa;
+    return d.opacidade != null ? d.opacidade : opacidadePadraoSetor(d.status);
+  }
+
+  // Fundo dos setores: cada intensidade tem a sua camada (pane) e a transparência é aplicada na camada inteira,
+  // com os preenchimentos opacos dentro dela. Assim setores sobrepostos NÃO somam a cor (a região não escurece)
+  // e o de cima (o menor) mostra a sua cor. O modo de mistura (fundoSetores) deixa o mapa visível por baixo.
+  function paneFundoSetor(v) {
+    var n = Math.max(1, Math.min(90, Math.round(v * 100)));
+    var nome = 'fundoSetor' + n;
+    if (!est.mapa.getPane(nome)) {
+      var el = est.mapa.createPane(nome);
+      el.style.zIndex = 340;
+      el.style.opacity = String(n / 100);
+      el.style.pointerEvents = 'none';
+      el.classList.add('pane-fundo-setor');
+    }
+    return nome;
+  }
+
+  function desenharFundoSetor(s, previa) {
+    if (s.fundo) { s.fundo.remove(); s.fundo = null; }
+    if (!s.camada || !est.camadaSetores) return;
+    var d = s.d;
+    var estilo = { pane: paneFundoSetor(opacidadeFundoSetor(d, previa)), stroke: false, fill: true, fillColor: d.cor, fillOpacity: 1, interactive: false, className: 'setor-fundo' };
+    s.fundo = (d.forma === 'circulo' ? L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, estilo)) : L.polygon(d.pontos, estilo)).addTo(est.camadaSetores);
+    agendarOrdemSetores();
+  }
+
+  // Mistura do fundo com o mapa: mapa claro → multiplica (a cor tinge sem esconder ruas e relevo);
+  // mapa escuro → clareia com a cor (sem virar cinza); satélite → transparência comum.
+  function atualizarMisturaSetores() {
+    var m = $('mapa');
+    if (!m) return;
+    var claro = document.documentElement.getAttribute('data-tema') === 'claro';
+    var base = est.camadaAtual || 'osm';
+    var modo = base === 'satelite' ? 'normal' : base === 'osm' && !claro ? 'clarear' : 'multiplicar';
+    m.setAttribute('data-fundo-setores', modo);
   }
 
   // A situação some de longe (o traço e o preenchimento da área já a indicam)
@@ -6100,6 +6239,7 @@
   }
 
   function tirarSetorDoMapa(s) {
+    if (s.fundo) { s.fundo.remove(); s.fundo = null; }
     if (s.camada) { s.camada.remove(); s.camada = null; }
     if (s.filete) { s.filete.remove(); s.filete = null; }
   }
@@ -6107,9 +6247,11 @@
   function desenharSetor(s) {
     if (!est.mapa || !est.camadaSetores) return;
     var d = s.d;
+    if (s.fundo) { s.fundo.remove(); s.fundo = null; }
     if (s.camada) { s.camada.remove(); s.camada = null; }
     if (s.filete) { s.filete.remove(); s.filete = null; }
     if (est.desenho && est.desenho.tipo === 'ajuste' && est.desenho.id === d.id) return;   // sendo ajustado
+    if (!setorNoFiltro(d)) return;   // filtro por dia: setor de outro dia
     // filete escuro por baixo do contorno colorido: separa a área do fundo do mapa e de outras áreas
     var forma = { pane: 'setores', color: '#0b1220', weight: 6, opacity: 0.45, fill: false, interactive: false, lineJoin: 'round', className: 'setor-filete' };
     s.filete = (d.forma === 'circulo' ? L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, forma)) : L.polygon(d.pontos, forma)).addTo(est.camadaSetores);
@@ -6125,7 +6267,7 @@
     });
     camada.addTo(est.camadaSetores);
     s.camada = camada;
-    agendarOrdemSetores();
+    desenharFundoSetor(s);
   }
 
   // Setores menores por cima dos maiores: o contorno de quem está dentro de outro continua inteiro à vista e o toque cai nele.
@@ -6135,7 +6277,11 @@
       est.timerOrdemSetores = null;
       Array.from(est.setores.values()).filter(function (x) { return x.camada; })
         .sort(function (a, b) { return areaSetorM2(b.d) - areaSetorM2(a.d); })
-        .forEach(function (x) { if (x.filete && x.filete.bringToFront) x.filete.bringToFront(); if (x.camada.bringToFront) x.camada.bringToFront(); });
+        .forEach(function (x) {
+          if (x.fundo && x.fundo.bringToFront) x.fundo.bringToFront();
+          if (x.filete && x.filete.bringToFront) x.filete.bringToFront();
+          if (x.camada.bringToFront) x.camada.bringToFront();
+        });
     }, 0);
   }
 
@@ -6195,12 +6341,13 @@
     if (p.marcador && p._assinatura === assinatura) return;
     tirarPontoInt(p);
     p._assinatura = assinatura;
+    if (!poiNoFiltro(d)) return;   // filtro por dia: ponto marcado em outro dia
     // Área de risco: círculo do alarme de proximidade (quem entra é avisado).
     if (d.categoria === 'RISCO') {
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_ALERTA_PADRAO, color: '#ef4444', weight: 1.5, opacity: 0.7, dashArray: '6 6',
         fillColor: '#ef4444', fillOpacity: 0.05, interactive: false, className: 'circulo-risco' }).addTo(est.camadaPontosInt);
     } else if (d.categoria === 'BASE') {
-      // Base: círculo do raio (chegada do controle de retorno e área sem gravação de trilha). Bem discreto.
+      // Base: círculo do raio (chegada do controle de retorno; a trilha dentro dele não é desenhada). Bem discreto.
       p.circulo = L.circle([d.lat, d.lng], { radius: d.raio_m || RAIO_BASE_PADRAO, color: '#0ea5e9', weight: 1, opacity: 0.35, dashArray: '2 6',
         fillColor: '#0ea5e9', fillOpacity: 0.02, interactive: false, className: 'circulo-base' }).addTo(est.camadaPontosInt);
     }
@@ -6211,7 +6358,14 @@
     });
     ligarCliquesMapa(mk, {
       noDesenho: function () { aoClicarNoMapa({ latlng: mk.getLatLng() }); },
-      info: function () { return { latlng: mk.getLatLng(), titulo: d.titulo, sub: cat.rotulo, texto: resumoTexto(d.descricao, 90), deslocY: -30 }; },
+      info: function () {
+        var extras = [];
+        if (podeAlterar() && !d.ulv) {
+          extras.push({ id: 'balao-ponto-editar', texto: '✎ Editar', acao: function () { abrirFormPontoInt(p.d); } });
+          extras.push({ id: 'balao-ponto-excluir', texto: '🗑 Excluir', acao: function () { excluirPontoInt(p.d); } });
+        }
+        return { latlng: mk.getLatLng(), titulo: d.titulo, sub: cat.rotulo, texto: resumoTexto(d.descricao, 90), deslocY: -30, extras: extras };
+      },
       detalhes: function () { abrirPontoInt(d.id); },
     });
     p.marcador = mk;
@@ -6553,7 +6707,7 @@
     var opPrevia = function () {
       opTexto.textContent = (opUsarPadrao.checked ? opacidadePadraoSetor(d.status) * 100 : opFaixa.value) + '%';
       var s0 = d.id && est.setores.get(d.id);
-      if (s0 && s0.camada && s0.camada.setStyle) s0.camada.setStyle({ fillOpacity: opUsarPadrao.checked ? opacidadePadraoSetor(d.status) : Number(opFaixa.value) / 100 });
+      if (s0 && s0.camada) desenharFundoSetor(s0, opUsarPadrao.checked ? opacidadePadraoSetor(d.status) : Number(opFaixa.value) / 100);
     };
     opUsarPadrao.addEventListener('change', function () { opFaixa.disabled = opUsarPadrao.checked; opPrevia(); });
     opFaixa.addEventListener('input', function () { opUsarPadrao.checked = false; opFaixa.disabled = false; opPrevia(); });
@@ -7200,7 +7354,7 @@
       rotRaio.innerHTML = '';
       rotRaio.appendChild(document.createTextNode(k === 'BASE' ? 'Raio da base (m)' : 'Raio de alerta (m)'));
       rotRaio.appendChild(UI.dica(k === 'BASE'
-        ? 'Dentro deste círculo a trilha NÃO é gravada (só o ponto de entrada fica guardado) e quem chega com GPS preciso conta como "chegou à base" no controle de retorno. Padrão: 50 m.'
+        ? 'Dentro deste círculo a trilha continua gravada, mas não aparece no mapa (a permanência na base não vira rabisco) e quem chega com GPS preciso conta como "chegou à base" no controle de retorno. Padrão: 50 m.'
         : 'Quem entrar neste círculo recebe um alerta no celular e o painel é avisado.'));
     }
     ajustarRaio(d.categoria);
@@ -7476,7 +7630,7 @@
         ['Coordenadas', blocoCoordenadas(d.lat, d.lng), true],
         ['Altitude', alt],
         d.categoria === 'RISCO' ? ['Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m'] : null,
-        d.categoria === 'BASE' ? ['Raio da base', Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m · chegada do grupo e área sem gravação de trilha'] : null,
+        d.categoria === 'BASE' ? ['Raio da base', Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m · chegada do grupo; dentro dele a trilha continua gravada, mas não aparece no mapa'] : null,
         ['Visível para', (d.visibilidade || visibilidadePadraoPonto(d.categoria)) === 'publico' ? 'Todos os participantes' : 'Responsáveis e quem receber'],
         ['Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
         d.concluido_em ? ['Concluído', C.hora(d.concluido_em) + ' por ' + (d.concluido_por_nome || '—')] : null,
@@ -7557,6 +7711,7 @@
       if (p) tirarPontoInt(p);
       est.pontosInt.delete(d.id);
       renderizarAreas();
+      conferirBasesTrilha();
       UI.aviso('Ponto excluído.', 'ok');
     } catch (e) {
       UI.aviso(e.codigo === 'sem_permissao' ? 'Só quem marcou o ponto, quem criou a operação ou um administrador pode excluí-lo.' : e.message, 'erro', 7000);
@@ -8137,10 +8292,30 @@
     });
     ulP.innerHTML = '';
     $('pontos-int-vazio').hidden = est.pontosInt.size > 0;
+    // Seleção para excluir vários de uma vez (ULV das vítimas fica de fora: é da ficha da vítima)
+    var sel = editavel ? est.selPontos : null;
+    if (!editavel) est.selPontos = null;
+    $('areas-selecionar-pontos').hidden = !editavel || !est.pontosInt.size;
+    $('areas-selecionar-pontos').setAttribute('aria-pressed', String(Boolean(sel)));
+    $('areas-selecionar-pontos').textContent = sel ? '✕ Cancelar seleção' : '☑ Selecionar para excluir';
+    $('barra-selecao-pontos').hidden = !sel;
+    if (sel) {
+      sel.forEach(function (id) { if (!est.pontosInt.has(id)) sel.delete(id); });
+      var total = 0; est.pontosInt.forEach(function (p, id) { if (id.indexOf('ulv:') !== 0) total++; });
+      $('pontos-sel-qtd').textContent = sel.size + (sel.size === 1 ? ' marcado' : ' marcados');
+      $('pontos-sel-todos').checked = total > 0 && sel.size === total;
+      $('pontos-excluir-sel').disabled = !sel.size;
+    }
     est.pontosInt.forEach(function (p) {
       var d = p.d;
       var cat = catDoPonto(d);
-      ulP.appendChild(UI.el('li', null, [UI.el('button', { classe: 'item-area', type: 'button', 'data-ponto': d.id, onclick: function () { abrirPontoInt(d.id); } }, [
+      var marcavel = sel && !d.ulv;
+      var cb = marcavel ? UI.el('input', { type: 'checkbox', classe: 'sel-ponto', 'aria-label': 'Marcar ' + d.titulo, checked: sel.has(d.id) ? true : null }) : null;
+      if (cb) cb.addEventListener('change', function () { if (cb.checked) sel.add(d.id); else sel.delete(d.id); renderizarAreas(); });
+      ulP.appendChild(UI.el('li', { classe: marcavel ? 'item-com-selecao' : null }, [cb, UI.el('button', { classe: 'item-area', type: 'button', 'data-ponto': d.id, onclick: function () {
+        if (marcavel) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); return; }
+        abrirPontoInt(d.id);
+      } }, [
         elMarcaPonto(d),
         UI.el('span', { classe: 'item-area-txt' }, [
           UI.el('strong', { texto: d.titulo }),
@@ -8148,6 +8323,39 @@
         ]),
       ])]));
     });
+  }
+
+  async function excluirPontosSelecionados() {
+    var sel = est.selPontos;
+    if (!sel || !sel.size || !podeAlterar()) return;
+    var ids = Array.from(sel);
+    var nomes = ids.map(function (id) { var p = est.pontosInt.get(id); return p ? p.d.titulo : ''; }).filter(Boolean);
+    var r = await UI.confirmar({
+      titulo: 'Excluir ' + ids.length + (ids.length === 1 ? ' ponto' : ' pontos') + ' de interesse?',
+      texto: nomes.slice(0, 8).join(', ') + (nomes.length > 8 ? '…' : '') + '. Eles somem do mapa de todos os responsáveis. Fotos anexadas continuam na galeria.',
+      ok: 'Excluir ' + ids.length, perigo: true,
+    });
+    if (!r) return;
+    try {
+      var res;
+      try { res = await C.rpc('excluir_pontos', { p_ids: ids }, 60000); }
+      catch (e1) {
+        if (e1.codigo !== 'funcao_ausente') throw e1;
+        // banco sem a 072: um por vez
+        res = { excluidos: 0, sem_permissao: 0 };
+        for (var i = 0; i < ids.length; i++) {
+          try { await C.rpc('excluir_ponto', { p_id: ids[i] }); res.excluidos++; } catch (e2) { res.sem_permissao++; }
+        }
+      }
+      est.selPontos = null;
+      await carregarAreas();
+      conferirBasesTrilha();
+      UI.aviso(res.excluidos + (res.excluidos === 1 ? ' ponto excluído.' : ' pontos excluídos.') +
+        (res.sem_permissao ? ' ' + res.sem_permissao + ' não puderam ser excluídos: só quem marcou o ponto, quem criou a operação ou um administrador pode excluí-los.' : ''),
+        res.sem_permissao ? 'erro' : 'ok', 9000);
+    } catch (e) {
+      UI.aviso(e.codigo === 'sem_permissao' ? 'Só quem marcou os pontos, quem criou a operação ou um administrador pode excluí-los.' : 'Não foi possível excluir: ' + e.message, 'erro', 8000);
+    }
   }
 
   /* ---------- Trilhas desenhadas à mão (migração 028) --------------- */
@@ -9215,7 +9423,7 @@
   // tempo, datas e relevo (estatísticas completas).
   function infoTrilhaGps(p) {
     var g = grupoDoParticipante(p);
-    var pts = pontosVisiveisDe(p).filter(function (x) { return !x.na_base; });
+    var pts = pontosVisiveisDe(p).filter(function (x) { return !x.na_base && (!est.filtroDia || noDia(x.t)); });
     var tr = trilhaDe(p);
     var m = 0;
     tr.segmentos.forEach(function (seg) { m += comprimentoLinhaM(seg); });
@@ -11277,7 +11485,28 @@
     });
     mk.addTo(est.mapa);
     est.marcaLocal = mk;
-    if (!est.jaEnquadrou && !temAlgumaPosicao()) est.mapa.setView([op.local_lat, op.local_lng], 15);
+  }
+
+  // Ao abrir a operação o mapa vai para o LOCAL dela (o ponto do cadastro). Sem ponto cadastrado, vai para a
+  // posição de quem abriu (o responsável). Sem nenhum dos dois, enquadra os participantes quando chegarem.
+  // usarMinhaPosicao = false no link público (o visitante não está na operação).
+  function enquadrarAoAbrir(usarMinhaPosicao) {
+    var op = est.op;
+    if (!est.mapa || !op) return;
+    if (op.local_lat != null && op.local_lng != null) {
+      est.jaEnquadrou = true;   // os participantes que chegarem depois não tiram o mapa do local
+      est.mapa.setView([op.local_lat, op.local_lng], 16);
+      return;
+    }
+    if (!usarMinhaPosicao) return;
+    var opId = op.id;
+    est.jaEnquadrou = true;
+    obterMinhaPosicao().then(function (r) {
+      if (!est.op || est.op.id !== opId || !est.mapa) return;
+      if (r && r.ok) { est.mapa.setView([r.lat, r.lng], 15); return; }
+      est.jaEnquadrou = false;   // sem a posição: enquadra os participantes, como antes
+      if (temAlgumaPosicao()) { est.jaEnquadrou = true; enquadrarTodos(); }
+    });
   }
 
   function verLocalNoMapa(op) {
@@ -11399,6 +11628,7 @@
   // Foco de uma pessoa (botão de olho da lista): no mapa só ela e o que é dela.
   function visivelNoMapa(p) {
     if (est.focoPessoa && p.id !== est.focoPessoa) return false;
+    if (est.filtroDia && !temAtividadeNoDia(p)) return false;
     return visivelNoFiltro(p);
   }
 
@@ -11439,10 +11669,203 @@
   }
 
 
+
+
+  /* ---------- Funções dos participantes militares (migração 072) ---------- */
+  var FUNCOES_MILITAR = [
+    { chave: 'setores', rotulo: 'Criar setores', dica: 'Desenhar setores no mapa (tocando os cantos ou em círculo). Ele pode ajustar e excluir só os que ele mesmo criou.' },
+    { chave: 'situacao_setor', rotulo: 'Mudar a situação dos setores', dica: 'Marcar setores como pendentes, em andamento ou concluídos.' },
+    { chave: 'pontos', rotulo: 'Marcar pontos de interesse', dica: 'Vestígio, possível localização, risco, encontro, base ou outro. Aparecem para a equipe e no painel.' },
+    { chave: 'ver_setores', rotulo: 'Ver todos os setores', dica: 'Sem esta opção, ele vê só os setores atribuídos a ele, os da missão dele e os públicos.' },
+  ];
+  function abrirPermissoesMilitar() {
+    if (!est.op || !podeAlterar()) return;
+    var atual = est.op.permissoes_militar || { setores: true, situacao_setor: true, pontos: true, ver_setores: true };
+    var caixas = {};
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var lista = UI.el('div', { classe: 'lista-funcoes-militar' }, FUNCOES_MILITAR.map(function (f) {
+      var cb = UI.el('input', { type: 'checkbox', id: 'perm-' + f.chave, checked: atual[f.chave] ? true : null });
+      caixas[f.chave] = cb;
+      return UI.el('label', { classe: 'funcao-militar', for: 'perm-' + f.chave }, [cb, UI.el('span', null, [UI.el('strong', { texto: f.rotulo }), UI.el('small', { classe: 'muted', texto: f.dica })])]);
+    }));
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'perm-salvar', texto: 'Salvar' });
+    var fechar = UI.abrirModal(UI.el('form', { classe: 'form-padrao', novalidate: true, onsubmit: async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      btn.disabled = true;
+      var dados = {};
+      FUNCOES_MILITAR.forEach(function (f) { dados[f.chave] = caixas[f.chave].checked; });
+      try {
+        var r = await C.rpc('definir_permissoes_militar', { p_operacao: est.op.id, p_permissoes: dados });
+        est.op.permissoes_militar = r;
+        fechar();
+        UI.aviso('Funções dos militares salvas. Os aparelhos atualizam em até 15 segundos.', 'ok', 7000);
+      } catch (e) {
+        erro.textContent = e.codigo === 'funcao_ausente' ? 'O banco ainda não tem a migração 072 (funções dos militares).' : 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    } }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Funções dos militares' }, [UI.dica('O que os participantes MILITARES desta operação podem fazer pela página (ou aplicativo) deles. O link de civil continua simples: nada disto aparece para civis. Tudo o que eles criam fica registrado com o nome de quem fez e entra no diário.')]),
+      lista,
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]));
+  }
+
+  /* ---------- Filtro por dia (e pessoa) no mapa ---------- */
+  // Mostra no mapa só o que aconteceu num dia: trilhas (só os pontos do dia), fotos e relatos do dia, quem teve
+  // posição no dia (num dia passado, na última posição daquele dia) e, se escolhido, só os setores e pontos de
+  // interesse criados no dia. A pessoa (opcional) usa o mesmo foco do olho da lista.
+  function noDia(ms) { var f = est.filtroDia; return !f || (ms != null && ms >= f.de && ms < f.ate); }
+  function pontosDoDia(p) {
+    var f = est.filtroDia;
+    if (!f) return p.pontos;
+    if (p._dia && p._dia.chave === f.dia && p._dia.n === p.pontos.length) return p._dia.pts;
+    var r = p.pontos.filter(function (x) { return x.t >= f.de && x.t < f.ate; });
+    p._dia = { chave: f.dia, n: p.pontos.length, pts: r };
+    return r;
+  }
+  function temAtividadeNoDia(p) {
+    if (pontosDoDia(p).length) return true;
+    var pos = posicaoAtual(p);
+    return Boolean(pos && noDia(pos.t));
+  }
+  function posicaoNoMapa(p) {
+    var f = est.filtroDia;
+    var pos = posicaoAtual(p);
+    if (!f || !pos || noDia(pos.t)) return pos;
+    var pts = pontosDoDia(p).filter(function (x) { return !x.na_base; });
+    var u = pts[pts.length - 1];
+    return u ? { lat: u.lat, lng: u.lng, prec: u.prec, t: u.t } : pos;
+  }
+  function setorNoFiltro(d) {
+    var f = est.filtroDia;
+    return !f || f.setoresSempre || noDia(C.paraMs(d.criado_em));
+  }
+  function poiNoFiltro(d) {
+    var f = est.filtroDia;
+    return !f || f.pontosSempre || d.ulv || noDia(C.paraMs(d.criado_em));
+  }
+
+  function chaveDia(ms) {
+    var d = new Date(ms);
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function rotuloDia(chave) {
+    var p = chave.split('-');
+    var hoje = chaveDia(Date.now()), ontem = chaveDia(Date.now() - 864e5);
+    var dia = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    var semana = dia.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+    return p[2] + '/' + p[1] + '/' + p[0] + ' (' + (chave === hoje ? 'hoje' : chave === ontem ? 'ontem' : semana) + ')';
+  }
+  // Dias com algo registrado: posições, fotos, relatos, pontos e setores (com a contagem de posições).
+  function diasComAtividade() {
+    var dias = {};
+    function soma(ms, k) { if (ms == null || isNaN(ms)) return; var c = chaveDia(ms); dias[c] = dias[c] || { pos: 0, outros: 0 }; dias[c][k]++; }
+    est.participantes.forEach(function (p) {
+      var ult = null;
+      p.pontos.forEach(function (x) { var c = chaveDia(x.t); if (c !== ult) { dias[c] = dias[c] || { pos: 0, outros: 0 }; ult = c; } dias[c].pos++; });
+    });
+    est.fotosMarc.forEach(function (mk) { soma(mk.options.quando, 'outros'); });
+    est.relatosMarc.forEach(function (mk) { soma(mk.options.quando, 'outros'); });
+    est.pontosInt.forEach(function (x) { if (!x.d.ulv) soma(C.paraMs(x.d.criado_em), 'outros'); });
+    est.setores.forEach(function (x) { soma(C.paraMs(x.d.criado_em), 'outros'); });
+    return Object.keys(dias).sort().reverse().map(function (k) { return { dia: k, pos: dias[k].pos, outros: dias[k].outros }; });
+  }
+
+  function definirFiltroDia(f) {
+    if (f && f.dia) {
+      var p = f.dia.split('-');
+      var de = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).getTime();
+      var ate = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + 1).getTime();
+      est.filtroDia = { dia: f.dia, de: de, ate: ate, setoresSempre: f.setoresSempre !== false, pontosSempre: f.pontosSempre !== false };
+    } else {
+      est.filtroDia = null;
+    }
+    est.participantes.forEach(function (q) { q._dia = null; atualizarMarcador(q); desenharTrilha(q); });
+    aplicarFocoPontos();
+    est.setores.forEach(function (x) { desenharSetor(x); });
+    est.pontosInt.forEach(function (x) { x._assinatura = null; desenharPontoInt(x); });
+    est.listaSuja = true;
+    renderizarLista();
+    atualizarBarraFoco();
+    if (est.mapa) est.mapa.invalidateSize();
+  }
+
+  // Enquadra o que ficou à vista com o filtro (trilhas e fotos/relatos do dia).
+  function enquadrarFiltro() {
+    if (!est.mapa) return;
+    var pts = [];
+    est.participantes.forEach(function (q) {
+      if (!visivelNoMapa(q)) return;
+      var pos = posicaoNoMapa(q);
+      if (pos) pts.push([pos.lat, pos.lng]);
+      trilhaDe(q).segmentos.forEach(function (seg) { seg.forEach(function (x) { pts.push(Array.isArray(x) ? [x[0], x[1]] : [x.lat, x.lng]); }); });
+    });
+    ['fotos', 'relatos'].forEach(function (k) { marcadoresDe(k).forEach(function (mk) { if (pontoVisivelPorPref(mk, k)) { var ll = mk.getLatLng(); pts.push([ll.lat, ll.lng]); } }); });
+    if (!pts.length) { UI.aviso('Nada registrado no mapa com este filtro.'); return; }
+    if (pts.length === 1) est.mapa.setView(pts[0], Math.max(est.mapa.getZoom(), 16));
+    else est.mapa.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 17 });
+  }
+
+  function abrirFiltroMapa() {
+    if (!est.op) return;
+    fecharMenu(false);
+    var f = est.filtroDia || { setoresSempre: true, pontosSempre: true };
+    var dias = diasComAtividade();
+    var selDia = UI.el('select', { classe: 'campo', id: 'filtro-dia' }, [UI.el('option', { value: '', texto: 'Todos os dias' })].concat(dias.map(function (x) {
+      return UI.el('option', { value: x.dia, texto: rotuloDia(x.dia) + ' · ' + (x.pos ? x.pos.toLocaleString('pt-BR') + ' posições' : 'sem trilha') + (x.outros ? ' · ' + x.outros + ' registro(s)' : '') });
+    })));
+    if (f.dia && !dias.some(function (x) { return x.dia === f.dia; })) selDia.appendChild(UI.el('option', { value: f.dia, texto: rotuloDia(f.dia) }));
+    selDia.value = f.dia || '';
+    var outroDia = UI.el('input', { type: 'date', classe: 'campo', id: 'filtro-dia-outro', 'aria-label': 'Outro dia' });
+    outroDia.addEventListener('change', function () {
+      if (!outroDia.value) return;
+      if (!Array.prototype.some.call(selDia.options, function (o) { return o.value === outroDia.value; })) selDia.appendChild(UI.el('option', { value: outroDia.value, texto: rotuloDia(outroDia.value) }));
+      selDia.value = outroDia.value;
+    });
+    var pessoas = Array.from(est.participantes.values()).sort(ordemLista);
+    var selPessoa = UI.el('select', { classe: 'campo', id: 'filtro-pessoa' }, [UI.el('option', { value: '', texto: 'Todas as pessoas' })].concat(pessoas.map(function (q) {
+      return UI.el('option', { value: q.id, texto: nomeExibido(q) + (q.dados.removido ? ' (fora da operação)' : '') });
+    })));
+    selPessoa.value = est.focoPessoa || '';
+    var cbSetores = UI.el('input', { type: 'checkbox', id: 'filtro-setores-sempre', checked: f.setoresSempre !== false ? true : null });
+    var cbPontos = UI.el('input', { type: 'checkbox', id: 'filtro-pontos-sempre', checked: f.pontosSempre !== false ? true : null });
+    var fechar = UI.abrirModal(UI.el('form', { classe: 'form-padrao form-filtro-mapa', novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault();
+      fechar();
+      var pid = selPessoa.value || null;
+      if ((est.focoPessoa || null) !== pid) { if (pid) focarPessoa(pid); else if (est.focoPessoa) focarPessoa(null); }
+      definirFiltroDia(selDia.value ? { dia: selDia.value, setoresSempre: cbSetores.checked, pontosSempre: cbPontos.checked } : null);
+      if (selDia.value || pid) enquadrarFiltro();
+    } }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Filtrar o mapa' }, [UI.dica('Escolha um dia para ver só o que foi feito nele: trilhas (só os trechos do dia), fotos, relatos e quem esteve em campo (num dia passado, cada pessoa aparece onde estava no fim daquele dia). Os alertas continuam chegando normalmente. O filtro não fica lembrado ao recarregar.')]),
+      UI.grade([
+        UI.campo('Dia', selDia, { para: 'filtro-dia' }),
+        UI.campo('Outro dia', outroDia, { para: 'filtro-dia-outro' }),
+        UI.campo('Pessoa', selPessoa, { para: 'filtro-pessoa' }),
+      ]),
+      UI.secao('Com um dia escolhido', [
+        UI.el('label', { classe: 'opcao-check' }, [cbSetores, ' Mostrar todos os setores, de qualquer dia']),
+        UI.el('label', { classe: 'opcao-check' }, [cbPontos, ' Mostrar todos os pontos de interesse, de qualquer dia']),
+      ]),
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', id: 'filtro-limpar', texto: 'Limpar filtros', onclick: function () {
+          fechar();
+          if (est.focoPessoa) focarPessoa(null);
+          definirFiltroDia(null);
+        } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'filtro-aplicar', texto: 'Aplicar' }),
+      ]),
+    ]));
+  }
+
   /* ---------- Foco numa pessoa (olho da lista) ---------- */
   // A pessoa, a trilha, as fotos, os relatos, os setores e o destino dela aparecem; o resto some do mapa
   // (setores de outros ficam bem fracos). Não fica lembrado ao recarregar.
   function pontoVisivelPorPref(mk, chave) {
+    if (est.filtroDia && mk.options.quando != null && !noDia(mk.options.quando)) return false;
     if (est.focoPessoa) return mk.options.donoId === est.focoPessoa;
     return Boolean(est.prefsMapa[chave]);
   }
@@ -11451,7 +11874,7 @@
     ['fotos', 'relatos'].forEach(function (chave) {
       marcadoresDe(chave).forEach(function (mk) { mostrarPonto(mk, pontoVisivelPorPref(mk, chave)); });
     });
-    est.setores.forEach(function (s) { if (s.camada && s.camada.setStyle) s.camada.setStyle(estiloSetor(s.d)); });
+    est.setores.forEach(function (s) { if (s.camada && s.camada.setStyle) s.camada.setStyle(estiloSetor(s.d)); desenharFundoSetor(s); });
     desenharDestinosGrupo();
   }
 
@@ -11493,14 +11916,19 @@
   function atualizarBarraFoco() {
     var barra = $('barra-foco');
     var p = est.focoPessoa && est.participantes.get(est.focoPessoa);
-    if (!p) { if (barra) barra.remove(); return; }
+    var f = est.filtroDia;
+    if (!p && !f) { if (barra) barra.remove(); return; }
     if (!barra) {
       barra = UI.el('div', { id: 'barra-foco', classe: 'barra-foco', role: 'status' });
       $('mapa').parentNode.appendChild(barra);
     }
     barra.innerHTML = '';
-    barra.appendChild(UI.el('span', { classe: 'barra-foco-txt', texto: '👁 Mostrando só ' + nomeExibido(p) }));
-    barra.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'foco-sair', texto: '✕ Mostrar todos', onclick: function () { focarPessoa(null); } }));
+    var txt = (f ? '📅 ' + rotuloDia(f.dia) : '') + (f && p ? ' · ' : '') + (p ? '👁 Mostrando só ' + nomeExibido(p) : '');
+    barra.appendChild(UI.el('button', { classe: 'barra-foco-txt', type: 'button', title: 'Mudar o filtro', texto: txt, onclick: function () { abrirFiltroMapa(); } }));
+    barra.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'foco-sair', texto: '✕ Mostrar todos', onclick: function () {
+      if (est.filtroDia) definirFiltroDia(null);
+      if (est.focoPessoa) focarPessoa(null);
+    } }));
   }
 
   function focarPessoa(id) {
@@ -11735,7 +12163,7 @@
               onclick: function () { alternarGrupoFiltro(g.id); render(); } }),
             UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Membros', onclick: function () { abrirMembrosGrupo(g.id); } }),
             est.op.status === 'ativa' && editavel ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'grupo-mensagem-' + g.id, texto: '✉ Mensagem ao grupo', title: 'Envia a mesma mensagem ou orientação, de uma vez, a todos os integrantes de campo',
-              onclick: function () { abrirMensagemAoGrupo(g.id); } }) : null,
+              onclick: function () { abrirMensagemVarios([g.id]); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Link do grupo', onclick: function () { abrirLinkGrupo(g.id); } }) : null,
             est.op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar destino', onclick: async function () {
               if (window.RecursosEquipe && !(await window.RecursosEquipe.confirmarEnvio(g))) return;
@@ -11872,55 +12300,105 @@
   }
 
 
-  // Mesma mensagem ou orientação, de uma vez, para todos os integrantes de campo do grupo (migração 067).
-  function abrirMensagemAoGrupo(gid) {
-    var g = est.grupos.get(gid);
-    if (!g || !podeAlterar()) return;
-    var alvos = membrosDe(gid).filter(function (x) { return !x.p.dados.removido && !x.p.dados.liberado_em && tipoDe(x.p.dados) !== 'responsavel' && !ehEu(x.p); });
-    if (!alvos.length) { UI.aviso(C.traduzirErro({ message: 'grupo_sem_integrantes' }), 'erro', 7000); return; }
+  // Mesma mensagem ou orientação, de uma vez, para TODOS os participantes de campo da operação ou para os
+  // integrantes dos grupos escolhidos (migração 072; com a 067, só um grupo por vez). gids = null → todos.
+  function abrirMensagemVarios(gids) {
+    if (!est.op || !podeAlterar()) return;
+    var escolha = { todos: !gids || !gids.length, grupos: new Set(gids || []) };
+    function deCampo(p) { return !p.dados.removido && !p.dados.liberado_em && tipoDe(p.dados) !== 'responsavel' && !ehEu(p); }
+    function alvos() {
+      if (escolha.todos) return Array.from(est.participantes.values()).filter(deCampo);
+      var vistos = new Set(), r = [];
+      escolha.grupos.forEach(function (gid) {
+        membrosDe(gid).forEach(function (x) { if (deCampo(x.p) && !vistos.has(x.p.id)) { vistos.add(x.p.id); r.push(x.p); } });
+      });
+      return r;
+    }
     var tipo = UI.el('select', { classe: 'campo', id: 'msg-grupo-tipo' }, ['PERSONALIZADA', 'ATENCAO', 'RETORNE', 'MUDE_ROTA', 'PARE', 'CONFIRME'].map(function (k) {
       return UI.el('option', { value: k, texto: k === 'PERSONALIZADA' ? 'Mensagem livre' : 'Orientação: ' + C.TIPOS_MENSAGEM[k].rotulo });
     }));
-    var texto = UI.el('textarea', { classe: 'campo', id: 'msg-grupo-texto', rows: '4', maxlength: '500', placeholder: 'Escreva a mensagem para o grupo' });
+    var texto = UI.el('textarea', { classe: 'campo', id: 'msg-grupo-texto', rows: '4', maxlength: '500', placeholder: 'Escreva a mensagem' });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'msg-grupo-enviar' });
-    var comFalha = alvos.filter(function (x) { var e = estadoDe(x.p); return !(e.cod === 'conectado' || e.cod === 'instavel' || e.cod === 'parado'); });
+    var resumo = UI.el('p', { classe: 'msg-varios-resumo', id: 'msg-varios-resumo' });
+    var nota = UI.el('p', { classe: 'nota', hidden: true });
+
+    var opTodos = UI.el('input', { type: 'radio', name: 'msg-dest', id: 'msg-dest-todos', value: 'todos', checked: escolha.todos ? true : null });
+    var opGrupos = UI.el('input', { type: 'radio', name: 'msg-dest', id: 'msg-dest-grupos', value: 'grupos', checked: escolha.todos ? null : true });
+    var listaGrupos = UI.el('div', { classe: 'msg-varios-grupos', role: 'group', 'aria-label': 'Grupos que recebem' });
+    var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    grupos.forEach(function (g) {
+      var n = membrosDe(g.id).filter(function (x) { return deCampo(x.p); }).length;
+      var cb = UI.el('input', { type: 'checkbox', value: g.id, 'data-grupo': g.id, checked: escolha.grupos.has(g.id) ? true : null });
+      cb.addEventListener('change', function () {
+        if (cb.checked) escolha.grupos.add(g.id); else escolha.grupos.delete(g.id);
+        if (cb.checked) { escolha.todos = false; opGrupos.checked = true; }
+        atualizar();
+      });
+      listaGrupos.appendChild(UI.el('label', { classe: 'msg-varios-grupo' }, [cb, ' ', chipGrupo(g), ' ', UI.el('span', { texto: g.nome }), UI.el('small', { classe: 'muted', texto: ' · ' + n + ' de campo' })]));
+    });
+    if (!grupos.length) listaGrupos.appendChild(UI.el('p', { classe: 'muted', texto: 'Nenhum grupo nesta operação (crie em Ferramentas → Grupos).' }));
+    opTodos.addEventListener('change', function () { if (opTodos.checked) { escolha.todos = true; atualizar(); } });
+    opGrupos.addEventListener('change', function () { if (opGrupos.checked) { escolha.todos = false; atualizar(); } });
+
     function ehPadrao(v) { return Object.keys(C.TIPOS_MENSAGEM).some(function (j) { return C.TIPOS_MENSAGEM[j].padrao && C.TIPOS_MENSAGEM[j].padrao === v; }); }
-    function ajustar() {
+    function atualizar() {
       var k = tipo.value, atual = texto.value;
       if (k === 'PERSONALIZADA') { if (ehPadrao(atual)) texto.value = ''; }
       else if (!atual.trim() || ehPadrao(atual)) texto.value = C.TIPOS_MENSAGEM[k].padrao;   // o texto padrão da orientação (dá para complementar)
-      btn.textContent = 'ENVIAR A ' + alvos.length + ' INTEGRANTE' + (alvos.length === 1 ? '' : 'S');
+      listaGrupos.classList.toggle('desligado', escolha.todos);
+      var a = alvos();
+      resumo.textContent = a.length ? (a.length + ' pessoa(s): ' + a.map(nomeExibido).slice(0, 8).join(', ') + (a.length > 8 ? '…' : '')) : (escolha.todos ? 'Nenhum participante de campo ativo.' : 'Escolha ao menos um grupo.');
+      var semCon = a.filter(function (p) { var e = estadoDe(p); return !(e.cod === 'conectado' || e.cod === 'instavel' || e.cod === 'parado'); });
+      nota.hidden = !semCon.length;
+      nota.textContent = semCon.length + ' pessoa(s) estão sem conexão agora (' + semCon.map(nomeExibido).slice(0, 4).join(', ') + (semCon.length > 4 ? '…' : '') + '): a mensagem fica aguardando e só chega quando o celular reconectar.';
+      btn.textContent = 'ENVIAR A ' + a.length + ' PESSOA' + (a.length === 1 ? '' : 'S');
+      btn.disabled = !a.length;
       btn.className = 'btn ' + (C.TIPOS_MENSAGEM[k].critico ? 'btn-perigo' : 'btn-escuro');
     }
-    tipo.addEventListener('change', ajustar);
-    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Mensagem ao grupo' }, [UI.dica('A mesma mensagem vai de uma vez para cada integrante de campo do grupo. Cada um recebe a sua, com a própria confirmação de entrega.')]),
-      UI.el('p', null, [chipGrupo(g), ' ', UI.el('strong', { texto: g.nome }), ' · ' + alvos.length + ' integrante(s): ' + alvos.map(function (x) { return x.p.dados.nome; }).slice(0, 8).join(', ') + (alvos.length > 8 ? '…' : '')]),
-      comFalha.length ? UI.el('p', { classe: 'nota', texto: comFalha.length + ' integrante(s) estão sem conexão agora (' + comFalha.map(function (x) { return x.p.dados.nome; }).slice(0, 4).join(', ') + (comFalha.length > 4 ? '…' : '') + '): a mensagem fica aguardando e só chega quando o celular reconectar.' }) : null,
+    tipo.addEventListener('change', atualizar);
+    var form = UI.el('form', { classe: 'form-padrao form-msg-varios', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Mensagem para vários' }, [UI.dica('A mesma mensagem vai de uma vez para cada pessoa escolhida (todos os participantes de campo ou os integrantes dos grupos marcados). Cada um recebe a sua, com a própria confirmação de entrega. Quem está em mais de um grupo recebe uma vez só.')]),
+      UI.secao('Para quem', [
+        UI.el('label', { classe: 'msg-varios-opcao' }, [opTodos, ' ', UI.el('strong', { texto: 'Todos os participantes da operação' })]),
+        UI.el('label', { classe: 'msg-varios-opcao' }, [opGrupos, ' ', UI.el('strong', { texto: 'Só os grupos marcados' })]),
+        listaGrupos,
+        resumo,
+        nota,
+      ]),
       UI.campo('Tipo', tipo, { para: 'msg-grupo-tipo' }),
       UI.campo('Texto', texto, { para: 'msg-grupo-texto', largo: true }),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
-    ajustar();
+    atualizar();
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       erro.hidden = true;
-      var k = tipo.value, t = texto.value.trim();
+      var k = tipo.value, t = texto.value.trim(), a = alvos();
+      if (!a.length) { erro.textContent = escolha.todos ? 'Ninguém para receber.' : 'Escolha ao menos um grupo com gente de campo.'; erro.hidden = false; return; }
       if (k === 'PERSONALIZADA' && !t) { erro.textContent = 'Escreva a mensagem.'; erro.hidden = false; texto.focus(); return; }
-      if (C.TIPOS_MENSAGEM[k].critico) {
-        var sim = await UI.confirmar({ titulo: 'Confirmar envio: ' + C.TIPOS_MENSAGEM[k].rotulo, texto: 'A orientação vai agora para ' + alvos.length + ' integrante(s) de ' + g.nome + '.', ok: 'ENVIAR AO GRUPO', perigo: true });
+      var para = escolha.todos ? 'todos os ' + a.length + ' participantes' : a.length + ' integrante(s) de ' + Array.from(escolha.grupos).map(function (g) { var x = est.grupos.get(g); return x ? x.nome : '?'; }).join(', ');
+      if (C.TIPOS_MENSAGEM[k].critico || escolha.todos) {
+        var sim = await UI.confirmar({ titulo: 'Confirmar envio: ' + C.TIPOS_MENSAGEM[k].rotulo, texto: 'A mensagem vai agora para ' + para + '.', ok: 'ENVIAR', perigo: Boolean(C.TIPOS_MENSAGEM[k].critico) });
         if (!sim) return;
       }
       btn.disabled = true;
+      var gidsEnvio = escolha.todos ? null : Array.from(escolha.grupos);
       try {
-        var r = await C.rpc('enviar_mensagem_grupo', { p_grupo: gid, p_tipo: k, p_texto: t }, 30000);
+        var r;
+        try {
+          r = await C.rpc('enviar_mensagem_varios', { p_operacao: est.op.id, p_tipo: k, p_texto: t, p_grupos: gidsEnvio }, 60000);
+        } catch (e1) {
+          // banco sem a 072: um grupo só ainda vai pela função da 067
+          if (e1.codigo !== 'funcao_ausente' || !gidsEnvio || gidsEnvio.length !== 1) throw e1;
+          r = await C.rpc('enviar_mensagem_grupo', { p_grupo: gidsEnvio[0], p_tipo: k, p_texto: t }, 30000);
+        }
         (r.mensagens || []).forEach(function (m) { receberMensagem(m, true); });
         fechar(true);
-        UI.aviso('Mensagem enviada a ' + r.enviadas + ' integrante(s) de ' + g.nome + '.' + (r.falhas ? ' ' + r.falhas + ' não receberam (limite de mensagens por minuto): envie de novo em instantes.' : ''), r.falhas ? 'erro' : 'ok', 8000);
+        UI.aviso('Mensagem enviada a ' + r.enviadas + ' pessoa(s).' + (r.falhas ? ' ' + r.falhas + ' não receberam: envie de novo em instantes.' : ''), r.falhas ? 'erro' : 'ok', 8000);
       } catch (e) {
-        erro.textContent = e.codigo === 'funcao_ausente' ? 'O banco ainda não tem a migração 067 (mensagem ao grupo).' : 'Não foi possível enviar: ' + e.message;
+        erro.textContent = e.codigo === 'funcao_ausente' ? 'O banco ainda não tem a migração 072 (mensagem para todos ou vários grupos).' : 'Não foi possível enviar: ' + e.message;
         erro.hidden = false;
         btn.disabled = false;
       }
@@ -12867,9 +13345,13 @@
     grupoNome: function (p) { var g = grupoDoParticipante(p); return g ? g.nome : null; },
     trechosApagados: function (p) { var iv = intervalosDe(p); return iv ? iv.length : 0; },
     focar: focarPessoa,
+    mensagemVarios: abrirMensagemVarios,
+    filtrarMapa: abrirFiltroMapa,
+    recarregarAreas: function () { return carregarAreas(); },
     abrirPessoa: function (id) { selecionar(id); },
     tipo: function (p) { return tipoDe(p.dados); },
-    trilha: function (p) { return trilhaDePontos(p.pontos, true, intervalosDe(p)); },
+    trilha: function (p) { return trilhaDePontos(pontosDoDia(p), true, intervalosDe(p)); },
+    filtroDia: function () { return est.filtroDia ? Object.assign({}, est.filtroDia) : null; },
     posicao: function (p) { return posicaoAtual(p); },
     pontosInteresse: function () { return Array.from(est.pontosInt.values()).map(function (x) { return x.d; }); },
     setores: function () { return Array.from(est.setores.values()).map(function (x) { return x.d; }); },

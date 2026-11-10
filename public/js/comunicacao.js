@@ -181,6 +181,9 @@
     grupo_invalido: 'O grupo escolhido não pertence a esta operação (pode ter sido excluído).',
     participante_em_outro_grupo: 'Esta pessoa já está em outro grupo. Tire-a do grupo atual (Ferramentas → Grupos → Membros) antes de colocá-la neste.',
     grupo_sem_integrantes: 'Este grupo não tem integrantes de campo ativos para receber a mensagem.',
+    sem_destinatarios: 'Ninguém para receber: não há participantes de campo ativos entre os escolhidos.',
+    so_militar: 'Esta função é só para participantes militares.',
+    funcao_nao_liberada: 'Esta função não está liberada para você nesta operação (o responsável controla no painel).',
     // depois de responsavel_trajeto_invalido (a busca pelo código é por trecho do texto)
     trajeto_invalido: 'Trajeto inválido: desenhe uma linha com pelo menos 2 pontos.',
     cenario_imutavel_aprovado: 'Esta versão do cenário já foi aprovada e não pode mais ser alterada. Crie uma nova versão.',
@@ -292,7 +295,7 @@
   // Link público do painel do comando: só leitura. Qualquer chamada ao servidor que não seja a leitura do próprio link
   // é recusada aqui (o servidor também recusa: quem abre o link não tem permissão de escrita).
   var somenteLeitura = false;
-  var LEITURAS_PUBLICAS = ['comando_publico'];
+  var LEITURAS_PUBLICAS = ['comando_publico', 'comando_publico_posicoes'];
   async function rpc(nome, args, ms) {
     if (!cliente) throw criarErro({ message: 'Aplicativo não configurado.' });
     if (somenteLeitura && LEITURAS_PUBLICAS.indexOf(nome) === -1) throw criarErro({ message: 'somente_leitura' });

@@ -125,13 +125,27 @@
     return false;
   }
 
-  // Rastro GPS: os pontos marcados na_base (entrada na base) não entram na linha; a linha se divide neles,
-  // para a longa permanência na base não virar uma "falha" nem uma reta atravessando a base.
-  // pontos = [{ na_base?, … }] em ordem de horário. Devolve as partes (cada uma sem pontos na_base).
-  function dividirNaBase(pontos) {
+  // Rastro GPS: os pontos marcados na_base (dentro do raio de uma base, gravados mesmo assim desde a migração 072)
+  // não entram na linha; a linha se divide neles, para a longa permanência na base não virar uma "falha" nem uma
+  // reta atravessando a base. bases (opcional) = [{ lat, lng, raio_m }]: os pontos dentro delas também ficam de
+  // fora do desenho (base criada ou movida depois de o ponto chegar).
+  // pontos = [{ na_base?, lat, lng, … }] em ordem de horário. Devolve as partes (cada uma sem pontos na base).
+  function dividirNaBase(pontos, bases) {
     var partes = [], atual = [];
+    var cs = (bases || []).filter(function (b) { return b && isFinite(b.lat) && isFinite(b.lng); }).map(function (b) {
+      var r = b.raio_m || 50;
+      return { lat: b.lat, lng: b.lng, r2: r * r, kx: 111320 * Math.cos(b.lat * Math.PI / 180) };
+    });
+    function naBase(p) {
+      if (p.na_base) return true;
+      for (var i = 0; i < cs.length; i++) {
+        var c = cs[i], dy = (p.lat - c.lat) * 110540, dx = (p.lng - c.lng) * c.kx;
+        if (dx * dx + dy * dy <= c.r2) return true;
+      }
+      return false;
+    }
     (pontos || []).forEach(function (p) {
-      if (p.na_base) { if (atual.length) partes.push(atual); atual = []; }
+      if (naBase(p)) { if (atual.length) partes.push(atual); atual = []; }
       else atual.push(p);
     });
     if (atual.length) partes.push(atual);

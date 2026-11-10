@@ -294,6 +294,7 @@
                 <button class="menu-item menu-vitima" type="button" id="menu-vitima"><span class="ico-item" aria-hidden="true">✚</span><span>Vítima encontrada</span></button>
                 <button class="menu-item" type="button" id="menu-vitima-rapida"><span class="ico-item" aria-hidden="true">⚡</span><span>Cadastro rápido de vítima</span></button>
                 <button class="menu-item" type="button" id="menu-destino"><span class="ico-item" aria-hidden="true">⌖</span><span>Enviar destino</span></button>
+                <button class="menu-item" type="button" id="menu-msg-varios" title="A mesma mensagem, de uma vez, para todos os participantes ou para os grupos escolhidos"><span class="ico-item" aria-hidden="true">✉</span><span>Mensagem para todos ou grupos</span></button>
                 <button class="menu-item" type="button" id="menu-ajuda"><span class="ico-item" aria-hidden="true">🆘</span><span>Pedidos de ajuda</span><small class="menu-estado" id="menu-ajuda-qtd"></small></button>
                 </div>
               </section>
@@ -305,12 +306,14 @@
                 <button class="menu-item" type="button" id="menu-binomio"><span class="ico-item" aria-hidden="true">🐕</span><span>Binômio (cão e condutor)</span><small class="menu-estado" id="menu-binomio-qtd"></small></button>
                 <button class="menu-item" type="button" id="menu-drone-agua"><span class="ico-item" aria-hidden="true">✈</span><span>Drone e água</span><small class="menu-estado" id="menu-obs-qtd"></small></button>
                 <button class="menu-item" type="button" id="menu-acesso" title="Código da operação e pessoas pedindo para entrar"><span class="ico-item" aria-hidden="true">🔑</span><span>Código e pedidos de acesso</span><small class="menu-estado" id="menu-acesso-qtd"></small></button>
+                <button class="menu-item" type="button" id="menu-perm-militar" title="O que os participantes militares podem fazer pela página deles (criar setores, marcar pontos…)"><span class="ico-item" aria-hidden="true">🎖</span><span>Funções dos militares</span></button>
                 <button class="menu-item" type="button" id="btn-equipe" title="Responsáveis desta operação"><span class="ico-item" aria-hidden="true">◆</span><span>Equipe de responsáveis</span></button>
                 </div>
               </section>
               <section class="menu-secao" data-secao="mapa">
                 <button class="menu-secao-titulo" type="button" aria-expanded="true">Mapa e arquivos</button>
                 <div class="menu-secao-itens">
+                <button class="menu-item" type="button" id="menu-filtro-mapa" title="Ver no mapa só o que foi feito num dia, ou só uma pessoa"><span class="ico-item" aria-hidden="true">📅</span><span>Filtrar por dia ou pessoa</span></button>
                 <button class="menu-item" type="button" id="menu-areas"><span class="ico-item" aria-hidden="true">≡</span><span>Setores, trilhas e pontos</span></button>
                 <button class="menu-item" type="button" id="menu-borracha-gps" title="Borracha: apaga trechos da trilha de GPS de um participante (os pontos continuam guardados)"><span class="ico-item" aria-hidden="true">✂</span><span>Apagar trecho de trilha de GPS</span></button>
                 <button class="menu-item" type="button" id="menu-ir-coord"><span class="ico-item" aria-hidden="true">✛</span><span>Ir para coordenada</span></button>
@@ -572,6 +575,12 @@
             <h3>Pontos de interesse (<span id="qtd-pontos-int">0</span>)</h3>
             <div class="acoes-linha">
               <button class="btn btn-pequeno" type="button" id="areas-novo-ponto">＋ Marcar ponto</button>
+              <button class="btn btn-pequeno" type="button" id="areas-selecionar-pontos" aria-pressed="false" title="Marcar vários pontos para excluir de uma vez">☑ Selecionar para excluir</button>
+            </div>
+            <div class="barra-selecao-pontos" id="barra-selecao-pontos" hidden>
+              <label><input type="checkbox" id="pontos-sel-todos"> Todos</label>
+              <span class="muted" id="pontos-sel-qtd">0 marcados</span>
+              <button class="btn btn-pequeno btn-perigo" type="button" id="pontos-excluir-sel" disabled>🗑 Excluir marcados</button>
             </div>
             <ul class="lista-areas" id="lista-pontos-int"></ul>
             <p class="muted" id="pontos-int-vazio">Nenhum ponto marcado ainda.</p>
@@ -619,6 +628,7 @@
         </div>
         <div class="ficha-corpo central-corpo">
           <div id="painel-msgs" role="tabpanel" aria-labelledby="aba-msgs">
+            <button class="btn btn-pequeno btn-escuro btn-msg-varios" type="button" id="central-msg-varios" title="A mesma mensagem, de uma vez, para todos os participantes ou para os grupos escolhidos">✉ Mensagem para todos ou grupos</button>
             <div class="filtros" role="group" aria-label="Filtrar">
               <button class="btn btn-pequeno btn-ativo" type="button" data-filtro="todas">Todas</button>
               <button class="btn btn-pequeno" type="button" data-filtro="relatos">Relatos</button>

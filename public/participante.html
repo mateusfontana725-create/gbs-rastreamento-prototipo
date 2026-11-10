@@ -267,6 +267,14 @@
           <ul class="fotos-minhas" id="fotos-minhas"></ul>
         </section>
 
+            <!-- Só militares, conforme as funções liberadas pelo responsável (migração 072) -->
+            <section class="ferramentas-militar" id="ferramentas-militar" hidden aria-labelledby="tit-ferr-militar">
+              <h3 class="titulo-secao" id="tit-ferr-militar">Ferramentas do militar</h3>
+              <button class="btn" type="button" id="fm-setor" hidden>▱ Criar setor (tocar os cantos no mapa)</button>
+              <button class="btn" type="button" id="fm-setor-circulo" hidden>◯ Criar setor em círculo</button>
+              <button class="btn" type="button" id="fm-ponto" hidden>📍 Marcar ponto de interesse</button>
+              <p class="muted fm-dica" id="fm-dica"></p>
+            </section>
             <div class="folha-legenda" id="folha-legenda"></div>
             <button class="btn btn-notif" type="button" id="btn-notif" hidden>🔔 Avisar quando os bombeiros mandarem mensagem</button>
             <label class="linha-opcao" hidden><input type="checkbox" id="opt-tela" checked> Manter a tela ligada</label>

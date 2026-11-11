@@ -3370,6 +3370,16 @@ console.log('\nLink público em partes, mensagem para vários, pontos em lote e 
   chk(/participante_invalido/.test(await erroDe(rpc(anM[2], 'local_da_operacao', { p_participante: mil.participante_id }))), 'outra conta não lê o local pelo participante dos outros');
   // 076: o responsável da operação apaga relatos (com o ponto criado a partir deles) e fotos dos participantes
   const relA = await rpc(anM[1], 'participante_enviar_mensagem', { p_participante: mil.participante_id, p_categoria: 'PISTA', p_texto: 'Pegada recente', p_lat: -25.6, p_lng: -49.4, p_client_id: uid(7001) });
+  // 079: a mesma mensagem enviada de novo (ou em dois pedidos juntos) devolve a gravada, sem erro de duplicidade
+  await db.exec(ler('supabase/migracoes/079_mensagem_reenvio_simultaneo.sql'));
+  await db.exec(ler('supabase/migracoes/079_mensagem_reenvio_simultaneo.sql'));
+  chk(true, 'migração 079 executa duas vezes (idempotente)');
+  const relA2 = await rpc(anM[1], 'participante_enviar_mensagem', { p_participante: mil.participante_id, p_categoria: 'PISTA', p_texto: 'Pegada recente', p_lat: -25.6, p_lng: -49.4, p_client_id: uid(7001) });
+  chk(relA2.id === relA.id && (await db.query(`select count(*)::int n from public.mensagens where client_id = $1`, [uid(7001)])).rows[0].n === 1, 'reenvio da mensagem (079) devolve a mesma, sem duplicar');
+  const vit1 = await rpc(anM[1], 'participante_registrar_vitima', { p_participante: mil.participante_id, p_condicao: 'viva', p_lat: -25.6, p_lng: -49.4, p_client_id: uid(7004) });
+  const vit2 = await rpc(anM[1], 'participante_registrar_vitima', { p_participante: mil.participante_id, p_condicao: 'viva', p_lat: -25.6, p_lng: -49.4, p_client_id: uid(7004) });
+  chk(vit1.id === vit2.id && (await db.query(`select count(*)::int n from public.vitima_localizacoes where mensagem_id = $1`, [vit1.id])).rows[0].n === 1, 'reenvio do aviso de vítima (079) não duplica o registro');
+  chk(/sem_permissao|permission denied|participante_invalido/.test(await erroDe(rpc(anM[2], 'participante_enviar_mensagem', { p_participante: mil.participante_id, p_categoria: 'PISTA', p_texto: 'x', p_client_id: uid(7001) }))), 'outra conta não lê a mensagem de outro participante pelo client_id');
   const ptRel = await rpc(resp1, 'salvar_ponto', { p_operacao: opM.id, p_id: null, p_dados: JSON.stringify({ categoria: 'VESTIGIO', titulo: 'Do relato', lat: -25.6, lng: -49.4 }) });
   await db.query(`update public.pontos_interesse set mensagem_id = $1 where id = $2`, [relA.id, ptRel.id]);
   chk(/sem_permissao/.test(await erroDe(rpc(anM[1], 'excluir_relato', { p_id: relA.id }))), 'o participante não exclui o próprio relato pela função do responsável');
@@ -3430,5 +3440,5 @@ console.log('\nBucket público de mapas (077)');
   chk(/row-level security|permission denied/.test(await erroDe(como(resp1, `insert into storage.objects (bucket_id, name) values ('mapas', 'parana.pmtiles')`))), 'responsável não grava no bucket de mapas pelo app');
 }
 
-console.log('\nMigrações 007–078 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–079 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

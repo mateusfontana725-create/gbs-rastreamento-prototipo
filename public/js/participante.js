@@ -3364,7 +3364,19 @@
     });
   }
 
+  // Mensagens em envio agora (por client_id): a volta da internet dispara o reenvio por mais de um
+  // caminho ao mesmo tempo; a mesma mensagem nunca vai em dois pedidos paralelos.
+  var msgEmEnvio = new Set();
+
+  // Erro de duplicidade de versões antigas do banco: a mensagem já estava gravada; tentar de novo
+  // devolve a gravada (o servidor reconhece o client_id).
+  function erroDuplicidade(texto) {
+    return /mensagens_cliente_unico|duplicate key|23505/.test(String(texto || ''));
+  }
+
   async function enviarMensagemPendente(item) {
+    if (msgEmEnvio.has(item.client_id)) return false;
+    msgEmEnvio.add(item.client_id);
     try {
       var m = item.categoria === 'VITIMA' ? await C.rpc('participante_registrar_vitima', {
         p_participante: estado.part.participante_id,
@@ -3389,20 +3401,35 @@
       return true;
     } catch (e) {
       if (tratarErroFatal(e)) return false;
-      if (!e.rede) {
+      if (!e.rede && !erroDuplicidade(e.message) && !erroDuplicidade(e.codigo)) {
         item.erro = e.message;
         salvarMsgPendentes();
         renderizarHistorico();
         UI.aviso(e.message, 'erro', 7000);
       }
       return false;
+    } finally {
+      msgEmEnvio.delete(item.client_id);
     }
   }
 
+  // Reenvia em ordem o que ficou no aparelho. Uma rodada por vez.
   async function reenviarMensagens() {
-    var copia = estado.msgPendentes.filter(function (x) { return !x.erro; });
-    for (var i = 0; i < copia.length; i++) {
-      if (!(await enviarMensagemPendente(copia[i]))) break;
+    if (estado.reenviandoMsgs) return;
+    estado.reenviandoMsgs = true;
+    try {
+      var mudou = false;
+      estado.msgPendentes.forEach(function (x) {
+        if (x.erro && erroDuplicidade(x.erro)) { delete x.erro; mudou = true; }
+      });
+      if (mudou) { salvarMsgPendentes(); renderizarHistorico(); }
+      var copia = estado.msgPendentes.filter(function (x) { return !x.erro; });
+      for (var i = 0; i < copia.length; i++) {
+        if (estado.msgPendentes.indexOf(copia[i]) === -1) continue;   // já confirmada por outro caminho
+        if (!(await enviarMensagemPendente(copia[i]))) break;
+      }
+    } finally {
+      estado.reenviandoMsgs = false;
     }
   }
 

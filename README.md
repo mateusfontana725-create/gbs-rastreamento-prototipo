@@ -130,6 +130,17 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   hora para todos os responsáveis. Operação encerrada não permite excluir.
 - **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
+### Mensagens enviadas ao voltar a internet sem erro de duplicidade (migração 079)
+
+Quando a internet voltava, o celular reenviava cada mensagem guardada por vários caminhos ao mesmo tempo, e o banco
+respondia "Erro inesperado: duplicate key value violates unique constraint mensagens_cliente_unico"; a mensagem ficava
+marcada com erro e parava de ser reenviada. Agora o aparelho manda uma mensagem por vez (uma rodada de reenvio só) e
+volta a tentar as que tinham ficado com esse erro. No banco, a migração 079 faz dois envios iguais esperarem um ao
+outro (o segundo devolve a mensagem já gravada). Rode `supabase/migracoes/079_mensagem_reenvio_simultaneo.sql` no
+SQL Editor; sem ela a correção do aparelho já evita o erro.
+
+**Teste:** desligue a internet, mande duas mensagens, ligue de novo: as duas chegam ao painel uma vez cada, sem aviso de erro.
+
 ### Militar sem internet: setores e pontos guardados no celular (migração 078)
 
 - Criar setor (área ou círculo), marcar ponto, mudar a situação de um setor, editar e excluir o que ele criou funcionam

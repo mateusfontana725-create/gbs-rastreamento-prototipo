@@ -912,7 +912,7 @@ a.tel { color: var(--civil-texto); font-weight: 800; text-decoration: none; bord
  * ===================================================================== */
 .painel-corpo { transition: grid-template-columns .25s ease; }
 .lateral { overflow: hidden; min-width: 0; visibility: visible; transition: visibility 0s; }
-.lateral > * { min-width: var(--larg-lateral); }
+.lateral > * { min-width: min(var(--larg-lateral), 100%); }
 body.lateral-oculta .painel-corpo { grid-template-columns: 1fr 0px; }
 body.lateral-oculta .lateral { visibility: hidden; border-left-width: 0; transition: visibility 0s .25s; }
 .ficha { transition: right .25s ease; }
@@ -1121,7 +1121,7 @@ body.lateral-oculta .ficha { right: 0; width: min(420px, 100%); }
   .central::before { display: none; }
   .central-cabeca { padding-top: 12px; }
   body.lateral-oculta .lateral { max-height: none !important; }
-  .lateral > * { min-width: var(--larg-lateral); }
+  .lateral > * { min-width: min(var(--larg-lateral), 100%); }
   .painel-corpo { transition: grid-template-columns .25s ease; }
   .btn-reabrir { top: 10px; bottom: auto; }
 }

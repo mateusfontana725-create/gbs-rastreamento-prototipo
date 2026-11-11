@@ -115,8 +115,8 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   "✓ Enviada" ou "Esperando internet".
 - **Começar** entra direto no rastreamento, sem perguntar nada, e a gravação do caminho começa junto. O **civil não tem como parar a gravação** nem
   parar a gravação: o botão **Quero sair da busca** só faz um pedido (os bombeiros liberam a saída pelo painel). Quem para a gravação de vez é o militar, pelo menu (Busca).
-- **Mapa abre no satélite** (civil e militar). Um fundo escolhido pela pessoa (Camadas) fica guardado neste aparelho; enquanto ela não
-  escolhe outro, o satélite vale.
+- **Mapa abre no mapa de ruas** (civil e militar). Um fundo escolhido pela pessoa (Camadas) fica guardado neste aparelho; enquanto ela não
+  escolhe outro, o mapa de ruas vale. O satélite continua disponível na escolha de Camadas.
 - **Link de militares só registra militar** (migração 073): o link de militares não oferece a escolha de civil; quem entra por ele é
   sempre militar. O link de civis segue só para civis. A escolha de tipo só aparece no link de grupo que permite militar.
 - **Quem exclui e quem edita** (migração 074): o **administrador** e os **responsáveis da operação** (criador ou adicionados) excluem

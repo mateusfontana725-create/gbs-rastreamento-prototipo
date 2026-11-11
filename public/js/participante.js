@@ -2397,14 +2397,14 @@
   /* ------------------------------------------------------------------ */
   var CHAVE_PREFS_CIVIL = 'gbs-civil-mapa';
   var CHAVE_TEMA_CIVIL = 'gbs-civil-tema';
-  var PADRAO_PREFS = { base: 'satelite', setores: true, pontos: true, proibidas: true, trilhas: true };
+  var PADRAO_PREFS = { base: 'osm', setores: true, pontos: true, proibidas: true, trilhas: true };   // abre no mapa de ruas; o satélite fica na escolha de Camadas
   var COR_TRILHA_EQUIPE = '#8aa0b8';   // única cor para as trilhas dos outros; a sua usa a cor do grupo (ou azul)
 
   function lerPrefsMapa() {
     var salvo = {};
     try { salvo = JSON.parse(localStorage.getItem(CHAVE_PREFS_CIVIL) || 'null') || {}; } catch (e) { salvo = {}; }
     var p = Object.assign({}, PADRAO_PREFS, salvo);
-    // o satélite abre sempre; um fundo guardado só vale se a pessoa escolheu outro de propósito
+    // o mapa de ruas abre sempre; um fundo guardado só vale se a pessoa escolheu outro de propósito
     if (!salvo.baseEscolhida) p.base = PADRAO_PREFS.base;
     return p;
   }

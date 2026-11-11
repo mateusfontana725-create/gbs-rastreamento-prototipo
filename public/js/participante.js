@@ -2415,6 +2415,7 @@
   function aplicarTemaCivil(valor) {
     document.documentElement.setAttribute('data-tema', valor === 'claro' ? 'claro' : 'escuro');
     try { localStorage.setItem(CHAVE_TEMA_CIVIL, valor === 'claro' ? 'claro' : 'escuro'); } catch (e) { /* sem armazenamento */ }
+    if (estado.vetorUrl) usarMapaVetor(estado.vetorUrl);   // o mapa de ruas acompanha o tema (claro ou escuro)
   }
 
   // Fundo do mapa (mapa, relevo ou satélite): o mesmo conjunto do painel dos bombeiros.
@@ -2469,7 +2470,7 @@
     estado.vetorUrl = url;
     if (!estado.bases) return;
     var antiga = estado.bases.osm;
-    estado.bases.osm = window.MapaVetor.camada(url);
+    estado.bases.osm = window.MapaVetor.camada(url, { tema: temaCivil() });
     if (estado.mapa && estado.baseAtual === 'osm') {
       if (antiga) antiga.remove();
       estado.bases.osm.addTo(estado.mapa).bringToBack();

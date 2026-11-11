@@ -148,7 +148,9 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   recorte do arquivo mundial gratuito do **Protomaps**, zoom 0 a 15). Fica no **Supabase Storage**, bucket público `mapas`
   (migração 077), em `mapas/parana.pmtiles`. Não custa nada além do plano que o projeto já usa.
 - **No celular do participante** (`public/js/mapa-vetor.js`, bibliotecas `pmtiles` e `protomaps-leaflet` com versão fixa):
-  o fundo **Mapa** passa a ser desenhado no próprio aparelho a partir desse arquivo, com nomes de ruas em português.
+  o fundo **Mapa** passa a ser desenhado no próprio aparelho a partir desse arquivo, com nomes de ruas em português,
+  nas cores do tema escolhido (claro ou escuro). O arquivo traz os dados até o zoom 15 (todas as ruas, caminhos e prédios);
+  por ser desenho vetorial, ele continua nítido ao aproximar até o zoom 22, também sem internet.
   Ao entrar na operação, o app baixa sozinho um **pacote de 10 km** em volta do local da operação (zoom 8 a 15, ~5–15 MB,
   só os pedaços do arquivo que precisa) e guarda no aparelho (até 3 pacotes; `public/js/mapa-offline.js`).
 - **Sem internet**: o Mapa continua aparecendo dentro do pacote. Se a pessoa estava no **Satélite** ou no **Relevo** (que

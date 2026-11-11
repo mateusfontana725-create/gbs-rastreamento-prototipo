@@ -130,6 +130,18 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   hora para todos os responsáveis. Operação encerrada não permite excluir.
 - **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
+### Militar sem internet: setores e pontos guardados no celular (migração 078)
+
+- Criar setor (área ou círculo), marcar ponto, mudar a situação de um setor, editar e excluir o que ele criou funcionam
+  **sem internet**: a ação fica guardada no aparelho (sobrevive a fechar e reabrir o app) e é enviada **na ordem em que foi
+  feita** assim que a internet volta (evento "online", a cada ciclo da equipe e ao abrir o rastreamento).
+- O que foi criado sem internet aparece no mapa **tracejado em laranja** ("aguardando internet"), e o menu mostra
+  "⏳ N ações aguardando internet". Ao enviar, aparece o aviso; erro do servidor (permissão retirada, por exemplo)
+  descarta só aquela ação e avisa qual foi.
+- Migração 078: o item criado sem internet já nasce com o id do aparelho (`novo_id` em `participante_salvar_setor` e
+  `participante_salvar_ponto`), então o reenvio não duplica e as ações seguintes usam o mesmo id; excluir de novo algo
+  que já saiu não é erro. Sem a 078, o app ajusta os ids na hora do envio.
+
 ### Mapa de ruas gratuito para usar sem internet (migração 077)
 
 - **O que é**: um arquivo único (`parana.pmtiles`, ~445 MB) com o mapa de ruas do Paraná inteiro (dados do **OpenStreetMap**,

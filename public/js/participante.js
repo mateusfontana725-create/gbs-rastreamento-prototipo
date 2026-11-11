@@ -1044,8 +1044,9 @@
     carregarDestino();
     carregarMeusGrupos();
     if (!estado.timerEquipe) {
-      estado.timerEquipe = setInterval(function () { carregarEquipe(); carregarDestino(); carregarMeusGrupos(); }, CFG.destinoMs);
+      estado.timerEquipe = setInterval(function () { carregarEquipe(); carregarDestino(); carregarMeusGrupos(); enviarFilaMil(); }, CFG.destinoMs);
     }
+    setTimeout(function () { desenharPendentesMil(); enviarFilaMil(); }, 2000);
     carregarFilaFotos().then(function () { retomarLocaisPendentes(); processarFilaFotos(); });
     carregarMinhasFotos();
     renderizarHistorico();
@@ -2078,11 +2079,115 @@
   }
   function recarregarMapaMilitar() { estado.assinaturaExtras = null; carregarEquipe(); }
 
-  async function salvarSetorMilitar(id, dados, msg) {
+  /* ---------- Ações do militar sem internet: fila no aparelho ---------- */
+  // Criar, editar, excluir e mudar a situação de setores e pontos funcionam sem internet: a ação fica guardada no
+  // aparelho (sobrevive a recarregar a página) e é enviada na ordem em que foi feita assim que a internet volta.
+  // O que foi criado sem internet aparece no mapa tracejado, como "aguardando internet". Um item criado sem internet
+  // já nasce com o id do aparelho (novo_id, migração 078), e as ações seguintes sobre ele usam esse id.
+  var CHAVE_FILA_MIL = 'gbs-fila-militar';
+  var AVISO_GUARDADO = 'Sem internet: guardado no celular. Vai ser enviado sozinho quando a internet voltar.';
+  function filaMil() {
+    var r = C.local.ler(CHAVE_FILA_MIL, null);
+    return r && estado.part && r.participante_id === estado.part.participante_id && Array.isArray(r.itens) ? r.itens : [];
+  }
+  function gravarFilaMil(itens) {
+    if (estado.part) C.local.gravar(CHAVE_FILA_MIL, { participante_id: estado.part.participante_id, itens: itens });
+    desenharPendentesMil();
+  }
+  function semRede(e) { return navigator.onLine === false || Boolean(e && e.rede); }
+
+  // Faz a ação no servidor; sem internet (ou com outras ações ainda na fila, para manter a ordem) guarda no aparelho.
+  // Devolve { estado: 'ok', r } ou { estado: 'guardado' }; erro do servidor (permissão, dados) é lançado.
+  async function acaoMilitar(fn, args, rotulo, extra) {
+    if (!filaMil().length && navigator.onLine !== false) {
+      try {
+        var r = await C.rpc(fn, Object.assign({ p_participante: estado.part.participante_id }, args), 20000);
+        return { estado: 'ok', r: r };
+      } catch (e) {
+        if (!semRede(e)) throw e;
+      }
+    }
+    var itens = filaMil();
+    itens.push(Object.assign({ cid: C.uuid(), fn: fn, args: args, rotulo: rotulo, em: Date.now() }, extra || {}));
+    gravarFilaMil(itens);
+    agendarFilaMil();
+    return { estado: 'guardado' };
+  }
+
+  function agendarFilaMil() {
+    clearTimeout(estado.timerFilaMil);
+    estado.timerFilaMil = setTimeout(enviarFilaMil, 15000);
+  }
+  // Envia a fila na ordem. Para no primeiro problema de rede (tenta de novo depois); erro do servidor descarta só aquela ação.
+  async function enviarFilaMil() {
+    if (estado.enviandoFilaMil || !estado.part || navigator.onLine === false) return;
+    if (!filaMil().length) return;
+    estado.enviandoFilaMil = true;
+    var enviados = 0, recusados = [];
     try {
-      await C.rpc('participante_salvar_setor', { p_participante: estado.part.participante_id, p_id: id || null, p_dados: dados }, 20000);
-      UI.aviso(msg || 'Setor salvo.', 'ok', 6000);
-      recarregarMapaMilitar();
+      for (;;) {
+        var itens = filaMil();
+        if (!itens.length) break;
+        var it = itens[0], r;
+        try {
+          r = await C.rpc(it.fn, Object.assign({ p_participante: estado.part.participante_id }, it.args), 20000);
+        } catch (e) {
+          if (semRede(e)) { agendarFilaMil(); break; }
+          recusados.push((it.rotulo || 'ação') + ': ' + ((e && e.message) || 'erro'));
+          r = undefined;
+        }
+        itens = filaMil().filter(function (x) { return x.cid !== it.cid; });
+        // servidor sem a migração 078 cria outro id: as ações seguintes passam a usar o id de verdade
+        if (r && it.novoId && r.id && r.id !== it.novoId) {
+          itens.forEach(function (x) { if (x.args && x.args.p_id === it.novoId) x.args.p_id = r.id; });
+        }
+        if (r !== undefined) enviados++;
+        gravarFilaMil(itens);
+      }
+    } finally {
+      estado.enviandoFilaMil = false;
+    }
+    if (enviados) { UI.aviso('Internet de volta: ' + enviados + (enviados === 1 ? ' ação feita sem internet foi enviada.' : ' ações feitas sem internet foram enviadas.'), 'ok', 7000); recarregarMapaMilitar(); }
+    if (recusados.length) UI.aviso('Não foi possível enviar: ' + recusados.join(' · '), 'erro', 12000);
+  }
+
+  // O que foi criado sem internet e ainda não foi enviado: tracejado no mapa, com o aviso.
+  function desenharPendentesMil() {
+    var itens = filaMil();
+    var caixa = $('fm-pendentes');
+    if (caixa) {
+      caixa.hidden = !itens.length;
+      caixa.textContent = itens.length ? '⏳ ' + itens.length + (itens.length === 1 ? ' ação aguardando internet' : ' ações aguardando internet') + ' (vão ser enviadas sozinhas).' : '';
+    }
+    if (!estado.mapa || !window.L) return;
+    if (!estado.camPendMil) estado.camPendMil = L.layerGroup().addTo(estado.mapa);
+    estado.camPendMil.clearLayers();
+    var excluidos = {};
+    itens.forEach(function (it) { if (/excluir/.test(it.fn) && it.args) excluidos[it.args.p_id] = true; });
+    itens.forEach(function (it) {
+      if (!it.novoId || excluidos[it.novoId]) return;
+      var d = (it.args && it.args.p_dados) || {};
+      var estilo = { color: '#f59e0b', weight: 3, dashArray: '6 6', fillOpacity: 0.08, interactive: true };
+      var c = null;
+      if (it.fn === 'participante_salvar_setor') {
+        if (d.forma === 'circulo') c = L.circle([d.centro_lat, d.centro_lng], Object.assign({ radius: d.raio_m }, estilo));
+        else if (d.pontos) c = L.polygon(d.pontos, estilo);
+      } else if (it.fn === 'participante_salvar_ponto') {
+        c = L.circleMarker([d.lat, d.lng], { radius: 9, color: '#f59e0b', weight: 3, dashArray: '3 3', fillColor: '#0b1220', fillOpacity: 0.8 });
+      }
+      if (c) c.bindTooltip(C.esc(d.nome || d.titulo || 'Novo') + ' · aguardando internet', { direction: 'top' }).addTo(estado.camPendMil);
+    });
+  }
+
+  async function salvarSetorMilitar(id, dados, msg) {
+    var novo = !id;
+    var novoId = novo ? C.uuid() : null;
+    if (novo) dados = Object.assign({ novo_id: novoId }, dados);
+    try {
+      var r = await acaoMilitar('participante_salvar_setor', { p_id: id || null, p_dados: dados },
+        novo ? 'novo setor "' + (dados.nome || '') + '"' : 'setor', novo ? { novoId: novoId } : null);
+      if (r.estado === 'guardado') UI.aviso(AVISO_GUARDADO, 'ok', 8000);
+      else { UI.aviso(msg || 'Setor salvo.', 'ok', 6000); recarregarMapaMilitar(); }
       return true;
     } catch (e) { erroMilitar(e); return false; }
   }
@@ -2090,9 +2195,9 @@
     var ok = await UI.confirmar({ titulo: 'Excluir o setor "' + st.nome + '"?', texto: 'Ele some do mapa de todos. Só dá para excluir os setores que você criou.', ok: 'Excluir setor', perigo: true });
     if (!ok) return;
     try {
-      await C.rpc('participante_excluir_setor', { p_participante: estado.part.participante_id, p_id: st.id }, 20000);
-      UI.aviso('Setor excluído.', 'ok');
-      recarregarMapaMilitar();
+      var r = await acaoMilitar('participante_excluir_setor', { p_id: st.id }, 'excluir o setor "' + st.nome + '"');
+      if (r.estado === 'guardado') UI.aviso(AVISO_GUARDADO, 'ok', 8000);
+      else { UI.aviso('Setor excluído.', 'ok'); recarregarMapaMilitar(); }
     } catch (e) { erroMilitar(e); }
   }
   // Edição do que o militar criou (migração 074): ponto (tipo, título, descrição) e setor (nome, observações).
@@ -2111,10 +2216,10 @@
       var t = titulo.value.trim();
       if (!t) { erro.textContent = 'Informe o título do ponto.'; erro.hidden = false; return; }
       try {
-        await C.rpc('participante_editar_ponto', { p_participante: estado.part.participante_id, p_id: pt.id, p_dados: { categoria: cat.value, titulo: t, descricao: desc.value.trim() } }, 20000);
-        UI.aviso('Ponto salvo.', 'ok', 6000);
+        var r = await acaoMilitar('participante_editar_ponto', { p_id: pt.id, p_dados: { categoria: cat.value, titulo: t, descricao: desc.value.trim() } }, 'editar o ponto "' + t + '"');
         fechar();
-        recarregarMapaMilitar();
+        if (r.estado === 'guardado') UI.aviso(AVISO_GUARDADO, 'ok', 8000);
+        else { UI.aviso('Ponto salvo.', 'ok', 6000); recarregarMapaMilitar(); }
       } catch (e) { erroMilitar(e); }
     } }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Editar ponto' }),
@@ -2154,9 +2259,9 @@
     var ok = await UI.confirmar({ titulo: 'Excluir o ponto "' + pt.titulo + '"?', texto: 'Ele some do mapa de todos. Só dá para excluir os pontos que você marcou.', ok: 'Excluir ponto', perigo: true });
     if (!ok) return;
     try {
-      await C.rpc('participante_excluir_ponto', { p_participante: estado.part.participante_id, p_id: pt.id }, 20000);
-      UI.aviso('Ponto excluído.', 'ok');
-      recarregarMapaMilitar();
+      var r = await acaoMilitar('participante_excluir_ponto', { p_id: pt.id }, 'excluir o ponto "' + pt.titulo + '"');
+      if (r.estado === 'guardado') UI.aviso(AVISO_GUARDADO, 'ok', 8000);
+      else { UI.aviso('Ponto excluído.', 'ok'); recarregarMapaMilitar(); }
     } catch (e) { erroMilitar(e); }
   }
 
@@ -2268,11 +2373,13 @@
       ev.preventDefault();
       var t = titulo.value.trim() || (NOME_PONTO[cat.value] || 'Ponto');
       try {
-        await C.rpc('participante_salvar_ponto', { p_participante: estado.part.participante_id, p_dados: { categoria: cat.value, titulo: t, descricao: desc.value.trim(), lat: local[0], lng: local[1] } }, 20000);
+        var novoId = C.uuid();
+        var r = await acaoMilitar('participante_salvar_ponto', { p_dados: { novo_id: novoId, categoria: cat.value, titulo: t, descricao: desc.value.trim(), lat: local[0], lng: local[1] } },
+          'novo ponto "' + t + '"', { novoId: novoId });
         fechar();
         sairDesenhoP();
-        UI.aviso('Ponto "' + t + '" marcado. A equipe e os responsáveis já veem.', 'ok', 6000);
-        recarregarMapaMilitar();
+        if (r.estado === 'guardado') UI.aviso(AVISO_GUARDADO, 'ok', 8000);
+        else { UI.aviso('Ponto "' + t + '" marcado. A equipe e os responsáveis já veem.', 'ok', 6000); recarregarMapaMilitar(); }
       } catch (e) { erro.textContent = e.codigo === 'funcao_ausente' ? 'O servidor ainda não tem esta função (migração 072).' : ((e && e.message) || 'Erro inesperado.'); erro.hidden = false; }
     } }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Marcar ponto de interesse' }),
@@ -3701,6 +3808,7 @@
     if (estado.part && !estado.finalizado) {
       enviarSinal(); agendarEnvio(0); reenviarMensagens(); processarFilaFotos(); carregarDestino();
       if (estado.destino && !estado.rota) { estado.rotaErroEm = 0; calcularRota('tentar'); }
+      enviarFilaMil();
     }
     fundoConformeRede();
     atualizarUI();

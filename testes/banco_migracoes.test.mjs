@@ -3298,6 +3298,29 @@ console.log('\nLink público em partes, mensagem para vários, pontos em lote e 
   const vistosC = (await rpc(anM[0], 'mapa_do_participante', { p_participante: civ.participante_id })).setores.map((x) => x.id);
   chk(!vistosC.includes(sM.id), 'o civil não vê o setor privado');
   const poM = await rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ categoria: 'VESTIGIO', titulo: 'Pegada', lat: -25.605, lng: -49.395 }) });
+  // 078: ações do militar feitas sem internet (id criado no aparelho; reenvio e exclusão repetida sem erro nem duplicação)
+  await db.exec(ler('supabase/migracoes/078_militar_sem_internet.sql'));
+  await db.exec(ler('supabase/migracoes/078_militar_sem_internet.sql'));
+  chk(true, 'migração 078 executa duas vezes (idempotente)');
+  const idS = '7a000000-0000-4000-8000-000000000001', idP = '7a000000-0000-4000-8000-000000000002';
+  const sOff1 = await rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: null, p_dados: JSON.stringify(Object.assign({ novo_id: idS }, forma, { nome: 'Sem rede' })) });
+  const sOff2 = await rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: null, p_dados: JSON.stringify(Object.assign({ novo_id: idS }, forma, { nome: 'Sem rede' })) });
+  chk(sOff1.id === idS && sOff2.id === idS && (await db.query(`select count(*)::int n from public.setores where id = $1`, [idS])).rows[0].n === 1, 'setor criado sem internet nasce com o id do aparelho; o reenvio não duplica', [sOff1.id, sOff2.id]);
+  const sOffSt = await rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: idS, p_dados: JSON.stringify({ status: 'concluido' }) });
+  chk(sOffSt.status === 'concluido', 'a ação seguinte (situação) usa o id do aparelho');
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_salvar_setor', { p_participante: mil2.participante_id, p_id: null, p_dados: JSON.stringify(Object.assign({ novo_id: idS }, forma)) }))), 'outro militar não "reaproveita" o id de um setor que não é dele');
+  chk(/dados_invalidos/.test(await erroDe(rpc(anM[1], 'participante_salvar_setor', { p_participante: mil.participante_id, p_id: null, p_dados: JSON.stringify(Object.assign({ novo_id: 'abc' }, forma)) }))), 'id do aparelho inválido: recusado');
+  const pOff1 = await rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ novo_id: idP, categoria: 'OUTRO', titulo: 'Sem rede', lat: -25.606, lng: -49.396 }) });
+  const pOff2 = await rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ novo_id: idP, categoria: 'OUTRO', titulo: 'Sem rede', lat: -25.606, lng: -49.396 }) });
+  chk(pOff1.id === idP && pOff2.id === idP && (await db.query(`select count(*)::int n from public.pontos_interesse where id = $1`, [idP])).rows[0].n === 1, 'ponto criado sem internet: id do aparelho e reenvio sem duplicar');
+  const pNormal = await rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ categoria: 'OUTRO', titulo: 'Normal', lat: -25.607, lng: -49.397 }) });
+  chk(pNormal.id && pNormal.id !== idP, 'sem novo_id continua igual (id do servidor)');
+  chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_excluir_ponto', { p_participante: mil2.participante_id, p_id: idP }))), 'excluir o ponto de outro militar continua recusado');
+  await rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: idP });
+  chk((await erroDe(rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: idP }))) === null, 'excluir de novo o ponto que já saiu não é erro (reenvio)');
+  await rpc(anM[1], 'participante_excluir_setor', { p_participante: mil.participante_id, p_id: idS });
+  chk((await erroDe(rpc(anM[1], 'participante_excluir_setor', { p_participante: mil.participante_id, p_id: idS }))) === null, 'excluir de novo o setor que já saiu não é erro (reenvio)');
+  await rpc(anM[1], 'participante_excluir_ponto', { p_participante: mil.participante_id, p_id: pNormal.id });
   chk(poM.visibilidade === 'publico' && /militar/.test(poM.criado_por_nome), 'militar marca ponto de interesse (público para a equipe)', poM);
   chk(/dados_invalidos/.test(await erroDe(rpc(anM[1], 'participante_salvar_ponto', { p_participante: mil.participante_id, p_dados: JSON.stringify({ categoria: 'VITIMA_ENCONTRADA', titulo: 'x', lat: -25.6, lng: -49.4 }) }))), 'categoria de vítima não (usa o relato de vítima)');
   chk(/funcao_nao_liberada/.test(await erroDe(rpc(anM[2], 'participante_excluir_ponto', { p_participante: mil2.participante_id, p_id: poM.id }))), 'outro militar não exclui o ponto');
@@ -3407,5 +3430,5 @@ console.log('\nBucket público de mapas (077)');
   chk(/row-level security|permission denied/.test(await erroDe(como(resp1, `insert into storage.objects (bucket_id, name) values ('mapas', 'parana.pmtiles')`))), 'responsável não grava no bucket de mapas pelo app');
 }
 
-console.log('\nMigrações 007–077 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('\nMigrações 007–078 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

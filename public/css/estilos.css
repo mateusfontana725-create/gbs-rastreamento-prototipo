@@ -2638,6 +2638,9 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
 
 /* Participante militar: ferramentas (migração 072); o menu fica no fim do arquivo */
 .fm-dica:empty { display: none; }
+/* Ações do militar feitas sem internet, aguardando envio */
+.fm-pendentes { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; border: 1px dashed #f59e0b; color: #fbbf24; background: rgba(245, 158, 11, 0.08); font-size: 0.85rem; }
+.fm-pendentes[hidden] { display: none; }
 .popup-setor-militar { display: grid; gap: 6px; min-width: 180px; }
 .popup-setor-militar p { margin: 0; }
 .popup-botoes { display: flex; flex-wrap: wrap; gap: 6px; }

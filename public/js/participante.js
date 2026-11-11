@@ -3814,6 +3814,20 @@
     atualizarUI();
   });
   window.addEventListener('offline', function () { fundoConformeRede(); atualizarUI(); });
+  // Os avisos sobem logo acima da barra de ações (no militar, o botão Menu fica lá embaixo e não pode ser coberto).
+  (function acompanharBarraAvisos() {
+    var barra = document.querySelector('#tela-rastreio .acoes-civil');
+    var avisos = $('avisos');
+    if (!barra || !avisos) return;
+    function ajustar() {
+      var alto = barra.offsetHeight || 0;
+      avisos.style.bottom = (alto ? alto + 14 : 16) + 'px';
+    }
+    if (window.ResizeObserver) new ResizeObserver(ajustar).observe(barra);
+    window.addEventListener('resize', ajustar);
+    window.addEventListener('orientationchange', ajustar);
+    ajustar();
+  })();
   window.addEventListener('pagehide', function () { if (estado.trilha) estado.trilha.persistirPendentes(); });
   window.addEventListener('beforeunload', function (ev) {
     if (estado.rastreando && !window.GBS_RECARREGANDO && !NATIVO) {

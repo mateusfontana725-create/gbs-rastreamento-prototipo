@@ -130,6 +130,26 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   hora para todos os responsáveis. Operação encerrada não permite excluir.
 - **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
+### Mapa de ruas gratuito para usar sem internet (migração 077)
+
+- **O que é**: um arquivo único (`parana.pmtiles`, ~445 MB) com o mapa de ruas do Paraná inteiro (dados do **OpenStreetMap**,
+  recorte do arquivo mundial gratuito do **Protomaps**, zoom 0 a 15). Fica no **Supabase Storage**, bucket público `mapas`
+  (migração 077), em `mapas/parana.pmtiles`. Não custa nada além do plano que o projeto já usa.
+- **No celular do participante** (`public/js/mapa-vetor.js`, bibliotecas `pmtiles` e `protomaps-leaflet` com versão fixa):
+  o fundo **Mapa** passa a ser desenhado no próprio aparelho a partir desse arquivo, com nomes de ruas em português.
+  Ao entrar na operação, o app baixa sozinho um **pacote de 10 km** em volta do local da operação (zoom 8 a 15, ~5–15 MB,
+  só os pedaços do arquivo que precisa) e guarda no aparelho (até 3 pacotes; `public/js/mapa-offline.js`).
+- **Sem internet**: o Mapa continua aparecendo dentro do pacote. Se a pessoa estava no **Satélite** ou no **Relevo** (que
+  precisam de internet), o app troca sozinho para o Mapa guardado e volta ao fundo escolhido quando a internet voltar.
+  Reaberto sem internet (APK ou navegador), o mapa aparece igual (o service worker guarda as bibliotecas).
+- **Sem o arquivo no Storage**, o app percebe (um pedido só) e segue exatamente como antes (OpenStreetMap público e área
+  pequena guardada). `MAPA_PMTILES_URL` (opcional, no Vercel) troca o endereço do arquivo.
+- **Como gerar o arquivo de novo** (para atualizar as ruas): extraia o retângulo do Paraná (lon −54,62 a −48,02, lat
+  −26,72 a −22,51, zoom até 15) de um arquivo diário de <https://build.protomaps.com> com `pmtiles extract`, e envie para
+  `mapas/parana.pmtiles` substituindo o anterior (guarde só uma versão). O limite de tamanho de arquivo do projeto
+  (Storage → Settings) precisa permitir ~500 MB.
+- **Ainda não incluídos**: relevo e satélite sem internet.
+
 ### Mapa do participante: setores, pontos, camadas, tema e trilhas (migração 065)
 
 O mapa da página do participante mostra, além dos bombeiros:
@@ -2119,6 +2139,7 @@ rastreamento-sar/
    | `ARQUIVAR_APOS_DIAS` | (opcional) dias depois do encerramento para arquivar a operação sozinha (`/api/arquivar`, migração 055). Padrão 7; `0` arquiva no dia seguinte ao encerramento |
    | `TILES_MAPA_URL`, `TILES_TOPO_URL`, `TILES_SATELITE_URL` | (opcional) endereço de cada camada do **servidor próprio de mapas**, com `{z}`, `{x}` e `{y}` (só `https`). Ligam o **pacote de mapa offline** (veja abaixo). Sem nenhuma delas, o app segue como antes. O servidor precisa mandar `Access-Control-Allow-Origin`. **Também é preciso incluir o domínio do servidor de mapas no `img-src` e no `connect-src` da CSP em `vercel.json`**; sem isso, o navegador bloqueia os quadros e o download |
    | `TILES_ATRIBUICAO` | (opcional) texto de crédito mostrado no mapa |
+   | `MAPA_PMTILES_URL` | (opcional) endereço `https://…/arquivo.pmtiles` do mapa de ruas gratuito. Padrão: `mapas/parana.pmtiles` no Storage do próprio projeto (migração 077) |
    | `ORS_API_KEY` | token do openrouteservice (rota por caminhos) — crie em <https://openrouteservice.org> (Sign up → API Keys). Sem ele, o destino funciona só em linha reta |
    | `RESEND_API_KEY` | (opcional) chave do provedor de e-mail <https://resend.com> (API Keys), usada só por `/api/convidar` para o convite por e-mail. Sem ela o painel oferece abrir no seu e-mail ou copiar o link |
    | `APP_ANDROID_URL` | (opcional) endereço do APK do aplicativo Android. Padrão: o Release `app-android` deste repositório. `desligado` esconde o botão "Baixar aplicativo" |

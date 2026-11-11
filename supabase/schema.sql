@@ -23828,3 +23828,11 @@ begin
   );
 end;
 $$;
+
+-- =====================================================================
+-- Migração 077: bucket público "mapas" (mapa de ruas gratuito, parana.pmtiles, usado sem internet pelo participante).
+-- Só leitura pública; o arquivo é enviado pelo painel do Supabase. Sem ele, o app segue com o mapa antigo.
+-- =====================================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('mapas', 'mapas', true, 2147483648, null)
+on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = null;

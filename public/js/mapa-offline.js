@@ -113,7 +113,7 @@
    * com as camadas configuradas (mapa, topográfico, satélite) do zoom 10 ao 17. O pacote fica no aparelho e vale para as
    * próximas operações que ele cobrir: só baixa outro quando a nova operação não está bem dentro de nenhum (margem). */
   var PACOTE = { raioM: 10000, zoomMin: 10, zoomMax: 17, margemM: 2000, max: 3, paralelo: 6 };
-  var KB_QUADRO = { osm: 15, topo: 25, satelite: 35 };   // média aproximada de cada quadro (só para a estimativa de tamanho)
+  var KB_QUADRO = { osm: 15, topo: 25, satelite: 35, vetor: 22 };   // média aproximada de cada quadro (só para a estimativa de tamanho)
 
   // Quadros que tocam o círculo (o centro do quadro a até raio + meia diagonal dele), do zoom zMin ao zMax.
   function quadrosDoCirculo(lat, lng, raioM, zMin, zMax) {
@@ -158,7 +158,8 @@
     return (pacotes || []).some(function (p) { return distanciaM(p.lat, p.lng, lat, lng) <= p.raioM - m; });
   }
 
-  // Baixa os quadros que faltam, vários ao mesmo tempo. opc: { paralelo, aoProgresso(feitos, total), cancelado() }.
+  // Baixa os quadros que faltam, vários ao mesmo tempo. opc: { paralelo, aoProgresso(feitos, total), cancelado(), buscar(url) }.
+  // buscar: quem obtém cada quadro (padrão: fetch do endereço). O mapa vetorial (js/mapa-vetor.js) lê do arquivo PMTiles.
   // Retoma de onde parou (o que já está guardado não é baixado de novo). Para com "sem rede", "cota" cheia ou cancelamento.
   async function baixarPacote(urls, opc) {
     opc = opc || {};
@@ -173,8 +174,9 @@
         try {
           if (!(await cache.match(urls[k]))) {
             var r;
-            try { r = await global.fetch(urls[k], { mode: 'cors', credentials: 'omit' }); if (!r.ok) throw new Error('HTTP ' + r.status); }
-            catch (e1) { r = await global.fetch(urls[k], { mode: 'cors', credentials: 'omit' }); if (!r.ok) throw new Error('HTTP ' + r.status); }   // uma nova tentativa
+            var buscar = opc.buscar || function (u) { return global.fetch(u, { mode: 'cors', credentials: 'omit' }); };
+            try { r = await buscar(urls[k]); if (!r.ok) throw new Error('HTTP ' + r.status); }
+            catch (e1) { r = await buscar(urls[k]); if (!r.ok) throw new Error('HTTP ' + r.status); }   // uma nova tentativa
             await cache.put(urls[k], r);
           }
           feitos++;

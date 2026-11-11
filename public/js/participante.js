@@ -807,7 +807,23 @@
     return r && r.pacotes ? r.pacotes : [];
   }
   function gravarPacotes(lista) { C.local.gravar(CHAVE_PACOTES, { pacotes: lista }); }
-  function planoDoPacote(p) { return window.MapaOffline.planejarPacote(p.lat, p.lng, modelosPacote(), { raioM: p.raioM, zoomMax: p.zoomMax }); }
+  // O que o pacote guarda: as camadas do servidor próprio (TILES_*) ou, sem ele, o mapa vetorial gratuito (js/mapa-vetor.js).
+  function fontesPacote() {
+    var proprio = modelosPacote();
+    if (proprio) return proprio;
+    return estado.vetorUrl && window.MapaVetor ? { vetor: window.MapaVetor.MODELO } : null;
+  }
+  function ehVetor(modelos) { return Boolean(modelos && modelos.vetor); }
+  // Zoom do pacote: o vetorial tem dados até o 15 (acima disso o desenho amplia) e começa no 8 (visão da região)
+  function opcPacote(modelos, p) {
+    if (ehVetor(modelos)) return { raioM: (p && p.raioM) || undefined, zoomMin: 8, zoomMax: window.MapaVetor.ZOOM_DADOS };
+    return { raioM: p && p.raioM, zoomMax: p && p.zoomMax };
+  }
+  function modelosDoPacote(p) {
+    return p && p.camadas && p.camadas.indexOf('vetor') >= 0 ? { vetor: window.MapaVetor ? window.MapaVetor.MODELO : 'https://mapa-vetor.gbs/{z}/{x}/{y}' } : modelosPacote();
+  }
+  function mesmoTipo(p, modelos) { return (p.camadas || []).slice().sort().join(',') === Object.keys(modelos || {}).sort().join(','); }
+  function planoDoPacote(p) { var m = modelosDoPacote(p); return window.MapaOffline.planejarPacote(p.lat, p.lng, m, opcPacote(m, p)); }
 
   async function carregarLocalOperacao() {
     if (estado.opLocalTentado || !estado.part) return;
@@ -828,7 +844,8 @@
     if (estado.opLocal) alvo = { lat: estado.opLocal.lat, lng: estado.opLocal.lng, motivo: 'endereço', rotulo: estado.opLocal.endereco || 'Local da operação' };
     else if (l && l.prec != null && l.prec <= 150) alvo = { lat: l.lat, lng: l.lng, motivo: 'posição', rotulo: 'Perto de onde você estava' };
     if (!alvo || Date.now() - (estado.mapaFalhaEm || 0) < 120000) return;
-    var completos = pacotesMapa().filter(function (p) { return p.completo !== false; });
+    var atuais = fontesPacote();
+    var completos = pacotesMapa().filter(function (p) { return p.completo !== false && mesmoTipo(p, atuais); });
     if (M.cobre(completos, alvo.lat, alvo.lng)) return;   // um pacote que já está no aparelho cobre esta operação
     baixarPacoteMapa(alvo);
   }
@@ -844,12 +861,12 @@
   }
 
   async function baixarPacoteMapa(alvo) {
-    var M = window.MapaOffline, modelos = modelosPacote();
+    var M = window.MapaOffline, modelos = fontesPacote();
     estado.mapaBaixando = true;
     estado.cancelarPacote = false;
     var cancelar = $('mapa-offline-cancelar');
     try {
-      var plano = M.planejarPacote(alvo.lat, alvo.lng, modelos);
+      var plano = M.planejarPacote(alvo.lat, alvo.lng, modelos, opcPacote(modelos));
       // espaço livre no aparelho (só impede quando está claramente faltando)
       if (navigator.storage && navigator.storage.estimate) {
         var e = await navigator.storage.estimate();
@@ -861,7 +878,7 @@
       }
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () { /* o sistema decide */ });
       var pacotes = pacotesMapa();
-      var meu = pacotes.filter(function (p) { return M.distanciaM(p.lat, p.lng, alvo.lat, alvo.lng) < 200; })[0];   // retoma o que ficou pela metade
+      var meu = pacotes.filter(function (p) { return mesmoTipo(p, modelos) && M.distanciaM(p.lat, p.lng, alvo.lat, alvo.lng) < 200; })[0];   // retoma o que ficou pela metade
       while (!meu && pacotes.length >= M.PACOTE.max) {   // limite de pacotes: o mais antigo sai
         var velho = pacotes.slice().sort(function (a, b) { return (a.em || 0) - (b.em || 0); })[0];
         await apagarPacoteMapa(velho.id);
@@ -876,10 +893,13 @@
       };
       mostrarMapaOffline('Baixando o mapa para usar sem internet… 0% (~' + plano.mb + ' MB no total)', false);
       if (cancelar) { cancelar.hidden = false; cancelar.onclick = function () { estado.cancelarPacote = true; }; }
-      var r = await M.baixarPacote(plano.urls, { aoProgresso: texto, cancelado: function () { return estado.cancelarPacote; } });
+      var urlVetor = estado.vetorUrl;
+      var r = await M.baixarPacote(plano.urls, { aoProgresso: texto, cancelado: function () { return estado.cancelarPacote; },
+        buscar: ehVetor(modelos) ? function (u) { return window.MapaVetor.buscarResposta(urlVetor, u); } : null });
       var guardados = await M.contarGuardados(plano.urls);
       var reg = { id: meu ? meu.id : Date.now().toString(36), lat: alvo.lat, lng: alvo.lng, raioM: plano.raioM, zoomMax: plano.zoomMax, camadas: plano.camadas,
-        total: plano.total, guardados: guardados, mb: plano.mb, em: Date.now(), motivo: alvo.motivo, rotulo: alvo.rotulo, completo: guardados >= plano.total };
+        total: plano.total, guardados: guardados, mb: plano.mb, em: Date.now(), motivo: alvo.motivo, rotulo: alvo.rotulo, completo: guardados >= plano.total,
+        url: ehVetor(modelos) ? urlVetor : undefined };
       pacotes = pacotesMapa().filter(function (p) { return p.id !== reg.id; });
       if (guardados) pacotes.push(reg);
       gravarPacotes(pacotes);
@@ -932,7 +952,7 @@
     desenhar();
     var fechar = UI.abrirModal(UI.el('div', null, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Mapas offline' }),
-      UI.el('p', { classe: 'muted', texto: 'Mapa, relevo e satélite guardados no celular para usar sem internet. Cada mapa cobre 10 km em volta do local da operação.' }),
+      UI.el('p', { classe: 'muted', texto: 'Mapas guardados no celular para usar sem internet. Cada mapa cobre 10 km em volta do local da operação.' }),
       lista, resumo,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
     ]));
@@ -951,7 +971,8 @@
   }
   function verificarMapaOffline() {
     var M = window.MapaOffline;
-    if (modelosPacote()) { verificarPacotes(); return; }
+    if (!estado.vetorDecidido && configVetor()) { decidirMapaVetor(); return; }   // espera saber se o mapa gratuito existe
+    if (fontesPacote()) { verificarPacotes(); return; }
     if (!M || !M.disponivel() || !estado.part || estado.finalizado || estado.mapaBaixando || navigator.onLine === false) return;
     var alvo = null, l = estado.ultimaLeitura;
     if (l && l.prec != null && l.prec <= 150 && M.precisaArea(areasMapa(), l.lat, l.lng)) alvo = { lat: l.lat, lng: l.lng, motivo: 'posição' };
@@ -992,7 +1013,7 @@
   }
   // Resumo (com a conferência de quantos quadros estão de fato no aparelho)
   function resumoMapaOffline() {
-    if (modelosPacote()) { resumoPacotes(); return; }
+    if (fontesPacote()) { resumoPacotes(); return; }
     var areas = areasMapa();
     if (!areas.length) { mostrarMapaOffline(window.MapaOffline && window.MapaOffline.disponivel() ? '' : 'Este navegador não guarda o mapa para uso sem internet.', true); return; }
     var total = 0, ok = 0;
@@ -1597,6 +1618,7 @@
     montarCamadasCivil();
     setTimeout(function () { mapa.invalidateSize(); }, 80);
     atualizarMeuMarcador();
+    if (estado.vetorUrl) usarMapaVetor(estado.vetorUrl); else decidirMapaVetor();
   }
 
   // Cor de quem é do seu grupo (o primeiro grupo, por nome, igual ao painel); sem grupo, a cor padrão.
@@ -2316,8 +2338,64 @@
     return bases;
   }
 
+  /* ---------- Mapa de ruas gratuito (PMTiles no Supabase Storage; js/mapa-vetor.js) ---------- */
+  // Decide uma vez por abertura: há pacote vetorial guardado (vale sem internet) ou o arquivo responde no servidor.
+  // Sem o arquivo (ainda não enviado ao Storage), tudo segue como antes.
+  function configVetor() { return (window.APP_CONFIG && window.APP_CONFIG.mapaVetor) || null; }
+  async function decidirMapaVetor() {
+    var url = configVetor(), V = window.MapaVetor;
+    if (estado.vetorDecidido || estado.vetorDecidindo) return;
+    if (!url || !V || !V.disponivel() || modelosPacote()) { estado.vetorDecidido = true; return; }
+    var guardado = pacotesMapa().some(function (p) { return (p.camadas || []).indexOf('vetor') >= 0 && p.url === url; });
+    estado.vetorDecidindo = true;
+    try {
+      var ok = guardado || await V.verificar(url, 8000);
+      if (!ok && navigator.onLine === false) return;   // sem rede agora: decide depois
+      estado.vetorDecidido = true;
+      if (ok) usarMapaVetor(url);
+    } finally {
+      estado.vetorDecidindo = false;
+      if (estado.vetorDecidido) verificarMapaOffline();
+    }
+  }
+  function usarMapaVetor(url) {
+    estado.vetorUrl = url;
+    if (!estado.bases) return;
+    var antiga = estado.bases.osm;
+    estado.bases.osm = window.MapaVetor.camada(url);
+    if (estado.mapa && estado.baseAtual === 'osm') {
+      if (antiga) antiga.remove();
+      estado.bases.osm.addTo(estado.mapa).bringToBack();
+    }
+    fundoConformeRede();
+  }
+
+  // Sem internet, o satélite e o relevo não carregam: mostra o mapa de ruas guardado no aparelho (sem mudar a escolha
+  // salva da pessoa) e volta ao fundo escolhido quando a internet voltar.
+  function mostrarBase(nome) {
+    if (!estado.mapa || !estado.bases || !estado.bases[nome] || estado.baseAtual === nome) return;
+    if (estado.baseAtual && estado.bases[estado.baseAtual]) estado.bases[estado.baseAtual].remove();
+    estado.bases[nome].addTo(estado.mapa).bringToBack();
+    estado.baseAtual = nome;
+  }
+  function fundoConformeRede() {
+    if (!estado.mapa || !estado.vetorUrl) return;
+    if (navigator.onLine === false) {
+      if (estado.baseAtual !== 'osm') {
+        estado.baseAntesSemRede = estado.baseAtual;
+        mostrarBase('osm');
+        UI.aviso('Sem internet: mostrando o mapa de ruas guardado no celular.', 'ok', 6000);
+      }
+    } else if (estado.baseAntesSemRede) {
+      var volta = estado.baseAntesSemRede;
+      estado.baseAntesSemRede = null;
+      if (estado.prefs && estado.prefs.base === volta) mostrarBase(volta);
+    }
+  }
+
   function trocarBaseMapa(nome) {
     if (!estado.mapa || !estado.bases || !estado.bases[nome]) return;
+    estado.baseAntesSemRede = null;   // escolha da pessoa vale mais que a troca automática
     if (estado.baseAtual && estado.bases[estado.baseAtual]) estado.bases[estado.baseAtual].remove();
     estado.bases[nome].addTo(estado.mapa).bringToBack();
     estado.baseAtual = nome;
@@ -3624,9 +3702,10 @@
       enviarSinal(); agendarEnvio(0); reenviarMensagens(); processarFilaFotos(); carregarDestino();
       if (estado.destino && !estado.rota) { estado.rotaErroEm = 0; calcularRota('tentar'); }
     }
+    fundoConformeRede();
     atualizarUI();
   });
-  window.addEventListener('offline', function () { atualizarUI(); });
+  window.addEventListener('offline', function () { fundoConformeRede(); atualizarUI(); });
   window.addEventListener('pagehide', function () { if (estado.trilha) estado.trilha.persistirPendentes(); });
   window.addEventListener('beforeunload', function (ev) {
     if (estado.rastreando && !window.GBS_RECARREGANDO && !NATIVO) {

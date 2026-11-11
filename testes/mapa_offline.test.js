@@ -141,6 +141,32 @@ const urls50 = M.planejarPacote(-25.43, -49.27, { osm: MODELOS.osm }, { raioM: 5
     assert.strictEqual(apagados, urls50.length - 4);
     assert.strictEqual(sim.guardado.size, 4);
   });
+  // Mapa vetorial gratuito (js/mapa-vetor.js): o pacote usa uma busca própria em vez do fetch do endereço
+  const MODELO_VETOR = 'https://mapa-vetor.gbs/{z}/{x}/{y}';
+  const planoV = M.planejarPacote(-25.43, -49.27, { vetor: MODELO_VETOR }, { raioM: 10000, zoomMin: 8, zoomMax: 15 });
+  await teste2('vetorial: pacote de 10 km do zoom 8 ao 15, só com a camada vetorial e estimativa pequena', async () => {
+    assert.deepStrictEqual(planoV.camadas, ['vetor']);
+    assert.ok(planoV.urls.every((u) => /^https:\/\/mapa-vetor\.gbs\/\d+\/\d+\/\d+$/.test(u)));
+    const zs = planoV.urls.map((u) => Number(u.split('/')[3]));
+    assert.strictEqual(Math.min.apply(null, zs), 8); assert.strictEqual(Math.max.apply(null, zs), 15);
+    assert.ok(planoV.total < 1500, 'quadros: ' + planoV.total);
+    assert.ok(planoV.mb > 0 && planoV.mb < 30, 'MB: ' + planoV.mb);
+  });
+  await teste2('vetorial: baixa pela busca própria (nunca pelo fetch) e guarda com a chave do quadro', async () => {
+    const sim = simular(); const pedidos = [];
+    const r = await M.baixarPacote(planoV.urls, { paralelo: 4, buscar: async (u) => { pedidos.push(u); return { ok: true, status: 200, url: u }; } });
+    assert.strictEqual(sim.chamadas(), 0, 'o fetch não pode ser usado');
+    assert.strictEqual(pedidos.length, planoV.urls.length);
+    assert.strictEqual(r.feitos, planoV.urls.length);
+    assert.ok(planoV.urls.every((u) => sim.guardado.has(u)));
+  });
+  await teste2('vetorial: falha da busca própria tenta de novo uma vez e conta a falha', async () => {
+    simular(); const vezes = {};
+    const r = await M.baixarPacote(planoV.urls.slice(0, 5), { paralelo: 1, buscar: async (u) => { vezes[u] = (vezes[u] || 0) + 1; if (u === planoV.urls[2]) throw new Error('rede'); return { ok: true, status: 200 }; } });
+    assert.strictEqual(vezes[planoV.urls[2]], 2);
+    assert.strictEqual(r.falhas, 1); assert.strictEqual(r.feitos, 4);
+  });
+
   if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
   console.log('\nTodos os testes do mapa offline passaram.');
 })();

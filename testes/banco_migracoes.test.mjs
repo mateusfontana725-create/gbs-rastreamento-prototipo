@@ -3394,5 +3394,18 @@ console.log('\nLink de militares: só militar (073)');
   chk(p73c.tipo === 'civil', 'pelo link de civis nunca entra como militar', p73c.tipo);
 }
 
-console.log('\nMigrações 007–076 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+// --- Migração 077: bucket público "mapas" (mapa de ruas gratuito) ---
+console.log('\nBucket público de mapas (077)');
+{
+  const b0 = (await db.query(`select public, file_size_limit from storage.buckets where id = 'mapas'`)).rows[0];
+  chk(b0 && b0.public === true && Number(b0.file_size_limit) === 2147483648, 'schema.sql cria o bucket "mapas" público, até 2 GB por arquivo', b0);
+  await db.exec(`update storage.buckets set public = false where id = 'mapas'`);
+  await db.exec(ler('supabase/migracoes/077_bucket_mapas.sql'));
+  await db.exec(ler('supabase/migracoes/077_bucket_mapas.sql'));
+  const b1 = (await db.query(`select public from storage.buckets where id = 'mapas'`)).rows[0];
+  chk(b1 && b1.public === true, 'a 077 (repetida) deixa o bucket público');
+  chk(/row-level security|permission denied/.test(await erroDe(como(resp1, `insert into storage.objects (bucket_id, name) values ('mapas', 'parana.pmtiles')`))), 'responsável não grava no bucket de mapas pelo app');
+}
+
+console.log('\nMigrações 007–077 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

@@ -27,6 +27,13 @@ module.exports = (req, res) => {
     if (atrib) config.mapaAtribuicao = atrib.slice(0, 200);
   }
 
+  // Mapa de ruas gratuito (OpenStreetMap, arquivo PMTiles do Paraná) guardado no Supabase Storage, bucket público "mapas"
+  // (migração 077). MAPA_PMTILES_URL troca o endereço; sem ela, vale o arquivo padrão do próprio projeto. Se o arquivo não
+  // estiver lá, o app percebe sozinho e segue com o mapa antigo.
+  const vetor = (process.env.MAPA_PMTILES_URL || '').trim();
+  if (/^https:\/\/[^\s]+\.pmtiles$/.test(vetor)) config.mapaVetor = vetor;
+  else if (url) config.mapaVetor = url + '/storage/v1/object/public/mapas/parana.pmtiles';
+
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=300');
   res.setHeader('X-Content-Type-Options', 'nosniff');

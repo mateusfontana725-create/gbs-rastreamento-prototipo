@@ -110,6 +110,14 @@ chk(sv.length === 0, 'vaivém no mesmo lugar: nenhuma seta (não dá para saber 
 const depois = vaivem.concat([{ x: 4, y: -40 }, { x: 4, y: -200 }]);
 const sd = G.setasAoLongo(depois, 40).filter((s) => s.y < -45);
 chk(sd.length >= 2 && sd.every((s) => Math.abs(s.ang + Math.PI / 2) < 0.2), 'no trecho que segue, as setas apontam para onde a pessoa foi', sd.map((s) => Math.round(s.ang * 180 / Math.PI)));
+// a seta fica inteira dentro da linha (sem ponta para fora), em qualquer espessura usada no mapa
+[2.4, 3.3, 4.2, 5.3, 6, 7.5].forEach(function (peso) {
+  const tam = G.tamanhoSeta(peso);
+  if (!tam) { chk(peso < 3, 'linha de ' + peso + ' px sem setas (fina demais)'); return; }
+  const vs = G.verticesSeta({ x: 0, y: 0, ang: 0 }, tam);
+  const meiaLargura = Math.max.apply(null, vs.map(function (q) { return Math.abs(q.y); }));
+  chk(meiaLargura < peso / 2, 'seta dentro da linha de ' + peso + ' px (meia largura ' + meiaLargura.toFixed(2) + ' < ' + (peso / 2) + ')');
+});
 const v = G.verticesSeta({ x: 10, y: 10, ang: 0 }, 5);
 chk(v.length === 4 && v[0].x === 15 && v[0].y === 10 && v[1].x < 10 && v[3].x < 10 && v[1].y > 10 && v[3].y < 10, 'a seta tem a ponta à frente e as abas para trás', v);
 const vb = G.verticesSeta({ x: 0, y: 0, ang: Math.PI / 2 }, 5);

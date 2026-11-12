@@ -3724,27 +3724,34 @@
   // Trilhas discretas (padrão, "Camadas" → "Trilhas discretas"): numa operação de vários dias as trilhas se cruzam e
   // cobrem os pontos e as fotos. Ficam mais finas, escuras e transparentes e sem setas; a trilha tocada (est.trilhaRealce),
   // a da pessoa com a ficha aberta e a da pessoa em foco voltam à cor forte, com setas, por cima das outras.
+  // As mesmas regras valem para a trilha de GPS (chave = id da pessoa) e para a trilha importada, que é desenhada igual
+  // (chave = 'tm:' + id da trilha; dono = pessoa vinculada). "q" é a pessoa (p) ou { chave, dono }.
   function trilhasDiscretas() { return est.prefsMapa.trilhasDiscretas !== false; }
-  function trilhaDestacada(p) { return est.trilhaRealce === p.id || est.selecionado === p.id || est.focoPessoa === p.id; }
+  function chaveTrilha(q) { return q.chave || q.id; }
+  function donoTrilha(q) { return q.chave ? q.dono : q.id; }
+  function trilhaDestacada(q) {
+    var dono = donoTrilha(q);
+    return est.trilhaRealce === chaveTrilha(q) || Boolean(dono && (est.selecionado === dono || est.focoPessoa === dono));
+  }
   function algumaDestacada() { return Boolean(est.trilhaRealce || est.selecionado || est.focoPessoa); }
-  function trilhaApagada(p) { return !trilhaDestacada(p) && (trilhasDiscretas() || algumaDestacada()); }
-  function pesoTrilha(p) {
+  function trilhaApagada(q) { return !trilhaDestacada(q) && (trilhasDiscretas() || algumaDestacada()); }
+  function pesoTrilha(q) {
     var f = fatorZoomTrilha();
-    var base = trilhaDestacada(p) && (est.trilhaRealce || est.selecionado) ? 7.5 : trilhaApagada(p) && trilhasDiscretas() ? 3.5 : 6;
+    var base = trilhaDestacada(q) && (est.trilhaRealce || est.selecionado) ? 7.5 : trilhaApagada(q) && trilhasDiscretas() ? 3.5 : 6;
     return Math.max(1.5, Math.round(base * f * 10) / 10);
   }
-  function pesoHalo(p) { return pesoTrilha(p) + (fatorZoomTrilha() >= 0.55 ? 3 : 2); }
-  function opacidadeTrilha(p) {
-    if (!trilhaApagada(p)) return 1;
+  function pesoHalo(q) { return pesoTrilha(q) + (fatorZoomTrilha() >= 0.55 ? 3 : 2); }
+  function opacidadeTrilha(q) {
+    if (!trilhaApagada(q)) return 1;
     return trilhasDiscretas() ? 0.5 : 0.35;
   }
-  function opacidadeHalo(p) { return trilhaApagada(p) ? (trilhasDiscretas() ? 0.12 : 0.2) : 0.8; }
-  // apagada: a cor da pessoa puxada para o escuro (some menos no satélite e não briga com os pontos)
-  function corTrilha(p) {
-    var c = corDoParticipante(p);
-    if (!trilhaApagada(p) || !trilhasDiscretas()) return c;
+  function opacidadeHalo(q) { return trilhaApagada(q) ? (trilhasDiscretas() ? 0.12 : 0.2) : 0.8; }
+  // apagada: a cor puxada para o escuro (some menos no satélite e não briga com os pontos)
+  function corApagada(c, q) {
+    if (!trilhaApagada(q) || !trilhasDiscretas()) return c;
     return misturarCor(c, '#111827', 0.35);
   }
+  function corTrilha(p) { return corApagada(corDoParticipante(p), p); }
   function misturarCor(a, b, t) {
     var ca = hexParaRgb(a), cb = hexParaRgb(b);
     if (!ca || !cb) return a;
@@ -3767,14 +3774,15 @@
 
   /* ---------- Setas de sentido e horário nas pontas (estilo AlpineQuest) ---------- */
   var ESPACO_SETAS_PX = 70, MAX_SETAS = 800, ZOOM_SETAS = 15;
+  // p: a pessoa (trilha de GPS) ou a trilha importada desenhada igual (t com segsDesenhados, trilha, setas, chave e dono).
   function desenharSetas(p) {
     var mapa = est.mapa, G = window.TrilhaGeo, segs = p.segsDesenhados;
-    if (!mapa || !G || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !mapa.hasLayer(p.trilha) || (trilhaApagada(p) && trilhasDiscretas())) {
+    var tam = G ? G.tamanhoSeta(pesoTrilha(p)) : 0;   // a seta cabe inteira dentro da linha
+    if (!mapa || !G || !tam || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !p.trilha || !mapa.hasLayer(p.trilha) || (trilhaApagada(p) && trilhasDiscretas())) {
       if (p.setas) p.setas.remove();
       return;
     }
     var vista = mapa.getBounds().pad(0.25);
-    var tam = Math.max(3, pesoTrilha(p) * 0.8 + 1.5);
     var poligonos = [], total = 0;
     segs.forEach(function (seg) {
       if (total >= MAX_SETAS || seg.length < 2) return;
@@ -3798,6 +3806,10 @@
     est.timerDecoracoes = setTimeout(function () {
       est.participantes.forEach(function (p) {
         try { desenharSetas(p); } catch (e) { /* enfeite: nunca impede a trilha */ }
+      });
+      est.trilhasManuais.forEach(function (t) {
+        if (!trilhaComoGps(t.d)) return;
+        try { desenharSetas(t); } catch (e) { /* enfeite */ }
       });
     }, 120);
   }
@@ -3902,6 +3914,8 @@
         if (p.toque) p.toque.bringToFront();
       }
     });
+    // trilhas importadas (desenhadas como as de GPS): espessura, realce e cor acompanham
+    est.trilhasManuais.forEach(function (t) { if (trilhaComoGps(t.d) && t.camada) desenharTrilhaManual(t); });
     agendarDecoracoesTrilhas();
   }
 
@@ -8528,6 +8542,8 @@
 
   function desenharTrilhaManual(t) {
     if (t.camada) { t.camada.remove(); t.camada = null; }
+    if (t.setas) { t.setas.remove(); t.setas = null; }
+    t.trilha = null;
     if (!est.mapa || !est.camadaTrilhasManuais) return;
     var d = t.d;
     if (est.desenho && est.desenho.tipo === 'trilha' && est.desenho.trilhaId === d.id) return;   // traçado sendo editado
@@ -8536,6 +8552,7 @@
     var partes = recortarSegmentos([d.pontos]);   // fora das áreas sem trilha (migração 066)
     if (!partes.length) return;
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
+    if (trilhaComoGps(d)) { desenharTrilhaImportadaComoGps(t, partes, e); return; }
     var g = L.featureGroup();
     var opc = { pane: 'trilhasDesenhadas', lineJoin: 'round', lineCap: 'round' };
     var ft = fatorTelaTrilha();   // mais discreta em telas pequenas
@@ -8555,6 +8572,37 @@
     t.camada = g;
   }
 
+  // Trilha importada de arquivo (GPX, KML, AlpineQuest…): é o caminho de alguém, então aparece IGUAL à trilha de GPS
+  // feita pelo app — linha cheia com contorno escuro, setas de sentido, espessura pelo zoom, discreta por padrão e em
+  // destaque ao tocar (ou com a ficha/foco da pessoa vinculada). As desenhadas à mão no mapa seguem como estavam.
+  function trilhaComoGps(d) { return Boolean(d) && /^Importada de /.test(String(d.observacoes || '')); }
+  function desenharTrilhaImportadaComoGps(t, partes, e) {
+    var d = t.d;
+    t.chave = 'tm:' + d.id;
+    t.dono = d.participante_id || null;
+    t.segsDesenhados = partes;
+    var cor = corApagada(d.cor || e.cor, t);
+    var g = L.featureGroup();
+    var opc = { lineJoin: 'round', lineCap: 'round' };
+    L.polyline(partes, Object.assign({ color: '#0b1220', weight: pesoHalo(t), opacity: opacidadeHalo(t), interactive: false, className: 'trilha-halo' }, opc)).addTo(g);
+    t.trilha = L.polyline(partes, Object.assign({ color: cor, weight: pesoTrilha(t), opacity: opacidadeTrilha(t), interactive: false, className: 'trilha trilha-importada' }, opc)).addTo(g);
+    var toque = L.polyline(partes, Object.assign({ color: '#000', weight: 16, opacity: 0, smoothFactor: 3, className: 'trilha-toque' }, opc)).addTo(g);
+    ligarCliquesMapa(toque, {
+      noDesenho: function (ev) { aoClicarNoMapa(ev); },
+      info: function () {
+        realcarTrilha(t.chave);
+        var quem = equipeDaTrilha(d);
+        return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : '') };
+      },
+      detalhes: function () { realcarTrilha(t.chave); abrirTrilhaManual(d.id); },
+    });
+    g.addTo(est.mapa);
+    t.camada = g;
+    if (trilhaDestacada(t)) g.bringToFront();
+    if (t.setas) { t.setas.remove(); t.setas = null; }
+    desenharSetas(t);
+  }
+
   function redesenharTrilhasManuais() {
     est.trilhasManuais.forEach(desenharTrilhaManual);
   }
@@ -8570,7 +8618,7 @@
     });
     if (completa) {
       est.trilhasManuais.forEach(function (t, id) {
-        if (!vistos.has(id)) { if (t.camada) t.camada.remove(); est.trilhasManuais.delete(id); }
+        if (!vistos.has(id)) { if (t.camada) t.camada.remove(); if (t.setas) t.setas.remove(); est.trilhasManuais.delete(id); }
       });
     }
     renderizarAreas();

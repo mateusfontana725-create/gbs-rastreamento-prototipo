@@ -141,6 +141,12 @@ foco (olho da lista) também fica em destaque. Para ver todas fortes como antes:
 **Teste:** abra uma operação com várias trilhas: os pontos e as fotos aparecem por cima; toque numa trilha (ela fica forte
 e com setas) e depois no mapa vazio.
 
+**Trilha importada igual à do app:** a trilha que veio de um arquivo (GPX, KML, AlpineQuest…) é desenhada exatamente como a
+trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido, discreta por padrão e forte ao tocar
+(também com a ficha ou o foco da pessoa vinculada a ela). As trilhas desenhadas à mão no mapa continuam como antes.
+As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
+legível, elas não aparecem.
+
 ### Avisos pequenos, tempo em linguagem simples, importação e outra busca pelo aplicativo
 
 - **Avisos pequenos:** os avisos rápidos (painel e participante) viraram etiquetas compactas, de no máximo 2 linhas e

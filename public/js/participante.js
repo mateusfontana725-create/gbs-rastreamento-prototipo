@@ -1760,7 +1760,8 @@
     var mapa = estado.mapa, G = window.TrilhaGeo;
     if (!mapa || !G || !listaSegs || !listaSegs.length || mapa.getZoom() < ZOOM_SETAS) { if (anterior) anterior.remove(); return null; }
     var vista = mapa.getBounds().pad(0.25);
-    var tam = Math.max(3, peso * 0.8 + 1.5);
+    var tam = G.tamanhoSeta(peso);   // a seta cabe dentro da linha (sem ponta para fora)
+    if (!tam) { if (anterior) anterior.remove(); return null; }
     var poligonos = [], total = 0;
     listaSegs.forEach(function (seg) {
       if (total >= MAX_SETAS || !seg || seg.length < 2) return;

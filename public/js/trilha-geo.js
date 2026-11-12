@@ -362,8 +362,15 @@
     });
   }
 
+  // Tamanho da seta para uma linha de "peso" px: a seta (meia largura = 0,85 × tam) fica inteira DENTRO da linha,
+  // com uma folga de cada lado; linha fina demais para caber uma seta legível → 0 (sem setas).
+  function tamanhoSeta(peso) {
+    var tam = Math.round((Number(peso) || 0) * 0.48 * 10) / 10;   // 0,85 × 0,48 ≈ 0,41 do peso: sobra ~9% de cada lado
+    return tam >= 1.3 ? tam : 0;
+  }
+
   global.TrilhaGeo = {
-    setasAoLongo: setasAoLongo, verticesSeta: verticesSeta,
+    setasAoLongo: setasAoLongo, verticesSeta: verticesSeta, tamanhoSeta: tamanhoSeta,
     dividirPorIntervalos: dividirPorIntervalos, intervalosApagados: intervalosApagados, unirIntervalos: unirIntervalos,
     recortarForaDosCirculos: recortarForaDosCirculos, apagarComPincel: apagarComPincel,
     dentroDeAlgum: dentroDeAlgum, dividirNaBase: dividirNaBase, comprimentoM: comprimentoM,

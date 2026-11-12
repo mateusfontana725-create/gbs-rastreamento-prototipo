@@ -470,6 +470,12 @@
     $('ficha-estatisticas').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirEstatisticas(est.selecionado); });
     $('ficha-exportar').addEventListener('click', function () { if (window.Ferramentas && est.selecionado) window.Ferramentas.abrirExportar(est.selecionado); });
     $('opt-trilhas').addEventListener('click', function () { definirTodasTrilhas(!todasTrilhasVisiveis()); });
+    $('opt-trilhas-discretas').addEventListener('click', function () {
+      est.prefsMapa.trilhasDiscretas = !trilhasDiscretas();
+      C.local.gravar(CHAVE_PREFS_MAPA, est.prefsMapa);
+      estilizarTrilhas();
+      atualizarMenu();
+    });
     $('menu-diag-gps').addEventListener('click', function () { fecharMenu(false); abrirDiagnosticoGps(); });
     $('menu-minha-trilha').addEventListener('click', function () { fecharMenu(false); alternarMinhaTrilha(); });
     iniciarSecoesMenu();
@@ -869,6 +875,7 @@
   });
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape' && menuLinhaAberto) menuLinhaAberto();
+    if (ev.key === 'Escape' && est.trilhaRealce && !document.querySelector('.modal-fundo')) realcarTrilha(null);
   });
 
   function abrirOperacao(op) {
@@ -2173,6 +2180,7 @@
     if (est.prefsMapa.setores) est.camadaSetores.addTo(mapa);
     if (est.prefsMapa.pontos) est.camadaPontosInt.addTo(mapa);
     mapa.on('click', aoClicarNoMapa);
+    mapa.on('click', function () { if (est.trilhaRealce && !est.desenho) realcarTrilha(null); });   // mapa vazio: tira o realce da trilha
     ligarSegurarNoMapa(mapa);
     // toque longo / botão direito: coordenadas e altitude do ponto (como no AlpineQuest)
     mapa.on('contextmenu', function (e) { if (!est.desenho && window.Ferramentas) window.Ferramentas.infoPonto(e.latlng); });
@@ -2661,6 +2669,7 @@
     $('opt-coord').value = est.prefsMapa.coord || 'dec';
     var trilhasVisiveis = todasTrilhasVisiveis();
     $('opt-trilhas').setAttribute('aria-pressed', String(trilhasVisiveis));
+    $('opt-trilhas-discretas').setAttribute('aria-pressed', String(trilhasDiscretas()));
     $('opt-local').setAttribute('aria-pressed', String(Boolean(est.prefsMapa.local)));
     $('menu-grupos-qtd').textContent = est.grupos.size ? String(est.grupos.size) : '';
     var ativas = missoesAtivas().length;
@@ -3116,7 +3125,7 @@
         var cor = PALETA[tipo][cont[tipo]++ % PALETA[tipo].length];
         if (p.cor !== cor) {
           p.cor = cor;
-          if (p.trilha) p.trilha.setStyle({ color: corDoParticipante(p), dashArray: tracoTrilha(tipo) });
+          if (p.trilha) p.trilha.setStyle({ color: corTrilha(p), dashArray: tracoTrilha(tipo) });
           if (p.marcador) { p.marcador.setIcon(criarIcone(p)); }
           if (p.li) p.li = null; // força recriar o item da lista
         }
@@ -3501,7 +3510,7 @@
       var cor = corDoParticipante(p);
       if (p.marcador.options.corAgrupado !== cor) { p.marcador.options.corAgrupado = cor; atualizarAgrupamentos(); }
     }
-    if (p.trilha) p.trilha.setStyle({ color: corDoParticipante(p) });
+    if (p.trilha) p.trilha.setStyle({ color: corTrilha(p) });
   }
 
   function atualizarAparenciaMarcador(p) {
@@ -3712,17 +3721,47 @@
   }
   // Estilo AlpineQuest: linha cheia e contínua (6 px de perto, mais fina de longe) com contorno escuro por baixo,
   // e setas brancas no sentido do deslocamento. Datas, horários, distância e relevo ficam nos DETALHES da trilha (tocar nela). A selecionada fica mais grossa.
+  // Trilhas discretas (padrão, "Camadas" → "Trilhas discretas"): numa operação de vários dias as trilhas se cruzam e
+  // cobrem os pontos e as fotos. Ficam mais finas, escuras e transparentes e sem setas; a trilha tocada (est.trilhaRealce),
+  // a da pessoa com a ficha aberta e a da pessoa em foco voltam à cor forte, com setas, por cima das outras.
+  function trilhasDiscretas() { return est.prefsMapa.trilhasDiscretas !== false; }
+  function trilhaDestacada(p) { return est.trilhaRealce === p.id || est.selecionado === p.id || est.focoPessoa === p.id; }
+  function algumaDestacada() { return Boolean(est.trilhaRealce || est.selecionado || est.focoPessoa); }
+  function trilhaApagada(p) { return !trilhaDestacada(p) && (trilhasDiscretas() || algumaDestacada()); }
   function pesoTrilha(p) {
     var f = fatorZoomTrilha();
-    return Math.max(1.5, Math.round((est.selecionado === p.id ? 7.5 : 6) * f * 10) / 10);
+    var base = trilhaDestacada(p) && (est.trilhaRealce || est.selecionado) ? 7.5 : trilhaApagada(p) && trilhasDiscretas() ? 3.5 : 6;
+    return Math.max(1.5, Math.round(base * f * 10) / 10);
   }
   function pesoHalo(p) { return pesoTrilha(p) + (fatorZoomTrilha() >= 0.55 ? 3 : 2); }
-  // com alguém selecionado, as outras trilhas ficam apagadas (menos cor no mapa)
   function opacidadeTrilha(p) {
-    if (est.selecionado && est.selecionado !== p.id) return 0.35;
-    return 1;
+    if (!trilhaApagada(p)) return 1;
+    return trilhasDiscretas() ? 0.5 : 0.35;
   }
-  function opacidadeHalo(p) { return est.selecionado && est.selecionado !== p.id ? 0.2 : 0.8; }
+  function opacidadeHalo(p) { return trilhaApagada(p) ? (trilhasDiscretas() ? 0.12 : 0.2) : 0.8; }
+  // apagada: a cor da pessoa puxada para o escuro (some menos no satélite e não briga com os pontos)
+  function corTrilha(p) {
+    var c = corDoParticipante(p);
+    if (!trilhaApagada(p) || !trilhasDiscretas()) return c;
+    return misturarCor(c, '#111827', 0.35);
+  }
+  function misturarCor(a, b, t) {
+    var ca = hexParaRgb(a), cb = hexParaRgb(b);
+    if (!ca || !cb) return a;
+    return '#' + [0, 1, 2].map(function (i) { return ('0' + Math.round(ca[i] + (cb[i] - ca[i]) * t).toString(16)).slice(-2); }).join('');
+  }
+  function hexParaRgb(h) {
+    var m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(h || '').trim());
+    if (!m) return null;
+    var x = m[1].length === 3 ? m[1].replace(/./g, '$&$&') : m[1];
+    return [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2, 4), 16), parseInt(x.slice(4, 6), 16)];
+  }
+  // Tocar numa trilha realça só ela; tocar no mapa vazio (ou Esc) volta ao normal.
+  function realcarTrilha(id) {
+    if (est.trilhaRealce === id) return;
+    est.trilhaRealce = id;
+    estilizarTrilhas();
+  }
   // linha contínua para todos (o tipo da pessoa aparece no símbolo e no toque na trilha)
   function tracoTrilha() { return null; }
 
@@ -3730,7 +3769,7 @@
   var ESPACO_SETAS_PX = 70, MAX_SETAS = 800, ZOOM_SETAS = 15;
   function desenharSetas(p) {
     var mapa = est.mapa, G = window.TrilhaGeo, segs = p.segsDesenhados;
-    if (!mapa || !G || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !mapa.hasLayer(p.trilha)) {
+    if (!mapa || !G || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !mapa.hasLayer(p.trilha) || (trilhaApagada(p) && trilhasDiscretas())) {
       if (p.setas) p.setas.remove();
       return;
     }
@@ -3782,11 +3821,12 @@
       p.halo = L.polyline(segs, { color: '#0b1220', weight: pesoHalo(p), opacity: opacidadeHalo(p), interactive: false, lineJoin: 'round', lineCap: 'round', className: 'trilha-halo' });
     } else {
       p.halo.setLatLngs(segs);
+      p.halo.setStyle({ weight: pesoHalo(p), opacity: opacidadeHalo(p) });
     }
     if (!est.mapa.hasLayer(p.halo)) p.halo.addTo(est.mapa);
     if (!p.trilha) {
       p.trilha = L.polyline(segs, {
-        color: corDoParticipante(p),
+        color: corTrilha(p),
         weight: pesoTrilha(p),
         opacity: opacidadeTrilha(p),
         dashArray: tracoTrilha(tipo),
@@ -3797,6 +3837,7 @@
       });
     } else {
       p.trilha.setLatLngs(segs);
+      p.trilha.setStyle({ color: corTrilha(p), weight: pesoTrilha(p), opacity: opacidadeTrilha(p) });   // realce/discreta podem ter mudado
     }
     if (!est.mapa.hasLayer(p.trilha)) p.trilha.addTo(est.mapa);
     // Faixa larga e invisível sobre a linha: tocar nela mostra de quem é a trilha.
@@ -3804,8 +3845,8 @@
       p.toque = L.polyline(segs, { color: '#000', weight: 16, opacity: 0, lineCap: 'round', lineJoin: 'round', smoothFactor: 3, className: 'trilha-toque' });
       ligarCliquesMapa(p.toque, {
         noDesenho: function (ev) { aoClicarNoMapa(ev); },
-        info: function (ev) { return Object.assign({ latlng: ev.latlng }, infoTrilhaGps(p)); },
-        detalhes: function () { abrirDetalhesTrilha(p); },
+        info: function (ev) { realcarTrilha(p.id); return Object.assign({ latlng: ev.latlng }, infoTrilhaGps(p)); },
+        detalhes: function () { realcarTrilha(p.id); abrirDetalhesTrilha(p); },
       });
     } else {
       p.toque.setLatLngs(segs);
@@ -3848,14 +3889,18 @@
   // Também refeita a cada zoom (espessura e tracejado acompanham o zoom).
   function estilizarTrilhas() {
     est.participantes.forEach(function (p) {
-      if (p.trilha) p.trilha.setStyle({ weight: pesoTrilha(p), dashArray: tracoTrilha(tipoDe(p.dados)), opacity: opacidadeTrilha(p) });
+      if (p.trilha) p.trilha.setStyle({ color: corTrilha(p), weight: pesoTrilha(p), dashArray: tracoTrilha(tipoDe(p.dados)), opacity: opacidadeTrilha(p) });
       if (p.halo) p.halo.setStyle({ weight: pesoHalo(p), opacity: opacidadeHalo(p) });
       if (p.lacunas) p.lacunas.eachLayer(function (l) {
         if (l instanceof L.CircleMarker) l.setRadius(raioFalha());
         else l.setStyle({ weight: pesoLacuna() });
       });
-      if (p.trilha && est.selecionado === p.id) p.trilha.bringToFront();
-      if (p.setas && est.selecionado === p.id) p.setas.bringToFront();
+      if (trilhaDestacada(p)) {   // a destacada por cima das apagadas (contorno, linha e setas)
+        if (p.halo) p.halo.bringToFront();
+        if (p.trilha) p.trilha.bringToFront();
+        if (p.setas) p.setas.bringToFront();
+        if (p.toque) p.toque.bringToFront();
+      }
     });
     agendarDecoracoesTrilhas();
   }

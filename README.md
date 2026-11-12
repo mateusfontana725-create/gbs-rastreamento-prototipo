@@ -130,6 +130,17 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   hora para todos os responsáveis. Operação encerrada não permite excluir.
 - **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
+### Trilhas discretas: a trilha tocada fica em destaque
+
+Numa operação de vários dias, as trilhas de GPS se cruzam e escondem os pontos e as fotos. Agora elas ficam discretas
+por padrão: mais finas, escurecidas, transparentes e sem as setas. Ao tocar numa trilha, só ela volta à cor forte, com
+setas e por cima das outras; tocar no mapa vazio (ou Esc) volta ao normal. A trilha da pessoa com a ficha aberta ou em
+foco (olho da lista) também fica em destaque. Para ver todas fortes como antes: **Camadas → Trilhas discretas**
+(lembrado neste aparelho).
+
+**Teste:** abra uma operação com várias trilhas: os pontos e as fotos aparecem por cima; toque numa trilha (ela fica forte
+e com setas) e depois no mapa vazio.
+
 ### Avisos pequenos, tempo em linguagem simples, importação e outra busca pelo aplicativo
 
 - **Avisos pequenos:** os avisos rápidos (painel e participante) viraram etiquetas compactas, de no máximo 2 linhas e

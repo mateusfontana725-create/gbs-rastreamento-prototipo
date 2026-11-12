@@ -2953,3 +2953,31 @@ body:has(.barra-apoio:not([hidden])) #avisos { bottom: 88px; }
 html[data-tema="claro"] .pilha-x:hover, html[data-tema="claro"] .pilha-x:focus-visible { background: rgba(0, 0, 0, .06); }
 .barra-apoio .pilha-x { margin-left: 4px; }
 .meteo-aviso .pilha-x { margin-left: 4px; }
+
+/* Filtro ligado: o próprio botão mostra o dia/pessoa; ao lado, só um ✕ pequeno para mostrar todos */
+.filtro-mapa { display: flex; align-items: stretch; gap: 4px; }
+.filtro-limpar-x {
+  flex: none; width: 30px; display: grid; place-items: center; padding: 0; border-radius: 8px; cursor: pointer;
+  background: var(--superficie); color: var(--texto); border: 1px solid var(--acento); font-size: .95rem; line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+}
+.filtro-limpar-x:hover, .filtro-limpar-x:focus-visible { background: var(--acento); color: #0a0d10; outline: none; }
+@media (pointer: coarse) { .filtro-limpar-x { width: 40px; } }
+@media (max-width: 860px) { .camadas-filtro.camadas-filtrado .camadas-rotulo { display: none; } .camadas-filtro.camadas-filtrado .camadas-resumo { margin-left: 0; padding-left: 0; border-left: 0; } }
+
+/* Meteorologia: situação do tempo em linguagem simples */
+.meteo-resumo { margin: 4px 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--superficie-2); border: 1px solid var(--borda); }
+.meteo-resumo-topo { display: flex; gap: 10px; align-items: flex-start; }
+.meteo-resumo-icone { font-size: 1.9rem; line-height: 1; flex: none; }
+.meteo-resumo-topo strong { display: block; font-size: 1rem; }
+.meteo-resumo-topo p { margin: 2px 0 0; font-size: .85rem; color: var(--texto-2); line-height: 1.3; }
+.meteo-resumo-depois { margin: 8px 0 6px; font-size: .88rem; font-weight: 600; line-height: 1.3; }
+.meteo-horas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.meteo-hora { display: grid; justify-items: center; gap: 1px; padding: 4px 2px; border-radius: 8px; background: var(--superficie); font-size: .72rem; }
+.meteo-hora-h { font-weight: 700; color: var(--texto-2); }
+.meteo-hora-i { font-size: 1.05rem; line-height: 1.2; }
+.meteo-hora-mm { font-family: var(--mono); font-size: .66rem; color: var(--texto-2); }
+.meteo-hora-fraca { box-shadow: inset 0 -3px 0 #60a5fa; }
+.meteo-hora-moderada { box-shadow: inset 0 -3px 0 #22c55e; }
+.meteo-hora-intensa { box-shadow: inset 0 -3px 0 #ef4444; }
+.meteo-painel:not([hidden]) { z-index: 1300; }   /* aberto: fica à frente dos botões Dia e Camadas */

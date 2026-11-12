@@ -483,13 +483,20 @@
           <button class="btn btn-pequeno" type="button" id="meteo-fechar" aria-label="Fechar o painel de meteorologia">✕</button>
         </div>
 
+        <!-- Situação do tempo em linguagem simples: agora, o que muda e as próximas horas -->
+        <div class="meteo-resumo" id="meteo-resumo" hidden>
+          <div class="meteo-resumo-topo"><span class="meteo-resumo-icone" id="meteo-resumo-icone" aria-hidden="true"></span><div><strong id="meteo-resumo-titulo"></strong><p id="meteo-resumo-agora"></p></div></div>
+          <p class="meteo-resumo-depois" id="meteo-resumo-depois"></p>
+          <ol class="meteo-horas" id="meteo-horas" aria-label="Próximas horas"></ol>
+        </div>
+
         <div class="meteo-alertas" id="meteo-alertas"></div>
         <p class="muted" id="meteo-alertas-vazio" hidden></p>
         <button class="btn btn-pequeno meteo-mais" type="button" id="meteo-mais-alertas" hidden></button>
 
         <div class="meteo-chips" role="group" aria-label="Camadas no mapa">
-          <button class="meteo-chip" type="button" id="meteo-chuva" aria-pressed="true" title="Radar de chuva: intensidade da chuva em cores de radar (previsão de modelo para agora)">Radar de chuva</button>
-          <button class="meteo-chip" type="button" id="meteo-radar" aria-pressed="true">Radar</button>
+          <button class="meteo-chip" type="button" id="meteo-chuva" aria-pressed="true" title="Onde o modelo de previsão indica chuva agora, em cores de radar (não é medição de radar)">Chuva prevista</button>
+          <button class="meteo-chip" type="button" id="meteo-radar" aria-pressed="true" title="Radar meteorológico: chuva medida agora">Radar</button>
           <button class="meteo-chip" type="button" id="meteo-vento" aria-pressed="false">Vento</button>
           <button class="meteo-chip" type="button" id="meteo-temp" aria-pressed="false">Temperatura</button>
         </div>
@@ -507,8 +514,8 @@
           <span class="meteo-detalhe" id="meteo-radar-hora"></span>
         </div>
 
-        <div class="meteo-agora" id="meteo-agora"></div>
-        <p class="meteo-previsao" id="meteo-previsao"></p>
+        <div class="meteo-agora" id="meteo-agora" hidden></div>
+        <p class="meteo-previsao" id="meteo-previsao" hidden></p>
 
         <div class="meteo-ajustes">
 

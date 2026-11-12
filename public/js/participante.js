@@ -178,8 +178,11 @@
     // Guarda a página e o mapa no aparelho já na primeira visita (abre de novo mesmo sem internet)
     registrarServiceWorker();
     if (NATIVO) ouvirApp();
-    // Sem link: a pessoa entra com o código da operação e espera os bombeiros aceitarem
-    if (!estado.token) return iniciarPorCodigo();
+    // "Entrar em outra busca com o código" (telas de início, erro e encerrada): quem já tem o aplicativo,
+    // que abre sempre na última busca, consegue pedir para entrar numa busca nova.
+    document.querySelectorAll('[data-outra-busca]').forEach(function (b) { b.addEventListener('click', abrirEntradaPorCodigo); });
+    // Sem link (ou pedido pelo código ainda esperando resposta): a pessoa entra com o código e espera os bombeiros aceitarem
+    if (!estado.token || (C.local.ler(CHAVE_PEDIDO, null) && !participacaoAtiva())) return iniciarPorCodigo();
 
     try {
       estado.info = await C.rpc('info_operacao', { p_token: estado.token });
@@ -564,7 +567,34 @@
   function mostrarCodigo() { var c = codigoDigitado(); $('cod-codigo').value = c.length > 3 ? c.slice(0, 3) + ' ' + c.slice(3) : c; }
   function erroCodigo(texto) { $('cod-erro').textContent = texto || ''; $('cod-erro').hidden = !texto; }
 
+  // A participação guardada neste aparelho para o link aberto está em andamento?
+  function participacaoAtiva() {
+    var salvo = C.local.ler(CHAVE_PART, null);
+    return Boolean(salvo && salvo.token === estado.token && salvo.ativo);
+  }
+
+  // Vai para a tela do código (sem trocar a busca guardada até os bombeiros aceitarem o pedido).
+  function abrirEntradaPorCodigo() {
+    if (estado.rastreando && !estado.finalizado) {
+      UI.aviso('Saia desta busca antes de entrar em outra.', 'erro', 5000);
+      return;
+    }
+    estado.token = null;
+    try { history.replaceState(null, '', location.pathname + location.search + (NATIVO ? '#app=1' : '')); } catch (e) { /* segue */ }
+    if (!estado.codigoPronto) iniciarPorCodigo();
+    else mostrarTela('codigo');
+    var salvo = C.local.ler(CHAVE_PART, null);
+    if (salvo && !$('cod-nome').value) {
+      $('cod-nome').value = salvo.nome || '';
+      $('cod-cpf').value = mascararCpf(salvo.cpf || '');
+      $('cod-tel').value = mascararTelefone(salvo.telefone || '');
+    }
+    setTimeout(function () { $('cod-codigo').focus(); }, 50);
+  }
+
   async function iniciarPorCodigo() {
+    if (estado.codigoPronto) { mostrarTela(estado.pedidoAcesso ? 'espera' : 'codigo'); return; }
+    estado.codigoPronto = true;
     $('form-codigo').addEventListener('submit', aoPedirAcesso);
     $('cod-codigo').addEventListener('input', mostrarCodigo);
     $('cod-cpf').addEventListener('input', function () { this.value = mascararCpf(this.value); });
@@ -3073,7 +3103,7 @@
   function mostrarAtivarBussola() {
     $('bussola-civil').hidden = false;
     $('bussola-ativar').hidden = false;
-    if (!rumoAtual()) $('bussola-direcao').textContent = 'Toque para ativar';
+    if (!rumoAtual()) $('bussola-direcao').textContent = '';   // só o botão "Ativar" (pequeno), sem texto a mais
   }
 
   // Liga as fontes de direção (ver o começo desta parte). Com o pedido de permissão, tenta sem toque primeiro.

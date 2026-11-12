@@ -37,6 +37,7 @@
           <h2>Não foi possível abrir a operação</h2>
           <p id="erro-texto"></p>
           <button class="btn btn-escuro btn-gigante" type="button" id="btn-recarregar">TENTAR NOVAMENTE</button>
+          <button class="btn btn-outra-busca" type="button" data-outra-busca>🔑 Entrar em outra busca com o código</button>
         </div>
       </section>
 
@@ -131,6 +132,7 @@
 
           <button class="btn btn-primario btn-gigante" type="submit" id="btn-iniciar">COMEÇAR</button>
           <p class="erro-form" id="ini-erro" role="alert" hidden></p>
+          <button class="btn btn-outra-busca" type="button" data-outra-busca>🔑 É outra busca? Entrar com o código</button>
         </form>
 
         <!-- Aplicativo Android (aparece só no Android, fora do aplicativo) -->
@@ -158,7 +160,7 @@
             </div>
             <div class="bussola-info">
               <strong id="bussola-direcao">—</strong>
-              <button class="btn btn-pequeno" type="button" id="bussola-ativar" hidden>Ativar bússola</button>
+              <button class="btn btn-pequeno" type="button" id="bussola-ativar" hidden aria-label="Ativar a bússola">Ativar</button>
             </div>
           </div>
           <div class="legenda-civil" aria-hidden="true">
@@ -335,6 +337,7 @@
           <p id="fim-texto"></p>
           <p class="muted" id="fim-nota">Sua localização não está mais sendo compartilhada. Você já pode fechar esta página.</p>
           <p class="muted" id="fim-aguardando" hidden>Se os bombeiros chamarem você de volta, esta tela avisa. Pode deixá-la aberta.</p>
+          <button class="btn btn-primario btn-outra-busca" type="button" data-outra-busca>🔑 Entrar em outra busca com o código</button>
         </div>
         <div class="cartao secao voltar-busca" id="fim-voltar" hidden role="alert">
           <h2>Os bombeiros chamaram você de volta</h2>

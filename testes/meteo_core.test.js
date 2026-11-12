@@ -236,5 +236,23 @@ teste('mapa de chuva: cores de radar e transparência pela intensidade', () => {
   assert.ok(M.opacidadeChuva(0) === 0 && fraca > 0.3 && forte > fraca && forte <= 0.75 && M.opacidadeChuva(500) <= 0.75);
 });
 
+teste('resumo em linguagem simples: agora, depois e próximas horas', () => {
+  const fmt = (ms) => new Date(ms).getUTCHours() + 'h';
+  const pv = { atual: { temperatura: 23.6, precipitacao: 0, codigo: 1, vento: 9, direcao: 135, rajada: null },
+    horas: [0, 1, 2, 3, 4, 5].map((h) => ({ t: new Date(agora + h * 3600e3).toISOString(), precip: h >= 2 ? 3 : 0, prob: null, codigo: h >= 2 ? 61 : 1, vento: 10 })) };
+  const r = M.resumoTempo(pv, agora, fmt);
+  assert.strictEqual(r.titulo, 'Poucas nuvens');
+  assert.ok(/24 °C · sem chuva agora · vento fraco vindo do sudeste \(9 km\/h\)/.test(r.agora), r.agora);
+  assert.ok(/Chuva moderada prevista a partir das 22h \(daqui a 2 h\)/.test(r.depois), r.depois);
+  assert.strictEqual(r.horas.length, 6);
+  assert.strictEqual(r.horas[2].chuva, 'moderada');
+  const chovendo = M.resumoTempo({ atual: { temperatura: 18, precipitacao: 12, codigo: 65, vento: 30, direcao: 0 }, horas: [{ t: new Date(agora + 3600e3).toISOString(), precip: 0, codigo: 3 }] }, agora, fmt);
+  assert.strictEqual(chovendo.titulo, 'Chuva forte');
+  assert.ok(/chuva forte \(12 mm\/h\)/.test(chovendo.agora) && /A chuva deve parar por volta das 21h/.test(chovendo.depois), chovendo.agora + ' | ' + chovendo.depois);
+  const tempestade = M.resumoTempo({ atual: { temperatura: 25, precipitacao: 0, codigo: 2, vento: 5 }, horas: [{ t: new Date(agora + 3600e3).toISOString(), precip: 8, codigo: 95, rajada: 70 }] }, agora, fmt);
+  assert.ok(/risco de tempestade com raios/.test(tempestade.depois) && /Rajadas fortes, até 70 km\/h/.test(tempestade.depois), tempestade.depois);
+  assert.strictEqual(M.resumoTempo(null, agora), null);
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes de meteorologia passaram.');

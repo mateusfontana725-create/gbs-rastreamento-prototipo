@@ -281,6 +281,35 @@ const MET = (fn) => (url) => json(fn(url));
     assert.strictEqual(r2.code, 401);
   });
 
+  await teste('radar REDEMET: só com a chave; lê as imagens com limites e fica com os radares perto da operação', async () => {
+    ambiente({ METEO_ALERTAS_URL: '', REDEMET_API_KEY: 'chave-teste' });
+    const respRedemet = { status: true, data: { radar: [[
+      { localidade: 'sr', nome: 'São Roque', lat_min: -26.3, lat_max: -21.0, lon_min: -50.0, lon_max: -44.5, path: 'https://estatico-redemet.decea.mil.br/radar/sr.png', data: '2026-11-12 19:50' },
+      { localidade: 'bv', nome: 'Boa Vista', lat_min: 0.0, lat_max: 4.5, lon_min: -63.0, lon_max: -58.5, path: 'https://estatico-redemet.decea.mil.br/radar/bv.png' },
+      { nome: 'fora da REDEMET', lat_min: -27, lat_max: -24, lon_min: -51, lon_max: -48, path: 'https://exemplo.test/x.png' },
+    ]] } };
+    let urlPedida = '';
+    global.fetch = fetchFalso({ 'rpc/eh_responsavel': ok(true), 'api.met.no/weatherapi/locationforecast': MET(() => metResp(21, 3, 90, 0, 'fair_day')),
+      'api-redemet.decea.mil.br': (u) => { urlPedida = u; return json(respRedemet); } });
+    const r = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r);
+    assert.ok(/api_key=chave-teste/.test(urlPedida));
+    assert.strictEqual(r.body.fontes.radarBr.ok, true);
+    assert.strictEqual(r.body.radarBr.imagens.length, 1);
+    assert.strictEqual(r.body.radarBr.imagens[0].nome, 'São Roque');
+    assert.ok(!JSON.stringify(r.body).includes('chave-teste'), 'a chave não volta para a página');
+    delete process.env.REDEMET_API_KEY;
+    const r2 = resposta(); await carregar()(req({ lat: '-25.4', lng: '-49.2' }, 't'), r2);
+    assert.strictEqual(r2.body.fontes.radarBr.status, 'nao_configurado');
+    assert.strictEqual(r2.body.radarBr, null);
+  });
+  await teste('imagem do radar pelo servidor: só endereços da REDEMET', async () => {
+    ambiente({}); global.fetch = fetchFalso(RESP_OK);
+    const r = resposta(); await carregar()(req({ tipo: 'radar_img', u: 'https://exemplo.test/x.png' }, 't'), r);
+    assert.strictEqual(r.code, 400);
+    const r2 = resposta(); await carregar()(req({ tipo: 'radar_img', u: 'https://estatico-redemet.decea.mil.br/x.png' }), r2);
+    assert.strictEqual(r2.code, 401);
+  });
+
   if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
   console.log('\nTodos os testes do endpoint de meteorologia passaram.');
 })();

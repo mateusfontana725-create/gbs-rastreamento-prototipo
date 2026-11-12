@@ -349,6 +349,78 @@
       eta: { t: new Date(Date.now() + tendencia.etaMin * 60e3).toISOString(), incertezaMin: Math.max(30, Math.round(tendencia.etaMin / 2)), tipo: 'estimativa_tendencia' } };
   }
 
+  /* ---------- Resumo em linguagem simples (painel do tempo) ---------- */
+  // Código WMO → descrição curta e ícone.
+  function descreverTempo(codigo) {
+    var c = Number(codigo);
+    if (codigo == null || !isFinite(c)) return null;
+    if (c === 96 || c === 99) return { icone: '⛈', texto: 'Tempestade com granizo' };
+    if (c >= 95) return { icone: '⛈', texto: 'Tempestade com raios' };
+    if (c >= 80) return { icone: '🌦', texto: 'Pancadas de chuva' };
+    if (c >= 71 && c <= 77) return { icone: '🌨', texto: 'Neve' };
+    if (c === 65 || c === 67) return { icone: '🌧', texto: 'Chuva forte' };
+    if (c >= 61) return { icone: '🌧', texto: 'Chuva' };
+    if (c >= 51) return { icone: '🌦', texto: 'Garoa' };
+    if (c >= 45) return { icone: '🌫', texto: 'Neblina' };
+    if (c === 3) return { icone: '☁', texto: 'Nublado' };
+    if (c === 2) return { icone: '⛅', texto: 'Parcialmente nublado' };
+    if (c === 1) return { icone: '🌤', texto: 'Poucas nuvens' };
+    return { icone: '☀', texto: 'Céu limpo' };
+  }
+  var NOME_DIRECAO = { N: 'norte', NE: 'nordeste', L: 'leste', SE: 'sudeste', S: 'sul', SO: 'sudoeste', O: 'oeste', NO: 'noroeste' };
+  function textoChuva(mm) {
+    var i = intensidadeChuva(mm);
+    return i === 'nenhuma' ? 'sem chuva' : 'chuva ' + (i === 'intensa' ? 'forte' : i) + ' (' + (Math.round(mm * 10) / 10).toString().replace('.', ',') + ' mm/h)';
+  }
+  function textoVento(kmh, direcao) {
+    if (kmh == null || !isFinite(kmh)) return null;
+    var b = beaufort(kmh);
+    var forca = b.forca <= 1 ? 'quase parado' : b.forca <= 3 ? 'fraco' : b.forca <= 5 ? 'moderado' : b.forca <= 7 ? 'forte' : 'muito forte';
+    var de = direcao != null && isFinite(direcao) ? ' vindo do ' + NOME_DIRECAO[direcaoCardeal(direcao)] : '';
+    return 'vento ' + forca + de + ' (' + Math.round(kmh) + ' km/h)';
+  }
+  // Resumo para quem não é meteorologista: { icone, titulo, agora, depois, horas[] }.
+  // horaFmt(ms) → "15h" (o painel passa o formato do fuso local).
+  function resumoTempo(pv, agoraMs, horaFmt) {
+    if (!pv || !pv.atual) return null;
+    var fmt = horaFmt || function (ms) { return new Date(ms).getUTCHours() + 'h'; };
+    var a = pv.atual;
+    var chove = a.precipitacao != null && a.precipitacao > 0.05;
+    var d = descreverTempo(a.codigo) || (chove ? { icone: '🌧', texto: 'Chuva' } : { icone: '🌤', texto: 'Tempo firme' });
+    if (chove && !/chuva|garoa|pancada|tempestade/i.test(d.texto)) d = { icone: '🌧', texto: 'Chuva' };
+    var partes = [];
+    if (a.temperatura != null) partes.push(Math.round(a.temperatura) + ' °C');
+    partes.push(chove ? textoChuva(a.precipitacao) : 'sem chuva agora');
+    var v = textoVento(a.vento, a.direcao);
+    if (v) partes.push(v + (a.rajada != null && a.rajada >= LIMIARES.rajadaAtencao ? ', rajadas de ' + Math.round(a.rajada) + ' km/h' : ''));
+    var futuras = (pv.horas || []).filter(function (h) { var t = Date.parse(h.t); return t > agoraMs - 1800e3 && t <= agoraMs + 6 * 3600e3; });
+    // O que muda nas próximas 6 h (frase única)
+    var depois;
+    var primeiraChuva = null, fimChuva = null, maxMm = 0, maxRaj = 0;
+    futuras.forEach(function (h) {
+      var t = Date.parse(h.t), mm = h.precip || 0;
+      if (h.rajada != null) maxRaj = Math.max(maxRaj, h.rajada);
+      if (mm >= LIMIARES.mmParaChegada || (h.prob != null && h.prob >= LIMIARES.probParaChegada)) {
+        if (primeiraChuva == null && t > agoraMs) primeiraChuva = t;
+        maxMm = Math.max(maxMm, mm);
+      } else if (chove && fimChuva == null && t > agoraMs) fimChuva = t;
+    });
+    var tempestade = futuras.some(function (h) { return CODIGOS_TEMPESTADE.indexOf(Number(h.codigo)) !== -1; });
+    if (!futuras.length) depois = 'Sem previsão para as próximas horas.';
+    else if (chove && fimChuva) depois = 'A chuva deve parar por volta das ' + fmt(fimChuva) + '.';
+    else if (chove) depois = 'Deve continuar chovendo nas próximas horas.';
+    else if (primeiraChuva) depois = 'Chuva ' + (intensidadeChuva(maxMm) === 'intensa' ? 'forte ' : intensidadeChuva(maxMm) === 'moderada' ? 'moderada ' : '') + 'prevista a partir das ' + fmt(primeiraChuva) + ' (daqui a ' + Math.max(1, Math.round((primeiraChuva - agoraMs) / 3600e3)) + ' h).';
+    else depois = 'Sem chuva prevista nas próximas 6 horas.';
+    if (tempestade) depois += ' Há risco de tempestade com raios.';
+    if (maxRaj >= LIMIARES.rajadaAlerta) depois += ' Rajadas fortes, até ' + Math.round(maxRaj) + ' km/h.';
+    var horas = futuras.filter(function (h) { return Date.parse(h.t) >= agoraMs - 1800e3; }).slice(0, 6).map(function (h) {
+      var dd = descreverTempo(h.codigo) || ((h.precip || 0) > 0.05 ? { icone: '🌧', texto: 'Chuva' } : { icone: '🌤', texto: '' });
+      return { t: h.t, hora: fmt(Date.parse(h.t)), icone: dd.icone, mm: h.precip != null ? Math.round(h.precip * 10) / 10 : null,
+        chuva: intensidadeChuva(h.precip), vento: h.vento != null ? Math.round(h.vento) : null };
+    });
+    return { icone: d.icone, titulo: d.texto, agora: partes.join(' · '), depois: depois, horas: horas };
+  }
+
   var API = {
     beaufort: beaufort, alertaBeaufort: alertaBeaufort, BEAUFORT: BEAUFORT,
     direcaoCardeal: direcaoCardeal, chuvaMaisProxima: chuvaMaisProxima, alertaChuvaProxima: alertaChuvaProxima, tendenciaChuva: tendenciaChuva,
@@ -357,6 +429,7 @@
     PARADAS_TEMP: PARADAS_TEMP, PARADAS_VENTO: PARADAS_VENTO,
     LIMIARES: LIMIARES, intensidadeChuva: intensidadeChuva, distanciaM: distanciaM, rumoGraus: rumoGraus,
     nivelDeSeveridade: nivelDeSeveridade, maior: maior, previsaoChegada: previsaoChegada, analisar: analisar,
+    descreverTempo: descreverTempo, textoVento: textoVento, resumoTempo: resumoTempo,
     desatualizado: desatualizado, deveNotificar: deveNotificar, compararLeituras: compararLeituras, RANK: RANK,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;

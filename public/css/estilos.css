@@ -2774,3 +2774,26 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-sel
 .mapa-pacote-txt { display: grid; gap: 2px; min-width: 0; }
 .mapa-pacote-txt small { color: var(--texto-3); font-size: .78rem; line-height: 1.25; }
 
+
+/* "Entrar em outra busca com o código" (participante: telas de início, erro e encerrada) */
+.btn-outra-busca { display: block; width: 100%; max-width: 100%; margin-top: 12px; white-space: normal; height: auto; min-height: 44px; line-height: 1.25; padding: 8px 12px; font-size: .85rem; text-transform: none; letter-spacing: 0; }
+
+/* ---- Avisos rápidos minimalistas (painel e participante): pequenos, no máximo 2 linhas, sem cobrir o mapa ---- */
+#avisos { width: auto; max-width: min(380px, calc(100% - 24px)); gap: 4px; align-items: center; }
+#avisos > .aviso {
+  align-items: center; gap: 6px; padding: 5px 6px 5px 10px; border-radius: 999px; border-left-width: 1px;
+  font-size: .8rem; font-weight: 600; line-height: 1.25; box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+  max-width: 100%; animation: aviso-entra .18s ease-out;
+}
+#avisos > .aviso .aviso-texto { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+#avisos > .aviso-erro { box-shadow: 0 0 0 1px rgba(239, 68, 68, .5), 0 2px 10px rgba(0, 0, 0, .35); }
+#avisos > .aviso .aviso-fechar { width: 22px; height: 22px; margin: 0; font-size: 1rem; border-radius: 50%; }
+@media (pointer: coarse) { #avisos > .aviso .aviso-fechar { width: 30px; height: 30px; margin: -4px -2px; } }
+.aviso-vezes { flex: none; font-size: .7rem; font-weight: 800; opacity: .8; padding: 1px 6px; border-radius: 999px; background: rgba(255, 255, 255, .12); }
+@keyframes aviso-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #avisos > .aviso { animation: none; } }
+.bussola-info strong:empty { display: none; }
+.civil-em-rastreio #tela-rastreio .bussola-civil { width: 62px; }
+/* avisos do participante: largura da tela, cada aviso no tamanho do texto (centralizado) */
+html body #avisos { left: 12px; right: 12px; transform: none; width: auto; max-width: none; }
+#avisos > .aviso { max-width: min(380px, 100%); }

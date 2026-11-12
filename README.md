@@ -130,6 +130,33 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
   hora para todos os responsáveis. Operação encerrada não permite excluir.
 - **Celular**: botões de toque (44 px ou mais), barra de baixo enxuta e o canto direito com os botões do mapa menores (40 px).
 
+### Avisos pequenos, tempo em linguagem simples, importação e outra busca pelo aplicativo
+
+- **Avisos pequenos:** os avisos rápidos (painel e participante) viraram etiquetas compactas, de no máximo 2 linhas e
+  com até 2 na tela. O mesmo aviso repetido não empilha: aparece uma vez com "×2", "×3". O filtro do mapa não mostra mais
+  a faixa larga no topo: o botão 📅 já mostra o dia ou a pessoa, e um ✕ pequeno ao lado tira o filtro. No participante,
+  a bússola sem permissão mostra só o botão "Ativar".
+- **Meteorologia:** o painel abre com a situação do tempo escrita de forma simples ("Agora: Parcialmente nublado · 23 °C
+  · sem chuva agora · vento fraco vindo do sudeste"), o que muda nas próximas 6 horas (quando a chuva chega ou para, risco
+  de tempestade, rajadas) e uma faixa hora a hora. A camada que antes se chamava "Radar de chuva" agora se chama
+  **Chuva prevista**: ela vem do modelo de previsão, com pontos a cada ~40 km, e não é radar. Para ter radar de verdade
+  (como no Windy), peça a chave gratuita da **REDEMET** (DECEA, Força Aérea) e coloque em `REDEMET_API_KEY` na Vercel. Com
+  a chave, aparece o botão **Radar**, com as imagens MAXCAPPI dos radares perto da operação, que passam pelo servidor sem
+  expor a chave. O formato da resposta da REDEMET não foi conferido com uma chave real: se o radar não aparecer, o
+  painel mostra "indisponível" em "Mais informações". No celular, o painel não passa mais do topo do mapa.
+- **Importação:** cada coisa importada vira o que é no app. Áreas viram setores, pontos viram pontos de interesse e
+  linhas viram trilhas, com todas as funções. Antes, uma segunda linha com o mesmo nome (por exemplo, as partes de uma
+  MultiGeometry do KML, ou um arquivo importado de novo) era recusada e ficava só como desenho no aparelho. Agora, mesmo
+  nome com o mesmo desenho já existe e não duplica; mesmo nome com outro desenho entra como "Nome (2)". Ao abrir a
+  operação, o que tinha ficado preso no aparelho é enviado sozinho, uma vez e sem perguntar. Só imagens (PNG/JPG/KMZ com
+  imagem) continuam só no aparelho.
+- **Outra busca pelo aplicativo:** o aplicativo abre sempre na última busca. Nas telas de início, de erro e de busca
+  encerrada há o botão **"Entrar em outra busca com o código"**, que abre o campo do código da operação. A busca
+  guardada só muda quando os bombeiros aceitam o pedido. Com o registro em andamento, o app pede para sair primeiro.
+
+**Teste:** no app, abra uma busca já usada, toque em "É outra busca? Entrar com o código", digite o código de outra
+operação e espere o aceite. Importe um KML com MultiGeometry: as duas linhas viram trilhas ("Nome" e "Nome (2)").
+
 ### Mensagens enviadas ao voltar a internet sem erro de duplicidade (migração 079)
 
 Quando a internet voltava, o celular reenviava cada mensagem guardada por vários caminhos ao mesmo tempo, e o banco
@@ -1147,6 +1174,7 @@ e educacional. Confira os termos do MET Norway antes da operação real. O endpo
 | `METEO_ALERTAS_URL` | não | URL do feed de alertas do INMET no formato CAP (JSON). Sem ela, o painel mostra "alertas oficiais não configurados". O endereço ainda não foi verificado: confirme no catálogo WIS2 do INMET antes de definir |
 | `OPEN_METEO_API_KEY` | não | chave do plano comercial do Open-Meteo. Se definida, a previsão passa a vir dele (no lugar do MET Norway) |
 | `METEO_USER_AGENT` | não | identificação do aplicativo enviada ao MET Norway (nome e contato). Há um valor padrão |
+| `REDEMET_API_KEY` | não | chave gratuita da REDEMET (DECEA): liga o radar oficial brasileiro (MAXCAPPI) no painel do tempo |
 | `METEO_RADAR` | não | `rainviewer` liga o radar (uso pessoal e educacional apenas). Sem a variável, o radar fica desligado |
 
 O MET Norway não exige chave. Nada disso aparece no navegador: as chaves ficam só no servidor.

@@ -32,13 +32,23 @@
     var erro = tipo === 'erro', fixo = ms === 'fixo';
     var dur = fixo ? null : Math.min(ms || (erro ? 6000 : 3500), erro ? AVISO_MAX_ERRO : AVISO_MAX);
     var timer = null;
-    var a = el('div', { classe: 'aviso' + (tipo ? ' aviso-' + tipo : '') + (fixo ? ' aviso-fixo' : ''), role: erro ? 'alert' : 'status' }, [
+    // O mesmo aviso de novo não empilha: some o anterior e o novo mostra quantas vezes aconteceu (×2, ×3…).
+    var chave = (tipo || '') + '|' + String(texto);
+    var vezes = 1;
+    Array.prototype.slice.call(raiz.children).forEach(function (v) {
+      if (v._chave === chave) { vezes += v._vezes || 1; if (v._fechar) v._fechar(); else raiz.removeChild(v); }
+    });
+    var a = el('div', { classe: 'aviso' + (tipo ? ' aviso-' + tipo : '') + (fixo ? ' aviso-fixo' : ''), role: erro ? 'alert' : 'status', title: String(texto) }, [
       el('span', { classe: 'aviso-texto', texto: texto }),
+      vezes > 1 ? el('span', { classe: 'aviso-vezes', texto: '×' + vezes }) : null,
     ]);
+    a._chave = chave;
+    a._vezes = vezes;
     function fechar() {
       clearTimeout(timer);
       if (a.parentNode) a.parentNode.removeChild(a);
     }
+    a._fechar = fechar;
     a.appendChild(el('button', { classe: 'aviso-fechar', type: 'button', 'aria-label': 'Fechar aviso', title: 'Fechar', texto: '×',
       onclick: function (ev) { ev.stopPropagation(); fechar(); } }));
     if (!fixo) {
@@ -51,10 +61,10 @@
       timer = setTimeout(fechar, dur);
     }
     raiz.appendChild(a);
-    // no máximo 3 na tela: sai o mais antigo que não seja fixo
-    while (raiz.children.length > 3) {
+    // no máximo 2 na tela (não cobrem o mapa): sai o mais antigo que não seja fixo
+    while (raiz.children.length > 2) {
       var velho = raiz.querySelector('.aviso:not(.aviso-fixo)') || raiz.firstChild;
-      raiz.removeChild(velho);
+      if (velho._fechar) velho._fechar(); else raiz.removeChild(velho);
     }
     return a;
   }

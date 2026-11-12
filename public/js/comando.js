@@ -6716,9 +6716,27 @@
   }
 
   // Linha importada vira trilha da operação (planejada, ou percorrida se o arquivo traz horário final).
+  // Como nos setores: mesmo nome e mesmo desenho = já está na operação (devolve a existente com jaExistia, sem duplicar);
+  // mesmo nome com outro desenho (ex.: as partes de uma MultiGeometry do KML, ou outro arquivo) = entra como "Nome (2)".
+  // Antes a segunda era recusada pelo banco (nome_repetido) e ficava só como desenho local, sem as funções de trilha.
   async function enviarTrilhaImportada(dados) {
     if (!est.op || !podeAlterar() || est.semTrilhasManuais) throw new Error('Trilhas indisponíveis nesta operação.');
-    var r = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: null, p_dados: Object.assign({ client_id: C.uuid() }, dados) });
+    var pts = dados.pontos || [];
+    var nome = String(dados.nome || 'Trilha importada').trim().slice(0, 80);
+    var mesmas = Array.from(est.trilhasManuais.values()).filter(function (x) { return String(x.d.nome || '').trim().toLowerCase() === nome.toLowerCase(); });
+    var igual = mesmas.find(function (x) {
+      var q = x.d.pontos || [];
+      return q.length && pts.length && C.distancia(q[0][0], q[0][1], pts[0][0], pts[0][1]) < 3 &&
+        C.distancia(q[q.length - 1][0], q[q.length - 1][1], pts[pts.length - 1][0], pts[pts.length - 1][1]) < 3 && Math.abs(q.length - pts.length) <= 2;
+    });
+    if (igual) return Object.assign({}, igual.d, { jaExistia: true });
+    if (mesmas.length) {
+      var nomes = new Set(Array.from(est.trilhasManuais.values()).map(function (x) { return String(x.d.nome || '').trim().toLowerCase(); }));
+      var n = 2, base = nome.slice(0, 74);
+      while (nomes.has((base + ' (' + n + ')').toLowerCase())) n++;
+      nome = base + ' (' + n + ')';
+    }
+    var r = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: null, p_dados: Object.assign({ client_id: C.uuid() }, dados, { nome: nome }) });
     aplicarTrilhasManuais([r], false);
     return r;
   }
@@ -12133,22 +12151,26 @@
     }
   }
 
+  // Filtro ou foco ligado: só um "✕" pequeno colado no botão do filtro (que já mostra o dia e a pessoa).
+  // Antes era uma faixa larga no topo do mapa, que cobria o mapa e, no celular, os botões.
   function atualizarBarraFoco() {
-    var barra = $('barra-foco');
+    var antiga = $('barra-foco');
+    if (antiga) antiga.remove();
+    var caixa = $('filtro-mapa');
+    var x = $('foco-sair');
     var p = est.focoPessoa && est.participantes.get(est.focoPessoa);
     var f = est.filtroDia;
-    if (!p && !f) { if (barra) barra.remove(); return; }
-    if (!barra) {
-      barra = UI.el('div', { id: 'barra-foco', classe: 'barra-foco', role: 'status' });
-      ($('pilha-topo') || $('mapa').parentNode).appendChild(barra);
+    if (!caixa || (!p && !f)) { if (x) x.remove(); return; }
+    if (!x) {
+      x = UI.el('button', { classe: 'filtro-limpar-x', type: 'button', id: 'foco-sair', texto: '✕', onclick: function () {
+        if (est.filtroDia) definirFiltroDia(null);
+        if (est.focoPessoa) focarPessoa(null);
+      } });
+      caixa.appendChild(x);
     }
-    barra.innerHTML = '';
-    var txt = (f ? '📅 ' + rotuloDia(f.dia) : '') + (f && p ? ' · ' : '') + (p ? '👁 Mostrando só ' + nomeExibido(p) : '');
-    barra.appendChild(UI.el('button', { classe: 'barra-foco-txt', type: 'button', title: 'Mudar o filtro', texto: txt, onclick: function () { abrirFiltroMapa(); } }));
-    barra.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'foco-sair', texto: '✕ Mostrar todos', onclick: function () {
-      if (est.filtroDia) definirFiltroDia(null);
-      if (est.focoPessoa) focarPessoa(null);
-    } }));
+    var desc = (f ? rotuloDia(f.dia) : '') + (f && p ? ' · ' : '') + (p ? 'só ' + nomeExibido(p) : '');
+    x.title = 'Mostrar todos (tirar o filtro: ' + desc + ')';
+    x.setAttribute('aria-label', 'Mostrar todos: tirar o filtro ' + desc);
   }
 
   function focarPessoa(id) {

@@ -67,6 +67,8 @@
     var rc = pn.offsetParent.getBoundingClientRect(), rb = bt.getBoundingClientRect();
     if (!rb.height) return;
     pn.style.bottom = Math.max(10, Math.round(rc.bottom - rb.top + 8)) + 'px';
+    // nunca passa do topo do mapa (no celular o mapa é baixo): o resto rola dentro do painel
+    pn.style.maxHeight = Math.max(150, Math.round(rb.top - rc.top - 16)) + 'px';
   }
 
   function ligar(valor) {
@@ -94,6 +96,9 @@
     }
     if (quer) { est.camadaRadar.setUrl(urlQuadro(est.quadro)); est.camadaRadar.addTo(m); }
     else if (m.hasLayer(est.camadaRadar)) m.removeLayer(est.camadaRadar);
+    var querBr = est.ligada && est.radar && !quer && Boolean(est.radarBr && est.radarBr.imagens.length);
+    aplicarRadarBr(m, querBr);
+    quer = quer || querBr;
 
     if (!est.camadaVento) est.camadaVento = MeteoMapa.criarVento();
     if (!est.camadaTemp) est.camadaTemp = MeteoMapa.criarTemperatura();
@@ -108,6 +113,34 @@
       if (!quer2 && m.hasLayer(camada)) m.removeLayer(camada);
       if (quer2 && gradeMapa && camada._gradeOrigem !== gradeMapa) { camada._gradeOrigem = gradeMapa; camada.setGrade(gradeMapa); }
     });
+  }
+
+  // Radar oficial (REDEMET): uma imagem por radar perto da operação, com os limites que a API informa. A imagem vem
+  // pelo servidor (/api/meteo?tipo=radar_img), com o login, e entra no mapa como imagem local (blob).
+  function aplicarRadarBr(m, quer) {
+    var chave = quer ? est.radarBr.imagens.map(function (i) { return i.url; }).join('|') : '';
+    if (est.radarBrChave === chave) return;
+    (est.radarBrCamadas || []).forEach(function (c) { if (m.hasLayer(c)) m.removeLayer(c); if (c._blobUrl) URL.revokeObjectURL(c._blobUrl); });
+    est.radarBrCamadas = [];
+    est.radarBrChave = chave;
+    if (!quer) return;
+    sessaoToken().then(function (token) {
+      est.radarBr.imagens.forEach(function (img) {
+        fetch('/api/meteo?tipo=radar_img&u=' + encodeURIComponent(img.url), { headers: { Authorization: 'Bearer ' + token } })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+          .then(function (b) {
+            if (est.radarBrChave !== chave) return;
+            var u = URL.createObjectURL(b);
+            var c = L.imageOverlay(u, [[img.sul, img.oeste], [img.norte, img.leste]], { opacity: 0.7, zIndex: 400, interactive: false,
+              attribution: 'Radar: REDEMET (DECEA)' });
+            c._blobUrl = u;
+            est.radarBrCamadas.push(c);
+            c.addTo(m);
+            est.tilesOk++; desenharRadarEstado();
+          })
+          .catch(function () { est.tilesErro++; desenharRadarEstado(); });
+      });
+    }).catch(function () { /* sem sessão: tenta na próxima atualização */ });
   }
 
   // Tile do radar sobre a operação: endereço para abrir numa aba e conferir a resposta do provedor.
@@ -163,7 +196,7 @@
     var el = $('meteo-radar-tiles');
     if (!el) return;
     var total = est.tilesOk + est.tilesErro;
-    if (!est.ligada || !est.radar || !est.quadros.length) { el.textContent = ''; return; }
+    if (!est.ligada || !est.radar || (!est.quadros.length && !est.radarBr)) { el.textContent = ''; return; }
     if (!total) { el.textContent = 'Imagens do radar: carregando…'; el.className = 'meteo-detalhe meteo-radar-tiles'; return; }
     if (est.tilesOk === 0) {
       el.textContent = 'Imagens do radar não carregaram (' + est.tilesErro + ' com erro). Veja o console do navegador.';
@@ -179,7 +212,7 @@
     var o = op(), id = o ? o.id : null;
     if (id === est.opId) return;
     est.opId = id;
-    est.alertas = []; est.estados = []; est.chuvaHist = []; est.previsao = null; est.quadros = []; est.atualizadoEm = null; est.grade = null;
+    est.alertas = []; est.estados = []; est.chuvaHist = []; est.previsao = null; est.quadros = []; est.atualizadoEm = null; est.grade = null; est.radarBr = null;
     est.historico = id ? (lerLocal(CHAVE_HIST + id, []) || []) : [];
     est.ultimoSom = {};
   }
@@ -274,6 +307,7 @@
       $('meteo-range').max = String(est.quadros.length - 1);
       if (!antes || est.quadro >= est.quadros.length - 1) mostrarQuadro(est.quadros.length - 1);
     }
+    est.radarBr = d.radarBr && d.radarBr.imagens && d.radarBr.imagens.length ? d.radarBr : null;
     // Os alertas são integrados depois, em buscarGrade, quando a grade da área já está disponível.
     est.oficiais = d.alertas || [];
   }
@@ -360,8 +394,8 @@
     desenharAlertas();
     desenharLegenda();
     $('meteo-radar-bloco').hidden = !(est.radar && est.quadros.length);
-    // Sem radar no servidor (desligado por padrão), o botão Radar não aparece
-    $('meteo-radar').hidden = !est.quadros.length;
+    // Sem radar no servidor (RainViewer desligado por padrão; REDEMET só com a chave), o botão Radar não aparece
+    $('meteo-radar').hidden = !est.quadros.length && !est.radarBr;
     desenharPrevisao();
     desenharFontes();
     desenharGradeEstado();
@@ -409,8 +443,9 @@
   function desenharLegenda() {
     var bloco = $('meteo-legenda');
     var partes = [];
-    if (est.ligada && est.radar && est.quadros.length) partes.push('<div class="meteo-legenda-bloco"><strong>Radar · intensidade da chuva</strong><p class="meteo-legenda-linha"><span class="meteo-swatch meteo-swatch-radar"></span>tons claros = fraca; escuros e vermelhos = intensa</p></div>');
-    if (est.ligada && est.chuva && !(est.radar && est.quadros.length)) partes.push('<div class="meteo-legenda-bloco"><strong>Radar de chuva · intensidade (mm/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-chuva"></div><div class="meteo-escala-rotulos"><span>0,1</span><span>2,5</span><span>10</span><span>50+ mm/h</span></div></div><p class="meteo-legenda-linha muted">Previsão de modelo para agora (pontos a cada ' + ({ operacao: '~40 km', parana: '~60 km', brasil: '~450 km' }[est.gradeMapa ? est.gradeMapaArea : 'operacao']) + '): mostra onde chove, não substitui o radar' + (est.satelite ? '; o satélite mostra as nuvens de chuva com mais detalhe' : '') + '.</p></div>');
+    var temRadar = est.quadros.length || est.radarBr;
+    if (est.ligada && est.radar && temRadar) partes.push('<div class="meteo-legenda-bloco"><strong>Radar · intensidade da chuva</strong><p class="meteo-legenda-linha"><span class="meteo-swatch meteo-swatch-radar"></span>tons claros = fraca; escuros e vermelhos = intensa</p></div>');
+    if (est.ligada && est.chuva && !(est.radar && temRadar)) partes.push('<div class="meteo-legenda-bloco"><strong>Chuva prevista · intensidade (mm/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-chuva"></div><div class="meteo-escala-rotulos"><span>0,1</span><span>2,5</span><span>10</span><span>50+ mm/h</span></div></div><p class="meteo-legenda-linha muted">Previsão de modelo para agora (pontos a cada ' + ({ operacao: '~40 km', parana: '~60 km', brasil: '~450 km' }[est.gradeMapa ? est.gradeMapaArea : 'operacao']) + '): mostra onde chove, não substitui o radar' + (est.satelite ? '; o satélite mostra as nuvens de chuva com mais detalhe' : '') + '.</p></div>');
     if (est.ligada && est.vento) partes.push('<div class="meteo-legenda-bloco"><strong>Vento · velocidade (km/h)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-vento"></div><div class="meteo-escala-rotulos"><span>0</span><span>25</span><span>50+ km/h</span></div></div></div>');
     if (est.ligada && est.temp) partes.push('<div class="meteo-legenda-bloco"><strong>Temperatura (°C)</strong><div class="meteo-escala"><div class="meteo-barra" id="meteo-barra-temp"></div><div class="meteo-escala-rotulos"><span>-5 °C</span><span>16 °C</span><span>38 °C</span></div></div></div>');
     bloco.innerHTML = partes.join('');
@@ -424,38 +459,42 @@
       Core.PARADAS_VENTO.map(function (p) { return 'rgb(' + p[1].join(',') + ') ' + (p[0] / 50 * 100).toFixed(1) + '%'; }).join(', ') + ')';
   }
 
-  // Valores de agora em três cartões, e uma frase para a chegada da chuva.
+  // Situação do tempo em linguagem simples (MeteoCore.resumoTempo): o que acontece agora, o que muda nas
+  // próximas horas e uma faixa hora a hora.
+  function horaCurta(ms) { var d = new Date(ms); return d.getHours() + 'h'; }
   function desenharPrevisao() {
-    var pv = est.previsao;
-    var cartoes = $('meteo-agora');
-    if (!pv || !pv.atual) {
-      cartoes.innerHTML = '';
-      $('meteo-previsao').textContent = est.atualizadoEm ? 'Previsão indisponível.' : '';
+    var caixa = $('meteo-resumo');
+    var r = Core.resumoTempo(est.previsao, Date.now(), horaCurta);
+    if (!r) {
+      caixa.hidden = !est.atualizadoEm;
+      $('meteo-resumo-icone').textContent = '';
+      $('meteo-resumo-titulo').textContent = est.atualizadoEm ? 'Previsão indisponível agora' : '';
+      $('meteo-resumo-agora').textContent = '';
+      $('meteo-resumo-depois').textContent = '';
+      $('meteo-horas').innerHTML = '';
       return;
     }
-    var a = pv.atual;
-    var itens = [
-      ['Temperatura', a.temperatura != null ? Math.round(a.temperatura) + ' °C' : '—'],
-      ['Vento', a.vento != null ? Math.round(a.vento) + ' km/h · Bf ' + Core.beaufort(a.vento).forca : '—'],
-      ['Rajadas', a.rajada != null ? Math.round(a.rajada) + ' km/h' : '—'],
-    ];
-    cartoes.innerHTML = '';
-    itens.forEach(function (x) {
-      var div = document.createElement('div'); div.className = 'meteo-stat';
-      var r = document.createElement('span'); r.textContent = x[0];
-      var v = document.createElement('strong'); v.textContent = x[1];
-      div.appendChild(r); div.appendChild(v); cartoes.appendChild(div);
+    caixa.hidden = false;
+    $('meteo-resumo-icone').textContent = r.icone;
+    $('meteo-resumo-titulo').textContent = 'Agora: ' + r.titulo;
+    $('meteo-resumo-agora').textContent = r.agora.charAt(0).toUpperCase() + r.agora.slice(1) + '.';
+    $('meteo-resumo-depois').textContent = r.depois;
+    var ol = $('meteo-horas');
+    ol.innerHTML = '';
+    r.horas.forEach(function (h) {
+      var li = document.createElement('li');
+      li.className = 'meteo-hora meteo-hora-' + h.chuva;
+      li.title = h.hora + ': ' + (h.chuva === 'nenhuma' ? 'sem chuva' : 'chuva ' + (h.chuva === 'intensa' ? 'forte' : h.chuva) + (h.mm != null ? ' (' + String(h.mm).replace('.', ',') + ' mm)' : '')) + (h.vento != null ? ', vento ' + h.vento + ' km/h' : '');
+      var a = document.createElement('span'); a.className = 'meteo-hora-h'; a.textContent = h.hora;
+      var b = document.createElement('span'); b.className = 'meteo-hora-i'; b.textContent = h.icone; b.setAttribute('aria-hidden', 'true');
+      var c = document.createElement('span'); c.className = 'meteo-hora-mm'; c.textContent = h.mm ? String(h.mm).replace('.', ',') + ' mm' : '—';
+      li.appendChild(a); li.appendChild(b); li.appendChild(c);
+      ol.appendChild(li);
     });
-    var chegada = Core.previsaoChegada(pv.horas, Date.now());
-    $('meteo-previsao').textContent = chegada
-      ? (chegada.iniciada
-        ? 'Chuva prevista desde ' + hora(chegada.t) + ' (período já iniciado), segundo o modelo.'
-        : 'Chegada da chuva prevista por volta de ' + hora(chegada.t) + ' (±' + chegada.incertezaMin + ' min), segundo o modelo.')
-      : 'Sem chuva prevista nas próximas horas, segundo o modelo.';
   }
 
   // Cada fonte com o papel, o horário do dado e a idade (o servidor guarda o dado até 15 min; mostra quando foi obtido)
-  var PAPEL_FONTE = { radar: 'Radar', previsao: 'Previsão', alertas: 'Alertas oficiais' };
+  var PAPEL_FONTE = { radar: 'Radar', radarBr: 'Radar oficial', previsao: 'Previsão', alertas: 'Alertas oficiais' };
   function desenharFontes() {
     var f = est.fontes, linhas = [], caixa = $('meteo-fontes');
     if (f) {

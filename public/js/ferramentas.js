@@ -105,6 +105,24 @@
     desenharImportados();
     desenharAneis();
     atualizarSol(true);
+    reenviarPendentesDepois(opId);
+  }
+
+  // Camadas com itens que ficaram só neste aparelho (ex.: trilha recusada por nome repetido em versões antigas):
+  // quando a operação abre, tenta de novo sozinho, uma vez, sem perguntar nada (não duplica o que já existe).
+  var reenvioFeito = {};
+  function reenviarPendentesDepois(opId) {
+    if (reenvioFeito[opId]) return;
+    setTimeout(async function () {
+      var op = P.op();
+      if (!op || op.id !== opId || op.status !== 'ativa' || op.dados_apagados_em || reenvioFeito[opId]) return;
+      if (P.podeAlterar && !P.podeAlterar()) return;
+      var camadas = atual.importados.filter(pendentes);
+      reenvioFeito[opId] = true;
+      if (!camadas.length) return;
+      var r = await compartilharImportados(camadas, { automatico: true });
+      if (r.enviados) UI.aviso('Itens importados que estavam só neste aparelho foram enviados à operação: ' + r.texto.replace(/^Enviado para a operação[^:]*: /, ''), r.falhas ? 'erro' : 'ok', 8000);
+    }, 8000);
   }
 
   /* ------------------------------------------------------------------ */
@@ -627,13 +645,14 @@
   // pontos viram pontos de interesse e linhas viram trilhas. Imagens ficam só neste aparelho (não há onde guardá-las na operação).
   // O que foi enviado sai da camada local (senão aparecia duas vezes aqui e só neste aparelho com a cor do arquivo).
   // Devolve { texto, falhas }.
-  async function compartilharImportados(novos) {
+  async function compartilharImportados(novos, opcoes) {
+    opcoes = opcoes || {};
     var op = P.op();
     var concluidos = importarComoConcluidos();
     if (!op || op.status !== 'ativa' || op.dados_apagados_em) {
       return { texto: 'Importado neste aparelho. A operação está encerrada, então nada foi enviado para os outros responsáveis.', falhas: 0 };
     }
-    var c = { setores: 0, setoresJa: 0, pontos: 0, pontosJa: 0, trilhas: 0, imagens: 0, falhas: 0, motivo: null };
+    var c = { setores: 0, setoresJa: 0, pontos: 0, pontosJa: 0, trilhas: 0, trilhasJa: 0, imagens: 0, falhas: 0, motivo: null };
     for (var k = 0; k < novos.length; k++) {
       var imp = novos[k], d = imp.dados;
       imp.ids = imp.ids || { setores: [], pontos: [], trilhas: [] };
@@ -670,7 +689,7 @@
       }
       // Cada linha pode ser vinculada a uma pessoa (ou ao grupo dela): a trilha passa a ser "dessa pessoa" na operação.
       var linhasPend = d.linhas.filter(function (x) { return !x.enviado; });
-      var vinculos = linhasPend.length ? await escolherVinculoTrilhas(imp.nome, d.linhas.map(function (x) { return x.enviado ? null : x; }).filter(Boolean)) : {};
+      var vinculos = linhasPend.length && !opcoes.automatico ? await escolherVinculoTrilhas(imp.nome, d.linhas.map(function (x) { return x.enviado ? null : x; }).filter(Boolean)) : {};
       var posPend = 0;
       for (var m = 0; m < d.linhas.length && m < 200; m++) {
         var l = d.linhas[m];
@@ -684,7 +703,8 @@
             pontos: pts, meio: drone ? 'drone' : 'equipe', cor: l.cor || imp.dados.cor || null, observacoes: ('Importada de ' + imp.nome).slice(0, 1000),
             participante_id: vm && vm.indexOf('p:') === 0 ? vm.slice(2) : null,
             grupo_id: vm && vm.indexOf('g:') === 0 ? vm.slice(2) : null });
-          l.enviado = true; c.trilhas++; imp.ids.trilhas.push(tr.id);
+          l.enviado = true;
+          if (tr.jaExistia) c.trilhasJa++; else { c.trilhas++; imp.ids.trilhas.push(tr.id); }
         } catch (e) { c.falhas++; c.motivo = e.message || String(e); }
       }
     }
@@ -698,11 +718,12 @@
     var ja = [];
     if (c.setoresJa) ja.push(c.setoresJa + ' setor(es) já existiam');
     if (c.pontosJa) ja.push(c.pontosJa + ' ponto(s) já existiam');
+    if (c.trilhasJa) ja.push(c.trilhasJa + ' trilha(s) já existiam');
     var texto = partes.length ? 'Enviado para a operação' + (concluidos ? ' (como concluído)' : '') + ': ' + partes.join(', ') + '.' : 'Nada novo para enviar.';
     if (ja.length) texto += ' (' + ja.join(', ') + ', não duplicados.)';
     if (c.imagens) texto += ' ' + c.imagens + ' imagem(ns) ficam só neste aparelho.';
     if (c.falhas) texto += ' ' + c.falhas + ' item(ns) NÃO foram enviados' + (c.motivo ? ' (' + c.motivo + ')' : '') + ': continuam só neste aparelho.';
-    return { texto: texto, falhas: c.falhas };
+    return { texto: texto, falhas: c.falhas, enviados: c.setores + c.pontos + c.trilhas };
   }
 
   // Marca como concluído o que esta camada mandou para a operação (setores, pontos e trilhas).

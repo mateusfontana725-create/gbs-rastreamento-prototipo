@@ -68,6 +68,53 @@ async function radarRainViewer() {
   };
 }
 
+// Radar oficial brasileiro (REDEMET, DECEA/Força Aérea), produto MAXCAPPI: imagens PNG de cada radar com os limites
+// geográficos. Gratuito, com chave pedida no site da REDEMET (REDEMET_API_KEY). O formato da resposta não foi
+// conferido com uma chave real nesta versão: a leitura procura em qualquer nível objetos com endereço de imagem e
+// limites (lat/lon mínimos e máximos) e descarta o resto; sem nada reconhecível, o radar fica "indisponível".
+const REDEMET_URL = 'https://api-redemet.decea.mil.br/produtos/radar/maxcappi';
+const HOSTS_REDEMET = /(^|\.)(decea\.mil\.br|decea\.gov\.br|redemet\.aer\.mil\.br)$/i;
+function numeroDe(o, nomes) {
+  for (const k of Object.keys(o)) {
+    if (nomes.test(k)) { const v = Number(String(o[k]).replace(',', '.')); if (isFinite(v)) return v; }
+  }
+  return null;
+}
+function lerImagensRedemet(j) {
+  const achadas = [];
+  (function andar(x, prof) {
+    if (!x || prof > 6) return;
+    if (Array.isArray(x)) { x.forEach(function (y) { andar(y, prof + 1); }); return; }
+    if (typeof x !== 'object') return;
+    const url = ['path', 'url', 'imagem', 'image', 'img'].map(function (k) { return x[k]; }).find(function (v) { return typeof v === 'string' && /^https?:\/\//.test(v); });
+    const sul = numeroDe(x, /^lat_?(min|inf|sul|s)$/i), norte = numeroDe(x, /^lat_?(max|sup|norte|n)$/i);
+    const oeste = numeroDe(x, /^(lon|lng)_?(min|inf|oeste|o|w)$/i), leste = numeroDe(x, /^(lon|lng)_?(max|sup|leste|l|e)$/i);
+    if (url && [sul, norte, oeste, leste].every(function (v) { return v != null; }) && sul < norte && oeste < leste) {
+      let host = '';
+      try { host = new URL(url).hostname; } catch (e) { host = ''; }
+      if (HOSTS_REDEMET.test(host)) {
+        achadas.push({ url: url, sul: sul, norte: norte, oeste: oeste, leste: leste,
+          nome: String(x.nome || x.localidade || x.radar || ''), data: x.data || x.data_hora || x.hora || null });
+      }
+      return;
+    }
+    Object.keys(x).forEach(function (k) { andar(x[k], prof + 1); });
+  })(j, 0);
+  return achadas;
+}
+async function radarRedemet() {
+  const chave = (process.env.REDEMET_API_KEY || '').trim();
+  const j = await getJson(REDEMET_URL + '?api_key=' + encodeURIComponent(chave));
+  const imagens = lerImagensRedemet(j);
+  if (!imagens.length) throw new Error('resposta da REDEMET sem imagens de radar reconhecíveis');
+  return { imagens: imagens };
+}
+// Só os radares cuja imagem cobre a operação ou fica a menos de ~300 km dela.
+function radaresPerto(imagens, lat, lng) {
+  const m = 2.7;   // ~300 km em graus
+  return imagens.filter(function (i) { return lat >= i.sul - m && lat <= i.norte + m && lng >= i.oeste - m && lng <= i.leste + m; });
+}
+
 // Open-Meteo: horário em GMT (sem deslocamento) para não depender do fuso do servidor.
 async function previsaoOpenMeteo(lat, lng) {
   const chave = (process.env.OPEN_METEO_API_KEY || '').trim();
@@ -308,6 +355,24 @@ module.exports = async (req, res) => {
   if (autorizado !== true) return res.status(403).json({ erro: 'sem_permissao' });
 
   const tipo = req.query && req.query.tipo;
+  // Imagem do radar REDEMET pelo servidor (a página busca com o login e mostra; sem expor a chave)
+  if (tipo === 'radar_img') {
+    let alvo = null;
+    try { alvo = new URL(String(req.query.u || '')); } catch (e) { alvo = null; }
+    if (!alvo || alvo.protocol !== 'https:' && alvo.protocol !== 'http:' || !HOSTS_REDEMET.test(alvo.hostname)) return res.status(400).json({ erro: 'endereco_invalido' });
+    try {
+      const r = await fetch(alvo.toString(), { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const tipoImg = r.headers.get('content-type') || '';
+      if (!r.ok || !/^image\//.test(tipoImg)) return res.status(502).json({ erro: 'imagem_indisponivel' });
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > 5e6) return res.status(502).json({ erro: 'imagem_grande_demais' });
+      res.setHeader('Content-Type', tipoImg);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      return res.status(200).send(buf);
+    } catch (e) {
+      return res.status(502).json({ erro: 'falha_rede' });
+    }
+  }
   // Satélite: igual para todos (não depende da operação)
   if (tipo === 'satelite') {
     const s = await comCache('satelite', TTL.satelite, sateliteGoes);
@@ -349,13 +414,16 @@ module.exports = async (req, res) => {
     });
   }
 
-  const [radar, previsao, inmet] = await Promise.all([
+  const redemetLigado = Boolean((process.env.REDEMET_API_KEY || '').trim());
+  const [radar, previsao, inmet, redemet] = await Promise.all([
     radarLigado ? comCache('radar', TTL.radar, radarRainViewer) : Promise.resolve({ ok: false, obtidoEm: null, erro: null, dados: null }),
     comCache('previsao:' + nomePrevisao + ':' + latR + ',' + lngR, TTL.previsao, function () {
       return openMeteo ? previsaoOpenMeteo(latR, lngR) : previsaoMetNorway(latR, lngR);
     }),
     comCache('alertas', TTL.alertas, alertasInmet),
+    redemetLigado ? comCache('redemet', TTL.radar, radarRedemet) : Promise.resolve({ ok: false, obtidoEm: null, erro: null, dados: null }),
   ]);
+  const radarBr = redemet.ok && redemet.dados ? radaresPerto(redemet.dados.imagens, latR, lngR) : [];
 
   const avisos = [];
   if (radarLigado && radar.ok) avisos.push('Radar RainViewer: uso gratuito restrito a fins pessoais e educacionais. Confirme a licença antes do uso operacional.');
@@ -365,6 +433,8 @@ module.exports = async (req, res) => {
   return res.status(200).json({
     atualizadoEm: new Date().toISOString(),
     fontes: {
+      radarBr: { nome: 'REDEMET (DECEA)', ok: redemet.ok && radarBr.length > 0, status: redemetLigado ? (redemet.ok ? (radarBr.length ? 'ok' : 'sem_radar_perto') : 'erro') : 'nao_configurado', obtidoEm: redemet.obtidoEm,
+        erro: redemetLigado ? (redemet.erro || (redemet.ok && !radarBr.length ? 'Nenhum radar cobre a área da operação.' : null)) : 'Defina REDEMET_API_KEY na Vercel (chave gratuita da REDEMET) para ver o radar.' },
       radar: { nome: 'RainViewer', ok: radar.ok, status: radarLigado ? (radar.ok ? 'ok' : 'erro') : 'desligado', obtidoEm: radar.obtidoEm, erro: radar.erro || (radarLigado ? null : 'Desligado: sem radar gratuito com licença comercial para o Brasil.') },
       previsao: { nome: nomePrevisao, ok: previsao.ok, obtidoEm: previsao.obtidoEm, erro: previsao.erro || null },
       alertas: inmet.ok && inmet.dados && !inmet.dados.configurado
@@ -372,6 +442,7 @@ module.exports = async (req, res) => {
         : { nome: 'INMET (CAP)', ok: inmet.ok, obtidoEm: inmet.obtidoEm, status: inmet.ok ? 'ok' : 'erro', erro: inmet.erro || null },
     },
     radar: radar.ok ? radar.dados : null,
+    radarBr: radarBr.length ? { imagens: radarBr, obtidoEm: redemet.obtidoEm } : null,
     previsao: previsao.ok ? previsao.dados : null,
     alertas: inmet.ok && inmet.dados ? inmet.dados.lista : [],
     avisos: avisos,
@@ -381,3 +452,5 @@ module.exports = async (req, res) => {
 module.exports.montarGrade = montarGrade;
 module.exports.montarGradeCaixa = montarGradeCaixa;
 module.exports.AREAS = AREAS;
+module.exports.lerImagensRedemet = lerImagensRedemet;
+module.exports.radaresPerto = radaresPerto;

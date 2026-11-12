@@ -3737,7 +3737,7 @@
   function trilhaApagada(q) { return !trilhaDestacada(q) && (trilhasDiscretas() || algumaDestacada()); }
   function pesoTrilha(q) {
     var f = fatorZoomTrilha();
-    var base = trilhaDestacada(q) && (est.trilhaRealce || est.selecionado) ? 7.5 : trilhaApagada(q) && trilhasDiscretas() ? 3.5 : 6;
+    var base = trilhaDestacada(q) && (est.trilhaRealce || est.selecionado) ? 7.5 : trilhaApagada(q) && trilhasDiscretas() ? 5 : 6;
     return Math.max(1.5, Math.round(base * f * 10) / 10);
   }
   function pesoHalo(q) { return pesoTrilha(q) + (fatorZoomTrilha() >= 0.55 ? 3 : 2); }
@@ -3778,7 +3778,7 @@
   function desenharSetas(p) {
     var mapa = est.mapa, G = window.TrilhaGeo, segs = p.segsDesenhados;
     var tam = G ? G.tamanhoSeta(pesoTrilha(p)) : 0;   // a seta cabe inteira dentro da linha
-    if (!mapa || !G || !tam || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !p.trilha || !mapa.hasLayer(p.trilha) || (trilhaApagada(p) && trilhasDiscretas())) {
+    if (!mapa || !G || !tam || !segs || !segs.length || mapa.getZoom() < ZOOM_SETAS || !p.trilha || !mapa.hasLayer(p.trilha)) {
       if (p.setas) p.setas.remove();
       return;
     }
@@ -3794,7 +3794,9 @@
       });
     });
     if (!poligonos.length) { if (p.setas) p.setas.remove(); return; }
-    var estilo = { stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: opacidadeTrilha(p), interactive: false, smoothFactor: 0, className: 'trilha-setas' };
+    // apagada: setas presentes (mostram que é trilha e o sentido), mas em tom suave
+    var apagada = trilhaApagada(p) && trilhasDiscretas();
+    var estilo = { stroke: false, fill: true, fillColor: apagada ? '#e5e7eb' : '#ffffff', fillOpacity: apagada ? 0.9 : opacidadeTrilha(p), interactive: false, smoothFactor: 0, className: 'trilha-setas' };
     if (!p.setas) p.setas = L.polygon(poligonos, estilo);
     else { p.setas.setLatLngs(poligonos); p.setas.setStyle(estilo); }
     if (!mapa.hasLayer(p.setas)) p.setas.addTo(mapa);
@@ -3810,6 +3812,14 @@
       est.trilhasManuais.forEach(function (t) {
         if (!trilhaComoGps(t.d)) return;
         try { desenharSetas(t); } catch (e) { /* enfeite */ }
+      });
+      // as setas das apagadas não podem ficar por cima da trilha em destaque
+      est.participantes.forEach(function (p) {
+        if (!trilhaDestacada(p)) return;
+        [p.halo, p.trilha, p.setas, p.toque].forEach(function (c) { if (c && est.mapa.hasLayer(c)) c.bringToFront(); });
+      });
+      est.trilhasManuais.forEach(function (t) {
+        if (trilhaComoGps(t.d) && trilhaDestacada(t)) { if (t.camada) t.camada.bringToFront(); if (t.setas) t.setas.bringToFront(); }
       });
     }, 120);
   }

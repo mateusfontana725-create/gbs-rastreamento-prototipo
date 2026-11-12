@@ -133,7 +133,8 @@ A tela do civil é propositalmente simples, para quem está nervoso procurando a
 ### Trilhas discretas: a trilha tocada fica em destaque
 
 Numa operação de vários dias, as trilhas de GPS se cruzam e escondem os pontos e as fotos. Agora elas ficam discretas
-por padrão: mais finas, escurecidas, transparentes e sem as setas. Ao tocar numa trilha, só ela volta à cor forte, com
+por padrão: mais finas, escurecidas e transparentes, mas sempre com as setas de sentido (em tom suave), para continuar
+claro que é uma trilha e para onde a pessoa foi. Ao tocar numa trilha, só ela volta à cor forte, com
 setas e por cima das outras; tocar no mapa vazio (ou Esc) volta ao normal. A trilha da pessoa com a ficha aberta ou em
 foco (olho da lista) também fica em destaque. Para ver todas fortes como antes: **Camadas → Trilhas discretas**
 (lembrado neste aparelho).

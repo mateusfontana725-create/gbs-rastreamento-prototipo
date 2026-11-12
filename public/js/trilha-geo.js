@@ -357,7 +357,8 @@
   // tam = meio comprimento em px.
   function verticesSeta(s, tam) {
     var c = Math.cos(s.ang), si = Math.sin(s.ang);
-    return [[tam, 0], [-tam * 0.8, tam * 0.85], [-tam * 0.35, 0], [-tam * 0.8, -tam * 0.85]].map(function (q) {
+    // seta alongada: a largura é limitada pela linha (tamanhoSeta), o comprimento não; mais comprida = fácil de ler
+    return [[tam, 0], [-tam * 1.6, tam * 0.85], [-tam * 0.9, 0], [-tam * 1.6, -tam * 0.85]].map(function (q) {
       return { x: s.x + q[0] * c - q[1] * si, y: s.y + q[0] * si + q[1] * c };
     });
   }
@@ -366,7 +367,7 @@
   // com uma folga de cada lado; linha fina demais para caber uma seta legível → 0 (sem setas).
   function tamanhoSeta(peso) {
     var tam = Math.round((Number(peso) || 0) * 0.48 * 10) / 10;   // 0,85 × 0,48 ≈ 0,41 do peso: sobra ~9% de cada lado
-    return tam >= 1.3 ? tam : 0;
+    return tam >= 1 ? tam : 0;
   }
 
   global.TrilhaGeo = {

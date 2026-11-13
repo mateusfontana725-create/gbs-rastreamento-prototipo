@@ -356,10 +356,12 @@
     } catch (e) {
       return false;   // sem internet: mostra a tela inicial com CONTINUAR
     }
+    // Resposta sem situação (rede com página de entrada, resposta vazia): não é "busca encerrada"; vale como falta de internet
+    if (!respostaDeSinalValida(r)) return false;
     estado.part = { participante_id: salvo.participante_id, nome: salvo.nome, tipo: salvo.tipo, operacao: estado.info.operacao };
     estado.cpf = salvo.cpf;
     estado.telefone = salvo.telefone;
-    if (!r || r.status !== 'ativa') {
+    if (r.status !== 'ativa') {
       finalizar(r && ['removido', 'liberado', 'inexistente'].indexOf(r.status) !== -1 ? r.status : 'encerrada');
       return true;
     }
@@ -1317,8 +1319,11 @@
         p_rastreando: estado.rastreando,
         p_gps: estado.rastreando ? estado.gps : null,
       }, 12000);
-      if (!r || r.status !== 'ativa') {
-        finalizar(r && ['removido', 'inexistente', 'liberado'].indexOf(r.status) !== -1 ? r.status : 'encerrada');
+      // O servidor sempre diz a situação. Resposta vazia ou estranha (Wi-Fi com página de entrada, proxy) NÃO encerra a
+      // participação nem para o GPS: conta como falha de conexão e tenta de novo no próximo sinal.
+      if (!respostaDeSinalValida(r)) { marcarFalha(); atualizarUI(); return; }
+      if (r.status !== 'ativa') {
+        finalizar(['removido', 'inexistente', 'liberado'].indexOf(r.status) !== -1 ? r.status : 'encerrada');
         return;
       }
       if (estado.saidaSolicitadaEm && !r.saida_solicitada_em) {
@@ -1352,6 +1357,8 @@
     estado.ultimoSucesso = Date.now();
     estado.falhas = 0;
   }
+
+  function respostaDeSinalValida(r) { return Boolean(r && typeof r === 'object' && typeof r.status === 'string' && r.status); }
 
   function marcarFalha() {
     estado.falhas++;

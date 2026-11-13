@@ -794,12 +794,38 @@
     var cont = mapa.getContainer();
     if (cont._gbsArrastar) return;
     cont._gbsArrastar = true;
-    cont.addEventListener('dragover', function (ev) { if (temArquivos(ev)) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; } });
+    // Enquanto o arquivo está sobre o mapa, uma moldura avisa que soltar ali importa
+    var sairEm = null;
+    function moldura(liga) { clearTimeout(sairEm); cont.classList.toggle('soltar-arquivo', liga); }
+    cont.addEventListener('dragover', function (ev) { if (temArquivos(ev)) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; moldura(true); } });
+    cont.addEventListener('dragleave', function () { clearTimeout(sairEm); sairEm = setTimeout(function () { moldura(false); }, 120); });
     cont.addEventListener('drop', function (ev) {
+      moldura(false);
       if (!temArquivos(ev)) return;
       ev.preventDefault();
       ev.stopPropagation();
       importarArquivos(ev.dataTransfer.files);
+    });
+    protegerSoltarForaDoMapa();
+  }
+
+  // Arquivo solto FORA do mapa (lista, cabeçalho, janela aberta): sem isto o navegador abria o arquivo no lugar do painel
+  // e a pessoa perdia a tela da operação. Campos de arquivo continuam aceitando o que for solto neles.
+  var soltarProtegido = false;
+  function protegerSoltarForaDoMapa() {
+    if (soltarProtegido) return;
+    soltarProtegido = true;
+    function campoDeArquivo(ev) { var t = ev.target; return Boolean(t && t.tagName === 'INPUT' && t.type === 'file'); }
+    window.addEventListener('dragover', function (ev) {
+      if (!temArquivos(ev) || campoDeArquivo(ev) || ev.defaultPrevented) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'none';
+    });
+    window.addEventListener('drop', function (ev) {
+      Array.prototype.forEach.call(document.querySelectorAll('.soltar-arquivo'), function (e) { e.classList.remove('soltar-arquivo'); });
+      if (!temArquivos(ev) || campoDeArquivo(ev) || ev.defaultPrevented) return;
+      ev.preventDefault();
+      UI.aviso('Solte o arquivo em cima do mapa para importar (ou use Ferramentas → Importar arquivo).', 'erro', 6000);
     });
   }
 

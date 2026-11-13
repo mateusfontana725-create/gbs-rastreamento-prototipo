@@ -2991,3 +2991,9 @@ html[data-tema="claro"] .pilha-x:hover, html[data-tema="claro"] .pilha-x:focus-v
   .btn-link-camadas::after { content: ""; position: absolute; inset: -13px -4px; }
   #btn-recolher-topo::after { content: ""; position: absolute; inset: -4px -8px -14px; }
 }
+/* Arquivo arrastado do computador para cima do mapa: moldura avisando que soltar ali importa */
+.leaflet-container.soltar-arquivo { outline: 3px dashed var(--responsavel, #facc15); outline-offset: -6px; }
+.leaflet-container.soltar-arquivo::after {
+  content: "Solte para importar"; position: absolute; z-index: 1500; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  padding: 10px 16px; border-radius: 8px; background: rgba(14, 18, 22, .92); color: #fff; font-weight: 700; pointer-events: none;
+}

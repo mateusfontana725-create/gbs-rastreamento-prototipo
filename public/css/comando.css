@@ -2982,3 +2982,12 @@ html[data-tema="claro"] .pilha-x:hover, html[data-tema="claro"] .pilha-x:focus-v
 .meteo-hora-intensa { box-shadow: inset 0 -3px 0 #ef4444; }
 .meteo-painel:not([hidden]) { z-index: 1300; }   /* aberto: fica à frente dos botões Dia e Camadas */
 .sinal-trilha-discreta::before { border-top-color: #7f1d1d; opacity: .6; }
+
+/* Alvos pequenos no toque (contagens da lista, "Mostrar tudo" das camadas, aba de esconder o cabeçalho): a área que
+   responde ao dedo cresce, invisível, sem mudar o tamanho do desenho. */
+@media (pointer: coarse) {
+  .resumo-chip, .btn-link-camadas { position: relative; }
+  .resumo-chip::after { content: ""; position: absolute; inset: -11px -3px; }
+  .btn-link-camadas::after { content: ""; position: absolute; inset: -13px -4px; }
+  #btn-recolher-topo::after { content: ""; position: absolute; inset: -4px -8px -14px; }
+}

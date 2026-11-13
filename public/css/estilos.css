@@ -2111,14 +2111,13 @@ html[data-fonte="grande"] { --texto-escala: 1.25; }
   .secao-form { padding: 12px; }
 }
 @media (max-width: 380px) { .escolhas { grid-template-columns: 1fr; } }
-}
 
-/* Escolher arquivo: área tracejada com o botão no mesmo estilo dos outros */
-.modal input[type="file"] {
+/* Escolher arquivo: área tracejada com o botão no mesmo estilo dos outros (campos escondidos, acionados por um botão, ficam de fora) */
+.modal input[type="file"]:not(.sr-only) {
   width: 100%; min-height: 56px; padding: 10px; cursor: pointer; color: var(--texto-3); font-size: .85rem;
   border: 1px dashed var(--borda-forte); border-radius: var(--raio); background: var(--superficie-2);
 }
-.modal input[type="file"]:hover { border-color: var(--acento); }
+.modal input[type="file"]:not(.sr-only):hover { border-color: var(--acento); }
 .modal input[type="file"]::file-selector-button {
   margin-right: 12px; min-height: 36px; padding: 0 14px; cursor: pointer; font: inherit; font-weight: 700; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase;
   color: var(--texto); background: var(--superficie-3); border: 1px solid var(--borda-forte); border-radius: var(--raio);
@@ -2797,3 +2796,22 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { grid-column: 2; justify-sel
 /* avisos do participante: largura da tela, cada aviso no tamanho do texto (centralizado) */
 html body #avisos { left: 12px; right: 12px; transform: none; width: auto; max-width: none; }
 #avisos > .aviso { max-width: min(380px, 100%); }
+
+/* ---- Revisão de toque e de telas médias ---------------------------------------------------------------------------
+   Alvos pequenos no toque: a área que responde ao dedo cresce (invisível) até perto de 44 px, sem mudar o desenho. */
+@media (pointer: coarse) {
+  .dica, #tela-rastreio #bussola-ativar { position: relative; }
+  .dica::after { content: ""; position: absolute; inset: -12px; border-radius: 50%; }
+  #tela-rastreio #bussola-ativar::after { content: ""; position: absolute; inset: -8px -4px; }
+}
+/* Rastreio do participante: os créditos do mapa ficavam atrás do botão "Quero sair da busca" (canto direito);
+   vão para o canto esquerdo, que está livre acima da barra. */
+.civil-em-rastreio #mapa-civil .leaflet-bottom.leaflet-right { right: auto; left: 0; }
+.civil-em-rastreio #mapa-civil .leaflet-bottom.leaflet-right .leaflet-control { float: left; }
+/* Barra de desenho em tela média (tablet deitado, lista aberta): a instrução ficava espremida em duas ou três letras.
+   Quando não cabem lado a lado, os botões descem para a linha de baixo e a instrução usa a largura toda. */
+@media (min-width: 600px) {
+  .barra-desenho { flex-wrap: wrap; }
+  .barra-desenho-texto { flex: 1 1 200px; }
+  .barra-desenho-botoes { margin-left: auto; }
+}

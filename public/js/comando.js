@@ -6038,6 +6038,8 @@
     andamento: { rotulo: 'Em andamento', selo: 'selo-alerta' },
     concluido: { rotulo: 'Concluído', selo: 'selo-ok' },
   };
+  // Situação que este painel não conhece (versão mais nova gravou outra): mostra como "Pendente" em vez de derrubar a tela.
+  function situacaoSetor(status) { return STATUS_SETOR[status] || STATUS_SETOR.pendente; }
   var RAIO_ALERTA_PADRAO = 100;   // m — área de risco sem raio definido
   var CAT_PONTO = {
     ULTIMA_LOCALIZACAO: { rotulo: 'Última localização conhecida', letra: 'U' },
@@ -6360,7 +6362,7 @@
 
   // A situação some de longe (o traço e o preenchimento da área já a indicam)
   function htmlRotuloSetor(d) {
-    return '<span class="rs-nome">' + C.esc(d.nome) + '</span><span class="rs-status"> · ' + C.esc(STATUS_SETOR[d.status].rotulo) + '</span>';
+    return '<span class="rs-nome">' + C.esc(d.nome) + '</span><span class="rs-status"> · ' + C.esc(situacaoSetor(d.status).rotulo) + '</span>';
   }
 
   function tirarSetorDoMapa(s) {
@@ -6386,7 +6388,7 @@
     camada.bindTooltip(htmlRotuloSetor(d), { permanent: true, direction: 'center', className: 'rotulo-setor', opacity: 1, pane: 'rotulosSetor' });
     ligarCliquesMapa(camada, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante o desenho o clique é do mapa
-      info: function () { return { titulo: 'Setor ' + d.nome, sub: STATUS_SETOR[d.status].rotulo }; },
+      info: function () { return { titulo: 'Setor ' + d.nome, sub: situacaoSetor(d.status).rotulo }; },
       detalhes: function () { abrirSetor(d.id); },
       sobrepostos: itensSobrepostosEm,
     });
@@ -6959,7 +6961,7 @@
         : Array.isArray(d.pontos) && d.pontos.length >= 3 && G.pontoNoPoligono(ll.lat, ll.lng, d.pontos);
       if (!dentro) return;
       var a = areaSetorM2(d);
-      itens.push({ chave: 's:' + d.id, cor: d.cor, area: a, titulo: 'Setor ' + d.nome, sub: STATUS_SETOR[d.status].rotulo + ' · ' + formatarArea(a),
+      itens.push({ chave: 's:' + d.id, cor: d.cor, area: a, titulo: 'Setor ' + d.nome, sub: situacaoSetor(d.status).rotulo + ' · ' + formatarArea(a),
         camada: s.camada, estilo: function () { return estiloSetor(d); }, abrir: function () { abrirSetor(d.id); } });
     });
     est.areasProibidas.forEach(function (x) {
@@ -7299,7 +7301,7 @@
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-setor' }, [
       cabecaDetalhe({
         cor: d.cor, tipo: 'Setor de busca · ' + (d.forma === 'circulo' ? 'círculo' : 'área desenhada'), titulo: d.nome,
-        etiqueta: { texto: STATUS_SETOR[d.status].rotulo, classe: classeSituacao },
+        etiqueta: { texto: situacaoSetor(d.status).rotulo, classe: classeSituacao },
       }),
       secaoDetalhe('Situação', botoesStatus),
       fatosDetalhe([
@@ -8113,7 +8115,7 @@
             var c = centroSetor(d);
             fechar(); abrirEnviarDestino({ nome: 'Setor ' + d.nome, lat: c[0], lng: c[1], setor_id: d.id, participantes: participantes, grupo_id: grupoId });
           } }, [UI.el('span', { classe: 'chip-cor', style: 'background:' + d.cor }),
-            UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: (STATUS_SETOR[d.status] || STATUS_SETOR.pendente).rotulo })])])]);
+            UI.el('span', { classe: 'item-area-txt' }, [UI.el('strong', { texto: 'Setor ' + d.nome }), UI.el('small', { classe: 'muted', texto: (situacaoSetor(d.status) || STATUS_SETOR.pendente).rotulo })])])]);
         })) : UI.el('p', { classe: 'muted', texto: 'Nenhum setor.' })], { dica: 'O centro do setor é o destino.' }),
         UI.secao('Pontos de interesse', [pontos.length ? UI.el('ul', { classe: 'lista-areas lista-escolha' }, pontos.map(function (d) {
           var cat = catDoPonto(d);
@@ -8433,7 +8435,7 @@
             return r ? UI.el('small', { classe: 'permanencia-setor' + (r.acima ? ' acima' : ''), texto: '⏱ ' + r.texto }) : null;
           })(),
         ]),
-        UI.el('span', { classe: 'selo ' + STATUS_SETOR[d.status].selo, texto: STATUS_SETOR[d.status].rotulo }),
+        UI.el('span', { classe: 'selo ' + situacaoSetor(d.status).selo, texto: situacaoSetor(d.status).rotulo }),
       ])]));
     });
     ulP.innerHTML = '';
@@ -12117,7 +12119,7 @@
     var ativo = est.filtroDia;
     var hoje = chaveDia(Date.now());
     // Abre sempre no dia de hoje (ou no dia que já está filtrado)
-    var data = UI.el('input', { type: 'date', classe: 'campo', id: 'filtro-data', value: ativo ? ativo.dia : hoje, max: hoje });
+    var data = UI.el('input', { type: 'date', classe: 'campo', id: 'filtro-data', 'aria-label': 'Dia mostrado no mapa', value: ativo ? ativo.dia : hoje, max: hoje });
     var modos = Object.assign(modosPadraoFiltro(), ativo ? ativo.modos : {});
     var selects = {}, rotulos = {};
     var linhas = CATEGORIAS_FILTRO.map(function (c) {
@@ -12905,15 +12907,15 @@
         UI.el('span', { texto: c[1] }),
       ]);
     }));
-    var quem = UI.el('select', { classe: 'campo', id: 'vit-quem' }, [UI.el('option', { value: '', texto: '— não informar —' })].concat(pessoas.map(function (p) {
+    var quem = UI.el('select', { classe: 'campo', id: 'vit-quem', 'aria-label': 'Quem encontrou a vítima' }, [UI.el('option', { value: '', texto: '— não informar —' })].concat(pessoas.map(function (p) {
       return UI.el('option', { value: p.id, selected: pre.encontrou === p.id ? true : null, texto: nomeExibido(p) + ' (' + TIPOS[tipoDe(p.dados)].rotulo.toLowerCase() + ')' });
     })).concat([UI.el('option', { value: '__outra', selected: pre.encontrou === '__outra' ? true : null, texto: 'Outra pessoa (fora do sistema)…' })]));
-    var quemTexto = UI.el('input', { classe: 'campo', id: 'vit-quem-texto', maxlength: '120', value: pre.encontradaPor || '', placeholder: 'Ex.: morador da chácara, PM, SAMU', hidden: pre.encontrou !== '__outra' });
+    var quemTexto = UI.el('input', { classe: 'campo', id: 'vit-quem-texto', 'aria-label': 'Quem encontrou (outra pessoa)', maxlength: '120', value: pre.encontradaPor || '', placeholder: 'Ex.: morador da chácara, PM, SAMU', hidden: pre.encontrou !== '__outra' });
     quem.addEventListener('change', function () { quemTexto.hidden = quem.value !== '__outra'; if (!quemTexto.hidden) quemTexto.focus(); });
     // Ficha da vítima: escolher uma já cadastrada ou criar agora só com o nome
-    var ficha = UI.el('select', { classe: 'campo', id: 'vit-ficha' }, [UI.el('option', { value: '', texto: '— não informar —' }),
+    var ficha = UI.el('select', { classe: 'campo', id: 'vit-ficha', 'aria-label': 'Ficha da vítima' }, [UI.el('option', { value: '', texto: '— não informar —' }),
       UI.el('option', { value: '__nova', selected: pre.vitimaId === '__nova' ? true : null, texto: '＋ Nova vítima (informar o nome)' })]);
-    var fichaNome = UI.el('input', { classe: 'campo', id: 'vit-nome', maxlength: '80', value: pre.vitimaNome || '', placeholder: 'Nome ou "Não identificada"', hidden: pre.vitimaId !== '__nova' });
+    var fichaNome = UI.el('input', { classe: 'campo', id: 'vit-nome', 'aria-label': 'Nome da vítima', maxlength: '80', value: pre.vitimaNome || '', placeholder: 'Nome ou "Não identificada"', hidden: pre.vitimaId !== '__nova' });
     ficha.addEventListener('change', function () { fichaNome.hidden = ficha.value !== '__nova'; if (!fichaNome.hidden) fichaNome.focus(); });
     C.consultar(C.cliente.from('vitimas').select('id,nome,idade').eq('operacao_id', est.op.id).order('criado_em', { ascending: true })).then(function (lista) {
       (lista || []).forEach(function (v, i) {
@@ -12921,8 +12923,8 @@
         if (pre.vitimaId === v.id || (!pre.vitimaId && lista.length === 1 && i === 0)) ficha.value = v.id;   // uma só vítima: já vem escolhida
       });
     }).catch(function () { /* sem fichas: segue com nome ou sem informar */ });
-    var localDesc = UI.el('input', { classe: 'campo', id: 'vit-local', maxlength: '500', value: pre.localDescricao || '', placeholder: 'Ex.: margem esquerda do córrego, sob a ponte' });
-    var obs = UI.el('textarea', { classe: 'campo', id: 'vit-obs', maxlength: '1000', rows: '2', placeholder: 'Ex.: consciente, hipotermia leve; levada pelo SAMU ao HU' });
+    var localDesc = UI.el('input', { classe: 'campo', id: 'vit-local', 'aria-label': 'Descrição do local', maxlength: '500', value: pre.localDescricao || '', placeholder: 'Ex.: margem esquerda do córrego, sob a ponte' });
+    var obs = UI.el('textarea', { classe: 'campo', id: 'vit-obs', 'aria-label': 'Observações sobre a vítima', maxlength: '1000', rows: '2', placeholder: 'Ex.: consciente, hipotermia leve; levada pelo SAMU ao HU' });
     obs.value = pre.observacoes || '';
 
     function opcaoOnde(valor, texto, extra) {

@@ -236,7 +236,7 @@
       var r = await fetch('/api/poa-ia', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessao.access_token },
         body: JSON.stringify({ modo: modo, operacao_id: P.op().id, contexto: contexto }) });
       var corpo = await r.json().catch(function () { return {}; });
-      if (!r.ok) return { ok: false, mensagem: corpo.mensagem || 'A IA não respondeu agora. Preencha manualmente.' };
+      if (!r.ok) return { ok: false, mensagem: corpo.mensagem || (r.status === 404 ? 'A IA não está instalada nesta versão. Preencha manualmente.' : 'A IA não respondeu agora. Preencha manualmente.') };
       return { ok: true, dados: corpo };
     } catch (e) { return { ok: false, mensagem: 'Sem conexão com a IA agora. Preencha manualmente.' }; }
   }

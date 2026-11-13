@@ -148,6 +148,26 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Revisão geral: confiança nos dados, tempo, toque e telas médias
+
+- **Sinal de vida sem resposta válida não encerra a participação:** o servidor sempre diz a situação (`ativa`, `removido`,
+  `liberado`, `encerrada`, `inexistente`). Uma resposta vazia ou estranha (Wi-Fi com página de entrada, proxy) era lida como
+  "busca encerrada": o GPS parava e a participação era apagada do aparelho. Agora conta como falha de conexão e o próximo
+  sinal tenta de novo; o rastreamento e a fila de pontos continuam.
+- **Meteorologia:** cada pedido tem prazo de 35 s (antes, um serviço que não respondia deixava o painel preso em
+  "Carregando…" sem tentar de novo); o erro diz o motivo em português ("sem internet", "o serviço demorou demais",
+  "não instalado nesta versão") e mantém à vista o horário dos últimos dados bons ("· dados das 14:32"), também quando
+  estão desatualizados. Voltar para a aba só consulta de novo se a última tentativa tem mais de 1 minuto.
+- **Importar arrastando:** enquanto o arquivo está sobre o mapa aparece a moldura "Solte para importar". Soltar o arquivo
+  fora do mapa não troca mais o painel pelo arquivo (o navegador abria o arquivo no lugar da operação): aparece um aviso.
+- **Telas e toque:** a instrução da barra de desenho não fica mais espremida em tablet deitado (os botões descem para a
+  linha de baixo); os créditos do mapa do participante saíram de trás do botão "Quero sair da busca"; a área de toque do
+  "i" das dicas, das contagens da lista, do "Mostrar tudo" das camadas e do "Ativar" da bússola cresceu sem mudar o
+  desenho; os campos de arquivo das janelas voltaram a ter a área tracejada (uma chave sobrando no CSS desligava a regra).
+- **Robustez e leitura de tela:** setor com situação que o painel não conhece aparece como "Pendente" em vez de derrubar a
+  lista; a IA ausente (versão sem `/api/poa-ia`) responde "não está instalada nesta versão"; os campos de "Vítima
+  encontrada" e a data do filtro do mapa ganharam nome para leitores de tela.
+
 ### Avisos pequenos, tempo em linguagem simples, importação e outra busca pelo aplicativo
 
 - **Avisos pequenos:** os avisos rápidos (painel e participante) viraram etiquetas compactas, de no máximo 2 linhas e

@@ -18,6 +18,8 @@
   var CHAVE_AREA = 'gbs-meteo-area';
   var AREAS_GRADE = { operacao: 'ao redor da operação', parana: 'no Paraná', brasil: 'no Brasil' };
   var CHAVE_HIST = 'gbs-meteo-historico:';
+  var TEMPO_PEDIDO_MS = 35000;      // o servidor responde em até 30 s; sem resposta, o pedido é cancelado (não fica preso em "Carregando")
+  var MIN_AO_VOLTAR_MS = 60e3;      // voltar para a aba não consulta de novo se a última tentativa foi há menos de 1 min
   var INTERVALO_MS = 5 * 60e3, LIMITE_DESATUALIZADO_MIN = 20, MIN_ENTRE_SONS_MS = 10 * 60e3;
   var NIVEIS = { informativo: 'Informativo', atencao: 'Atenção', alerta: 'Alerta', critico: 'Crítico' };
   var ESTADOS = { novo: 'novo', atualizado: 'atualizado', mantido: 'ativo', expirado: 'expirado' };
@@ -223,6 +225,16 @@
     return sessao.access_token;
   }
 
+  // Pedido ao servidor com prazo: sem ele, uma conexão que não responde deixava a consulta presa (est.buscando) para sempre.
+  function pedir(url, token) {
+    var opcoes = { headers: { Authorization: 'Bearer ' + token } };
+    try { if (window.AbortSignal && AbortSignal.timeout) opcoes.signal = AbortSignal.timeout(TEMPO_PEDIDO_MS); } catch (e) { /* navegador antigo: sem prazo */ }
+    return fetch(url, opcoes).catch(function (e) {
+      var prazo = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      throw new Error(prazo ? 'o serviço demorou demais para responder' : (navigator.onLine === false ? 'sem internet' : 'sem conexão com o serviço'));
+    });
+  }
+
   function chaveOperacao() {
     var o = op();
     return o ? o.id + ':' + o.local_lat + ',' + o.local_lng : '';
@@ -247,9 +259,9 @@
     est.buscando = true;
     try {
       var token = await sessaoToken();
-      var r = await fetch('/api/meteo?lat=' + o.local_lat + '&lng=' + o.local_lng, { headers: { Authorization: 'Bearer ' + token } });
+      var r = await pedir('/api/meteo?lat=' + o.local_lat + '&lng=' + o.local_lng, token);
       var d = await r.json().catch(function () { return {}; });
-      if (!r.ok) throw new Error(d.mensagem || 'Serviço meteorológico indisponível (' + (d.erro || r.status) + ').');
+      if (!r.ok) throw new Error(d.mensagem || (r.status === 404 ? 'Serviço meteorológico não instalado nesta versão.' : 'Serviço meteorológico indisponível (' + (d.erro || r.status) + ').'));
       processar(d);
       await buscarGrade();
     } catch (e) {
@@ -267,7 +279,7 @@
     if (!o || o.local_lat == null) return;
     try {
       var token = await sessaoToken();
-      var r = await fetch('/api/meteo?tipo=grade&lat=' + o.local_lat + '&lng=' + o.local_lng, { headers: { Authorization: 'Bearer ' + token } });
+      var r = await pedir('/api/meteo?tipo=grade&lat=' + o.local_lat + '&lng=' + o.local_lng, token);
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok || !d.ok) throw new Error(d.erro || d.mensagem || 'grade indisponível');
       est.grade = d.grade; est.gradeEm = d.obtidoEm; est.gradeErro = null;
@@ -284,7 +296,7 @@
     if (est.area === 'operacao') { est.gradeMapa = null; est.gradeMapaArea = 'operacao'; est.gradeMapaErro = null; return; }
     try {
       var token = await sessaoToken();
-      var r = await fetch('/api/meteo?tipo=grade&area=' + est.area, { headers: { Authorization: 'Bearer ' + token } });
+      var r = await pedir('/api/meteo?tipo=grade&area=' + est.area, token);
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok || !d.ok) throw new Error(d.erro || d.mensagem || 'grade indisponível');
       est.gradeMapa = d.grade; est.gradeMapaArea = est.area; est.gradeMapaEm = d.obtidoEm; est.gradeMapaErro = null;
@@ -386,9 +398,9 @@
     var desat = Core.desatualizado(est.atualizadoEm, Date.now(), LIMITE_DESATUALIZADO_MIN);
     var st = $('meteo-status');
     if (!o || o.local_lat == null) st.textContent = 'Defina o local da operação.';
-    else if (est.erro) st.textContent = 'Não atualizou: ' + est.erro;
+    else if (est.erro) st.textContent = 'Não atualizou: ' + est.erro + (est.atualizadoEm ? ' · dados das ' + hora(est.atualizadoEm) : '');
     else if (!est.atualizadoEm) st.textContent = 'Carregando…';
-    else st.textContent = desat ? 'Desatualizado' : 'Atualizado às ' + hora(est.atualizadoEm);
+    else st.textContent = desat ? 'Desatualizado · dados das ' + hora(est.atualizadoEm) : 'Atualizado às ' + hora(est.atualizadoEm);
     st.className = 'meteo-status' + (desat || est.erro ? ' meteo-desat' : '');
 
     desenharAlertas();
@@ -582,7 +594,9 @@
     // assim que ela carrega ou muda; depois de um erro tenta outra vez em 30 s, sem esperar o ciclo de 5 min.
     setInterval(vigiarOperacao, 1000);
     setInterval(function () { if (document.visibilityState === 'visible') consultar(); }, INTERVALO_MS);
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') consultar(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && Date.now() - (est.ultimaTentativa || 0) > MIN_AO_VOLTAR_MS) consultar();
+    });
     var tent = setInterval(function () { if (mapa()) { clearInterval(tent); aplicarCamadas(); } }, 500);
   }
 

@@ -164,6 +164,12 @@ legível, elas não aparecem.
   linha de baixo); os créditos do mapa do participante saíram de trás do botão "Quero sair da busca"; a área de toque do
   "i" das dicas, das contagens da lista, do "Mostrar tudo" das camadas e do "Ativar" da bússola cresceu sem mudar o
   desenho; os campos de arquivo das janelas voltaram a ter a área tracejada (uma chave sobrando no CSS desligava a regra).
+- **Abrir uma operação mais rápido:** a tela escura "Carregando a operação…" cobria o painel até a última trilha e o
+  último módulo chegarem. Agora ela sai assim que o essencial está na tela (pessoas, setores, pontos, grupos, fotos) e vira
+  uma etiqueta pequena no pé do mapa ("Carregando trilhas e mensagens…"), que não bloqueia nada; as trilhas continuam
+  aparecendo aos poucos. As pessoas e os limites das posições são pedidos junto com a operação (antes, um pedido depois
+  do outro) e as posições vêm em 6 faixas ao mesmo tempo (eram 4). Num teste local com 30 mil posições e 250 ms de atraso
+  por pedido, o painel ficou utilizável em 1,9 s (antes 4,8 s).
 - **Robustez e leitura de tela:** setor com situação que o painel não conhece aparece como "Pendente" em vez de derrubar a
   lista; a IA ausente (versão sem `/api/poa-ia`) responde "não está instalada nesta versão"; os campos de "Vítima
   encontrada" e a data do filtro do mapa ganharam nome para leitores de tela.

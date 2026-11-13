@@ -1729,11 +1729,29 @@
   /* ------------------------------------------------------------------ */
   // Spinner sobre o painel até a operação carregar (participantes, posições, mensagens, setores, grupos, POA, pedidos de ajuda, briefing…).
   // Trava de segurança: some sozinho depois de 45 s, para nunca prender a tela.
-  function carregandoPainel(ligado) {
+  // discreto: o essencial já está na tela (pessoas, setores, pontos); o aviso vira uma etiqueta pequena, que não cobre
+  // nem bloqueia o painel, enquanto as trilhas e as mensagens terminam de chegar.
+  var TEXTO_CARREGANDO = 'Carregando a operação…';
+  function carregandoPainel(ligado, discreto) {
     var c = $('painel-carregando');
     if (!c) return;
     clearTimeout(est.timerCarregando);
     c.hidden = !ligado;
+    c.classList.toggle('discreto', Boolean(ligado && discreto));
+    // a etiqueta fica no pé do mapa (centro), longe do título, dos botões e da lista
+    c.style.top = c.style.left = '';
+    if (ligado && discreto && $('mapa') && c.offsetParent) {
+      var rm = $('mapa').getBoundingClientRect(), rb = c.offsetParent.getBoundingClientRect();
+      if (rm.width && rm.height) {
+        // no celular a lista sobe por cima do mapa: o pé visível do mapa é onde a gaveta começa
+        var alca = $('gaveta-alca'), ra = alca && alca.offsetParent ? alca.getBoundingClientRect() : null;
+        var pe = ra && ra.top > rm.top + 80 && ra.top < rm.bottom ? ra.top : rm.bottom;
+        c.style.top = Math.round(pe - rb.top - 46) + 'px';
+        c.style.left = Math.round(rm.left - rb.left + rm.width / 2) + 'px';
+      }
+    }
+    var txt = c.querySelector('.painel-carregando-txt');
+    if (txt && !est.publico) txt.textContent = ligado && discreto ? 'Carregando trilhas e mensagens…' : TEXTO_CARREGANDO;
     $('tela-painel').setAttribute('aria-busy', String(Boolean(ligado)));
     if (ligado) est.timerCarregando = setTimeout(function () { c.hidden = true; $('tela-painel').setAttribute('aria-busy', 'false'); }, 45000);
   }
@@ -1745,6 +1763,13 @@
     mostrarTela('painel');
     carregandoPainel(true);
     var op;
+    // Enquanto a operação é consultada, as pessoas e os limites das posições já são pedidos (antes era um pedido
+    // depois do outro). Se a operação estiver arquivada ou o pedido adiantado falhar, carregarTudo consulta de novo.
+    var adiantado = { opId: id,
+      participantes: C.consultarTudo(function () {
+        return C.cliente.from('participantes').select('*').eq('operacao_id', id).order('criado_em', { ascending: true });
+      }).catch(function () { return null; }),
+      limitesPosicoes: limitesDasPosicoes(id).catch(function () { return undefined; }) };
     try {
       op = await C.consultar(C.cliente.from('operacoes').select('*').eq('id', id).maybeSingle());
     } catch (e) {
@@ -1779,7 +1804,7 @@
     enquadrarAoAbrir(true);
     atualizarChipDeslocamento();
     aplicarIntervaloGpsMeu();
-    await carregarTudo();
+    await carregarTudo(op.arquivada_em ? null : adiantado);
     if (pedidoEncerrar === op.id && est.op && est.op.id === op.id && op.status === 'ativa') {
       setTimeout(function () { encerrarOperacao(); }, 0);   // pedido do menu da lista: mesmo fluxo do botão Encerrar
     }
@@ -2784,7 +2809,7 @@
   async function consultarPosicoes(montar, aoPagina, limites) {
     var cols = 'id,participante_id,lat,lng,precisao,registrado_em,recebido_em' + (est.semNaBase ? '' : ',na_base');
     try {
-      if (limites) return await C.consultarPorChaveEmFaixas(function () { return montar(cols); }, 'id', 1000, aoPagina, limites, 4);
+      if (limites) return await C.consultarPorChaveEmFaixas(function () { return montar(cols); }, 'id', 1000, aoPagina, limites, 6);
       return await C.consultarPorChave(function () { return montar(cols); }, 'id', 1000, aoPagina);
     } catch (e) {
       if (!est.semNaBase && /na_base/.test(String(e.original && (e.original.message || e.original.details) || e.message))) {
@@ -2798,38 +2823,36 @@
   // Carga inicial. Primeiro os participantes (uma consulta pequena): a lista aparece logo. Depois, em paralelo,
   // posições (várias páginas ao mesmo tempo), mensagens, fotos, áreas, grupos, vítimas, permanências e missões.
   // Antes era tudo em fila: a lista e os setores só apareciam depois que todas as posições tinham chegado.
-  async function carregarTudo() {
+  // menor e maior id das posições da operação (duas consultas pequenas, pelo índice) para dividir a carga em faixas
+  function limitesDasPosicoes(opId) {
+    var base = function (asc) { return C.consultar(C.cliente.from('posicoes').select('id').eq('operacao_id', opId).order('id', { ascending: asc }).limit(1)); };
+    return Promise.all([base(true), base(false)]).then(function (r) {
+      return r[0] && r[0].length ? { min: r[0][0].id, max: r[1][0].id } : null;
+    });
+  }
+
+  async function carregarTudo(adiantado) {
     var opId = est.op.id;
+    if (adiantado && adiantado.opId !== opId) adiantado = null;
     function ainda() { return Boolean(est.op && est.op.id === opId); }
     var falhas = [];
     function falhou(e) { falhas.push(e); }
     try {
-      var parts = await C.consultarTudo(function () {
-        return C.cliente.from('participantes').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true });
-      });
+      var parts = adiantado ? await adiantado.participantes : null;
+      if (!parts) {
+        parts = await C.consultarTudo(function () {
+          return C.cliente.from('participantes').select('*').eq('operacao_id', opId).order('criado_em', { ascending: true });
+        });
+      }
       if (!ainda()) return;
       parts.forEach(upsertParticipante);
       renderizarLista();
     } catch (e) { falhou(e); }
     if (!ainda()) return;
 
-    await emLoteLista(Promise.all([
-      consultarPosicoes(function (cols) {
-        return C.cliente.from('posicoes').select(cols).eq('operacao_id', opId).order('id', { ascending: true });
-      }, function (pagina) {
-        if (ainda()) adicionarPontosLote(pagina);   // cada página entra na hora: as trilhas vão aparecendo
-      }, function () {
-        // menor e maior id da operação (duas consultas pequenas, pelo índice) para dividir a carga em faixas
-        var base = function (asc) { return C.consultar(C.cliente.from('posicoes').select('id').eq('operacao_id', opId).order('id', { ascending: asc }).limit(1)); };
-        return Promise.all([base(true), base(false)]).then(function (r) {
-          return r[0] && r[0].length ? { min: r[0][0].id, max: r[1][0].id } : null;
-        });
-      }).catch(falhou),
-      C.consultarTudoParalelo(function () {
-        return C.cliente.from('mensagens').select('*').eq('operacao_id', opId).order('criada_em', { ascending: true });
-      }, 1000, 2).then(function (msgs) {
-        if (ainda()) msgs.forEach(function (m) { receberMensagem(m, true); });
-      }).catch(falhou),
+    // O essencial para trabalhar (setores, pontos, grupos, fotos, vítimas, missões): quando chega, o painel é liberado.
+    // As trilhas e as mensagens, que são o grosso de uma operação longa, continuam chegando com o aviso discreto.
+    var essencial = Promise.all([
       carregarFotos(true).catch(falhou),
       carregarAreas().catch(falhou),
       carregarGrupos().catch(falhou),
@@ -2838,6 +2861,27 @@
       carregarMissoes(true).catch(falhou),
       carregarDescansos().catch(falhou),
       carregarTrechosApagados().catch(falhou),
+    ]).then(function () {
+      if (ainda() && !$('painel-carregando').hidden) carregandoPainel(true, true);
+    });
+
+    await emLoteLista(Promise.all([
+      consultarPosicoes(function (cols) {
+        return C.cliente.from('posicoes').select(cols).eq('operacao_id', opId).order('id', { ascending: true });
+      }, function (pagina) {
+        if (ainda()) adicionarPontosLote(pagina);   // cada página entra na hora: as trilhas vão aparecendo
+      }, function () {
+        // os limites pedidos junto com a operação servem se chegaram; senão consulta agora (posições novas depois deles
+        // entram pelo tempo real e pela conferência periódica, que busca id > último)
+        if (!adiantado) return limitesDasPosicoes(opId);
+        return adiantado.limitesPosicoes.then(function (lim) { return lim === undefined ? limitesDasPosicoes(opId) : lim; });
+      }).catch(falhou),
+      C.consultarTudoParalelo(function () {
+        return C.cliente.from('mensagens').select('*').eq('operacao_id', opId).order('criada_em', { ascending: true });
+      }, 1000, 2).then(function (msgs) {
+        if (ainda()) msgs.forEach(function (m) { receberMensagem(m, true); });
+      }).catch(falhou),
+      essencial,
     ]));
     if (!ainda()) return;
     if (falhas.length) {

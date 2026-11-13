@@ -2997,3 +2997,11 @@ html[data-tema="claro"] .pilha-x:hover, html[data-tema="claro"] .pilha-x:focus-v
   content: "Solte para importar"; position: absolute; z-index: 1500; left: 50%; top: 50%; transform: translate(-50%, -50%);
   padding: 10px 16px; border-radius: 8px; background: rgba(14, 18, 22, .92); color: #fff; font-weight: 700; pointer-events: none;
 }
+/* O essencial da operação já chegou: o aviso de carga vira uma etiqueta pequena no alto do mapa, que não cobre nem
+   bloqueia o painel, enquanto as trilhas e as mensagens terminam de chegar. */
+.painel-carregando.discreto {
+  inset: auto; top: 10px; left: 50%; transform: translateX(-50%); flex-direction: row; gap: 8px; padding: 6px 12px;
+  border-radius: 999px; border: 1px solid var(--borda-forte); background: rgba(14, 18, 22, .92); backdrop-filter: none;
+  font-size: .8rem; pointer-events: none; white-space: nowrap; max-width: calc(100% - 24px);
+}
+.painel-carregando.discreto .spinner { width: 16px; height: 16px; border-width: 2px; }

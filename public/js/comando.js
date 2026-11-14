@@ -3986,16 +3986,23 @@
     lacunas.forEach(function (l) {
       var dur = Math.round((l.t1 - l.t0) / 1000);
       var txtDur = dur < 120 ? dur + ' s' : Math.round(dur / 60) + ' min';
-      var texto = 'Falha: sem posições registradas de ' + C.hora(l.t0) + ' a ' + C.hora(l.t1) + ' (' + txtDur + ')' +
+      var texto = 'Sem posições de ' + C.hora(l.t0) + ' a ' + C.hora(l.t1) + ' (' + txtDur + '): o celular não enviou a localização nesse intervalo' +
         (l.impossivel ? ' — salto incoerente' : '') + '. O percurso real nesse trecho é desconhecido.';
-      L.polyline([l.de, l.ate], { color: '#9ca3af', weight: pesoLacuna(), opacity: 0.9, dashArray: '8 6', interactive: true, className: 'trilha-lacuna' })
-        .bindTooltip(texto, { sticky: true })
-        .addTo(p.lacunas);
+      // Intervalo longo (mais de 15 min) ou salto grande (mais de 2 km): a pessoa parou de enviar e voltou depois, talvez em
+      // outro lugar. Ligar os dois pontos com um tracejado riscava o mapa de ponta a ponta e sugeria um caminho que não
+      // existiu; ficam só as marcas de onde parou (○) e de onde voltou (●), com a explicação ao tocar.
+      var de = Array.isArray(l.de) ? l.de : [l.de.lat, l.de.lng], ate = Array.isArray(l.ate) ? l.ate : [l.ate.lat, l.ate.lng];
+      var longa = (l.t1 - l.t0) > 15 * 60000 || C.distancia(de[0], de[1], ate[0], ate[1]) > 2000;
+      if (!longa) {
+        L.polyline([l.de, l.ate], { color: '#9ca3af', weight: pesoLacuna(), opacity: 0.9, dashArray: '8 6', interactive: true, className: 'trilha-lacuna' })
+          .bindTooltip(texto, { sticky: true })
+          .addTo(p.lacunas);
+      }
       L.circleMarker(l.de, { radius: raioFalha(), color: '#e5e7eb', weight: 2, fillColor: '#111827', fillOpacity: 1, className: 'falha-inicio' })
-        .bindTooltip('Início da falha · ' + nomeExibido(p) + ' · ' + C.hora(l.t0) + ' (último ponto antes da falha)')
+        .bindTooltip('Sem posições a partir daqui · ' + nomeExibido(p) + ' · ' + C.hora(l.t0) + ' (último ponto recebido; voltou a enviar às ' + C.hora(l.t1) + ', ' + txtDur + ' depois)')
         .addTo(p.lacunas);
       L.circleMarker(l.ate, { radius: raioFalha(), color: '#111827', weight: 2, fillColor: '#e5e7eb', fillOpacity: 1, className: 'falha-fim' })
-        .bindTooltip('Fim da falha · ' + nomeExibido(p) + ' · ' + C.hora(l.t1) + ' (primeiro ponto depois da falha, ' + txtDur + ' sem posições)')
+        .bindTooltip('Voltou a enviar posição aqui · ' + nomeExibido(p) + ' · ' + C.hora(l.t1) + ' (' + txtDur + ' sem posições)')
         .addTo(p.lacunas);
     });
   }
@@ -6926,12 +6933,31 @@
     var pts = dados.pontos || [];
     var nome = String(dados.nome || 'Trilha importada').trim().slice(0, 80);
     var mesmas = Array.from(est.trilhasManuais.values()).filter(function (x) { return String(x.d.nome || '').trim().toLowerCase() === nome.toLowerCase(); });
-    var igual = mesmas.find(function (x) {
+    // Mesmo desenho (começo, fim, meio e comprimento iguais), com QUALQUER nome: não entra de novo. Antes só o mesmo nome
+    // contava, e um arquivo com a rota e a trilha do mesmo caminho ("Item 1" e "Item 2") deixava uma linha em cima da outra.
+    var comp = comprimentoLinhaM(pts);
+    var perto = function (a, b) { return C.distancia(a[0], a[1], b[0], b[1]) < 5; };
+    var igual = pts.length < 2 ? null : Array.from(est.trilhasManuais.values()).find(function (x) {
       var q = x.d.pontos || [];
-      return q.length && pts.length && C.distancia(q[0][0], q[0][1], pts[0][0], pts[0][1]) < 3 &&
-        C.distancia(q[q.length - 1][0], q[q.length - 1][1], pts[pts.length - 1][0], pts[pts.length - 1][1]) < 3 && Math.abs(q.length - pts.length) <= 2;
+      if (q.length < 2 || !trilhaComoGps(x.d)) return false;
+      var cq = comprimentoLinhaM(q);
+      return perto(q[0], pts[0]) && perto(q[q.length - 1], pts[pts.length - 1]) && Math.abs(cq - comp) <= Math.max(10, comp * 0.02) &&
+        perto(q[Math.floor(q.length / 2)], pts[Math.floor(pts.length / 2)]);
     });
-    if (igual) return Object.assign({}, igual.d, { jaExistia: true });
+    if (igual) {
+      // a que já está lá era só planejada e esta foi percorrida (ou veio com vínculo): fica uma só, atualizada
+      var melhora = (dados.estado === 'percorrida' && igual.d.estado !== 'percorrida') || (dados.participante_id && !igual.d.participante_id) || (dados.grupo_id && !igual.d.grupo_id && !igual.d.participante_id);
+      if (melhora) {
+        try {
+          var at = await C.rpc('salvar_trilha_manual', { p_operacao: est.op.id, p_id: igual.d.id, p_dados: Object.assign({}, dados, { nome: igual.d.nome,
+            estado: dados.estado === 'percorrida' ? 'percorrida' : igual.d.estado, percorrida_em: dados.percorrida_em || igual.d.percorrida_em || null,
+            participante_id: dados.participante_id || igual.d.participante_id || null, grupo_id: dados.grupo_id || igual.d.grupo_id || null, pontos: igual.d.pontos }) });
+          aplicarTrilhasManuais([at], false);
+          return Object.assign({}, at, { jaExistia: true });
+        } catch (eAt) { /* não deu para atualizar: fica a que já existe */ }
+      }
+      return Object.assign({}, igual.d, { jaExistia: true });
+    }
     if (mesmas.length) {
       var nomes = new Set(Array.from(est.trilhasManuais.values()).map(function (x) { return String(x.d.nome || '').trim().toLowerCase(); }));
       var n = 2, base = nome.slice(0, 74);
@@ -8724,7 +8750,10 @@
     t.chave = 'tm:' + d.id;
     t.dono = d.participante_id || null;
     t.segsDesenhados = partes;
-    var cor = corApagada(d.cor || e.cor, t);
+    // Vinculada a uma pessoa: é a trilha DELA, então usa a cor dela (a do grupo ou do tipo), como a gravada pelo app.
+    // Sem vínculo: a cor do arquivo ou, na falta, a da situação.
+    var donoP = d.participante_id ? est.participantes.get(d.participante_id) : null;
+    var cor = corApagada(donoP ? corDoParticipante(donoP) : (d.cor || e.cor), t);
     var g = L.featureGroup();
     var opc = { lineJoin: 'round', lineCap: 'round' };
     L.polyline(partes, Object.assign({ color: '#0b1220', weight: pesoHalo(t), opacity: opacidadeHalo(t), interactive: false, className: 'trilha-halo' }, opc)).addTo(g);
@@ -8734,6 +8763,14 @@
       noDesenho: function (ev) { aoClicarNoMapa(ev); },
       info: function () {
         realcarTrilha(t.chave);
+        var pessoa = d.participante_id ? est.participantes.get(d.participante_id) : null;
+        if (pessoa) {   // igual ao balão da trilha gravada: "Trilha de Fulano", tipo, grupo e distância
+          var gp = grupoDoParticipante(pessoa);
+          return { titulo: 'Trilha de ' + nomeExibido(pessoa), deslocY: -2, botao: 'Detalhes da trilha ›',
+            sub: [TIPOS[tipoDe(pessoa.dados)].rotulo, gp ? gp.nome : null, d.comprimento_m ? window.Rotas.formatarDistancia(d.comprimento_m) : null,
+              d.percorrida_em ? C.hora(d.percorrida_em, false) : null, 'importada (' + d.nome + ')'].filter(Boolean).join(' · '),
+            extras: [{ id: 'balao-ficha', texto: 'Ficha de ' + nomeExibido(pessoa), acao: function () { selecionar(pessoa.id); } }] };
+        }
         var quem = equipeDaTrilha(d);
         return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : '') };
       },
@@ -8744,6 +8781,15 @@
     if (trilhaDestacada(t)) g.bringToFront();
     if (t.setas) { t.setas.remove(); t.setas = null; }
     desenharSetas(t);
+  }
+
+  // Tira do mapa tudo o que é da trilha: a linha E as setas de sentido (que são uma camada à parte). Excluir só a
+  // linha deixava as setas soltas no mapa.
+  function tirarTrilhaManualDoMapa(t) {
+    if (!t) return;
+    if (t.camada) { t.camada.remove(); t.camada = null; }
+    if (t.setas) { t.setas.remove(); t.setas = null; }
+    t.trilha = null; t.segsDesenhados = null;
   }
 
   function redesenharTrilhasManuais() {
@@ -8761,7 +8807,7 @@
     });
     if (completa) {
       est.trilhasManuais.forEach(function (t, id) {
-        if (!vistos.has(id)) { if (t.camada) t.camada.remove(); if (t.setas) t.setas.remove(); est.trilhasManuais.delete(id); }
+        if (!vistos.has(id)) { tirarTrilhaManualDoMapa(t); est.trilhasManuais.delete(id); }
       });
     }
     renderizarAreas();
@@ -10401,9 +10447,9 @@
     if (!r) return;
     try {
       await C.rpc('excluir_trilha_manual', { p_id: d.id });
-      var t = est.trilhasManuais.get(d.id);
-      if (t && t.camada) t.camada.remove();
+      tirarTrilhaManualDoMapa(est.trilhasManuais.get(d.id));
       est.trilhasManuais.delete(d.id);
+      if (est.trilhaRealce === 'tm:' + d.id) est.trilhaRealce = null;
       renderizarAreas();
       UI.aviso('Trilha excluída.', 'ok');
     } catch (e) {

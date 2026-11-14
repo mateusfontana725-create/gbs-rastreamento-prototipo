@@ -148,6 +148,23 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Importação: LDK, trilha vinculada igual à gravada, sem duplicar e sem setas soltas
+
+- **Excluir uma trilha importada tira também as setas de sentido** (ficavam soltas no mapa).
+- **Trilha importada vinculada a uma pessoa** aparece como a trilha dela: na cor da pessoa (do grupo ou do tipo) e com o
+  mesmo balão da trilha gravada pelo app ("Trilha de Fulano", tipo, grupo, distância, "Detalhes da trilha", "Ficha de…").
+  Sem vínculo, continua com a cor do arquivo.
+- **O mesmo traçado não entra duas vezes**, mesmo com nomes diferentes (um arquivo com a rota e a trilha do mesmo caminho
+  criava "Item 1" e "Item 2" um em cima do outro). Fica uma só; se a nova é a percorrida ou veio com vínculo, a que já
+  existia é atualizada.
+- **LDK do AlpineQuest:** o leitor aceita os dois leiautes dos arquivos novos e os metadados com extensões. Se mesmo assim
+  não ler nada pela estrutura, entra o **modo de recuperação**, que varre o arquivo atrás das sequências de posições e
+  traz os traçados (sem nome e sem os pontos soltos). Quando nada é aproveitável, a mensagem diz o motivo (quantos itens
+  o pacote tem e por que cada tipo foi recusado) em vez de só "nada encontrado".
+- **Intervalos sem posição na trilha:** o tracejado cinza só liga os dois pontos em intervalos curtos. Acima de 15 minutos
+  ou de 2 km ficam só as marcas de onde a pessoa parou de enviar (○) e de onde voltou (●), com a explicação ao tocar;
+  o risco atravessando o mapa sugeria um caminho que não existiu.
+
 ### Participante em tablet, painel de navegação do militar, quadro de recursos do SCI e dashboard
 
 - **Participante em tablet e computador (site e aplicativo):** a partir de 700 px o menu abre como painel lateral à direita,

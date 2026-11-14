@@ -102,7 +102,9 @@
     var m = n > 0 ? lerEntradas(l, Math.min(n, MAX_ITENS)) : {};
     if (variante === 'v2') {
       var e2 = l.int();
-      if (e2 > 0) throw erro('metadados estendidos não suportados');
+      if (e2 > 1000) throw erro('quantidade inválida (' + e2 + ')');
+      // extensões: nome e as entradas de cada uma (não usadas; antes o arquivo inteiro era recusado por causa delas)
+      for (var k = 0; k < e2; k++) { l.str(); var ne = l.int(); if (ne > 0) lerEntradas(l, Math.min(ne, MAX_ITENS)); }
     }
     return m;
   }
@@ -150,7 +152,21 @@
 
   /* ---------- um arquivo (wpt, set, rte, are, trk) ---------- */
   // Devolve { tipo, meta, pontos: [{meta,pos}], segmentos: [[pos…]], areas: [{meta, pos:[…]}] }
+  // Os arquivos novos (0x5050…) aparecem com dois leiautes conforme a versão do aplicativo: os metadados logo depois
+  // dos 8 primeiros bytes, ou depois de um cabeçalho do tamanho informado. Tenta o primeiro; se falhar ou vier vazio,
+  // tenta o segundo. O que tiver conteúdo vale.
+  function temConteudo(r) { return Boolean(r && (r.pontos.length || r.segmentos.some(function (x) { return x.length; }) || r.areas.some(function (a) { return a.pos.length; }))); }
   function lerArquivo(bytes, tipoEsperado) {
+    var primeiroErro = null, a = null;
+    try { a = lerArquivoComo(bytes, tipoEsperado, false); } catch (e) { primeiroErro = e; }
+    if (temConteudo(a)) return a;
+    var b = null;
+    try { b = lerArquivoComo(bytes, tipoEsperado, true); } catch (e2) { /* fica o resultado ou o erro da primeira leitura */ }
+    if (temConteudo(b)) return b;
+    if (a) return a;
+    throw primeiroErro;
+  }
+  function lerArquivoComo(bytes, tipoEsperado, pularCabecalho) {
     var l = new Leitor(bytes);
     var primeiro = l.uint();
     var cabecalho = l.int();
@@ -163,13 +179,13 @@
     var r = { tipo: tipo, meta: {}, pontos: [], segmentos: [], areas: [] };
 
     if (tipo === 'wpt') {
-      l.ir(8 + Math.max(0, cabecalho));
+      l.ir(novo && pularCabecalho ? 8 : 8 + Math.max(0, cabecalho));
       r.pontos.push({ meta: lerMetadados(l, varMeta), pos: lerPosicao(l, novo) });
       r.meta = r.pontos[0].meta;
       return r;
     }
-    if (novo) lerMetadados(l, 'novo');           // metadados técnicos (comprimento, horários…): não usados
-    else l.ir(8 + Math.max(0, cabecalho));       // antigos: cabeçalho de tamanho fixo, pulado
+    if (novo && !pularCabecalho) lerMetadados(l, 'novo');   // metadados técnicos (comprimento, horários…): não usados
+    else l.ir(8 + Math.max(0, cabecalho));                  // cabeçalho de tamanho informado, pulado
     r.meta = lerMetadados(l, varMeta);
 
     if (tipo === 'set' || tipo === 'rte') {
@@ -264,7 +280,8 @@
     if (l.uint() !== MAGIA_LDK) throw erro('não é um arquivo LDK do AlpineQuest');
     l.int();   // versão do pacote
     var raizPos = l.long();
-    var arquivos = [], ignorados = 0, vistos = {};
+    var arquivos = [], ignorados = 0, vistos = {}, motivos = {}, itens = 0;
+    function motivo(t) { motivos[t] = (motivos[t] || 0) + 1; }
     function no(pos, caminho, prof) {
       if (prof > MAX_PROFUNDIDADE || vistos[pos]) return;
       vistos[pos] = true;
@@ -278,19 +295,20 @@
       var nome = prof > 0 ? nomeDaPasta(l, metaPtr) : '';
       var aqui = nome ? caminho.concat([nome]) : caminho;
       ent.dados.forEach(function (ptr) {
+        itens++;
         try {
           var bloco = lerBloco(l, ptr);
           var tipo = TIPO_NO_LDK[bloco[0]];
-          if (!tipo) { ignorados++; return; }
+          if (!tipo) { ignorados++; motivo('tipo de item 0x' + (bloco[0] || 0).toString(16)); return; }
           var lido = lerArquivo(bloco.subarray(1), tipo);
           lido.pasta = aqui.join(' / ');
           arquivos.push(lido);
-        } catch (e) { ignorados++; }
+        } catch (e) { ignorados++; motivo(String((e && e.message) || e).slice(0, 60)); }
       });
       ent.filhos.forEach(function (ptr) { no(ptr, aqui, prof + 1); });
     }
     no(raizPos, [], 0);
-    return { arquivos: arquivos, ignorados: ignorados };
+    return { arquivos: arquivos, ignorados: ignorados, itens: itens, motivos: motivos };
   }
 
   /* ---------- para o formato do importador (Arquivos) ---------- */
@@ -340,6 +358,46 @@
     return r;
   }
 
+  /* ---------- modo de recuperação ----------
+   * Quando a leitura pela estrutura não acha nada (versão do aplicativo com leiaute diferente), o arquivo é varrido
+   * atrás de sequências de posições: cada posição é "tamanho, longitude, latitude" (inteiros × 1e-7) e, numa trilha,
+   * elas vêm uma depois da outra. Uma sequência de 3 ou mais posições plausíveis e próximas vira uma trilha.
+   * Não recupera nomes nem pontos soltos, mas não deixa a pessoa sem o traçado. */
+  function recuperarTrilhas(bytes) {
+    var v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), fim = bytes.byteLength, linhas = [];
+    function pos(i) {
+      if (i + 12 > fim) return null;
+      var tam = v.getInt32(i);
+      if (tam < 8 || tam > 96 || i + 4 + tam > fim) return null;
+      var lng = v.getInt32(i + 4) * 1e-7, lat = v.getInt32(i + 8) * 1e-7;
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180 || (Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01)) return null;
+      return { lat: lat, lng: lng, prox: i + 4 + tam };
+    }
+    function perto(a, b) { return Math.abs(a.lat - b.lat) < 0.05 && Math.abs(a.lng - b.lng) < 0.05; }   // menos de ~5 km entre pontos seguidos
+    var i = 0;
+    while (i + 12 <= fim && linhas.length < 500) {
+      var a = pos(i);
+      if (!a) { i++; continue; }
+      var seq = [a], p = a;
+      for (;;) {
+        var b = pos(p.prox);
+        if (!b || !perto(p, b)) break;
+        seq.push(b); p = b;
+        if (seq.length > MAX_ITENS) break;
+      }
+      if (seq.length >= 3) {
+        var parados = seq.every(function (q) { return q.lat === seq[0].lat && q.lng === seq[0].lng; });
+        if (!parados) linhas.push(seq.map(function (q) { return [r7(q.lat), r7(q.lng)]; }));
+        i = p.prox;
+      } else i++;
+    }
+    return linhas;
+  }
+  function textoMotivos(m) {
+    var ks = Object.keys(m || {}).sort(function (x, y) { return m[y] - m[x]; }).slice(0, 3);
+    return ks.map(function (k) { return m[k] + '× ' + k; }).join('; ');
+  }
+
   function ehAlpineQuest(bytes, nome) {
     if (/\.(ldk|wpt|set|rte|are|trk)$/i.test(nome || '')) return true;
     if (!bytes || bytes.length < 4) return false;
@@ -353,17 +411,38 @@
     ext = ext ? ext.toLowerCase() : '';
     var primeiro = bytes.length >= 4 ? new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0) : 0;
     if (primeiro === MAGIA_LDK || ext === 'ldk') {
-      var pac = lerLdk(bytes);
+      var pac, erroLdk = null;
+      try { pac = lerLdk(bytes); } catch (e) { erroLdk = e; pac = { arquivos: [], ignorados: 0, itens: 0, motivos: {} }; }
       var r = paraImportador(pac.arquivos, 'ldk');
-      if (pac.ignorados) r.avisos.push(pac.ignorados + ' item(ns) do pacote LDK em formato não reconhecido (fotos, anexos ou versão nova) foram ignorados.');
+      var detalhe = textoMotivos(pac.motivos);
+      if (pac.ignorados) r.avisos.push(pac.ignorados + ' item(ns) do pacote LDK não puderam ser lidos' + (detalhe ? ' (' + detalhe + ')' : '') + '.');
+      if (!r.pontos.length && !r.linhas.length && !r.areas.length) {
+        // nada pela estrutura: tenta recuperar pelo menos os traçados
+        var rec = recuperarTrilhas(bytes);
+        rec.forEach(function (pts, k) { r.linhas.push({ nome: 'Trilha recuperada ' + (k + 1), pts: pts, formato: 'ldk' }); });
+        if (rec.length) r.avisos.push('O pacote LDK está num leiaute que o leitor não conhece: ' + rec.length + ' traçado(s) foram recuperados sem nome e sem os pontos soltos. Confira no mapa.');
+        r.diagnostico = erroLdk ? 'estrutura do pacote não reconhecida (' + erroLdk.message + ')'
+          : pac.itens ? pac.itens + ' item(ns) no pacote, nenhum lido' + (detalhe ? ': ' + detalhe : '')
+          : 'o pacote não tem itens na árvore de pastas (ou a árvore está num leiaute diferente)';
+        if (erroLdk && !rec.length) throw erroLdk;
+      }
       return r;
     }
     var porExtensao = { wpt: 'wpt', set: 'set', rte: 'rte', trk: 'trk', are: 'are' }[ext] || null;   // arquivos antigos não dizem o tipo
-    var um = lerArquivo(bytes, porExtensao);
+    var um;
+    try { um = lerArquivo(bytes, porExtensao); }
+    catch (eUm) {
+      var rec1 = recuperarTrilhas(bytes);
+      if (!rec1.length) throw eUm;
+      var r1 = paraImportador([], porExtensao || 'trk');
+      rec1.forEach(function (pts, k) { r1.linhas.push({ nome: 'Trilha recuperada ' + (k + 1), pts: pts, formato: porExtensao || 'trk' }); });
+      r1.avisos.push('Arquivo num leiaute que o leitor não conhece: ' + rec1.length + ' traçado(s) recuperados sem nome. Confira no mapa.');
+      return r1;
+    }
     return paraImportador([um], um.tipo);
   }
 
-  var api = { ler: ler, ehAlpineQuest: ehAlpineQuest, _lerArquivo: lerArquivo, _lerLdk: lerLdk };
+  var api = { ler: ler, ehAlpineQuest: ehAlpineQuest, _lerArquivo: lerArquivo, _lerLdk: lerLdk, _recuperarTrilhas: recuperarTrilhas };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.AlpineQuest = api;
 })(typeof window !== 'undefined' ? window : globalThis);

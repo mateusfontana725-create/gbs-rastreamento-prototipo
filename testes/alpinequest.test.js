@@ -194,5 +194,21 @@ console.log('Arquivo corrompido');
   chk(msg2 !== '', 'LDK com a raiz fora do arquivo: erro', msg2);
 }
 
+console.log('Modo de recuperação (leiaute desconhecido)');
+{
+  // um LDK válido na assinatura, com a árvore ilegível, mas com as posições de uma trilha lá dentro
+  const w = new Escritor().uint(0x4C444B3A).int(1).long(999999).bytes(new Array(40).fill(0x7F));
+  [[-25.2526, -48.8128], [-25.2530, -48.8120], [-25.2536, -48.8111], [-25.2541, -48.8102]].forEach((q) => loc(w, q[0], q[1], { t: 1700000000000 }));
+  w.bytes(new Array(16).fill(0));
+  const r = AQ.ler(w.saida(), 'estranho.ldk');
+  chk(r.linhas.length === 1 && r.linhas[0].pts.length === 4 && perto(r.linhas[0].pts[0][0], -25.2526), 'o traçado é recuperado mesmo sem a estrutura', r.linhas);
+  chk(r.avisos.some((x) => /recuperad/.test(x)) && Boolean(r.diagnostico), 'o aviso e o diagnóstico dizem o que aconteceu', [r.avisos, r.diagnostico]);
+  // sem nada aproveitável: diz o motivo em vez de voltar vazio em silêncio
+  const vazio = new Escritor().uint(0x4C444B3A).int(1).long(56).bytes(new Array(40).fill(0));
+  vazio.int(0x00015555).int(0).long(0).dbl(0).int(0x00045555).int(0).int(0);
+  const rv = AQ.ler(vazio.saida(), 'vazio.ldk');
+  chk(!rv.linhas.length && /não tem itens/.test(rv.diagnostico || ''), 'pacote sem itens: diagnóstico claro', rv.diagnostico);
+}
+
 console.log('\n' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

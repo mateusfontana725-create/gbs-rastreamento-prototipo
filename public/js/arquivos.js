@@ -599,6 +599,11 @@
     var r;
     try { r = AQ.ler(await arquivo.arrayBuffer(), nome); }
     catch (e) { throw new Error('Não foi possível ler o arquivo do AlpineQuest: ' + e.message + '.'); }
+    // vazio: em vez de só "nada encontrado", diz o que o leitor viu dentro do arquivo (ajuda a corrigir o leitor)
+    if (!r.pontos.length && !r.linhas.length && !r.areas.length) {
+      throw new Error('Nenhum ponto, trilha ou área pôde ser lido deste arquivo do AlpineQuest' + (r.diagnostico ? ' — ' + r.diagnostico : '') +
+        '. Como alternativa, exporte do AlpineQuest em GPX ou KML e importe esse arquivo.');
+    }
     return conferirLido(r, null);
   }
 

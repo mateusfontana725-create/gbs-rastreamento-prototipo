@@ -148,6 +148,28 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Participante em tablet, painel de navegação do militar, quadro de recursos do SCI e dashboard
+
+- **Participante em tablet e computador (site e aplicativo):** a partir de 700 px o menu abre como painel lateral à direita,
+  os botões do mapa ficam maiores e a barra de baixo usa a largura da tela (civil: SOS e REGISTRAR centralizados, sem a
+  faixa escura atrás). O civil continua com a tela simples.
+- **Militar: painel de navegação (no estilo CalTopo / AlpineQuest).** Na barra de baixo, ao lado do Menu, ficam a
+  coordenada no formato escolhido e, embaixo, precisão, rumo, distância da trilha, altitude e velocidade. Tocar abre o
+  **Painel de navegação**: a posição em graus decimais, GMS, graus e minutos, UTM e MGRS (Copiar em cada um; tocar num
+  formato passa a usá-lo na barra), altitude do GPS, velocidade, rumo, trilha percorrida, tempo e velocidade média. No Menu,
+  a seção **Navegação** tem a **Mira no centro do mapa** (coordenada do ponto sob a cruz, distância e rumo a partir de
+  você, Copiar e, com a permissão de pontos, "Marcar aqui") e **Ir para coordenada** (aceita os mesmos formatos). O mapa do
+  militar ganhou a régua de escala.
+- **Modo SCI: quadro de recursos.** Em "Área de Espera" e "Recursos e fatores humanos" as equipes aparecem em colunas
+  (Disponíveis, Designadas, Em descanso, Indisponíveis). Arrastar o cartão (mouse; no celular, pela alça ⠿) ou usar "Mover
+  para" muda a situação. Soltar em "Designadas" abre "Enviar destino" (a designação precisa de um destino); tirar de lá
+  pede confirmação e encerra o deslocamento. O botão "Recursos das equipes" do SCI, que não fazia nada, agora lista as
+  equipes para escolher.
+- **Dashboard da operação:** o gráfico "Pessoas em campo" saiu; entrou **Equipe agora** (quem está enviando posição, quem
+  parou de enviar e há quanto tempo, quem nunca enviou). **Fadiga e descanso** mostra a barra do limite por pessoa, as
+  cores clicáveis, quem está descansando e o resumo por grupo. A janela de detalhes tem linhas numeradas, a contagem e a
+  cor da situação; o texto "[object HTMLSpanElement]" na lista de fadiga foi corrigido.
+
 ### Celular: menu do mapa, lista por botão, janela do ponto e letras menores
 
 - **Menu "☰ Mapa" (celular e tablet em pé):** um botão só no canto do mapa abre Participantes, Camadas, Dia ou pessoa,

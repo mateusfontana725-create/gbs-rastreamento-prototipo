@@ -1138,6 +1138,9 @@
     if (r.atual) {
       var a = r.atual;
       estado.ultimaLeitura = { lat: a.lat, lng: a.lng, prec: a.prec, recebidaEm: a.recebidaEm, t: a.t };
+      var cb = (pos && pos.coords) || {};
+      estado.leituraExtra = { alt: typeof cb.altitude === 'number' && isFinite(cb.altitude) ? cb.altitude : null,
+        vel: typeof cb.speed === 'number' && isFinite(cb.speed) && cb.speed >= 0 ? cb.speed : null };
       estado.gps = a.prec != null && a.prec > 50 ? 'fraco' : 'ok';
       atualizarRumoGps(pos, a);
       atualizarMeuMarcador();
@@ -4396,6 +4399,219 @@
     $('btn-saida').hidden = pendente;
     $('menu-saida').hidden = pendente;
     $('btn-menu').classList.toggle('tem-aviso', pendente);
+    atualizarPainelPro();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Militar: painel de navegação (no estilo CalTopo / AlpineQuest)       */
+  /* ------------------------------------------------------------------ */
+  // Na barra de baixo, ao lado do Menu: a coordenada no formato escolhido e, embaixo, precisão, rumo e distância da
+  // trilha. Tocar abre o painel completo (todos os formatos com Copiar, altitude, velocidade, tempo e média).
+  // No menu: mira no centro do mapa (coordenada, distância e rumo a partir de você) e "Ir para coordenada".
+  // Só aparece para o militar; o civil continua com a tela simples.
+  var CHAVE_COORD_P = 'gbs-coord-participante';
+  var pro = { el: null, formato: null, mira: null, cacheN: -1, cacheKm: 0, cacheMs: 0 };
+  function formatoCoordP() {
+    if (!pro.formato) {
+      var v = null;
+      try { v = localStorage.getItem(CHAVE_COORD_P); } catch (e) { /* sem armazenamento */ }
+      pro.formato = window.Coords && window.Coords.FORMATOS[v] ? v : 'dec';
+    }
+    return pro.formato;
+  }
+  function definirFormatoCoordP(f) {
+    if (!window.Coords || !window.Coords.FORMATOS[f]) return;
+    pro.formato = f;
+    try { localStorage.setItem(CHAVE_COORD_P, f); } catch (e) { /* vale nesta tela */ }
+    atualizarPainelPro();
+    atualizarMira();
+  }
+  function nomeFormato(f) { return String(window.Coords.FORMATOS[f] || f).replace(/\s*\(.*$/, ''); }
+  function copiarP(texto) {
+    var ok = function () { UI.aviso('Copiado: ' + texto, 'ok'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(ok, function () { UI.aviso(texto, 'ok', 9000); });
+    else UI.aviso(texto, 'ok', 9000);
+  }
+  // Distância e tempo da trilha desenhada neste aparelho (refaz a conta só quando chegam pontos novos).
+  function resumoTrilhaP() {
+    var segs = estado.trilhaMinha || [], tempos = estado.temposMinha || [];
+    var n = segs.reduce(function (t, x) { return t + x.length; }, 0);
+    if (n !== pro.cacheN) {
+      var m = 0, ms = 0;
+      segs.forEach(function (seg, i) {
+        for (var k = 1; k < seg.length; k++) m += C.distancia(seg[k - 1][0], seg[k - 1][1], seg[k][0], seg[k][1]);
+        var t = tempos[i] || [];
+        if (t.length > 1) ms += t[t.length - 1] - t[0];
+      });
+      pro.cacheN = n; pro.cacheKm = m / 1000; pro.cacheMs = ms;
+    }
+    return { km: pro.cacheKm, ms: pro.cacheMs, pontos: n };
+  }
+  function textoKmP(km) { return km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(km < 10 ? 2 : 1).replace('.', ',') + ' km'; }
+  function textoTempoP(ms) { var min = Math.round(ms / 60000); return Math.floor(min / 60) + 'h' + (min % 60 < 10 ? '0' : '') + (min % 60); }
+  function textoRumoP() {
+    var r = rumoAtual();
+    return r ? Math.round(r.graus) + '° ' + window.Coords.cardeal(r.graus) : null;
+  }
+  function criarPainelPro() {
+    var barra = document.querySelector('#tela-rastreio .acoes-civil');
+    if (pro.el || !barra || !window.Coords) return;
+    pro.coord = UI.el('span', { classe: 'pro-coord mono', texto: 'Sem posição ainda' });
+    pro.dados = UI.el('span', { classe: 'pro-dados' });
+    pro.el = UI.el('button', { classe: 'painel-pro', type: 'button', id: 'painel-pro', hidden: true, 'aria-haspopup': 'dialog', title: 'Coordenada, precisão, rumo e trilha: toque para ver tudo',
+      onclick: abrirPainelNavegacao }, [pro.coord, pro.dados]);
+    barra.insertBefore(pro.el, barra.firstChild);
+    // Ferramentas de navegação no menu (seção própria, só do militar)
+    var secao = UI.el('section', { classe: 'menu-grupo', id: 'menu-navegacao', hidden: true, 'aria-labelledby': 'menu-tit-nav' }, [
+      UI.el('h3', { classe: 'menu-grupo-titulo', id: 'menu-tit-nav', texto: 'Navegação' }),
+      UI.el('div', { classe: 'menu-lista' }, [
+        itemMenuP('⌖', 'Mira no centro do mapa', 'Coordenada, distância e rumo do ponto sob a mira', 'pro-mira', function () { alternarMira(); }),
+        itemMenuP('➜', 'Ir para coordenada', 'Graus decimais, GMS, UTM ou MGRS', 'pro-ir', function () { abrirIrParaCoordenada(); }),
+        itemMenuP('▦', 'Painel de navegação', 'Todos os formatos, altitude, velocidade e trilha', 'pro-painel', function () { abrirPainelNavegacao(); }),
+      ]),
+    ]);
+    var antes = $('menu-busca');
+    if (antes && antes.parentNode) antes.parentNode.insertBefore(secao, antes);
+    if (estado.mapa && !pro.escala) { pro.escala = L.control.scale({ metric: true, imperial: false, position: 'bottomright' }); }
+  }
+  function itemMenuP(icone, titulo, sub, id, fn) {
+    return UI.el('button', { classe: 'menu-item', type: 'button', id: id, onclick: function () { abrirMenuFolha(false); fn(); } }, [
+      UI.el('span', { classe: 'menu-item-ico', 'aria-hidden': 'true', texto: icone }),
+      UI.el('span', { classe: 'menu-item-txt' }, [UI.el('strong', { texto: titulo }), UI.el('small', { texto: sub })]),
+    ]);
+  }
+  function atualizarPainelPro() {
+    var militar = Boolean(estado.part && estado.part.tipo === 'militar' && !estado.finalizado);
+    if (militar && !pro.el) criarPainelPro();
+    if (!pro.el) return;
+    pro.el.hidden = !militar;
+    var sec = $('menu-navegacao');
+    if (sec) sec.hidden = !militar;
+    // escala do mapa (régua de distância) só para o militar
+    if (pro.escala && estado.mapa) {
+      if (militar && !pro.escala._map) pro.escala.addTo(estado.mapa);
+      else if (!militar && pro.escala._map) pro.escala.remove();
+    } else if (militar && estado.mapa && !pro.escala) { pro.escala = L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(estado.mapa); }
+    if (!militar) { if (pro.mira) alternarMira(false); return; }
+    var l = estado.ultimaLeitura, x = estado.leituraExtra || {};
+    var coord = l ? window.Coords.formatar(l.lat, l.lng, formatoCoordP()) : 'Sem posição ainda';
+    if (pro.coord.textContent !== coord) pro.coord.textContent = coord;
+    var t = resumoTrilhaP(), rumo = textoRumoP();
+    var partes = [];
+    if (l && l.prec != null) partes.push('±' + Math.round(l.prec) + ' m');
+    if (rumo) partes.push(rumo);
+    if (t.pontos > 1) partes.push('trilha ' + textoKmP(t.km));
+    if (x.alt != null) partes.push('alt ' + Math.round(x.alt) + ' m');
+    if (x.vel != null && x.vel >= 0.3) partes.push((x.vel * 3.6).toFixed(1).replace('.', ',') + ' km/h');
+    var dados = partes.join(' · ') || (l ? '' : 'aguardando o GPS');
+    if (pro.dados.textContent !== dados) pro.dados.textContent = dados;
+    if (pro.aoAtualizar) pro.aoAtualizar();
+  }
+  // Painel completo: a posição em todos os formatos (toque escolhe o da barra; Copiar em cada um) e os números da trilha.
+  function abrirPainelNavegacao() {
+    var corpo = UI.el('div', { classe: 'pro-painel-corpo' });
+    function desenhar() {
+      var l = estado.ultimaLeitura, x = estado.leituraExtra || {}, t = resumoTrilhaP(), rumo = rumoAtual();
+      corpo.innerHTML = '';
+      if (!l) { corpo.appendChild(UI.el('p', { classe: 'muted', texto: 'Sem posição ainda. Fique em local aberto e aguarde o GPS.' })); return; }
+      corpo.appendChild(UI.el('div', { classe: 'pro-formatos', role: 'radiogroup', 'aria-label': 'Formato das coordenadas' }, Object.keys(window.Coords.FORMATOS).map(function (f) {
+        var texto = window.Coords.formatar(l.lat, l.lng, f), ativo = f === formatoCoordP();
+        return UI.el('div', { classe: 'pro-formato' + (ativo ? ' ativo' : '') }, [
+          UI.el('button', { classe: 'pro-formato-escolher', type: 'button', role: 'radio', 'aria-checked': String(ativo), title: 'Usar este formato na barra',
+            onclick: function () { definirFormatoCoordP(f); desenhar(); } }, [UI.el('small', { texto: nomeFormato(f) }), UI.el('span', { classe: 'mono', texto: texto })]),
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Copiar', 'aria-label': 'Copiar ' + nomeFormato(f), onclick: function () { copiarP(texto); } }),
+        ]);
+      })));
+      var medias = t.ms > 60000 ? (t.km / (t.ms / 3600000)) : null;
+      corpo.appendChild(UI.el('dl', { classe: 'pro-medidas' }, [
+        ['Precisão', l.prec != null ? '±' + Math.round(l.prec) + ' m' : '—'],
+        ['Altitude (GPS)', x.alt != null ? Math.round(x.alt) + ' m' : '—'],
+        ['Velocidade', x.vel != null ? (x.vel * 3.6).toFixed(1).replace('.', ',') + ' km/h' : '—'],
+        ['Rumo', rumo ? Math.round(rumo.graus) + '° ' + window.Coords.cardeal(rumo.graus) + (rumo.fonte === 'gps' ? ' (pelo GPS)' : '') : '—'],
+        ['Trilha percorrida', t.pontos > 1 ? textoKmP(t.km) : '—'],
+        ['Tempo de trilha', t.ms > 0 ? textoTempoP(t.ms) : '—'],
+        ['Velocidade média', medias != null ? medias.toFixed(1).replace('.', ',') + ' km/h' : '—'],
+        ['Última leitura', C.hora(l.recebidaEm || l.t, true)],
+      ].reduce(function (r, par) { return r.concat([UI.el('dt', { texto: par[0] }), UI.el('dd', { texto: par[1] })]); }, [])));
+    }
+    desenhar();
+    pro.aoAtualizar = desenhar;
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Painel de navegação' }, [UI.dica('Toque num formato para usá-lo na barra de baixo. A trilha é a deste aparelho; a altitude é a do GPS (pode variar alguns metros). Datum WGS 84.')]),
+      corpo,
+      UI.rodape([
+        UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Ir para coordenada', onclick: function () { fechar(); abrirIrParaCoordenada(); } }),
+      ]),
+    ]), { aoFechar: function () { pro.aoAtualizar = null; } });
+  }
+  // Mira: uma cruz fixa no centro do mapa. A faixa mostra a coordenada do ponto sob a cruz e, a partir de você, a
+  // distância e o rumo até ele. Serve para ler um ponto do mapa, medir e (com a permissão) marcar um ponto ali.
+  function alternarMira(ligar) {
+    if (!estado.mapa) return;
+    var ativa = ligar == null ? !pro.mira : Boolean(ligar);
+    if (ativa === Boolean(pro.mira)) return;
+    var caixa = document.querySelector('.mapa-civil-caixa') || estado.mapa.getContainer().parentNode;
+    if (!ativa) {
+      estado.mapa.off('move', atualizarMira);
+      pro.mira.cruz.remove(); pro.mira.faixa.remove();
+      pro.mira = null;
+      return;
+    }
+    var texto = UI.el('span', { classe: 'pro-mira-coord mono' }), sub = UI.el('span', { classe: 'pro-mira-sub' });
+    var perm = estado.permissoes || {};
+    pro.mira = {
+      cruz: UI.el('div', { classe: 'pro-mira-cruz', 'aria-hidden': 'true' }),
+      faixa: UI.el('div', { classe: 'pro-mira-faixa', role: 'status' }, [
+        UI.el('div', { classe: 'pro-mira-textos' }, [texto, sub]),
+        UI.el('div', { classe: 'pro-mira-botoes' }, [
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Copiar', onclick: function () { copiarP(texto.textContent); } }),
+          perm.pontos && typeof formPontoMilitar === 'function' ? UI.el('button', { classe: 'btn btn-pequeno btn-ok', type: 'button', texto: '📍 Marcar aqui', onclick: function () {
+            var c = estado.mapa.getCenter(); formPontoMilitar([Math.round(c.lat * 1e7) / 1e7, Math.round(c.lng * 1e7) / 1e7]); } }) : null,
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '✕', 'aria-label': 'Fechar a mira', onclick: function () { alternarMira(false); } }),
+        ]),
+      ]), texto: texto, sub: sub,
+    };
+    caixa.appendChild(pro.mira.cruz);
+    caixa.appendChild(pro.mira.faixa);
+    estado.mapa.on('move', atualizarMira);
+    atualizarMira();
+  }
+  function atualizarMira() {
+    if (!pro.mira || !estado.mapa) return;
+    var c = estado.mapa.getCenter(), l = estado.ultimaLeitura;
+    pro.mira.texto.textContent = window.Coords.formatar(c.lat, c.lng, formatoCoordP());
+    if (l) {
+      var d = C.distancia(l.lat, l.lng, c.lat, c.lng), b = window.Coords.rumo(l.lat, l.lng, c.lat, c.lng);
+      pro.mira.sub.textContent = d < 3 ? 'você está aqui' : 'a ' + textoKmP(d / 1000) + ' de você · rumo ' + Math.round(b) + '° ' + window.Coords.cardeal(b);
+    } else pro.mira.sub.textContent = 'sem a sua posição para medir';
+  }
+  function abrirIrParaCoordenada() {
+    var entrada = UI.el('input', { classe: 'campo mono', id: 'pro-ir-coord', autocomplete: 'off', spellcheck: 'false', inputmode: 'text', placeholder: '-25.2526, -48.8128 · 22J 719450 7205310' });
+    var previa = UI.el('p', { classe: 'muted pro-ir-previa', 'aria-live': 'polite' });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Ir', disabled: true });
+    var achado = null;
+    entrada.addEventListener('input', function () {
+      achado = entrada.value.trim() ? window.Coords.interpretar(entrada.value) : null;
+      btn.disabled = !achado;
+      previa.textContent = !entrada.value.trim() ? '' : achado ? window.Coords.formatar(achado.lat, achado.lng, 'dec') + ' · ' + window.Coords.formatar(achado.lat, achado.lng, 'utm') : 'Formato não reconhecido.';
+    });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Ir para coordenada' }, [UI.dica('Aceita graus decimais, graus-minutos-segundos, UTM e MGRS (datum WGS 84). O mapa vai até o ponto com a mira ligada.')]),
+      UI.campo('Coordenada', entrada, { para: 'pro-ir-coord', largo: true }),
+      previa,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (!achado || !estado.mapa) return;
+      fechar();
+      estado.mapa.setView([achado.lat, achado.lng], Math.max(estado.mapa.getZoom(), 16));
+      alternarMira(true);
+      atualizarMira();
+    });
+    var fechar = UI.abrirModal(form);
+    setTimeout(function () { try { entrada.focus(); } catch (e) { /* ignora */ } }, 60);
   }
 
   iniciar();

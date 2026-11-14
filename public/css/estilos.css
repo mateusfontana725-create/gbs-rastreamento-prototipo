@@ -2815,3 +2815,67 @@ html body #avisos { left: 12px; right: 12px; transform: none; width: auto; max-w
   .barra-desenho-texto { flex: 1 1 200px; }
   .barra-desenho-botoes { margin-left: auto; }
 }
+
+/* ---- Participante militar: painel de navegação na barra de baixo (coordenada, precisão, rumo, trilha) ---- */
+.painel-pro { display: none; }
+body.militar-em-rastreio #tela-rastreio .painel-pro:not([hidden]) {
+  pointer-events: auto; display: grid; gap: 2px; align-content: center; justify-items: start; min-width: 0; height: 54px; padding: 4px 12px; cursor: pointer; text-align: left;
+  color: #e8edf2; background: rgba(14, 18, 22, .92); border: 1.5px solid #3d4a57; border-left: 4px solid #facc15; border-radius: 12px; box-shadow: 0 3px 10px rgba(0, 0, 0, .5); font: inherit;
+}
+.pro-coord { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .92rem; font-weight: 700; letter-spacing: .01em; }
+.pro-dados { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .72rem; color: #b4bfca; }
+body.militar-em-rastreio #tela-rastreio .acao-menu { width: auto; min-width: 104px; }
+/* painel completo */
+.pro-formatos { display: grid; gap: 6px; }
+.pro-formato { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px 6px 10px; border: 1px solid var(--borda); border-radius: 10px; background: var(--superficie-2); }
+.pro-formato.ativo { border-color: #facc15; box-shadow: inset 3px 0 0 #facc15; }
+.pro-formato-escolher { display: grid; gap: 1px; min-width: 0; padding: 4px 0; text-align: left; cursor: pointer; font: inherit; color: var(--texto); background: transparent; border: 0; }
+.pro-formato-escolher small { font-size: .7rem; color: var(--texto-2); }
+.pro-formato-escolher .mono { font-size: .95rem; font-weight: 700; overflow-wrap: anywhere; }
+.pro-medidas { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; margin: 14px 0 0; font-size: .9rem; }
+.pro-medidas dt { color: var(--texto-2); }
+.pro-medidas dd { margin: 0; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pro-ir-previa { margin: 6px 0 0; min-height: 1.3em; font-size: .82rem; }
+/* mira no centro do mapa */
+.pro-mira-cruz { position: absolute; z-index: 1190; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; pointer-events: none;
+  background:
+    linear-gradient(#facc15, #facc15) center / 2px 100% no-repeat,
+    linear-gradient(#facc15, #facc15) center / 100% 2px no-repeat;
+  filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 1px #000); }
+.pro-mira-cruz::after { content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 2px solid #facc15; border-radius: 50%; background: rgba(0, 0, 0, .35); }
+.pro-mira-faixa { position: absolute; z-index: 1260; left: 8px; right: 8px; bottom: calc(var(--barra-h) + env(safe-area-inset-bottom) + 8px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding: 8px 10px; color: #fff; background: rgba(14, 18, 22, .96); border: 1.5px solid rgba(250, 204, 21, .7); border-left: 4px solid #facc15; border-radius: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, .6); }
+.pro-mira-textos { flex: 1 1 180px; min-width: 0; display: grid; gap: 1px; }
+.pro-mira-coord { font-size: .9rem; font-weight: 700; overflow-wrap: anywhere; }
+.pro-mira-sub { font-size: .76rem; color: #b4bfca; }
+.pro-mira-botoes { display: flex; gap: 6px; flex: none; margin-left: auto; }
+.pro-mira-botoes .btn { min-height: 40px; }
+/* com a mira ligada, "Quero sair" e afins sobem para não ficar sob a faixa */
+#tela-rastreio:has(.pro-mira-faixa) .controles-topo { bottom: calc(var(--barra-h) + env(safe-area-inset-bottom) + 84px); }
+
+/* ---- Participante em tablet e computador (700 px ou mais): a tela usa a largura que tem ---- */
+@media (min-width: 700px) {
+  /* militar: a barra ocupa a largura toda (painel de navegação à esquerda, Menu à direita) */
+  body.militar-em-rastreio.civil-em-rastreio #tela-rastreio .acoes-civil { left: 0; right: 0; width: auto; transform: none; padding-left: 14px; padding-right: 14px; gap: 12px; }
+  body.militar-em-rastreio #tela-rastreio .painel-pro:not([hidden]) { max-width: 620px; padding: 4px 16px; }
+  .pro-coord { font-size: 1.02rem; }
+  .pro-dados { font-size: .8rem; }
+  /* civil: SOS e REGISTRAR maiores e centralizados, sem a faixa escura atrás */
+  body:not(.militar-em-rastreio).civil-em-rastreio #tela-rastreio .acoes-civil { background: none; gap: 14px; }
+  body:not(.militar-em-rastreio).civil-em-rastreio #tela-rastreio .acao { min-height: 58px; font-size: .95rem; border-radius: 16px; }
+  /* menu e conversa: painel lateral à direita em vez de folha de baixo */
+  .folha-menu { align-items: stretch; justify-content: flex-end; }
+  .folha-corpo { width: min(420px, 100%); max-height: none; height: 100%; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); border-radius: 0; border: 0; border-left: 2px solid var(--borda-forte); box-shadow: -10px 0 34px rgba(0, 0, 0, .55); }
+  .pro-mira-faixa { left: 50%; right: auto; width: min(620px, calc(100% - 16px)); transform: translateX(-50%); }
+  /* controles do canto: um pouco maiores e mais afastados da borda */
+  .civil-em-rastreio #tela-rastreio .btn-onde-estou, .civil-em-rastreio #tela-rastreio .btn-camadas { width: 48px; height: 48px; min-height: 48px; right: 14px; }
+  .civil-em-rastreio #tela-rastreio .btn-camadas { top: calc(68px + env(safe-area-inset-top)); }
+  .civil-em-rastreio #tela-rastreio .camadas-civil { top: calc(68px + env(safe-area-inset-top)); right: 72px; }
+  #tela-rastreio .controles-topo { right: 14px; }
+  #tela-rastreio .controles-topo .btn { min-height: 40px; padding: 0 14px; font-size: .8rem; }
+}
+/* tela inicial e telas de aviso em tablet: o cartão não estica de ponta a ponta */
+@media (min-width: 700px) {
+  .pagina-civil .cartao, .pagina-civil .civil-conteudo > .cartao { max-width: 640px; margin-left: auto; margin-right: auto; }
+}
+.civil-em-rastreio #tela-rastreio:has(.pro-mira-faixa) #mapa-civil .leaflet-bottom.leaflet-right { bottom: calc(var(--barra-h) + env(safe-area-inset-bottom) + 84px); }

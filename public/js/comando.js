@@ -133,7 +133,7 @@
     gpsMeu: 'aguardando',
     ultimoAceitoMeu: null,      // última leitura válida do meu GPS { lat, lng, prec, t }
     filtroMeu: new window.GPS.Filtro(),
-    minhaPosEstado: 'desligada', // desligada | iniciando | ativa | sem_sinal | bloqueada | indisponivel
+    minhaPosEstado: 'desligada', // desligada | iniciando | ativa | sem_sinal | bloqueada | indisponivel | outro_aparelho | longe
     iniciandoMinhaPos: false,
     meuWatchEm: 0,
     permissaoMinha: 'desconhecido',
@@ -2090,19 +2090,19 @@
     setTimeout(atualizarMisturaSetores, 0);
     L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(mapa);
 
-    // Controle essencial de orientação que fica sempre no mapa: enquadrar todos.
+    // Controle essencial de orientação que fica sempre no mapa: enquadrar o local da operação.
     var Botoes = L.Control.extend({
       options: { position: 'topleft' },
       onAdd: function () {
         var div = L.DomUtil.create('div', 'leaflet-bar');
         var b1 = L.DomUtil.create('a', 'btn-mapa', div);
         b1.href = '#';
-        b1.title = 'Enquadrar todos os participantes';
+        b1.title = 'Enquadrar o local da operação';
         b1.setAttribute('role', 'button');
         b1.setAttribute('aria-label', b1.title);
         b1.textContent = '⤢';
         L.DomEvent.disableClickPropagation(div);
-        L.DomEvent.on(b1, 'click', function (e) { L.DomEvent.preventDefault(e); enquadrarTodos(); });
+        L.DomEvent.on(b1, 'click', function (e) { L.DomEvent.preventDefault(e); enquadrarOperacao(true); });
         return div;
       },
     });
@@ -2772,6 +2772,56 @@
     $('reabrir-qtd').textContent = String(n);
     $('reabrir-alerta').hidden = !alerta;
     b.title = 'Mostrar a lista de participantes' + (alerta ? ' (há alertas)' : '');
+  }
+
+  /* ---------- Área da operação: o enquadramento e o aviso de "você está longe" ---------- */
+  // Quem está a mais do que isto do local da operação (ou da base) está "longe": não entra no enquadramento
+  // (alguém acompanhando de casa fazia o mapa abrir até caber as duas cidades) e, se for este aparelho, o painel
+  // pergunta antes de pôr a localização no mapa da equipe.
+  var LONGE_DA_OPERACAO_M = 15000;
+  var RAIO_MINIMO_ENQUADRE_M = 1000;
+  // Centro da operação: o local do cadastro; sem ele, a base (ponto BASE); sem os dois, null.
+  function centroDaOperacao() {
+    var op = est.op;
+    if (op && op.local_lat != null && op.local_lng != null) return { lat: op.local_lat, lng: op.local_lng, tipo: 'local' };
+    var bases = basesDaTrilha();
+    return bases.length ? { lat: bases[0].lat, lng: bases[0].lng, tipo: 'base' } : null;
+  }
+  // Enquadra um raio em volta do centro: 1 km no mínimo, crescendo até caber quem e o que está na área da operação
+  // (pessoas, setores e pontos a até 15 km). O que está mais longe fica de fora.
+  function enquadrarCentro(c) {
+    var raio = RAIO_MINIMO_ENQUADRE_M;
+    function conta(lat, lng) {
+      if (lat == null || lng == null) return;
+      var d = C.distancia(c.lat, c.lng, lat, lng);
+      if (d <= LONGE_DA_OPERACAO_M && d > raio) raio = d;
+    }
+    est.participantes.forEach(function (p) {
+      var pos = posicaoAtual(p);
+      if (pos && visivelNoMapa(p) && !p.dados.removido) conta(pos.lat, pos.lng);
+    });
+    est.setores.forEach(function (x) {
+      var d = x && x.d;
+      if (!d) return;
+      if (d.forma === 'circulo') conta(d.centro_lat, d.centro_lng);
+      else (d.pontos || []).forEach(function (q) { conta(q[0], q[1]); });
+    });
+    est.pontosInt.forEach(function (x) { if (x && x.d) conta(x.d.lat, x.d.lng); });
+    est.mapa.fitBounds(L.latLng(c.lat, c.lng).toBounds(raio * 2.15), { padding: [20, 20], maxZoom: 17 });
+  }
+  // Botão ⤢ do mapa e enquadramentos automáticos: o local da operação; sem local cadastrado, a base; sem base, a
+  // posição de quem está no painel (só no toque do botão); sem nada disso, os participantes, como era antes.
+  function enquadrarOperacao(pedirMinhaPosicao) {
+    if (!est.mapa) return;
+    var c = centroDaOperacao();
+    if (c) { enquadrarCentro(c); return; }
+    if (!pedirMinhaPosicao || est.publico) { enquadrarTodos(); return; }
+    var opId = est.op && est.op.id;
+    obterMinhaPosicao().then(function (r) {
+      if (!est.mapa || !est.op || est.op.id !== opId) return;
+      if (r && r.ok) est.mapa.setView([r.lat, r.lng], Math.max(est.mapa.getZoom(), 15));
+      else enquadrarTodos();
+    });
   }
 
   function enquadrarTodos() {
@@ -7208,15 +7258,15 @@
   // Enquadramento automático (primeira posição recebida): no deslocamento, fica no endereço da operação.
   function enquadrarAutomatico() {
     if (emDeslocamento()) { focarNoLocalDaOperacao(); return; }
-    enquadrarTodos();
+    enquadrarOperacao(false);
   }
   function marcarChegadaAoLocal(motivo) {
     if (!est.op) return;
     est.chegouLocal = est.op.id;
     C.local.gravar(chaveChegouLocal(), 1);
     atualizarChipDeslocamento();
-    est.jaEnquadrou = false;   // o próximo ponto recebido enquadra todos (já no local)
-    if (temAlgumaPosicao()) { est.jaEnquadrou = true; enquadrarTodos(); }
+    est.jaEnquadrou = false;   // o próximo ponto recebido enquadra a área da operação (já no local)
+    if (temAlgumaPosicao()) { est.jaEnquadrou = true; enquadrarOperacao(false); }
     UI.aviso(motivo === 'auto' ? 'Você chegou ao local da operação: o mapa volta a acompanhar normalmente.' : 'Chegada ao local registrada neste aparelho: o mapa volta ao normal.', 'ok', 7000);
   }
   function verificarChegadaAoLocal(lat, lng) {
@@ -10660,6 +10710,7 @@
     bloqueada: 'bloqueada no navegador',
     indisponivel: 'indisponível',
     outro_aparelho: 'enviada por outro aparelho seu',
+    longe: 'desligada · você está longe da operação',
   };
 
   // O botão só aparece como "ligado" com a permissão concedida E coordenadas chegando.
@@ -10669,6 +10720,7 @@
     bloqueada: 'A localização está bloqueada neste navegador. Sem ela, sua posição não chega à equipe.',
     indisponivel: 'Este aparelho não oferece localização. Sem ela, sua posição não chega à equipe.',
     outro_aparelho: 'Sua posição já é enviada por outro aparelho seu. Para enviar por este, use o botão abaixo.',
+    longe: 'Você está longe da operação e escolheu não compartilhar a sua localização. Para compartilhar, use o botão abaixo.',
   };
   function atualizarEstadoGps() {
     var e = est.minhaPosEstado;
@@ -10678,10 +10730,11 @@
       caixa.hidden = !texto;
       $('gps-alerta-texto').textContent = texto;
       $('gps-alerta-como').hidden = e !== 'bloqueada';
-      $('gps-alerta-tentar').textContent = e === 'outro_aparelho' ? 'Usar este aparelho' : 'Tentar de novo';
+      $('gps-alerta-tentar').textContent = e === 'outro_aparelho' ? 'Usar este aparelho' : e === 'longe' ? 'Compartilhar mesmo assim' : 'Tentar de novo';
     }
-    $('ferramentas').classList.toggle('alerta-gps', Boolean(texto));
-    if (texto && est.avisoGpsFeito !== e) UI.aviso(texto, 'erro', 8000);
+    // "longe" é uma escolha da pessoa, não um problema: fica só a linha no menu, sem destaque nem aviso de erro
+    $('ferramentas').classList.toggle('alerta-gps', Boolean(texto) && e !== 'longe');
+    if (texto && e !== 'longe' && est.avisoGpsFeito !== e) UI.aviso(texto, 'erro', 8000);
     est.avisoGpsFeito = texto ? e : null;
     atualizarFilaMinha();
     atualizarBotaoMinhaTrilha();
@@ -10851,6 +10904,8 @@
     }
     await verificarPermissaoMinha();
     if (est.permissaoMinha === 'denied') { mostrarComoLiberarMinha(); return; }
+    // "Compartilhar mesmo assim" (estava longe e tinha escolhido não compartilhar): o toque já é a resposta
+    if (est.minhaPosEstado === 'longe') { C.local.gravar(chaveLonge(), 'sim'); ligarMinhaPosicao(true); return; }
     ligarMinhaPosicao(false);
   }
 
@@ -10892,6 +10947,12 @@
         if (!automatico) mostrarComoLiberarMinha();   // no automático, o aviso do menu Ferramentas basta
         return;
       }
+      // Longe do local da operação (ou da base): pergunta antes de pôr a localização no mapa da equipe.
+      if (teste.ok && !(await confirmarCompartilharDeLonge(teste.pos, automatico))) {
+        est.minhaPosEstado = 'longe';
+        return;
+      }
+      if (!est.op || est.op.id !== opId || est.op.status !== 'ativa') return;
       est.compartilhando = true;
       atualizarChipDeslocamento();
       est.filtroMeu.reiniciar();
@@ -10916,6 +10977,33 @@
       est.iniciandoMinhaPos = false;
       atualizarEstadoGps();
     }
+  }
+
+  // Quem abre o painel longe do local da operação (em casa, no quartel) normalmente NÃO quer aparecer no mapa: o
+  // marcador distante confunde a equipe, estica o enquadramento e entra no relatório. Devolve true para compartilhar.
+  // A resposta fica guardada neste aparelho, por operação: ao abrir de novo (automático) não pergunta outra vez;
+  // no toque em "Minha posição" pergunta sempre. Perto do local nada muda (compartilha direto, como antes).
+  function chaveLonge() { return 'gbs-longe-' + (est.op ? est.op.id : ''); }
+  async function confirmarCompartilharDeLonge(pos, automatico) {
+    var c = centroDaOperacao();
+    if (!c || !pos || !pos.coords) return true;
+    var d = C.distancia(c.lat, c.lng, pos.coords.latitude, pos.coords.longitude);
+    if (!(d > LONGE_DA_OPERACAO_M + (pos.coords.accuracy || 0))) return true;
+    var guardada = C.local.ler(chaveLonge(), null);
+    if (automatico && guardada === 'sim') return true;
+    if (automatico && guardada === 'nao') return false;
+    var opId = est.op.id, chave = chaveLonge();
+    var km = Math.round(d / 1000).toLocaleString('pt-BR');
+    var sim = await UI.confirmar({
+      titulo: 'Você está longe da operação',
+      texto: 'Este aparelho está a cerca de ' + km + ' km ' + (c.tipo === 'base' ? 'da base' : 'do local da operação') +
+        '. Deseja compartilhar a sua localização mesmo assim? Ela aparece no mapa da equipe e no relatório.',
+      ok: 'Compartilhar mesmo assim', cancelar: 'Não compartilhar',
+    });
+    C.local.gravar(chave, sim ? 'sim' : 'nao');
+    if (!est.op || est.op.id !== opId) return false;
+    if (!sim) UI.aviso('Sua localização não está sendo compartilhada. Para ligar depois: Ferramentas → "Compartilhar mesmo assim".', 'ok', 8000);
+    return Boolean(sim);
   }
 
   function iniciarMeuWatch() {

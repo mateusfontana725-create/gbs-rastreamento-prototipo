@@ -148,6 +148,19 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Painel aberto longe da operação: enquadramento e pergunta antes de compartilhar
+
+- **Botão ⤢ do mapa = enquadrar o local da operação** (antes: todos os participantes). Mostra um raio em volta do local
+  cadastrado: 1 km no mínimo, crescendo até caber as pessoas, os setores e os pontos que estão a até 15 km. Quem está
+  mais longe (alguém acompanhando de casa) fica de fora e não estica mais o mapa. Sem local cadastrado, vale a base
+  (ponto BASE); sem base, a posição de quem está no painel; sem nada disso, os participantes, como antes.
+- **"Você está longe da operação":** ao abrir o painel a mais de 15 km do local (ou da base), a localização do responsável
+  não é mais ligada sozinha. O painel pergunta "Deseja compartilhar a sua localização mesmo assim?". Em "Não compartilhar",
+  nada é enviado: sem marcador distante no mapa da equipe, sem trilha e sem reflexo no relatório. A resposta fica guardada
+  neste aparelho, por operação (não pergunta de novo a cada abertura). Para ligar depois: Ferramentas → "Compartilhar
+  mesmo assim". Perto do local nada muda. Posições já gravadas antes continuam no banco (nunca são apagadas); para tirá-las
+  do mapa use a borracha da trilha.
+
 ### Revisão geral: confiança nos dados, tempo, toque e telas médias
 
 - **Sinal de vida sem resposta válida não encerra a participação:** o servidor sempre diz a situação (`ativa`, `removido`,

@@ -3083,3 +3083,46 @@ body.gaveta .gaveta-btn { display: inline-flex; flex: none; min-height: 36px; }
 
 /* Letras um pouco menores no painel (14 px de base, eram 15): o tamanho escolhido em Personalizar tela escala a partir daqui */
 html { --texto-base: 87.5%; }
+
+/* ---- Dashboard da operação: equipe agora, fadiga e janela de detalhes mais clara ---- */
+.dash-ocorr.dash-ocorr-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dash-ocorr-3 .dash-ocorr-item strong { font-size: 1.7rem; }
+.dash-tab-equipe { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 110px 56px; }
+.dash-tab-fadiga { grid-template-columns: minmax(0, 1.5fr) minmax(50px, .8fr) 70px 50px 96px 84px; }
+.dash-tab-fadiga-grupos { margin-bottom: 0; }
+.dash-fad-resumo { align-items: center; margin-bottom: 12px; }
+.dash-fad-resumo .dash-fad { padding: 4px 12px; font-size: .8rem; border-radius: 999px; }
+.dash-fad-resumo .dash-clicavel { cursor: pointer; }
+.dash-fad-resumo .dash-clicavel:hover, .dash-fad-resumo .dash-clicavel:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.dash-fad-descanso { background: #7dd3fc; }
+.dash-barra-verde { background: #4ade80 !important; }
+.dash-barra-amarelo { background: #fde047 !important; }
+.dash-barra-vermelho { background: #f87171 !important; }
+@media (max-width: 860px) {
+  .dash-tab-equipe { grid-template-columns: minmax(0, 1fr) 100px 48px; gap: 6px 10px; }
+  .dash-tab-fadiga { grid-template-columns: minmax(0, 1fr) 62px 84px 78px; gap: 6px 10px; }
+}
+/* Janela de detalhes: cada linha numerada, nome em duas linhas no máximo, valor em destaque e cor da situação na borda */
+.modal:has(.dash-det) { width: min(620px, 100%); }
+.dash-det { gap: 14px; }
+.dash-det-topo h2 { font-size: 1.15rem; }
+.dash-det-sub { font-size: .88rem; line-height: 1.4; }
+.dash-det-bloco { padding: 12px 14px; border: 1px solid var(--borda); border-radius: 10px; background: var(--superficie-2); }
+.dash-det-conta { margin: 0; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); }
+.dash-det-lista { gap: 0; border: 1px solid var(--borda); border-radius: 10px; }
+.dash-det-lista > li + li { border-top: 1px solid var(--borda); }
+.dash-det-lista > li:nth-child(even) .dash-det-item { background: var(--superficie-2); }
+.dash-det-item {
+  grid-template-columns: 26px minmax(0, 1fr) auto auto; grid-template-areas: "pos nome valor seta" "pos meta valor seta";
+  column-gap: 10px; row-gap: 2px; align-items: center; min-height: 52px; padding: 8px 12px; border: 0; border-radius: 0; background: transparent; text-align: left; color: var(--texto);
+}
+.dash-det-pos { grid-area: pos; font-family: var(--mono); font-size: .74rem; color: var(--texto-3); text-align: right; }
+.dash-det-nome { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: .92rem; }
+.dash-det-meta { font-size: .78rem; line-height: 1.35; }
+.dash-det-valor { font-size: .9rem; font-weight: 700; color: var(--texto); }
+button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var(--superficie-3); outline: 2px solid var(--acento); outline-offset: -2px; }
+.dash-det-lista > li[class*="dash-det-nivel-"] .dash-det-item { box-shadow: inset 4px 0 0 var(--cor-nivel); }
+.dash-det-nivel-verde { --cor-nivel: #4ade80; }
+.dash-det-nivel-amarelo { --cor-nivel: #fde047; }
+.dash-det-nivel-vermelho { --cor-nivel: #f87171; }
+.dash-det-vazio { padding: 14px; }

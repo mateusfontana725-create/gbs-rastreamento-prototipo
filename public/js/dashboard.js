@@ -90,13 +90,15 @@
     function preencher(lista) {
       ul.innerHTML = '';
       if (!lista.length) { ul.appendChild(el('li', { classe: 'muted dash-det-vazio', texto: vazio || 'Nada para mostrar.' })); return; }
-      lista.forEach(function (it) {
+      lista.forEach(function (it, i) {
         var partes = [
+          el('span', { classe: 'dash-det-pos', 'aria-hidden': 'true', texto: String(i + 1) }),
           el('span', { classe: 'dash-det-nome' }, [it.titulo]),
           it.meta ? el('span', { classe: 'dash-det-meta', texto: it.meta }) : null,
-          it.valor != null ? el('span', { classe: 'dash-det-valor', texto: it.valor }) : null,
+          // o valor pode ser um texto ou um elemento pronto (ex.: o selo de fadiga)
+          it.valor != null ? el('span', { classe: 'dash-det-valor' }, [it.valor]) : null,
         ];
-        ul.appendChild(el('li', null, [it.aoClicar
+        ul.appendChild(el('li', { classe: it.nivel ? 'dash-det-nivel-' + it.nivel : null }, [it.aoClicar
           ? el('button', { classe: 'dash-det-item', type: 'button', onclick: it.aoClicar }, partes.concat([el('span', { classe: 'dash-det-seta', 'aria-hidden': 'true', texto: '›' })]))
           : el('div', { classe: 'dash-det-item' }, partes)]));
       });
@@ -123,7 +125,9 @@
         el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
       o.subtitulo ? el('p', { classe: 'muted dash-det-sub', texto: o.subtitulo }) : null,
-      o.medidas ? medidas(o.medidas) : null,
+      o.resumo || null,
+      o.medidas ? el('div', { classe: 'dash-det-bloco' }, [medidas(o.medidas)]) : null,
+      o.lista && Array.isArray(o.lista) && o.lista.length > 1 ? el('p', { classe: 'dash-det-conta', texto: o.lista.length + ' itens' + (o.lista.some(function (i) { return i.aoClicar; }) ? ' · toque em um para abrir' : '') }) : null,
       o.lista ? listaDetalhe(o.lista, o.vazio) : null,
       o.acoes && o.acoes.length ? el('div', { classe: 'dash-det-acoes' }, o.acoes.map(function (a) {
         return el('button', { classe: 'btn' + (a.principal ? ' btn-primario' : ''), type: 'button', texto: a.texto, onclick: a.fn });
@@ -930,12 +934,26 @@
     function porNome(a, b) { return a.nome.localeCompare(b.nome); }
     var ROTULO_FADIGA = { verde: 'verde', amarelo: 'amarela', vermelho: 'vermelha' };
     function selo(nivel, texto) { return el('span', { classe: 'dash-fad dash-fad-' + nivel, texto: texto || ROTULO_FADIGA[nivel] }); }
-    function detalheFadiga() {
+    // Quanto do limite vermelho a pessoa já usou (0 a 1), pelo pior entre tempo de busca, km dela e km médio do grupo.
+    function usoDoLimite(p) {
+      var L = raiz.Fadiga.LIMITES;
+      return Math.max(0, Math.min(1, Math.max((p.buscaMin || 0) / L.tempoMin.vermelho, (p.km || 0) / L.km.vermelho, (p.kmGrupo || 0) / L.kmGrupo.vermelho)));
+    }
+    function resumoFadiga() {
+      return el('div', { classe: 'dash-fad-resumo' }, [selo('vermelho', fadiga.contagem.vermelho + ' vermelho'), selo('amarelo', fadiga.contagem.amarelo + ' amarelo'), selo('verde', fadiga.contagem.verde + ' verde'),
+        fadiga.pessoas.filter(function (p) { return p.descansando != null; }).length
+          ? el('span', { classe: 'dash-fad dash-fad-descanso', texto: fadiga.pessoas.filter(function (p) { return p.descansando != null; }).length + ' descansando agora' }) : null]);
+    }
+    function detalheFadiga(filtro, titulo) {
+      var pessoas = filtro ? fadiga.pessoas.filter(filtro) : fadiga.pessoas;
       abrirDetalhe({
-        titulo: 'Fadiga', subtitulo: 'Do mais para o menos cansado, desde o último descanso longo na base.',
-        lista: fadiga.pessoas.map(function (p) {
-          return { titulo: p.nome, meta: [p.grupo || 'sem grupo', 'busca ' + raiz.Fadiga.textoMinutos(p.buscaMin) + ' · ' + raiz.Fadiga.textoKm(p.km) +
-            (p.kmGrupo != null ? ' · grupo ' + raiz.Fadiga.textoKm(p.kmGrupo) : '') + (p.descansando != null ? ' · descansando há ' + raiz.Fadiga.textoMinutos(p.descansando) : '')].join(' · '),
+        titulo: titulo || 'Fadiga', subtitulo: 'Do mais para o menos cansado, desde o último descanso longo na base.',
+        resumo: filtro ? null : resumoFadiga(),
+        lista: pessoas.map(function (p) {
+          return { titulo: p.nome, nivel: p.nivel,
+            meta: [p.grupo || 'sem grupo', 'busca ' + raiz.Fadiga.textoMinutos(p.buscaMin), raiz.Fadiga.textoKm(p.km),
+              p.kmGrupo != null ? 'grupo ' + raiz.Fadiga.textoKm(p.kmGrupo) : null,
+              p.descansando != null ? 'descansando há ' + raiz.Fadiga.textoMinutos(p.descansando) : null].filter(Boolean).join(' · '),
             valor: selo(p.nivel), aoClicar: acoes.verPessoa ? function () { acoes.verPessoa(p.id); } : null };
         }),
         vazio: 'Ninguém com trilha ainda.',
@@ -1029,7 +1047,7 @@
             [encerrada ? 'Encerramento' : 'Agora', diaMes(fim || agora) + ' ' + hora(fim || agora)],
             ['Duração', duracao((fim || agora) - inicio) || '—'],
             ['Tempo com alguém em campo', comGente != null ? '≈ ' + duracao(comGente) : '—'],
-          ], nota: 'Tempo com alguém em campo: soma dos intervalos do gráfico em que pelo menos uma pessoa enviou posição.' });
+          ], nota: 'Tempo com alguém em campo: soma dos intervalos em que pelo menos uma pessoa enviou posição.' });
         }),
       kpi('◉', 'Efetivo', e ? String(e.efetivo) : '—', e ? (encerrada ? e.porTipo.militar + ' mil. · ' + e.porTipo.civil + ' civis' : e.emCampo + ' em campo agora') : null, 'verde',
         e ? function () {
@@ -1052,22 +1070,38 @@
       kpi('⌖', vitimas && vitimas.length > 1 ? 'Localizadas' : 'Localizada', vitimaValor, vitimaDet, 'roxo', detalheVitima),
     ]);
 
-    // pessoas em campo no tempo, com a localização marcada
-    var corpoAtiv = e && e.atividade && e.atividade.baldes.some(function (b) { return b.pessoas; })
-      ? [graficoAtividade(e.atividade, vitimas ? vitimas.filter(function (v) { return v.em; }).map(function (v) {
-          return { t: Date.parse(v.em), rotulo: (vitimas.length > 1 ? v.rotulo + ' localizada ' : 'Vítima localizada ') + hora(Date.parse(v.em)) };
-        }) : loc ? [{ t: Date.parse(loc.em), rotulo: 'Vítima localizada ' + hora(Date.parse(loc.em)) }] : [],
-        (elemento.clientWidth || 760) - 40, function (b) {
-          var intervalo = e.atividade.passo >= 86400000 ? diaMes(b.t) : diaMes(b.t) + ', ' + hora(b.t) + '–' + hora(b.t + e.atividade.passo);
-          detalhePessoas('Em campo: ' + intervalo, b.pessoas + (b.pessoas === 1 ? ' pessoa enviou' : ' pessoas enviaram') + ' posição neste intervalo.',
-            b.ids.map(function (id) { return porId.get(id); }).filter(Boolean).sort(porNome));
-        })]
-      : [el('p', { classe: 'muted', texto: 'Ainda não há trilhas GPS nesta operação.' })];
+    // Equipe agora: quem está enviando posição, quem parou de enviar (do que está há mais tempo sem sinal) e quem nunca enviou.
+    // (O gráfico "Pessoas em campo" por intervalo saiu: era difícil de ler e não ajudava a decidir.)
+    var agoraEquipe = e ? (function () {
+      var emCampo = e.pessoas.filter(function (p) { return p.emCampo; });
+      var semSinal = e.pessoas.filter(function (p) { return !p.emCampo && p.ultimo; }).sort(function (a, b) { return a.ultimo - b.ultimo; });
+      var semGps = e.pessoas.filter(function (p) { return !p.ultimo; }).sort(porNome);
+      return { emCampo: emCampo, semSinal: semSinal, semGps: semGps };
+    })() : null;
+    function tresColunas(no) { no.classList.add('dash-ocorr-3'); return no; }
     var cAtiv = cartao({
-      span: 8, titulo: 'Pessoas em campo', pergunta: 'Quantas pessoas enviaram posição em cada intervalo, do início até ' + (encerrada ? 'o encerramento' : 'agora') + '.',
-      corpo: corpoAtiv,
-      nota: e && e.atividade ? 'Início em ' + diaMes(e.atividade.inicio) + '. Cada coluna = ' + duracao(e.atividade.passo) +
-        '. Toque numa coluna para ver quem estava em campo.' : null,
+      span: 8, titulo: encerrada ? 'Equipe' : 'Equipe agora', n: e ? e.efetivo : undefined,
+      pergunta: encerrada ? 'Quem participou, com a distância percorrida e as horas com GPS.' : 'Quem está enviando posição agora e quem parou de enviar. Toque num número ou numa pessoa para ver os detalhes.',
+      corpo: !e || !e.pessoas.length ? [el('p', { classe: 'muted', texto: 'Ainda não há ninguém nesta operação.' })] : encerrada ? [
+        tabela('dash-tab-equipe', [{ titulo: 'Pessoa' }, { titulo: 'Grupo', classe: 'dash-so-largo' }, { titulo: 'km', num: true }, { titulo: 'Horas', num: true }],
+          e.pessoas.slice().sort(function (a, b) { return b.km - a.km; }).slice(0, 12).map(function (p) { return [p.nome, p.grupo ? p.grupo.nome : '—', num(p.km, 1), num(p.horas, 1)]; }),
+          function (j) { var p = e.pessoas.slice().sort(function (a, b) { return b.km - a.km; })[j]; if (acoes.verPessoa) acoes.verPessoa(p.id); }),
+      ] : [
+        tresColunas(ocorrencias([
+          { rotulo: 'enviando posição agora', valor: agoraEquipe.emCampo.length, dica: 'Ver quem está em campo',
+            aoClicar: agoraEquipe.emCampo.length ? function () { detalhePessoas('Enviando posição agora', 'Último ponto há menos de 10 minutos.', agoraEquipe.emCampo.slice().sort(porNome), function (p) { return num(p.km, 1) + ' km'; }); } : null },
+          { rotulo: 'pararam de enviar', valor: agoraEquipe.semSinal.length, alerta: true, dica: 'Ver quem parou de enviar posição',
+            aoClicar: agoraEquipe.semSinal.length ? function () { detalhePessoas('Pararam de enviar posição', 'Do que está há mais tempo sem enviar. Pode ser sem sinal, aparelho desligado ou a pessoa saiu.', agoraEquipe.semSinal, function (p) { return haQuanto(p.ultimo, agora); }); } : null },
+          { rotulo: 'nunca enviaram posição', valor: agoraEquipe.semGps.length, dica: 'Ver quem nunca enviou posição',
+            aoClicar: agoraEquipe.semGps.length ? function () { detalhePessoas('Nunca enviaram posição', 'Entraram na operação, mas o GPS não chegou ao painel.', agoraEquipe.semGps); } : null },
+        ])),
+        agoraEquipe.semSinal.length ? el('div', { classe: 'dash-sub' }, [el('h4', { texto: 'Há mais tempo sem enviar' }),
+          tabela('dash-tab-equipe', [{ titulo: 'Pessoa' }, { titulo: 'Grupo', classe: 'dash-so-largo' }, { titulo: 'Último ponto', num: true }, { titulo: 'km', num: true }],
+            agoraEquipe.semSinal.slice(0, 6).map(function (p) { return [p.nome, p.grupo ? p.grupo.nome : '—', haQuanto(p.ultimo, agora), num(p.km, 1)]; }),
+            function (j) { if (acoes.verPessoa) acoes.verPessoa(agoraEquipe.semSinal[j].id); })])
+          : el('p', { classe: 'muted dash-sub', texto: agoraEquipe.emCampo.length ? 'Todos os que têm GPS estão enviando posição.' : 'Ninguém enviou posição ainda.' }),
+      ],
+      nota: encerrada ? null : '"Enviando agora" = último ponto há menos de 10 minutos.',
     });
 
     // vítima: localização e perfis (do banco)
@@ -1120,19 +1154,32 @@
     });
 
     // cobertura dos setores
+    var emDescanso = fadiga ? fadiga.pessoas.filter(function (p) { return p.descansando != null; }) : [];
     var cFadiga = fadiga ? cartao({
       span: 6, titulo: 'Fadiga e descanso', n: fadiga.pessoas.length,
-      pergunta: 'Tempo de busca, quilômetros da pessoa e do grupo desde o último descanso longo na base. Verde, amarelo ou vermelho pelo pior dos três; o descanso começa sozinho quando a pessoa está na base.',
+      pergunta: 'Quem precisa de troca primeiro. Conta o tempo de busca e os quilômetros (da pessoa e do grupo) desde o último descanso longo na base; a cor é a do pior dos três. Toque numa cor ou numa pessoa.',
       corpo: [fadiga.pessoas.length ? el('div', null, [
-        el('div', { classe: 'dash-fad-resumo' }, [selo('verde', fadiga.contagem.verde + ' verde'), selo('amarelo', fadiga.contagem.amarelo + ' amarelo'), selo('vermelho', fadiga.contagem.vermelho + ' vermelho')]),
-        fadiga.grupos.length ? tabela('dash-tab-fadiga-grupos', [{ titulo: 'Grupo' }, { titulo: 'Pessoas', num: true }, { titulo: 'Média km', num: true }, { titulo: 'Fadiga' }],
-          fadiga.grupos.map(function (g) { return [g.nome, String(g.pessoas), num(g.kmMedio, 1), selo(g.nivel, g.vermelhos ? g.vermelhos + ' vermelho' : g.amarelos ? g.amarelos + ' amarelo' : 'verde')]; })) : null,
-        tabela('dash-tab-fadiga', [{ titulo: 'Pessoa' }, { titulo: 'Busca', num: true }, { titulo: 'Km', num: true, classe: 'dash-so-largo' }, { titulo: 'Descanso', num: true, classe: 'dash-so-largo' }, { titulo: 'Fadiga' }],
-          fadiga.pessoas.slice(0, 12).map(function (p) {
-            return [p.nome + (p.grupo ? ' · ' + p.grupo : ''), raiz.Fadiga.textoMinutos(p.buscaMin), num(p.km, 1),
-              p.descansando != null ? 'agora ' + raiz.Fadiga.textoMinutos(p.descansando) : (p.descansoTotalMin ? raiz.Fadiga.textoMinutos(p.descansoTotalMin) : '—'), selo(p.nivel)];
-          }), function (j) { var p = fadiga.pessoas[j]; if (acoes.verPessoa) acoes.verPessoa(p.id); }),
-        fadiga.pessoas.length > 12 ? el('p', { classe: 'muted', texto: 'Mostrando as 12 mais cansadas. Toque no indicador "Fadiga" no topo para ver todas.' }) : null,
+        // contagem por cor: tocar numa cor lista só quem está nela
+        el('div', { classe: 'dash-fad-resumo' }, ['vermelho', 'amarelo', 'verde'].map(function (nv) {
+          var qtd = fadiga.contagem[nv];
+          return clicavel(selo(nv, qtd + ' ' + nv), qtd ? function () { detalheFadiga(function (p) { return p.nivel === nv; }, 'Fadiga: ' + nv); } : null, 'Ver quem está no ' + nv);
+        }).concat([emDescanso.length ? clicavel(el('span', { classe: 'dash-fad dash-fad-descanso', texto: emDescanso.length + ' descansando agora' }),
+          function () { detalheFadiga(function (p) { return p.descansando != null; }, 'Descansando agora'); }, 'Ver quem está descansando') : null])),
+        // quem precisa de troca primeiro: a barra mostra quanto do limite vermelho a pessoa já usou
+        (function () {
+          var mostradas = fadiga.pessoas.slice(0, 10);
+          var t = tabela('dash-tab-fadiga', [{ titulo: 'Pessoa' }, { titulo: 'Do limite', barra: true, classe: 'dash-so-largo' }, { titulo: 'Busca', num: true }, { titulo: 'Km', num: true, classe: 'dash-so-largo' }, { titulo: 'Descanso', num: true }, { titulo: 'Fadiga' }],
+            mostradas.map(function (p) {
+              return [p.nome + (p.grupo ? ' · ' + p.grupo : ''), usoDoLimite(p), raiz.Fadiga.textoMinutos(p.buscaMin), num(p.km, 1),
+                p.descansando != null ? 'agora ' + raiz.Fadiga.textoMinutos(p.descansando) : (p.descansoTotalMin ? raiz.Fadiga.textoMinutos(p.descansoTotalMin) : '—'), selo(p.nivel)];
+            }), function (j) { var p = mostradas[j]; if (acoes.verPessoa) acoes.verPessoa(p.id); });
+          Array.prototype.forEach.call(t.querySelectorAll('.dash-trilho-barra'), function (b, j) { if (mostradas[j]) b.classList.add('dash-barra-' + mostradas[j].nivel); });
+          return t;
+        })(),
+        fadiga.pessoas.length > 10 ? el('p', { classe: 'muted', texto: 'Mostrando as 10 mais cansadas. Toque em "Fadiga" no topo para ver todas.' }) : null,
+        fadiga.grupos.length ? el('div', { classe: 'dash-sub' }, [el('h4', { texto: 'Por grupo' }),
+          tabela('dash-tab-fadiga-grupos', [{ titulo: 'Grupo' }, { titulo: 'Pessoas', num: true }, { titulo: 'Média km', num: true }, { titulo: 'Fadiga' }],
+            fadiga.grupos.map(function (g) { return [g.nome, String(g.pessoas), num(g.kmMedio, 1), selo(g.nivel, g.vermelhos ? g.vermelhos + ' vermelho' : g.amarelos ? g.amarelos + ' amarelo' : 'verde')]; }))]) : null,
       ]) : el('p', { classe: 'muted', texto: 'Ninguém com trilha ainda.' })],
       nota: fadiga.descansoDisponivel ? 'Limites padrão: amarelo a partir de 2 h de busca, 8 km ou média do grupo de 7 km; vermelho a partir de 4 h, 15 km ou 12 km. Um descanso de 30 min ou mais na base zera a contagem. A contagem é por dia: cada dia começa do zero.'
         : 'O descanso na base precisa da migração 068 no banco; sem ela a contagem não é zerada.',

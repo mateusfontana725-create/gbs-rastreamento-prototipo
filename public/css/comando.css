@@ -3126,3 +3126,41 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .dash-det-nivel-amarelo { --cor-nivel: #fde047; }
 .dash-det-nivel-vermelho { --cor-nivel: #f87171; }
 .dash-det-vazio { padding: 14px; }
+
+/* ---- Modo SCI: quadro de recursos (equipes em colunas por situação; arrastar muda a situação) ---- */
+.sci2-kb { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.sci2-kb-dica { margin: 0 0 10px; font-size: .8rem; }
+.sci2-kb-coluna { --kb: #64748b; min-width: 0; border: 1px solid var(--borda); border-top: 3px solid var(--kb); border-radius: 8px; background: var(--superficie-2); transition: background .12s, box-shadow .12s; }
+.sci2-kb-verde { --kb: #4fd08f; } .sci2-kb-azul { --kb: #66b2ff; } .sci2-kb-ambar { --kb: #f5b940; } .sci2-kb-cinza { --kb: #64748b; }
+.sci2-kb-topo { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--borda); }
+.sci2-kb-topo strong { font-family: var(--fonte-titulo); font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+.sci2-kb-topo small { grid-column: 1 / -1; color: var(--texto-2); font-size: .7rem; }
+.sci2-kb-n { min-width: 24px; padding: 1px 7px; border-radius: 999px; background: var(--kb); color: #0b1220; font: 700 .74rem/1.5 var(--mono); text-align: center; }
+.sci2-kb-lista { display: grid; gap: 8px; padding: 8px; min-height: 86px; align-content: start; }
+.sci2-kb-vazio { margin: 0; padding: 18px 6px; text-align: center; font-size: .78rem; border: 1px dashed var(--borda-forte); border-radius: 6px; }
+.sci2-kb-alvo { background: var(--superficie-3); box-shadow: 0 0 0 2px var(--kb) inset; }
+.sci2-kb-cartao { display: grid; gap: 6px; padding: 9px 10px; border: 1px solid var(--borda-forte); border-left: 3px solid var(--kb); border-radius: 6px; background: var(--superficie); cursor: grab; user-select: none; -webkit-user-select: none; }
+.sci2-kb-cab { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.sci2-kb-cab strong { min-width: 0; overflow-wrap: anywhere; font-size: .88rem; line-height: 1.25; }
+.sci2-kb-cab .sci2-cor { flex: none; }
+.sci2-kb-alca { flex: none; width: 26px; height: 30px; margin: -4px 0 -4px -6px; padding: 0; border: 0; background: transparent; color: var(--texto-3); font-size: 1.05rem; line-height: 1; cursor: grab; touch-action: none; }
+.sci2-kb-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: .74rem; color: var(--texto-2); }
+.sci2-kb-atraso { color: #f87171; font-weight: 700; }
+.sci2-kb-tarefa { font-size: .78rem; overflow-wrap: anywhere; }
+.sci2-kb-rec { display: flex; flex-wrap: wrap; gap: 4px; }
+.sci2-kb-chip { padding: 1px 7px; border-radius: 999px; border: 1px solid var(--borda-forte); font-size: .7rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.sci2-kb-acoes { display: flex; flex-wrap: wrap; gap: 5px; }
+.sci2-kb-acoes .btn { min-height: 30px; padding: 0 9px; font-size: .68rem; }
+.sci2-kb-mover { flex: 1 1 110px; min-width: 0; min-height: 30px; padding: 2px 6px; font-size: .74rem; }
+.sci2-kb-arrastando { opacity: .35; }
+.sci2-kb-sombra { position: fixed; z-index: 6000; left: 0; top: 0; pointer-events: none; opacity: .95; box-shadow: 0 14px 34px rgba(0, 0, 0, .6); cursor: grabbing; transform-origin: top left; }
+@media (max-width: 1100px) { .sci2-kb { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 599px) { .sci2-kb { grid-template-columns: minmax(0, 1fr); } .sci2-kb-lista { min-height: 56px; } }
+@media (pointer: coarse) { .sci2-kb-alca { width: 36px; height: 40px; font-size: 1.25rem; } .sci2-kb-acoes .btn, .sci2-kb-mover { min-height: 40px; } .sci2-kb-cartao { cursor: default; } }
+/* escolher a equipe (Recursos das equipes sem equipe definida) */
+.lista-recursos-equipes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.item-recursos-equipe { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 10px 12px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--texto); background: var(--superficie-2); border: 1px solid var(--borda); border-radius: 8px; }
+.item-recursos-equipe:hover, .item-recursos-equipe:focus-visible { border-color: var(--acento); outline: none; }
+.item-recursos-equipe .recursos-resumo { grid-column: 1; display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: .78rem; }
+.item-recursos-equipe .dash-det-seta { grid-column: 2; grid-row: 1 / span 2; }

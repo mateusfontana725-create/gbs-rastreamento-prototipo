@@ -24,7 +24,7 @@
     ativo: false, opId: null, pagina: 'resumo', voltarPara: 'resumo', ausente: false, erro: null, carregou: false,
     dados: { estado: null, informacoes: [], periodos: [], vitimas: [], diario: [] },
     canal: null, timer: null, relogio: null, raiz: null, corpo: null, menu: null, topo: null, hostMapa: null, mapaMovido: null,
-    responsaveis: null, wizard: null, usuario: null,
+    responsaveis: null, wizard: null, usuario: null, arrastando: false,
   };
 
   function Pn() { return window.Painel; }
@@ -185,6 +185,7 @@
     renderMenu(c);
     est.raiz.classList.toggle('sci2-assistente', est.pagina === 'estabelecer');
     if (!forcar && est.pagina === 'mapa' && est.corpo.querySelector('#sci2-host-mapa')) return;   // o mapa não é redesenhado
+    if (!forcar && est.arrastando) return;   // equipe sendo arrastada no quadro de recursos: o redesenho periódico espera
     var ae = document.activeElement;
     if (!forcar && ae && est.corpo.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
     if (!forcar && est.pagina === 'estabelecer') return;   // o assistente só redesenha quando a pessoa avança
@@ -744,28 +745,157 @@
     var r = D.responsavelSecao(c.org, secao);
     return el('div', { classe: 'sci2-cab' }, [el('small', { classe: 'sci2-olho', texto: olho + (r ? ' · ' + r.texto.toUpperCase() : '') }), el('h2', { texto: titulo })]);
   }
+  /* ---------- Quadro de recursos: as equipes em colunas por situação; arrastar muda a situação ----------
+   * Disponível, em descanso e indisponível são a disponibilidade informada pelo comando (salvar_recursos_grupo).
+   * "Designada" é a equipe com deslocamento ativo: soltar uma equipe ali abre "Enviar destino" (a designação precisa
+   * de um destino); tirar de lá pede para encerrar o deslocamento. Quem não arrasta usa o seletor "Mover para" do cartão. */
+  var COLUNAS_RECURSOS = [
+    { id: 'disponivel', titulo: 'Disponíveis', sub: 'prontas para designar', cor: 'verde' },
+    { id: 'missao', titulo: 'Designadas', sub: 'em deslocamento ou no setor', cor: 'azul' },
+    { id: 'em_descanso', titulo: 'Em descanso', sub: 'voltam depois', cor: 'ambar' },
+    { id: 'indisponivel', titulo: 'Indisponíveis', sub: 'fora de serviço', cor: 'cinza' },
+  ];
+  var ROTULO_MISSAO = { enviada: 'destino enviado', em_deslocamento: 'em deslocamento', no_setor: 'no setor', busca_finalizada: 'retornando', retorno_atrasado: 'RETORNO ATRASADO' };
+  function colunaDaEquipe(c, g) {
+    if (c.equipes.missao.some(function (x) { return x.grupo.id === g.id; })) return 'missao';
+    return g.disponibilidade === 'em_descanso' || g.disponibilidade === 'indisponivel' ? g.disponibilidade : 'disponivel';
+  }
+  async function moverEquipe(c, g, destino) {
+    var origem = colunaDaEquipe(c, g);
+    if (!pode() || origem === destino) return;
+    if (destino === 'missao') {
+      UI.aviso('Escolha o destino e marque a equipe ' + g.nome + ': ao enviar, ela passa para "Designadas".', 'ok', 8000);
+      var b = $('menu-destino');
+      if (b) b.click(); else Pn().abrirMissoes();
+      return;
+    }
+    if (origem === 'missao') {
+      var m = (c.equipes.missao.filter(function (x) { return x.grupo.id === g.id; })[0] || {}).missao;
+      var sim = await UI.confirmar({ titulo: 'Encerrar o deslocamento da equipe ' + g.nome + '?', ok: 'Encerrar e mover',
+        texto: 'A equipe está designada (' + (m ? m.setor_nome || m.nome : 'deslocamento ativo') + '). Para passar a "' + COLUNAS_RECURSOS.filter(function (k) { return k.id === destino; })[0].titulo + '", o deslocamento é encerrado.' });
+      if (!sim || !m) return;
+      try { await C.rpc('encerrar_missao', { p_missao: m.id }); } catch (e) { UI.aviso(e.message, 'erro', 8000); return; }
+    }
+    try {
+      await C.rpc('salvar_recursos_grupo', { p_grupo: g.id, p_dados: { disponibilidade: destino } });
+      UI.aviso('Equipe ' + g.nome + ': ' + COLUNAS_RECURSOS.filter(function (k) { return k.id === destino; })[0].titulo.toLowerCase() + '.', 'ok');
+    } catch (e) { UI.aviso(e.message, 'erro', 8000); }
+    if (Pn().recarregarGrupos) await Pn().recarregarGrupos();
+    if (window.RecursosEquipe && window.RecursosEquipe.recarregar) { try { await window.RecursosEquipe.recarregar(); } catch (e2) { /* segue */ } }
+    render(true);
+  }
+  // Arrastar com o dedo ou o mouse (eventos de ponteiro): o cartão vira uma "sombra" que acompanha o ponteiro e a
+  // coluna sob ele acende. No toque, arrasta-se pela alça ⠿ (o resto do cartão continua rolando a página).
+  function ligarArrasto(cartaoEl, quadro, aoSoltar) {
+    var a = null;
+    function colunaEm(x, y) { var e = document.elementFromPoint(x, y); return e && e.closest ? e.closest('.sci2-kb-coluna') : null; }
+    function limpar() {
+      if (a && a.sombra) a.sombra.remove();
+      Array.prototype.forEach.call(quadro.querySelectorAll('.sci2-kb-alvo'), function (k) { k.classList.remove('sci2-kb-alvo'); });
+      cartaoEl.classList.remove('sci2-kb-arrastando');
+      a = null; est.arrastando = false;
+    }
+    cartaoEl.addEventListener('pointerdown', function (ev) {
+      if (ev.button != null && ev.button !== 0) return;
+      if (ev.target.closest('select, button:not(.sci2-kb-alca), a')) return;
+      if (ev.pointerType !== 'mouse' && !ev.target.closest('.sci2-kb-alca')) return;
+      a = { x: ev.clientX, y: ev.clientY, id: ev.pointerId, moveu: false, sombra: null };
+      try { cartaoEl.setPointerCapture(ev.pointerId); } catch (e) { /* ignora */ }
+    });
+    cartaoEl.addEventListener('pointermove', function (ev) {
+      if (!a || ev.pointerId !== a.id) return;
+      if (!a.moveu) {
+        if (Math.abs(ev.clientX - a.x) + Math.abs(ev.clientY - a.y) < 6) return;
+        a.moveu = true; est.arrastando = true;
+        var r = cartaoEl.getBoundingClientRect();
+        a.dx = a.x - r.left; a.dy = a.y - r.top;
+        a.sombra = cartaoEl.cloneNode(true);
+        a.sombra.classList.add('sci2-kb-sombra');
+        a.sombra.style.width = r.width + 'px';
+        document.body.appendChild(a.sombra);
+        cartaoEl.classList.add('sci2-kb-arrastando');
+      }
+      ev.preventDefault();
+      a.sombra.style.transform = 'translate(' + (ev.clientX - a.dx) + 'px,' + (ev.clientY - a.dy) + 'px)';
+      var col = colunaEm(ev.clientX, ev.clientY);
+      Array.prototype.forEach.call(quadro.querySelectorAll('.sci2-kb-coluna'), function (k) { k.classList.toggle('sci2-kb-alvo', k === col); });
+    });
+    function fim(ev) {
+      if (!a || ev.pointerId !== a.id) return;
+      var moveu = a.moveu, col = moveu && ev.type === 'pointerup' ? colunaEm(ev.clientX, ev.clientY) : null;
+      limpar();
+      if (col) aoSoltar(col.getAttribute('data-coluna'));
+    }
+    cartaoEl.addEventListener('pointerup', fim);
+    cartaoEl.addEventListener('pointercancel', fim);
+  }
+  function quadroRecursos(c) {
+    var RE = window.RecursosEquipe, editavel = pode();
+    var quadro = el('div', { classe: 'sci2-kb', role: 'list', 'aria-label': 'Equipes por situação' });
+    COLUNAS_RECURSOS.forEach(function (col) {
+      var equipes = c.grupos.filter(function (g) { return colunaDaEquipe(c, g) === col.id; }).sort(function (x, y) { return x.nome.localeCompare(y.nome, 'pt-BR'); });
+      var lista = el('div', { classe: 'sci2-kb-lista' }, equipes.map(function (g) {
+        var x = c.equipes.missao.filter(function (m) { return m.grupo.id === g.id; })[0];
+        var membros = Pn().membros(g.id).length;
+        var rs = RE && RE.recursosDe ? RE.recursosDe(g.id) : [];
+        var mover = editavel ? el('select', { classe: 'campo sci2-kb-mover', 'aria-label': 'Mover a equipe ' + g.nome + ' para' },
+          [el('option', { value: '', texto: 'Mover para…' })].concat(COLUNAS_RECURSOS.filter(function (k) { return k.id !== col.id; }).map(function (k) { return el('option', { value: k.id, texto: k.titulo }); }))) : null;
+        if (mover) mover.addEventListener('change', function () { var d = mover.value; mover.value = ''; if (d) moverEquipe(c, g, d); });
+        var cartaoEl = el('article', { classe: 'sci2-kb-cartao', role: 'listitem', 'data-grupo': g.id }, [
+          el('div', { classe: 'sci2-kb-cab' }, [
+            editavel ? el('button', { type: 'button', classe: 'sci2-kb-alca', 'aria-label': 'Arrastar a equipe ' + g.nome, title: 'Arrastar para outra coluna', texto: '⠿' }) : null,
+            el('i', { classe: 'sci2-cor', style: 'background:' + (g.cor || '#888') }), el('strong', { texto: g.nome }),
+          ]),
+          el('div', { classe: 'sci2-kb-meta' }, [
+            el('span', { texto: membros + (membros === 1 ? ' pessoa' : ' pessoas') }),
+            x ? el('span', { classe: x.missao.status === 'retorno_atrasado' ? 'sci2-kb-atraso' : '', texto: ROTULO_MISSAO[x.missao.status] || x.missao.status }) : null,
+            x ? el('span', { texto: 'há ' + D.duracao(c.agora - Date.parse(x.missao.enviada_em)) }) : null,
+          ]),
+          x ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + (x.missao.setor_nome || x.missao.nome || 'destino') }) : null,
+          !x && g.disponibilidade_obs && col.id !== 'disponivel' ? el('div', { classe: 'sci2-kb-tarefa', texto: g.disponibilidade_obs }) : null,
+          rs.length ? el('div', { classe: 'sci2-kb-rec' }, rs.slice(0, 4).map(function (r) {
+            var T = RE.TIPOS[r.tipo] || { icone: '•', rotulo: r.tipo };
+            return el('span', { classe: 'sci2-kb-chip', title: T.rotulo, texto: T.icone + ' ' + (r.identificacao || T.rotulo) + (r.quantidade > 1 ? ' ×' + r.quantidade : '') });
+          })) : null,
+          el('div', { classe: 'sci2-kb-acoes' }, [mover, botao('Abrir', function () { Pn().abrirGrupos(g.id); }), RE ? botao('Recursos', function () { RE.abrir(g.id); }) : null]),
+        ]);
+        if (editavel) ligarArrasto(cartaoEl, quadro, function (destino) { moverEquipe(c, g, destino); });
+        return cartaoEl;
+      }));
+      if (!equipes.length) lista.appendChild(el('p', { classe: 'sci2-kb-vazio muted', texto: editavel ? 'Solte uma equipe aqui' : 'Nenhuma equipe' }));
+      quadro.appendChild(el('section', { classe: 'sci2-kb-coluna sci2-kb-' + col.cor, 'data-coluna': col.id, 'aria-label': col.titulo }, [
+        el('header', { classe: 'sci2-kb-topo' }, [el('strong', { texto: col.titulo }), el('span', { classe: 'sci2-kb-n', texto: String(equipes.length) }), el('small', { texto: col.sub })]),
+        lista,
+      ]));
+    });
+    return quadro;
+  }
+  function blocoQuadro(c) {
+    return bloco('Quadro de recursos', [
+      c.grupos.length ? el('p', { classe: 'muted sci2-kb-dica', texto: pode() ? 'Arraste a equipe para a coluna da nova situação (no celular, pela alça ⠿) ou use "Mover para".' : 'Somente visualização.' }) : null,
+      c.grupos.length ? quadroRecursos(c) : el('p', { classe: 'muted', texto: 'Nenhuma equipe (grupo) criada. Crie os grupos para organizar os recursos.' }),
+    ], [botao('Grupos', function () { Pn().abrirGrupos(); }), botao('Deslocamentos', function () { Pn().abrirMissoes(); }),
+      window.RecursosEquipe ? botao('Recursos das equipes', function () { window.RecursosEquipe.abrir(); }) : null], 'sci2-bloco-quadro');
+  }
   function paginaEspera(c) {
     var eq = c.equipes;
-    function linha(x, sub) { return el('li', { classe: 'sci2-linha' }, [el('i', { classe: 'sci2-cor', style: 'background:' + (x.grupo.cor || '#888') }), el('strong', { texto: x.grupo.nome }), el('span', { classe: 'muted', texto: sub }), botao('Abrir grupo', function () { Pn().abrirGrupos(x.grupo.id); })]); }
     return [cabSecao(c, 'SEÇÃO DE OPERAÇÕES · ÁREA DE ESPERA', 'Área de Espera', 'ops'),
-      proximaEtapa('check-in de recursos, reserva mínima e designação direto daqui.'),
-      el('div', { classe: 'sci2-kpis sci2-kpis-4' }, [kpi(eq.disponivel.length, 'equipes disponíveis', null, eq.disponivel.length ? 'verde' : 'laranja'), kpi(eq.descanso.length, 'em descanso'), kpi(eq.missao.length, 'em missão'), kpi(eq.indisponivel.length, 'indisponíveis')]),
+      el('div', { classe: 'sci2-kpis sci2-kpis-4' }, [kpi(eq.disponivel.length, 'equipes disponíveis', null, eq.disponivel.length ? 'verde' : 'laranja'), kpi(eq.descanso.length, 'em descanso'), kpi(eq.missao.length, 'designadas'), kpi(eq.indisponivel.length, 'indisponíveis')]),
       !eq.disponivel.length && c.grupos.length ? el('p', { classe: 'nota sci2-bloco-alerta', texto: 'Reserva abaixo do mínimo: nenhuma equipe disponível para substituição ou intervenção rápida.' }) : null,
-      bloco('Prontas para designar', [eq.disponivel.length ? el('ul', { classe: 'sci2-lista' }, eq.disponivel.map(function (x) { return linha(x, 'disponível'); }).concat(eq.descanso.map(function (x) { return linha(x, 'em descanso'); })))
-        : el('p', { classe: 'muted', texto: 'Nenhuma equipe disponível agora.' })], [botao('Grupos e disponibilidade', function () { Pn().abrirGrupos(); }), botao('Deslocamentos', function () { Pn().abrirMissoes(); })])];
+      blocoQuadro(c)];
   }
   function paginaRecursos(c) {
     var linhas = c.grupos.map(function (g) {
       var x = c.equipes.missao.filter(function (m) { return m.grupo.id === g.id; })[0];
-      return el('tr', null, [g.nome, x ? 'em missão' : ({ em_descanso: 'em descanso', indisponivel: 'indisponível' })[g.disponibilidade] || 'disponível', x ? (x.missao.setor_nome || x.missao.nome) : '—',
+      return el('tr', null, [g.nome, x ? 'designada' : ({ em_descanso: 'em descanso', indisponivel: 'indisponível' })[g.disponibilidade] || 'disponível', x ? (x.missao.setor_nome || x.missao.nome) : '—',
         String(Pn().membros(g.id).length), x ? D.duracao(c.agora - Date.parse(x.missao.enviada_em)) : '—'].map(function (t) { return el('td', { texto: t }); }));
     });
     return [cabSecao(c, 'SEÇÃO DE PLANEJAMENTO · RECURSOS', 'Recursos e fatores humanos', 'plan'),
-      proximaEtapa('horas no turno e descanso, água, alimentação, lesões e pedidos de recurso por equipe.'),
-      bloco('Equipes', [linhas.length ? el('div', { classe: 'sci2-tabela-rol' }, [el('table', { classe: 'sci2-tabela' }, [el('thead', null, [el('tr', null, ['Equipe', 'Status', 'Setor / tarefa', 'Membros', 'No deslocamento há'].map(function (t) { return el('th', { texto: t }); }))]), el('tbody', null, linhas)])])
-        : el('p', { classe: 'muted', texto: 'Nenhum grupo criado.' })], [botao('Grupos', function () { Pn().abrirGrupos(); }), window.RecursosEquipe ? botao('Recursos das equipes', function () { window.RecursosEquipe.abrir(); }) : null,
-        botao('Equipe de responsáveis', function () { Pn().abrirEquipe(); }), pode() ? botao('Convidar', function () { Pn().abrirConvite(); }) : null]),
-      bloco('Pessoas', [el('p', { classe: 'muted', texto: c.balanco.total + ' na operação · ' + c.balanco.emCampo + ' em campo · ' + c.balanco.militares + ' militares · ' + c.balanco.civis + ' civis' })])];
+      el('div', { classe: 'sci2-kpis sci2-kpis-4' }, [kpi(c.balanco.total, 'pessoas na operação'), kpi(c.balanco.emCampo, 'em campo'), kpi(c.balanco.militares, 'militares'), kpi(c.balanco.civis, 'civis')]),
+      blocoQuadro(c),
+      bloco('Equipes em tabela', [linhas.length ? el('div', { classe: 'sci2-tabela-rol' }, [el('table', { classe: 'sci2-tabela' }, [el('thead', null, [el('tr', null, ['Equipe', 'Situação', 'Setor / tarefa', 'Membros', 'Designada há'].map(function (t) { return el('th', { texto: t }); }))]), el('tbody', null, linhas)])])
+        : el('p', { classe: 'muted', texto: 'Nenhum grupo criado.' })], [botao('Equipe de responsáveis', function () { Pn().abrirEquipe(); }), pode() ? botao('Convidar', function () { Pn().abrirConvite(); }) : null]),
+    ];
   }
   function paginaLogistica(c) {
     var cmd = c.estado.comando || {}, bases = Pn().pontosInteresse().filter(function (p) { return p.categoria === 'BASE'; });

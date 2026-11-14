@@ -111,7 +111,22 @@
   }
 
   /* ---------- Edição ------------------------------------------------------ */
+  // Sem equipe escolhida (botões "Recursos das equipes" do Modo SCI): mostra as equipes para escolher uma.
+  // Antes a chamada sem equipe não fazia nada.
+  function escolherEquipe() {
+    var grupos = (P.grupos ? P.grupos() : []).slice().sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    if (grupos.length === 1) { abrir(grupos[0].id); return; }
+    var fechar = UI.abrirModal(el('div', { classe: 'form-padrao' }, [
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Recursos das equipes' }, [UI.dica('Embarcações, viaturas, drones, cães e equipamentos de cada equipe, e a disponibilidade dela.')]),
+      grupos.length ? el('ul', { classe: 'lista-recursos-equipes' }, grupos.map(function (g) {
+        return el('li', null, [el('button', { classe: 'item-recursos-equipe', type: 'button', onclick: function () { fechar(); abrir(g.id); } }, [
+          el('strong', { texto: g.nome }), el('span', { classe: 'recursos-resumo' }, est.ausente ? [] : [resumo(g)]), el('span', { classe: 'dash-det-seta', 'aria-hidden': 'true', texto: '›' })])]);
+      })) : el('p', { classe: 'muted', texto: 'Nenhuma equipe (grupo) criada nesta operação.' }),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]));
+  }
   function abrir(grupoId) {
+    if (!grupoId) { escolherEquipe(); return; }
     var g = (P.grupos ? P.grupos() : []).find(function (x) { return x.id === grupoId; });
     if (!g) return;
     if (est.ausente) { UI.aviso('Os recursos das equipes ainda não estão no servidor: rode a migração 036_recursos_equipes.sql no Supabase.', 'erro', 8000); return; }

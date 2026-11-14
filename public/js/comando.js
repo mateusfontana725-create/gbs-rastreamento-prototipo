@@ -1744,7 +1744,7 @@
       var rm = $('mapa').getBoundingClientRect(), rb = c.offsetParent.getBoundingClientRect();
       if (rm.width && rm.height) {
         // no celular a lista sobe por cima do mapa: o pé visível do mapa é onde a gaveta começa
-        var alca = $('gaveta-alca'), ra = alca && alca.offsetParent ? alca.getBoundingClientRect() : null;
+        var alca = $('lateral'), ra = alca && gaveta.ativa && gaveta.estado !== 'fechada' ? alca.getBoundingClientRect() : null;
         var pe = ra && ra.top > rm.top + 80 && ra.top < rm.bottom ? ra.top : rm.bottom;
         c.style.top = Math.round(pe - rb.top - 46) + 'px';
         c.style.left = Math.round(rm.left - rb.left + rm.width / 2) + 'px';
@@ -2744,9 +2744,10 @@
   // Ocultar a lista muda só a interface: dados, rastreamento e tempo real seguem iguais.
   function aplicarLateral(animar) {
     var oculta = est.lateralOculta && !gaveta.ativa;
+    var semLista = oculta || (gaveta.ativa && gaveta.estado === 'fechada');   // celular com a lista fechada: também fora do foco
     document.body.classList.toggle('lateral-oculta', oculta);
-    $('lateral').setAttribute('aria-hidden', String(oculta));
-    if (oculta) $('lateral').setAttribute('inert', ''); else $('lateral').removeAttribute('inert');
+    $('lateral').setAttribute('aria-hidden', String(semLista));
+    if (semLista) $('lateral').setAttribute('inert', ''); else $('lateral').removeAttribute('inert');
     $('btn-mostrar-lateral').hidden = !oculta;
     atualizarBotaoReabrir();
     atualizarMenu();
@@ -2762,6 +2763,7 @@
   }
 
   function atualizarBotaoReabrir() {
+    atualizarMenuMapa();
     var b = $('btn-mostrar-lateral');
     if (!b || b.hidden) return;
     var n = 0, alerta = false;
@@ -4065,7 +4067,8 @@
   // mini (só o cabeçalho), meia e cheia. Tocar na alça alterna; arrastar ajusta.
   var gaveta = {
     ativa: false,
-    estado: (function () { var v = C.local.ler(CHAVE_GAVETA, 'meia'); return v === 'mini' || v === 'cheia' ? v : 'meia'; })(),
+    // fechada (padrão: o mapa inteiro) | meia | cheia. A posição antiga "mini" (recolhida) vale como fechada.
+    estado: (function () { var v = C.local.ler(CHAVE_GAVETA, 'fechada'); return v === 'meia' || v === 'cheia' ? v : 'fechada'; })(),
     mq: window.matchMedia ? window.matchMedia('(max-width: 860px) and (orientation: portrait)') : null,
     arrastou: false,
   };
@@ -4079,7 +4082,7 @@
     mini = Math.max(64, Math.min(mini, 140));
     var cheia = Math.max(mini + 120, H - 52);
     var meia = Math.max(mini + 80, Math.min(Math.round(H * 0.5), cheia - 60));
-    return { mini: mini, meia: meia, cheia: cheia };
+    return { mini: mini, meia: meia, cheia: cheia, fechada: 0 };
   }
 
   function alturaGaveta(h) {
@@ -4094,15 +4097,24 @@
       $('painel-corpo').style.removeProperty('--gaveta-h');
       delete lat.dataset.gaveta;
       delete $('painel-corpo').dataset.gaveta;
+      if (!est.lateralOculta) { lat.setAttribute('aria-hidden', 'false'); lat.removeAttribute('inert'); }
+      document.body.classList.remove('ver-grupos-mapa', 'ver-legenda-mapa');
       return;
     }
     lat.dataset.gaveta = gaveta.estado;
     $('painel-corpo').dataset.gaveta = gaveta.estado;
     // primeiro o estado (mostra/esconde partes), depois a medida da altura
-    alturaGaveta(alturasGaveta()[gaveta.estado]);
-    var rot = { mini: 'recolhida', meia: 'pela metade', cheia: 'em tela cheia' }[gaveta.estado];
-    $('gaveta-alca').setAttribute('aria-label', 'Lista de participantes ' + rot + '. Tocar muda o tamanho; também dá para arrastar.');
-    $('gaveta-alca').setAttribute('aria-expanded', String(gaveta.estado !== 'mini'));
+    alturaGaveta(gaveta.estado === 'fechada' ? 0 : alturasGaveta()[gaveta.estado]);
+    var fechada = gaveta.estado === 'fechada';
+    lat.setAttribute('aria-hidden', String(fechada));
+    if (fechada) lat.setAttribute('inert', ''); else lat.removeAttribute('inert');
+    var bt = $('gaveta-tamanho');
+    if (bt) {
+      var cheia = gaveta.estado === 'cheia';
+      bt.textContent = cheia ? '▾ Reduzir' : '▴ Ampliar';
+      bt.setAttribute('aria-label', cheia ? 'Reduzir a lista para metade da tela' : 'Ampliar a lista para a tela inteira');
+    }
+    atualizarMenuMapa();
   }
 
   function definirGaveta(estado, lembrar) {
@@ -4129,62 +4141,88 @@
     }
     var tAjuste = null;
     window.addEventListener('resize', function () { clearTimeout(tAjuste); tAjuste = setTimeout(function () { if (gaveta.ativa) aplicarGaveta(); ajustarTrilhasATela(); }, 120); });
-    alca.addEventListener('click', function () {
-      if (gaveta.arrastou) { gaveta.arrastou = false; return; }
-      definirGaveta({ mini: 'meia', meia: 'cheia', cheia: 'mini' }[gaveta.estado]);
-    });
-    alca.addEventListener('keydown', function (ev) {
-      if (ev.key === 'ArrowUp') { ev.preventDefault(); definirGaveta(gaveta.estado === 'mini' ? 'meia' : 'cheia'); }
-      if (ev.key === 'ArrowDown') { ev.preventDefault(); definirGaveta(gaveta.estado === 'cheia' ? 'meia' : 'mini'); }
-    });
-    // Arrastar pela alça ou pelo título
-    var arr = null;
-    function inicio(ev) {
-      if (!gaveta.ativa || (ev.button != null && ev.button !== 0)) return;
-      if (ev.target.closest('button:not(.gaveta-alca), input, select, a')) return;
-      arr = { y: ev.clientY, h: lat.getBoundingClientRect().height, t: Date.now(), id: ev.pointerId, alt: alturasGaveta(), moveu: false };
-      try { ev.target.setPointerCapture(ev.pointerId); } catch (e) { /* ignora */ }
-    }
-    function mover(ev) {
-      if (!arr || ev.pointerId !== arr.id) return;
-      var dy = ev.clientY - arr.y;
-      if (!arr.moveu && Math.abs(dy) < 6) return;
-      if (!arr.moveu) { arr.moveu = true; lat.classList.add('arrastando'); }
-      ev.preventDefault();
-      alturaGaveta(Math.max(arr.alt.mini, Math.min(arr.alt.cheia, arr.h - dy)));
-    }
-    function fim(ev) {
-      if (!arr || ev.pointerId !== arr.id) return;
-      var a = arr;
-      arr = null;
-      lat.classList.remove('arrastando');
-      if (!a.moveu) return;
-      gaveta.arrastou = true;
-      setTimeout(function () { gaveta.arrastou = false; }, 350);
-      var h = lat.getBoundingClientRect().height;
-      var vel = (ev.clientY - a.y) / Math.max(1, Date.now() - a.t);   // px/ms (positivo = para baixo)
-      var ordem = ['mini', 'meia', 'cheia'];
-      var alvo;
-      if (Math.abs(vel) > 0.6) {
-        // gesto rápido: vai para a próxima posição na direção do gesto
-        var atual = ordem.reduce(function (m, k) { return Math.abs(a.alt[k] - a.h) < Math.abs(a.alt[m] - a.h) ? k : m; }, 'meia');
-        var i = ordem.indexOf(atual) + (vel < 0 ? 1 : -1);
-        alvo = ordem[Math.max(0, Math.min(2, i))];
-      } else {
-        alvo = ordem.reduce(function (m, k) { return Math.abs(a.alt[k] - h) < Math.abs(a.alt[m] - h) ? k : m; }, 'meia');
-      }
-      definirGaveta(alvo);
-    }
-    [alca, lat.querySelector('.lateral-cabeca .linha')].forEach(function (el) {
-      el.addEventListener('pointerdown', inicio);
-      el.addEventListener('pointermove', mover);
-      el.addEventListener('pointerup', fim);
-      el.addEventListener('pointercancel', fim);
-    });
+    // Sem arrastar: a lista abre pelo menu do mapa e tem dois botões no título, Ampliar/Reduzir e Fechar.
+    var linha = lat.querySelector('.lateral-cabeca .linha');
+    linha.appendChild(UI.el('button', { classe: 'btn btn-pequeno gaveta-btn', type: 'button', id: 'gaveta-tamanho', texto: '▴ Ampliar',
+      onclick: function () { definirGaveta(gaveta.estado === 'cheia' ? 'meia' : 'cheia'); } }));
+    linha.appendChild(UI.el('button', { classe: 'btn btn-pequeno gaveta-btn', type: 'button', id: 'gaveta-fechar', texto: '✕ Fechar', 'aria-label': 'Fechar a lista de participantes',
+      onclick: function () { definirGaveta('fechada'); } }));
+    criarMenuMapa();
     avaliarGaveta();
   }
 
   /* ---------- Lista lateral ---------------------------------------- */
+  /* ---------- Menu do mapa (celular e tablet em pé) ----------
+   * Um botão só no canto do mapa abre a lista do que antes ficava espalhado pela tela: Participantes, Camadas,
+   * Dia/pessoa, Grupos, Legenda e Meteorologia. Os controles de sempre continuam existindo (o menu só os aciona);
+   * em tela larga nada muda. */
+  function criarMenuMapa() {
+    if ($('menu-mapa') || !$('painel-corpo')) return;
+    var lista = UI.el('div', { classe: 'menu-mapa-lista', id: 'menu-mapa-lista', role: 'menu', hidden: true });
+    var botao = UI.el('button', { classe: 'menu-mapa-botao', type: 'button', id: 'btn-menu-mapa', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'menu-mapa-lista' }, [
+      UI.el('span', { 'aria-hidden': 'true', texto: '☰' }), UI.el('span', { texto: ' Mapa' }), UI.el('span', { classe: 'ponto-alerta', id: 'menu-mapa-alerta', hidden: true }),
+    ]);
+    function fechar() { lista.hidden = true; botao.setAttribute('aria-expanded', 'false'); }
+    function item(icone, texto, extra, acao, ligado) {
+      return UI.el('button', { classe: 'menu-mapa-item' + (ligado ? ' ligado' : ''), type: 'button', role: 'menuitem', onclick: function () { fechar(); acao(); } }, [
+        UI.el('span', { classe: 'menu-mapa-ico', 'aria-hidden': 'true', texto: icone }), UI.el('span', { classe: 'menu-mapa-txt', texto: texto }),
+        extra ? UI.el('small', { classe: 'menu-mapa-extra', texto: extra }) : null,
+      ]);
+    }
+    function mostrarControle(classe, seletor) {
+      var liga = !document.body.classList.contains(classe);
+      document.body.classList.toggle(classe, liga);
+      var det = document.querySelector(seletor + ' details');
+      if (det) det.open = liga;
+    }
+    function montar() {
+      var r = resumoParaMenuMapa();
+      var aberta = gaveta.estado !== 'fechada';
+      var filtro = est.filtroDia || est.focoPessoa;
+      var meteo = window.MeteoPainel && window.MeteoPainel.estado ? Boolean(window.MeteoPainel.estado().ligada) : false;
+      lista.innerHTML = '';
+      [
+        item('👥', aberta ? 'Fechar participantes' : 'Participantes', r.n + (r.alerta ? ' · há alertas' : ''), function () { definirGaveta(aberta ? 'fechada' : 'meia'); }, aberta),
+        item('◫', 'Camadas', ($('camadas-resumo') || {}).textContent || '', function () { if (gaveta.estado === 'cheia') definirGaveta('meia'); abrirCamadas(); }),
+        item('📅', 'Dia ou pessoa', filtro ? 'filtro ligado' : 'todos', function () { $('btn-filtro-mapa').click(); }, Boolean(filtro)),
+        est.grupos && est.grupos.size ? item('⚑', 'Grupos', est.grupos.size + (est.filtroGrupos && est.filtroGrupos.size ? ' · filtrado' : ''), function () { mostrarControle('ver-grupos-mapa', '.controle-grupos'); }, document.body.classList.contains('ver-grupos-mapa')) : null,
+        item('▤', 'Legenda', '', function () { mostrarControle('ver-legenda-mapa', '.legenda'); }, document.body.classList.contains('ver-legenda-mapa')),
+        $('opt-meteo') ? item('☂', 'Meteorologia', meteo ? 'ligada' : '', function () { $('opt-meteo').click(); }, meteo) : null,
+      ].forEach(function (x) { if (x) lista.appendChild(x); });
+    }
+    botao.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      if (!lista.hidden) { fechar(); return; }
+      montar();
+      lista.hidden = false;
+      botao.setAttribute('aria-expanded', 'true');
+    });
+    document.addEventListener('click', function (ev) { if (!lista.hidden && !ev.target.closest('#menu-mapa')) fechar(); });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !lista.hidden) { fechar(); botao.focus(); } });
+    // Recolher o controle pelo próprio título (Grupos / Legenda) tira-o da tela de novo
+    document.addEventListener('toggle', function (ev) {
+      var d = ev.target;
+      if (!d || d.open || !d.closest) return;
+      if (d.closest('.controle-grupos')) document.body.classList.remove('ver-grupos-mapa');
+      if (d.closest('.legenda')) document.body.classList.remove('ver-legenda-mapa');
+    }, true);
+    $('painel-corpo').appendChild(UI.el('div', { classe: 'menu-mapa', id: 'menu-mapa' }, [botao, lista]));
+  }
+  function resumoParaMenuMapa() {
+    var n = 0, alerta = false;
+    est.participantes.forEach(function (p) {
+      if (!p.dados.removido) n++;
+      if (temAjuda(p) || saidaPendente(p) || naoLidasDe(p.id).length) alerta = true;
+    });
+    return { n: n, alerta: alerta };
+  }
+  // O ponto de alerta no botão: há pedido de ajuda, saída pendente ou mensagem não lida e a lista está fechada.
+  function atualizarMenuMapa() {
+    var ponto = $('menu-mapa-alerta');
+    if (!ponto) return;
+    ponto.hidden = !(gaveta.ativa && gaveta.estado === 'fechada' && resumoParaMenuMapa().alerta);
+  }
+
   function alternarLateral() {
     var lat = $('lateral');
     var recolhida = lat.classList.toggle('recolhida');
@@ -4356,8 +4394,7 @@
       cont.militar + ' M · ' + cont.civil + ' C' + (cont.responsavel ? ' · ' + cont.responsavel + ' R' : '') + '</span>';
     if ($('resumo').innerHTML !== htmlResumo) $('resumo').innerHTML = htmlResumo;
     // a altura da gaveta recolhida depende do resumo (que muda de tamanho)
-    if (gaveta.ativa && gaveta.estado === 'mini' && !$('lateral').classList.contains('arrastando')) aplicarGaveta();
-    atualizarBotaoReabrir();
+        atualizarBotaoReabrir();
   }
 
   // Executado a cada 5 s: atualiza "há X s", estados e cores de conexão.
@@ -6657,7 +6694,7 @@
     cancelarDesenho();
     fecharMenu(false);
     if (telaPequena()) { fecharAreas(); fecharCentral(); if (!$('ficha').hidden) fecharFicha(); }
-    if (gaveta.ativa) definirGaveta('mini', false);   // o mapa inteiro livre para desenhar
+    if (gaveta.ativa) definirGaveta('fechada', false);   // o mapa inteiro livre para desenhar
     est.desenho = Object.assign({ tipo: tipo, camadaTemp: L.layerGroup().addTo(est.mapa), pontos: [] }, opcoes || {});
     $('mapa').classList.add('modo-desenho');
     var cancelar = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'desenho-cancelar', texto: 'Cancelar', onclick: cancelarDesenho });
@@ -6752,7 +6789,7 @@
     cancelarDesenho();
     fecharMenu(false);
     if (telaPequena()) { fecharAreas(); fecharCentral(); if (!$('ficha').hidden) fecharFicha(); }
-    if (gaveta.ativa) definirGaveta('mini', false);   // o mapa livre para tocar
+    if (gaveta.ativa) definirGaveta('fechada', false);   // o mapa livre para tocar
     est.desenho = { tipo: 'externo', camadaTemp: L.layerGroup().addTo(est.mapa), aoClicar: o.aoClicar, aoCancelar: o.aoCancelar };
     $('mapa').classList.add('modo-desenho');
     var dz = est.desenho;
@@ -12490,7 +12527,7 @@
     var grupos = Array.from(est.grupos.values()).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
     div.hidden = !grupos.length;
     var det = div.querySelector('details');
-    var aberto = det ? det.open : !telaPequena();
+    var aberto = det ? det.open : Boolean(document.body.classList.contains('ver-grupos-mapa'));   // começa recolhido (antes abria sozinho em tela grande)
     var focoGrupo = document.activeElement && div.contains(document.activeElement) ? document.activeElement.getAttribute('data-grupo') : null;
     div.innerHTML = '';
     if (!grupos.length) return;
@@ -13853,11 +13890,11 @@
     iniciarDesenho: iniciarDesenhoExterno,
     marcarPonto: function (lat, lng, extra) { abrirFormPontoInt(Object.assign({ lat: lat, lng: lng }, extra || {})); },
     registrarVitima: function (lat, lng) { abrirRegistroVitima({ lat: lat, lng: lng, onde: 'mapa' }); },
-    // Celular: recolhe a lista (gaveta) para a janela do ponto caber; devolve a altura que ainda cobre o mapa.
+    // Celular: fecha a lista (gaveta) para a janela do ponto caber; devolve a altura que ainda cobre o mapa (0).
     liberarMapa: function () {
       if (!gaveta.ativa) return 0;
-      if (gaveta.estado !== 'mini') definirGaveta('mini', false);
-      return alturasGaveta().mini;
+      if (gaveta.estado !== 'fechada') definirGaveta('fechada', false);
+      return 0;
     },
     // menu do toque longo / botão direito: setor com centro no ponto, ou área começando nele
     setorRaioEm: function (lat, lng) { iniciarDesenho('raio'); if (est.desenho) aoClicarNoMapa({ latlng: { lat: lat, lng: lng } }); },

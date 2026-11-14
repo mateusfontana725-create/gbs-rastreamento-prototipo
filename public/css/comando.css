@@ -3005,3 +3005,81 @@ html[data-tema="claro"] .pilha-x:hover, html[data-tema="claro"] .pilha-x:focus-v
   font-size: .8rem; pointer-events: none; white-space: nowrap; max-width: calc(100% - 24px);
 }
 .painel-carregando.discreto .spinner { width: 16px; height: 16px; border-width: 2px; }
+
+/* ---- Janela "Ponto no mapa" (botão direito / toque longo): no tema do painel, com as ações em grade ---- */
+.popup-info-ponto .leaflet-popup-content-wrapper {
+  background: var(--superficie); color: var(--texto); border: 1px solid var(--borda-forte); border-top: 2px solid var(--primaria);
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, .55); padding: 0;
+}
+.popup-info-ponto .leaflet-popup-tip { background: var(--superficie); border: 1px solid var(--borda-forte); box-shadow: none; }
+.popup-info-ponto .leaflet-popup-content { margin: 12px 14px 14px; color: var(--texto); min-width: 250px; }
+.popup-info-ponto a.leaflet-popup-close-button { color: var(--texto-2); width: 30px; height: 30px; font-size: 1.25rem; line-height: 30px; top: 4px; right: 4px; }
+.popup-info-ponto a.leaflet-popup-close-button:hover { color: var(--texto); }
+.info-ponto-novo { gap: 10px; font-size: .84rem; }
+.info-ponto-novo .muted, .info-ponto-novo .coord-outro { color: var(--texto-2); }
+.info-ponto-titulo { font-family: var(--fonte-titulo); font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--texto-2); padding-right: 28px; }
+.info-ponto-novo .bloco-coord { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; border-radius: 8px; background: var(--superficie-2); border: 1px solid var(--borda); }
+.info-ponto-novo .coord-principal { flex: 1 1 auto; font-size: .98rem; font-weight: 700; color: var(--texto); letter-spacing: .01em; }
+.info-ponto-novo .bloco-coord .btn-link { flex: none; min-height: 28px; padding: 0 10px; font-size: .68rem; color: var(--texto); background: var(--superficie-3); border-color: var(--borda-forte); }
+.info-ponto-formatos { flex: 1 1 100%; font-size: .76rem; }
+.info-ponto-formatos summary { cursor: pointer; color: var(--texto-2); padding: 2px 0; }
+.info-ponto-formatos[open] summary { margin-bottom: 2px; }
+.info-ponto-formatos .coord-outro { line-height: 1.5; }
+.info-ponto-dados { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; }
+.info-ponto-dados dt { color: var(--texto-2); }
+.info-ponto-dados dd { margin: 0; text-align: right; color: var(--texto); }
+.info-ponto-dados dd .muted { color: var(--texto); }
+.info-ponto-novo .info-ponto-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 0; }
+.info-ponto-novo .info-ponto-btn {
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; min-height: 36px; padding: 0 10px; text-align: left;
+  font-size: .74rem; letter-spacing: .02em; text-transform: none; font-weight: 600;
+  color: var(--texto); background: var(--superficie-2); border: 1px solid var(--borda-forte); border-radius: 8px;
+}
+.info-ponto-novo .info-ponto-btn:hover { background: var(--superficie-3); border-color: var(--primaria); }
+.info-ponto-ico { flex: none; width: 18px; text-align: center; font-size: .95rem; }
+.info-ponto-novo .info-ponto-largo { grid-column: 1 / -1; justify-content: center; }
+.info-ponto-novo .btn-vitima { border-color: #d946ef; color: #f5d0fe; background: rgba(217, 70, 239, .12); }
+html[data-tema="claro"] .info-ponto-novo .btn-vitima { color: #86198f; }
+.info-ponto-novo .info-ponto-setor { padding-top: 10px; border-top: 1px solid var(--borda); }
+.info-ponto-novo .info-ponto-rotulo { grid-column: 1 / -1; color: var(--texto-2); }
+@media (pointer: coarse) { .info-ponto-novo .info-ponto-btn { min-height: 44px; } }
+
+/* ---- Celular e tablet em pé: um menu só no mapa; a lista de participantes abre e fecha por botão (sem arrastar) ---- */
+.menu-mapa, .gaveta-btn { display: none; }
+body.gaveta .menu-mapa { display: block; position: absolute; z-index: 1115; top: 34px; right: 10px; }   /* abaixo da aba "Esconder cabeçalho" */
+.menu-mapa-botao {
+  position: relative; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px; cursor: pointer;
+  font-family: var(--fonte-titulo); font-weight: 700; font-size: .78rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--texto); background: var(--vidro); border: 1px solid var(--borda-forte); border-radius: var(--raio); box-shadow: var(--sombra);
+}
+.menu-mapa-botao .ponto-alerta { position: absolute; top: -4px; right: -4px; }
+.menu-mapa-lista {
+  position: absolute; top: calc(100% + 6px); right: 0; width: min(270px, calc(100vw - 20px)); padding: 6px; display: grid; gap: 2px;
+  background: var(--superficie); border: 1px solid var(--borda-forte); border-top: 2px solid var(--primaria); border-radius: var(--raio); box-shadow: 0 12px 32px rgba(0, 0, 0, .6);
+}
+.menu-mapa-lista[hidden] { display: none; }
+.menu-mapa-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 0 10px; cursor: pointer; text-align: left;
+  font: inherit; font-size: .88rem; font-weight: 600; color: var(--texto); background: transparent; border: 0; border-radius: 6px;
+}
+.menu-mapa-item:hover, .menu-mapa-item:focus-visible { background: var(--superficie-2); }
+.menu-mapa-item.ligado { background: var(--superficie-2); box-shadow: inset 3px 0 0 var(--primaria); }
+.menu-mapa-ico { flex: none; width: 22px; text-align: center; }
+.menu-mapa-txt { flex: 1 1 auto; min-width: 0; }
+.menu-mapa-extra { flex: none; color: var(--texto-2); font-weight: 400; font-size: .74rem; }
+/* o que o menu aciona sai da tela: Camadas, Dia (fica só quando há filtro, para o ✕), Meteorologia, Legenda e Grupos */
+body.gaveta #btn-camadas, body.gaveta .controle-meteo { display: none; }
+body.gaveta .filtro-mapa:not(:has(#foco-sair)) { display: none; }
+body.gaveta:not(.ver-legenda-mapa) .legenda { display: none; }
+body.gaveta:not(.ver-grupos-mapa):not(.personalizando) .controle-grupos { display: none; }
+body.gaveta.info-ponto-aberto .menu-mapa, body.gaveta .painel-corpo[data-gaveta="cheia"] .menu-mapa { visibility: hidden; }
+/* lista de participantes: fechada some; aberta tem Ampliar/Reduzir e Fechar no título (a alça de arrastar saiu) */
+body.gaveta .gaveta-alca { display: none; }
+body.gaveta .lateral[data-gaveta="fechada"] { display: none; }
+body.gaveta .lateral-cabeca { padding-top: 8px; }
+body.gaveta .lateral-cabeca .linha { touch-action: auto; display: flex; align-items: center; gap: 6px; }
+body.gaveta .lateral-cabeca .linha h2 { flex: 1 1 auto; min-width: 0; }
+body.gaveta .gaveta-btn { display: inline-flex; flex: none; min-height: 36px; }
+
+/* Letras um pouco menores no painel (14 px de base, eram 15): o tamanho escolhido em Personalizar tela escala a partir daqui */
+html { --texto-base: 87.5%; }

@@ -148,6 +148,20 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Celular: menu do mapa, lista por botão, janela do ponto e letras menores
+
+- **Menu "☰ Mapa" (celular e tablet em pé):** um botão só no canto do mapa abre Participantes, Camadas, Dia ou pessoa,
+  Grupos, Legenda e Meteorologia. Os botões soltos que ficavam sobre o mapa saem da tela (o botão do dia só aparece quando
+  há filtro ligado, para o ✕). Em tela larga nada muda.
+- **Lista de participantes sem arrastar:** no celular ela começa fechada (mapa inteiro) e abre pelo menu; no título há
+  **Ampliar/Reduzir** e **Fechar**. Com a lista fechada, um ponto amarelo no botão do menu avisa pedido de ajuda, saída
+  pendente ou mensagem não lida.
+- **Grupos começa recolhido** (antes abria sozinho em tela grande); um toque no título abre.
+- **Janela "Ponto no mapa"** (botão direito ou toque longo): no tema do painel, coordenada em destaque com Copiar, os
+  outros formatos recolhidos em "Outros formatos", altitude e distância alinhadas e as ações em grade.
+- **Letras menores no painel:** a base passou de 15 para 14 px. Em Ferramentas → Personalizar tela dá para aumentar ou
+  diminuir mais, por aparelho.
+
 ### Painel aberto longe da operação: enquadramento e pergunta antes de compartilhar
 
 - **Botão ⤢ do mapa = enquadrar o local da operação** (antes: todos os participantes). Mostra um raio em volta do local

@@ -136,22 +136,32 @@
     var deMim = UI.el('span', { classe: 'muted', texto: 'calculando…' });
     var ativa = P.op() && P.op().status === 'ativa';
     var podeDesenhar = ativa;
-    var caixa = UI.el('div', { classe: 'info-ponto' }, [
-      UI.el('strong', { texto: 'Ponto no mapa' }),
-      P.blocoCoordenadas(lat, lng),
-      UI.el('div', null, ['Altitude: ', alt]),
-      UI.el('div', null, ['Da sua posição: ', deMim]),
+    // Coordenadas: a do formato escolhido em destaque, com Copiar; os outros formatos ficam recolhidos
+    var coords = P.blocoCoordenadas(lat, lng);
+    var outros = Array.prototype.slice.call(coords.querySelectorAll('.coord-outro'));
+    if (outros.length) coords.appendChild(UI.el('details', { classe: 'info-ponto-formatos' }, [UI.el('summary', { texto: 'Outros formatos' })].concat(outros)));
+    function acao(icone, texto, fn, extra) {
+      return UI.el('button', Object.assign({ classe: 'btn btn-pequeno info-ponto-btn', type: 'button', onclick: function () { mapa.closePopup(); fn(); } }, extra || {}), [
+        UI.el('span', { classe: 'info-ponto-ico', 'aria-hidden': 'true', texto: icone }), UI.el('span', { texto: texto })]);
+    }
+    var caixa = UI.el('div', { classe: 'info-ponto info-ponto-novo' }, [
+      UI.el('strong', { classe: 'info-ponto-titulo', texto: 'Ponto no mapa' }),
+      coords,
+      UI.el('dl', { classe: 'info-ponto-dados' }, [
+        UI.el('dt', { texto: 'Altitude' }), UI.el('dd', null, [alt]),
+        UI.el('dt', { texto: 'Da sua posição' }), UI.el('dd', null, [deMim]),
+      ]),
       UI.el('div', { classe: 'info-ponto-acoes' }, [
-        ativa ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '⚑ Marcar ponto', onclick: function () { mapa.closePopup(); P.marcarPonto(lat, lng); } }) : null,
-        ativa ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '🧭 Enviar como destino', onclick: function () { mapa.closePopup(); P.enviarDestino(lat, lng); } }) : null,
-        ativa && P.registrarVitima ? UI.el('button', { classe: 'btn btn-pequeno btn-vitima', type: 'button', texto: '✚ Vítima encontrada aqui', onclick: function () { mapa.closePopup(); P.registrarVitima(lat, lng); } }) : null,
-        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📏 Medir daqui', onclick: function () { mapa.closePopup(); medir([lat, lng]); } }),
-        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '◎ Anéis aqui', onclick: function () { mapa.closePopup(); alternarAneis({ id: 'p' + lat + ',' + lng, lat: lat, lng: lng, nome: 'Ponto' }); } }),
+        ativa ? acao('⚑', 'Marcar ponto', function () { P.marcarPonto(lat, lng); }) : null,
+        ativa ? acao('🧭', 'Enviar destino', function () { P.enviarDestino(lat, lng); }, { title: 'Enviar este ponto como destino' }) : null,
+        acao('📏', 'Medir daqui', function () { medir([lat, lng]); }),
+        acao('◎', 'Anéis aqui', function () { alternarAneis({ id: 'p' + lat + ',' + lng, lat: lat, lng: lng, nome: 'Ponto' }); }),
+        ativa && P.registrarVitima ? acao('✚', 'Vítima encontrada aqui', function () { P.registrarVitima(lat, lng); }, { classe: 'btn btn-pequeno info-ponto-btn btn-vitima info-ponto-largo' }) : null,
       ]),
       podeDesenhar && P.setorRaioEm ? UI.el('div', { classe: 'info-ponto-acoes info-ponto-setor' }, [
         UI.el('span', { classe: 'info-ponto-rotulo', texto: 'Setor de busca' }),
-        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'info-setor-raio', texto: '◯ Setor por raio aqui', title: 'Novo setor com o centro neste ponto', onclick: function () { mapa.closePopup(); P.setorRaioEm(lat, lng); } }),
-        UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'info-setor-desenho', texto: '⬠ Desenhar setor daqui', title: 'Novo setor desenhando a área; este ponto é o primeiro canto', onclick: function () { mapa.closePopup(); P.setorDesenhoDesde(lat, lng); } }),
+        acao('◯', 'Por raio aqui', function () { P.setorRaioEm(lat, lng); }, { id: 'info-setor-raio', title: 'Novo setor com o centro neste ponto' }),
+        acao('⬠', 'Desenhar daqui', function () { P.setorDesenhoDesde(lat, lng); }, { id: 'info-setor-desenho', title: 'Novo setor desenhando a área; este ponto é o primeiro canto' }),
       ]) : null,
     ]);
     // No celular a lista (gaveta) cobre a parte de baixo do mapa: a janela cabe na área visível e rola por dentro.

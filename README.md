@@ -148,6 +148,19 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Participante e aplicativo: busca antiga não prende mais, tema escuro e botão de tema
+
+- **Abrir numa busca que já terminou para a pessoa** (saída liberada, participação encerrada, busca encerrada ou
+  excluída) leva direto à **tela do código**, com uma linha dizendo o que houve com a anterior. Antes a tela ficava
+  parada em "Saída liberada"; no aplicativo, que abre sempre na última busca, só reinstalando a pessoa saía dali.
+  O aparelho anota que aquele link terminou e continua abrindo no código nas próximas vezes. Quem foi chamado de volta
+  usa "Fui chamado de volta para a busca anterior". Durante a busca, com a tela aberta, a tela de fim continua igual.
+- **Tema:** o escuro é o padrão para todos (a escolha antiga foi zerada uma vez) e há um botão de tema no cabeçalho de
+  todas as telas; dentro do mapa a troca continua em Camadas.
+- **Atenção ao aplicativo:** o APK abre a página do endereço fixado na compilação (variável `GBS_ORIGEM`, o site
+  publicado da `main`). O que está só na `beta` aparece no aplicativo quando esse site for atualizado, ou num APK de
+  testes compilado pela branch `testes` com `GBS_ORIGEM_TESTES` apontando para o deploy da `beta`.
+
 ### Modo SCI: recursos avulsos, Área de Espera separada e menu mais claro (migração 080)
 
 No SCI, recurso é tudo o que a ocorrência emprega, não só gente. Além das equipes (grupos do painel), agora dá para

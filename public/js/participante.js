@@ -164,6 +164,7 @@
 
   async function iniciar() {
     $('btn-recarregar').addEventListener('click', function () { location.reload(); });
+    criarBotaoTema();
 
     if (!C.configurado) {
       return mostrarErro('O aplicativo não está configurado no servidor (variáveis do Supabase ausentes). Avise os bombeiros.');
@@ -183,6 +184,9 @@
     document.querySelectorAll('[data-outra-busca]').forEach(function (b) { b.addEventListener('click', abrirEntradaPorCodigo); });
     // Sem link (ou pedido pelo código ainda esperando resposta): a pessoa entra com o código e espera os bombeiros aceitarem
     if (!estado.token || (C.local.ler(CHAVE_PEDIDO, null) && !participacaoAtiva())) return iniciarPorCodigo();
+    var term = C.local.ler(CHAVE_TERMINADA, null);
+    if (term && term.token === estado.token && !participacaoAtiva()) return terminouAoAbrir(term.motivo || 'encerrada', term.operacao || '', true);
+    if (term && term.token !== estado.token) C.local.apagar(CHAVE_TERMINADA);   // outro link: a anotação antiga não vale mais
 
     try {
       estado.info = await C.rpc('info_operacao', { p_token: estado.token });
@@ -192,10 +196,12 @@
       return mostrarErro(e.rede ? 'Sem conexão com a internet. Conecte-se e toque em TENTAR NOVAMENTE.' : e.message);
     }
     if (!estado.info) {
+      // no aplicativo (que abre sempre no link guardado), a busca que não existe mais leva direto à tela do código
+      if (NATIVO) return terminouAoAbrir('inexistente', '');
       return mostrarErro('Link de operação inválido. Peça um novo link aos bombeiros.');
     }
     if (!estado.info.ativa) {
-      return finalizar('encerrada');
+      return terminouAoAbrir('encerrada', estado.info.operacao);
     }
 
     // Tela inicial
@@ -362,7 +368,7 @@
     estado.cpf = salvo.cpf;
     estado.telefone = salvo.telefone;
     if (r.status !== 'ativa') {
-      finalizar(r && ['removido', 'liberado', 'inexistente'].indexOf(r.status) !== -1 ? r.status : 'encerrada');
+      terminouAoAbrir(r && ['removido', 'liberado', 'inexistente'].indexOf(r.status) !== -1 ? r.status : 'encerrada', estado.info.operacao);
       return true;
     }
     if (salvo.ativo && estado.permissao === 'granted') {
@@ -574,6 +580,52 @@
   function participacaoAtiva() {
     var salvo = C.local.ler(CHAVE_PART, null);
     return Boolean(salvo && salvo.token === estado.token && salvo.ativo);
+  }
+
+  // A página (ou o aplicativo) ABRIU numa busca que já terminou para esta pessoa: saída liberada, participação
+  // encerrada, busca encerrada ou excluída. Ficar parado na tela "Saída liberada" de uma busca antiga prendia a pessoa
+  // (no aplicativo, que abre sempre na última busca, só reinstalando ela saía dali). Agora a limpeza é a mesma, mas a
+  // tela que aparece é a do código, pronta para entrar em outra busca, com uma linha dizendo o que houve com a anterior.
+  // Durante a busca (a pessoa está com a tela aberta e os bombeiros liberam a saída) nada muda: aparece a tela de fim.
+  var TEXTO_TERMINOU = {
+    encerrada: 'foi encerrada pelos bombeiros',
+    removido: 'terminou para você: os bombeiros encerraram a sua participação',
+    liberado: 'terminou para você: os bombeiros liberaram a sua saída',
+    inexistente: 'não existe mais (foi excluída pelos bombeiros)',
+    aparelho: 'foi aberta em outro aparelho ou excluída',
+  };
+  var CHAVE_TERMINADA = 'gbs-busca-terminada';   // { token, motivo, operacao }: a busca deste link já terminou para a pessoa
+  function terminouAoAbrir(motivo, operacao, jaLimpo) {
+    var tokenAntigo = estado.token;
+    if (!jaLimpo) {
+      finalizar(motivo);
+      clearInterval(estado.timerReinclusao);
+      estado.timerReinclusao = null;
+      C.local.apagar(CHAVE_PART);   // a busca antiga não volta a abrir sozinha
+      // o aplicativo abre sempre no mesmo link: fica anotado que ele terminou, para ir direto ao código nas próximas vezes
+      if (tokenAntigo) C.local.gravar(CHAVE_TERMINADA, { token: tokenAntigo, motivo: estado.motivoFim || motivo, operacao: operacao || '' });
+    } else {
+      estado.motivoFim = motivo;
+    }
+    abrirEntradaPorCodigo();
+    var nota = $('cod-nota-anterior');
+    if (!nota) {
+      nota = UI.el('p', { classe: 'nota cod-nota-anterior', id: 'cod-nota-anterior', role: 'status' });
+      var form = $('form-codigo');
+      if (form) form.insertBefore(nota, form.children[1] || null);
+    }
+    var m = estado.motivoFim || motivo;
+    nota.textContent = 'A busca anterior' + (operacao ? ' (' + operacao + ')' : '') + ' ' + (TEXTO_TERMINOU[m] || TEXTO_TERMINOU.encerrada) +
+      '. Para entrar em outra busca, digite o código dela abaixo. ';
+    // chamado de volta para a mesma busca (os bombeiros reincluíram): tenta abrir de novo o link antigo
+    if (tokenAntigo && (m === 'liberado' || m === 'removido')) {
+      nota.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Fui chamado de volta para a busca anterior', onclick: function () {
+        C.local.apagar(CHAVE_TERMINADA);
+        try { history.replaceState(null, '', location.pathname + location.search + '#t=' + tokenAntigo + (NATIVO ? '&app=1' : '')); } catch (e) { /* segue */ }
+        location.reload();
+      } }));
+    }
+    nota.hidden = false;
   }
 
   // Vai para a tela do código (sem trocar a busca guardada até os bombeiros aceitarem o pedido).
@@ -2462,7 +2514,7 @@
   /* Camadas do mapa, tema, trilhas da equipe, rota até um ponto e SOS    */
   /* ------------------------------------------------------------------ */
   var CHAVE_PREFS_CIVIL = 'gbs-civil-mapa';
-  var CHAVE_TEMA_CIVIL = 'gbs-civil-tema';
+  var CHAVE_TEMA_CIVIL = 'gbs-tema-participante';   // chave nova: o padrão é o escuro (a antiga podia ter ficado em "claro")
   var PADRAO_PREFS = { base: 'osm', setores: true, pontos: true, proibidas: true, trilhas: true };   // abre no mapa de ruas; o satélite fica na escolha de Camadas
   var COR_TRILHA_EQUIPE = '#8aa0b8';   // única cor para as trilhas dos outros; a sua usa a cor do grupo (ou azul)
 
@@ -2482,6 +2534,21 @@
     document.documentElement.setAttribute('data-tema', valor === 'claro' ? 'claro' : 'escuro');
     try { localStorage.setItem(CHAVE_TEMA_CIVIL, valor === 'claro' ? 'claro' : 'escuro'); } catch (e) { /* sem armazenamento */ }
     if (estado.vetorUrl) usarMapaVetor(estado.vetorUrl);   // o mapa de ruas acompanha o tema (claro ou escuro)
+    atualizarBotaoTema();
+  }
+  // Botão de tema no cabeçalho (todas as telas, não só dentro do mapa): escuro é o padrão, o claro é opção.
+  function atualizarBotaoTema() {
+    var b = $('btn-tema');
+    if (!b) return;
+    var claro = temaCivil() === 'claro';
+    b.textContent = claro ? '🌙 Tema escuro' : '☀ Tema claro';
+    b.setAttribute('aria-label', claro ? 'Trocar para o tema escuro' : 'Trocar para o tema claro');
+  }
+  function criarBotaoTema() {
+    var topo = document.querySelector('.civil-topo');
+    if (!topo || $('btn-tema')) return;
+    topo.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-tema', type: 'button', id: 'btn-tema', onclick: function () { aplicarTemaCivil(temaCivil() === 'claro' ? 'escuro' : 'claro'); } }));
+    atualizarBotaoTema();
   }
 
   // Fundo do mapa (mapa, relevo ou satélite): o mesmo conjunto do painel dos bombeiros.

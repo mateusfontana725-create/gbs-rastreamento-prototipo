@@ -52,7 +52,7 @@
   var MENU = [
     { titulo: 'Comando', paginas: [['resumo', 'Resumo'], ['painel', 'Painel do Comando'], ['organograma', 'SCI · organograma']] },
     { titulo: 'Operações', secao: 'ops', paginas: [['operacoes', 'Visão geral e períodos'], ['mapa', 'Mapa operacional e setores'], ['vitimas', 'Vítimas e ACV'], ['espera', 'Área de Espera']] },
-    { titulo: 'Planejamento', secao: 'plan', paginas: [['recursos', 'Recursos e fatores humanos'], ['formularios', 'Formulários e relatórios']] },
+    { titulo: 'Planejamento', secao: 'plan', paginas: [['recursos', 'Recursos'], ['formularios', 'Formulários e relatórios']] },
     { titulo: 'Logística', secao: 'log', paginas: [['logistica', 'Logística e materiais']] },
     { titulo: 'Administração e Finanças', secao: 'adm', paginas: [['admfin', 'Tempo, provedoria e custos']] },
   ];

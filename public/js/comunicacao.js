@@ -75,6 +75,8 @@
     sem_permissao: 'Você não tem permissão para esta ação.',
     tipo_invalido: 'Tipo de mensagem inválido.',
     texto_obrigatorio: 'Escreva o texto da mensagem.',
+    recurso_sem_nome: 'Informe o nome do recurso (até 80 letras).',
+    recurso_sem_destino: 'Informe para onde o recurso vai: um setor, uma equipe ou um local.',
     texto_longo: 'Texto muito longo. Encurte e tente de novo.',
     codigo_invalido: 'Informe um nome ou código da operação com 2 a 80 caracteres.',
     retencao_invalida: 'Política de retenção inválida.',

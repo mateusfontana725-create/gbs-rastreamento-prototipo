@@ -2660,7 +2660,7 @@ console.log('SCI novo: Posto de Comando (migração 057, só acréscimos)');
   await rpc(resp1, 'encerrar_operacao', { p_operacao: op7.id });
   chk(/operacao_encerrada/.test(await erroDe(est({ boletim: 'depois' }))), 'operação encerrada: SCI só para consulta');
   chk((await como(resp1, 'select count(*)::int n from public.sci2_vitimas where operacao_id = $1', [op7.id])).rows[0].n === 2, 'quadro de vítimas continua legível depois de encerrar');
-  chk((await db.query(`select count(*)::int n from public.arquivo_tabelas() where tabela like 'sci2\\_%' and apagar`)).rows[0].n === 4, 'as 4 tabelas novas entram no arquivamento da operação (migração 055) sozinhas');
+  chk((await db.query(`select count(*)::int n from public.arquivo_tabelas() where tabela like 'sci2\\_%' and apagar`)).rows[0].n === 5, 'as tabelas do SCI (as 4 da 057 e a de recursos da 080) entram no arquivamento da operação (migração 055) sozinhas');
   await rpc(resp1, 'excluir_operacao', { p_operacao: op7.id });
   chk((await db.query(`select (select count(*) from public.sci2_estado where operacao_id = $1) + (select count(*) from public.sci2_vitimas where operacao_id = $1)
     + (select count(*) from public.sci2_periodos where operacao_id = $1) + (select count(*) from public.sci2_informacoes where operacao_id = $1) n`, [op7.id])).rows[0].n == 0,
@@ -3440,5 +3440,36 @@ console.log('\nBucket público de mapas (077)');
   chk(/row-level security|permission denied/.test(await erroDe(como(resp1, `insert into storage.objects (bucket_id, name) values ('mapas', 'parana.pmtiles')`))), 'responsável não grava no bucket de mapas pelo app');
 }
 
-console.log('\nMigrações 007–079 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('SCI: recursos avulsos (migração 080)');
+{
+  const J = (o) => JSON.stringify(o);
+  await db.exec(ler('supabase/migracoes/080_sci_recursos.sql'));
+  await db.exec(ler('supabase/migracoes/080_sci_recursos.sql'));
+  chk(true, 'migração 080 executa duas vezes (idempotente)');
+  const op8 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 080', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const rec = (id, d, uid) => rpc(uid || resp1, 'sci2_recurso', { p_operacao: op8.id, p_id: id, p_dados: J(d) });
+  chk(/recurso_sem_nome/.test(await erroDe(rec(null, { nome: '  ' }))), 'recurso sem nome: recusado');
+  chk(/sem_permissao/.test(await erroDe(rec(null, { nome: 'Motosserra' }, resp2))), 'responsável de fora da operação não cadastra');
+  const ms = await rec(null, { nome: 'Motosserra  Stihl', categoria: 'equipamento', quantidade: 3, instituicao: 'CBMPR' });
+  chk(ms.nome === 'Motosserra Stihl' && ms.situacao === 'disponivel' && ms.quantidade === 3 && ms.checkin_em && !ms.designado_em, 'cadastro: disponível, com check-in e quantidade', ms);
+  const amb = await rec(null, { nome: 'Ambulância SAMU 02', categoria: 'ambulancia', situacao: 'a_caminho' });
+  chk(amb.situacao === 'a_caminho' && amb.checkin_em === null, 'recurso a caminho: ainda sem check-in', amb);
+  const amb2 = await rec(amb.id, { situacao: 'disponivel' });
+  chk(amb2.situacao === 'disponivel' && Boolean(amb2.checkin_em), 'chegada (check-in): disponível na Área de Espera', amb2);
+  chk(/recurso_sem_destino/.test(await erroDe(rec(ms.id, { situacao: 'designado' }))), 'designar sem destino: recusado');
+  const des = await rec(ms.id, { situacao: 'designado', destino: 'Rua das Flores, árvores caídas' });
+  chk(des.situacao === 'designado' && des.destino === 'Rua das Flores, árvores caídas' && Boolean(des.designado_em), 'designado para um local', des);
+  const volta = await rec(ms.id, { situacao: 'disponivel' });
+  chk(volta.situacao === 'disponivel' && volta.destino === '' && volta.designado_em === null, 'voltou a disponível: o destino é limpo', volta);
+  chk(/dados_invalidos/.test(await erroDe(rec(ms.id, { situacao: 'voando' }))) && /dados_invalidos/.test(await erroDe(rec(ms.id, { quantidade: 0 }))) &&
+    /dados_invalidos/.test(await erroDe(rec(ms.id, { situacao: 'designado', setor_id: '00000000-0000-4000-8000-000000000000' }))), 'situação, quantidade e setor inválidos: recusados');
+  chk((await como(resp2, 'select count(*)::int n from public.sci2_recursos where operacao_id = $1', [op8.id])).rows[0].n === 0, 'responsável de fora não lê os recursos');
+  chk(/permission denied/.test(await erroDe(como(resp1, `insert into public.sci2_recursos (operacao_id, nome, criado_por_nome) values ($1, 'x', 'y')`, [op8.id]))), 'escrita direta na tabela: recusada');
+  const dia = (await como(resp1, `select titulo, detalhe from public.diario where operacao_id = $1 and titulo like 'SCI · Recurso%' order by ocorrido_em, id`, [op8.id])).rows;
+  chk(dia.some((x) => x.titulo === 'SCI · Recurso designado' && /Motosserra Stihl ×3 \(CBMPR\) → Rua das Flores/.test(x.detalhe)) && dia.some((x) => x.titulo === 'SCI · Recurso a caminho'), 'as mudanças de situação entram no diário', dia);
+  const ex = await rec(amb.id, { excluir: true });
+  chk(ex.excluido === true && (await como(resp1, 'select count(*)::int n from public.sci2_recursos where operacao_id = $1', [op8.id])).rows[0].n === 1, 'excluir do cadastro', ex);
+}
+
+console.log('\nMigrações 007–080 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

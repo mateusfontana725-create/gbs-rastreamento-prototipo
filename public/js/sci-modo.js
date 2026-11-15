@@ -22,7 +22,7 @@
 
   var est = {
     ativo: false, opId: null, pagina: 'resumo', voltarPara: 'resumo', ausente: false, erro: null, carregou: false,
-    dados: { estado: null, informacoes: [], periodos: [], vitimas: [], diario: [] },
+    dados: { estado: null, informacoes: [], periodos: [], vitimas: [], diario: [], recursos: [] },
     canal: null, timer: null, relogio: null, raiz: null, corpo: null, menu: null, topo: null, hostMapa: null, mapaMovido: null,
     responsaveis: null, wizard: null, usuario: null, arrastando: false,
   };
@@ -72,8 +72,17 @@
         C.consultar(C.cliente.from('diario').select('id,ocorrido_em,categoria,tipo,nivel,titulo,detalhe,autor_nome').eq('operacao_id', id).order('ocorrido_em', { ascending: false }).limit(60)),
       ]);
       if (!op() || op().id !== id) return;
-      est.dados = { estado: r[0] || null, informacoes: r[1] || [], periodos: r[2] || [], vitimas: r[3] || [], diario: r[4] || [] };
+      est.dados = { estado: r[0] || null, informacoes: r[1] || [], periodos: r[2] || [], vitimas: r[3] || [], diario: r[4] || [], recursos: est.dados.recursos || [] };
       est.carregou = true; est.erro = null; est.ausente = false;
+      // recursos avulsos (migração 080): consulta à parte, para o SCI abrir mesmo num banco sem ela
+      try {
+        var rs = await C.consultar(C.cliente.from('sci2_recursos').select('*').eq('operacao_id', id).order('criado_em', { ascending: true }));
+        if (!op() || op().id !== id) return;
+        est.dados.recursos = rs || []; est.semRecursos = false;
+      } catch (eR) {
+        var tr = String((eR.original && (eR.original.message || eR.original.code)) || eR.message || '');
+        if (/sci2_recursos|42P01|PGRST205|does not exist|schema cache/.test(tr)) { est.semRecursos = true; est.dados.recursos = []; }
+      }
     } catch (e) {
       var t = String((e.original && (e.original.message || e.original.code)) || e.message || '');
       if (/sci2_|42P01|PGRST205|does not exist|schema cache/.test(t)) est.ausente = true;
@@ -88,7 +97,7 @@
     var id = op().id;
     try {
       est.canal = C.cliente.channel('sci2-' + id + '-' + Date.now());
-      ['sci2_estado', 'sci2_informacoes', 'sci2_periodos', 'sci2_vitimas'].forEach(function (t) {
+      ['sci2_estado', 'sci2_informacoes', 'sci2_periodos', 'sci2_vitimas', 'sci2_recursos'].forEach(function (t) {
         est.canal.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'operacao_id=eq.' + id }, function () { agendar(300); });
       });
       est.canal.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'diario', filter: 'operacao_id=eq.' + id }, function () { agendar(800); });
@@ -115,6 +124,8 @@
       o: o, agora: agora, parts: parts, grupos: grupos, missoes: missoes, setores: setores, quadro: quadro, nv: D.numerosVitimas(quadro), equipes: equipes,
       balanco: D.balancoPessoas(parts), progresso: D.progressoSetores(setores), pedidos: pedidos, estado: estado, org: estado.organograma || {},
       ci: cmd && cmd.comando_nome ? cmd.comando_nome : '', ciDesde: cmd && cmd.comando_desde, periodo: periodo,
+      recursos: (est.dados.recursos || []).filter(function (x) { return x.situacao !== 'desmobilizado'; }),
+      desmobilizados: (est.dados.recursos || []).filter(function (x) { return x.situacao === 'desmobilizado'; }),
     };
     c.alertas = D.alertas({ agora: agora, estado: estado, periodos: est.dados.periodos, informacoes: est.dados.informacoes, quadro: quadro, pedidosAjuda: pedidos,
       alertasApp: Pa.alertasAtivos(), equipes: equipes, ativa: o.status === 'ativa' });
@@ -157,7 +168,8 @@
     D.MENU.forEach(function (g) {
       var r = D.responsavelSecao(c.org, g.secao);
       est.menu.appendChild(el('div', { classe: 'sci2-menu-grupo' }, [
-        el('div', { classe: 'sci2-menu-titulo' }, [g.titulo.toUpperCase(), r ? el('small', { classe: r.comCi ? 'sci2-menu-ci' : r.texto === P ? 'sci2-pend' : '', texto: r.texto }) : null]),
+        el('div', { classe: 'sci2-menu-titulo' }, [el('span', { classe: 'sci2-menu-secao', texto: g.titulo }),
+          r ? el('small', { classe: r.comCi ? 'sci2-menu-ci' : r.texto === P ? 'sci2-pend' : '', title: 'Quem responde por esta seção', texto: (r.comCi ? '' : 'Chefe: ') + r.texto }) : null]),
       ].concat(g.paginas.map(function (p) {
         var n = contador(c, p[0]);
         return el('button', { type: 'button', classe: 'sci2-menu-item' + (est.pagina === p[0] ? ' ativo' : '') + (p[0] === 'mapa' ? ' sci2-menu-mapa' : ''), 'data-pagina': p[0],
@@ -218,7 +230,7 @@
     montarCasca();
     if (est.opId !== o.id) {
       est.opId = o.id; est.carregou = false; est.ausente = false; est.erro = null; est.wizard = null; est.responsaveis = null;
-      est.dados = { estado: null, informacoes: [], periodos: [], vitimas: [], diario: [] };
+      est.dados = { estado: null, informacoes: [], periodos: [], vitimas: [], diario: [], recursos: [] };
       est.pagina = 'resumo';
     }
     var u = Pn().usuario && Pn().usuario();
@@ -413,7 +425,7 @@
             el('p', { classe: 'muted' }, [tag(eq.missao.length + ' em missão', 'ambar'), ' ', tag(eq.disponivel.length + ' disponível(is)', 'verde'), ' ', tag(eq.descanso.length + ' em descanso', 'azul'), ' ', tag(eq.indisponivel.length + ' indisponível(is)', 'cinza')]),
             el('ul', { classe: 'sci2-lista' }, eq.missao.map(function (x) { return linhaEquipe(x, x.missao.nome + (x.missao.setor_nome ? ' · setor ' + x.missao.setor_nome : '') + ' · desde ' + D.horaCurta(x.missao.enviada_em) + ' (' + D.duracao(c.agora - Date.parse(x.missao.enviada_em)) + ')'); })
               .concat(eq.disponivel.map(function (x) { return linhaEquipe(x, 'disponível'); }), eq.descanso.map(function (x) { return linhaEquipe(x, 'em descanso'); }))),
-          ], [botao('Recursos e fatores humanos', function () { ir('recursos'); })]),
+          ], [botao('Recursos', function () { ir('recursos'); })]),
         ]),
       ]),
     ];
@@ -745,45 +757,159 @@
     var r = D.responsavelSecao(c.org, secao);
     return el('div', { classe: 'sci2-cab' }, [el('small', { classe: 'sci2-olho', texto: olho + (r ? ' · ' + r.texto.toUpperCase() : '') }), el('h2', { texto: titulo })]);
   }
-  /* ---------- Quadro de recursos: as equipes em colunas por situação; arrastar muda a situação ----------
-   * Disponível, em descanso e indisponível são a disponibilidade informada pelo comando (salvar_recursos_grupo).
-   * "Designada" é a equipe com deslocamento ativo: soltar uma equipe ali abre "Enviar destino" (a designação precisa
-   * de um destino); tirar de lá pede para encerrar o deslocamento. Quem não arrasta usa o seletor "Mover para" do cartão. */
+  /* ---------- Recursos da ocorrência (SCI) ----------
+   * Recurso é tudo o que a ocorrência emprega: as EQUIPES (grupos do painel) e os recursos AVULSOS cadastrados aqui
+   * (ambulância, caminhão, embarcação, motosserra, gerador…; tabela sci2_recursos, migração 080).
+   * Situações, como a Unidade de Recursos acompanha: a caminho → disponível (na Área de Espera) → designado; fora de
+   * serviço; desmobilizado.
+   *   Recursos (Planejamento): o quadro COMPLETO, com todas as situações, e o cadastro.
+   *   Área de Espera (Operações): só o que está esperando designação e o que está chegando; daqui se designa. */
+  var CAT_RECURSO = { pessoal: ['👥', 'Pessoal'], viatura: ['🚒', 'Viatura'], ambulancia: ['🚑', 'Ambulância'], embarcacao: ['🚤', 'Embarcação'], aeronave: ['🚁', 'Aeronave / drone'],
+    equipamento: ['🛠', 'Equipamento'], material: ['📦', 'Material'], outro: ['•', 'Outro'] };
   var COLUNAS_RECURSOS = [
-    { id: 'disponivel', titulo: 'Disponíveis', sub: 'prontas para designar', cor: 'verde' },
-    { id: 'missao', titulo: 'Designadas', sub: 'em deslocamento ou no setor', cor: 'azul' },
-    { id: 'em_descanso', titulo: 'Em descanso', sub: 'voltam depois', cor: 'ambar' },
-    { id: 'indisponivel', titulo: 'Indisponíveis', sub: 'fora de serviço', cor: 'cinza' },
+    { id: 'a_caminho', titulo: 'A caminho', sub: 'solicitados, ainda não chegaram', cor: 'cinza' },
+    { id: 'disponivel', titulo: 'Disponíveis', sub: 'na Área de Espera, prontos', cor: 'verde' },
+    { id: 'designado', titulo: 'Designados', sub: 'empregados em setor, equipe ou local', cor: 'azul' },
+    { id: 'indisponivel', titulo: 'Fora de serviço', sub: 'descanso, manutenção, avaria', cor: 'ambar' },
   ];
   var ROTULO_MISSAO = { enviada: 'destino enviado', em_deslocamento: 'em deslocamento', no_setor: 'no setor', busca_finalizada: 'retornando', retorno_atrasado: 'RETORNO ATRASADO' };
+  function tituloColuna(id) { return (COLUNAS_RECURSOS.filter(function (k) { return k.id === id; })[0] || {}).titulo || id; }
   function colunaDaEquipe(c, g) {
-    if (c.equipes.missao.some(function (x) { return x.grupo.id === g.id; })) return 'missao';
-    return g.disponibilidade === 'em_descanso' || g.disponibilidade === 'indisponivel' ? g.disponibilidade : 'disponivel';
+    if (c.equipes.missao.some(function (x) { return x.grupo.id === g.id; })) return 'designado';
+    return g.disponibilidade === 'em_descanso' || g.disponibilidade === 'indisponivel' ? 'indisponivel' : 'disponivel';
   }
-  async function moverEquipe(c, g, destino) {
+  function ondeDoRecurso(c, x) {
+    var s = x.setor_id ? c.setores.filter(function (k) { return k.id === x.setor_id; })[0] : null;
+    var g = x.grupo_id ? c.grupos.filter(function (k) { return k.id === x.grupo_id; })[0] : null;
+    return [s ? 'Setor ' + s.nome : null, g ? 'Equipe ' + g.nome : null, x.destino || null].filter(Boolean).join(' · ');
+  }
+  function haQuanto(c, v) { var t = Date.parse(v); return isNaN(t) ? '' : 'há ' + D.duracao(Math.max(0, c.agora - t)); }
+
+  // --- equipes (grupos): disponibilidade pelo painel; "designado" é o deslocamento ativo ---
+  async function moverEquipe(c, g, destino, sub) {
     var origem = colunaDaEquipe(c, g);
-    if (!pode() || origem === destino) return;
-    if (destino === 'missao') {
-      UI.aviso('Escolha o destino e marque a equipe ' + g.nome + ': ao enviar, ela passa para "Designadas".', 'ok', 8000);
+    if (!pode() || (origem === destino && !sub)) return;
+    if (destino === 'a_caminho') { UI.aviso('"A caminho" vale para recursos solicitados que ainda não chegaram. A equipe já está na operação.', 'erro', 7000); return; }
+    if (destino === 'designado') {
+      UI.aviso('Escolha o destino e marque a equipe ' + g.nome + ': ao enviar, ela passa para "Designados".', 'ok', 8000);
       var b = $('menu-destino');
       if (b) b.click(); else Pn().abrirMissoes();
       return;
     }
-    if (origem === 'missao') {
+    if (origem === 'designado') {
       var m = (c.equipes.missao.filter(function (x) { return x.grupo.id === g.id; })[0] || {}).missao;
       var sim = await UI.confirmar({ titulo: 'Encerrar o deslocamento da equipe ' + g.nome + '?', ok: 'Encerrar e mover',
-        texto: 'A equipe está designada (' + (m ? m.setor_nome || m.nome : 'deslocamento ativo') + '). Para passar a "' + COLUNAS_RECURSOS.filter(function (k) { return k.id === destino; })[0].titulo + '", o deslocamento é encerrado.' });
+        texto: 'A equipe está designada (' + (m ? m.setor_nome || m.nome : 'deslocamento ativo') + '). Para passar a "' + tituloColuna(destino) + '", o deslocamento é encerrado.' });
       if (!sim || !m) return;
       try { await C.rpc('encerrar_missao', { p_missao: m.id }); } catch (e) { UI.aviso(e.message, 'erro', 8000); return; }
     }
+    var disp = destino === 'disponivel' ? 'disponivel' : (sub || 'em_descanso');   // fora de serviço: em descanso (padrão) ou indisponível
     try {
-      await C.rpc('salvar_recursos_grupo', { p_grupo: g.id, p_dados: { disponibilidade: destino } });
-      UI.aviso('Equipe ' + g.nome + ': ' + COLUNAS_RECURSOS.filter(function (k) { return k.id === destino; })[0].titulo.toLowerCase() + '.', 'ok');
+      await C.rpc('salvar_recursos_grupo', { p_grupo: g.id, p_dados: { disponibilidade: disp } });
+      UI.aviso('Equipe ' + g.nome + ': ' + ({ disponivel: 'disponível', em_descanso: 'em descanso', indisponivel: 'indisponível' })[disp] + '.', 'ok');
     } catch (e) { UI.aviso(e.message, 'erro', 8000); }
     if (Pn().recarregarGrupos) await Pn().recarregarGrupos();
     if (window.RecursosEquipe && window.RecursosEquipe.recarregar) { try { await window.RecursosEquipe.recarregar(); } catch (e2) { /* segue */ } }
     render(true);
   }
+
+  // --- recursos avulsos ---
+  function salvarRecurso(id, dados, ok) { return rpc('sci2_recurso', { p_operacao: op().id, p_id: id, p_dados: dados }, ok); }
+  function formRecurso(x) {
+    if (est.semRecursos) { UI.aviso('O cadastro de recursos precisa da migração 080_sci_recursos.sql no Supabase.', 'erro', 9000); return; }
+    var novo = !x;
+    x = x || { categoria: 'equipamento', quantidade: 1, situacao: 'disponivel', instituicao: '', observacao: '', nome: '' };
+    var nome = el('input', { classe: 'campo', id: 'rec2-nome', maxlength: '80', value: x.nome, placeholder: 'Ex.: Motosserra, Ambulância SAMU 02, Caminhão guincho' });
+    var cat = el('select', { classe: 'campo', id: 'rec2-cat' }, Object.keys(CAT_RECURSO).map(function (k) { return el('option', { value: k, selected: k === x.categoria ? true : null, texto: CAT_RECURSO[k][0] + ' ' + CAT_RECURSO[k][1] }); }));
+    var qtd = el('input', { classe: 'campo', id: 'rec2-qtd', type: 'number', min: '1', max: '9999', step: '1', inputmode: 'numeric', value: String(x.quantidade || 1) });
+    var inst = el('input', { classe: 'campo', id: 'rec2-inst', maxlength: '60', value: x.instituicao || '', placeholder: 'Ex.: CBMPR, SAMU, Prefeitura', list: 'rec2-inst-lista' });
+    var sit = novo ? el('select', { classe: 'campo', id: 'rec2-sit' }, [['disponivel', 'Já está aqui (disponível na Área de Espera)'], ['a_caminho', 'A caminho (solicitado, ainda não chegou)']].map(function (k) { return el('option', { value: k[0], texto: k[1] }); })) : null;
+    var obs = el('textarea', { classe: 'campo', id: 'rec2-obs', rows: '2', maxlength: '500' });
+    obs.value = x.observacao || '';
+    var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', texto: novo ? 'Cadastrar recurso' : 'Salvar' });
+    var form = el('form', { classe: 'form-padrao', novalidate: true }, [
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: novo ? 'Novo recurso' : 'Editar recurso' }, [UI.dica('Tudo o que a ocorrência emprega e não é uma equipe do painel: viaturas, ambulâncias, embarcações, motosserras, geradores, materiais. As equipes continuam sendo os grupos.')]),
+      UI.grade([
+        UI.campo('Nome', nome, { para: 'rec2-nome' }),
+        UI.campo('Tipo', cat, { para: 'rec2-cat' }),
+        UI.campo('Quantidade', qtd, { para: 'rec2-qtd' }),
+        UI.campo('Instituição', inst, { para: 'rec2-inst', opcional: true }),
+        sit ? UI.campo('Onde está agora', sit, { para: 'rec2-sit' }) : null,
+      ]),
+      el('datalist', { id: 'rec2-inst-lista' }, INSTITUICOES.map(function (i) { return el('option', { value: i }); })),
+      UI.campo('Observação', obs, { para: 'rec2-obs', largo: true, opcional: true }),
+      erro,
+      UI.rodape([
+        !novo && pode() ? el('button', { classe: 'btn btn-perigo', type: 'button', texto: 'Excluir', onclick: async function () {
+          var s1 = await UI.confirmar({ titulo: 'Excluir "' + x.nome + '" do cadastro?', texto: 'Use só para erro de digitação. Se o recurso saiu da ocorrência, use "Desmobilizar": ele fica no histórico.', ok: 'Excluir', perigo: true, empilhar: true });
+          if (!s1) return;
+          fechar(); salvarRecurso(x.id, { excluir: true }, 'Recurso excluído.');
+        } }) : null,
+        el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var n = nome.value.replace(/\s+/g, ' ').trim(), q = Number(qtd.value);
+      if (!n) { erro.textContent = 'Informe o nome do recurso.'; erro.hidden = false; nome.focus(); return; }
+      if (!(q >= 1 && q <= 9999) || Math.floor(q) !== q) { erro.textContent = 'A quantidade deve ser um número de 1 a 9999.'; erro.hidden = false; qtd.focus(); return; }
+      btn.disabled = true;
+      var dados = { nome: n, categoria: cat.value, quantidade: q, instituicao: inst.value.trim(), observacao: obs.value.trim() };
+      if (sit) dados.situacao = sit.value;
+      try {
+        await C.rpc('sci2_recurso', { p_operacao: op().id, p_id: novo ? null : x.id, p_dados: dados });
+        fechar();
+        UI.aviso(novo ? 'Recurso "' + n + '" cadastrado.' : 'Recurso salvo.', 'ok');
+        await carregar();
+      } catch (e) { erro.textContent = e.message; erro.hidden = false; btn.disabled = false; }
+    });
+    var fechar = UI.abrirModal(form);
+  }
+  // Designar: para onde o recurso vai (setor, equipe ou um local escrito)
+  function designarRecurso(c, x) {
+    var setor = el('select', { classe: 'campo', id: 'rec2-setor' }, [el('option', { value: '', texto: '— nenhum —' })].concat(c.setores.map(function (s) { return el('option', { value: s.id, selected: s.id === x.setor_id ? true : null, texto: s.nome }); })));
+    var grupo = el('select', { classe: 'campo', id: 'rec2-grupo' }, [el('option', { value: '', texto: '— nenhuma —' })].concat(c.grupos.map(function (g) { return el('option', { value: g.id, selected: g.id === x.grupo_id ? true : null, texto: g.nome }); })));
+    var local = el('input', { classe: 'campo', id: 'rec2-local', maxlength: '200', value: x.destino || '', placeholder: 'Ex.: Rua das Flores, 120 · Hospital Regional' });
+    var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', texto: 'Designar' });
+    var form = el('form', { classe: 'form-padrao', novalidate: true }, [
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Designar · ' + x.nome }, [UI.dica('Diga para onde o recurso vai: um setor, uma equipe que vai usá-lo ou um local. Pelo menos um dos três.')]),
+      UI.grade([UI.campo('Setor', setor, { para: 'rec2-setor', opcional: true }), UI.campo('Equipe', grupo, { para: 'rec2-grupo', opcional: true })]),
+      UI.campo('Local ou tarefa', local, { para: 'rec2-local', largo: true, opcional: true }),
+      erro,
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      if (!setor.value && !grupo.value && !local.value.trim()) { erro.textContent = 'Escolha um setor, uma equipe ou escreva o local.'; erro.hidden = false; return; }
+      btn.disabled = true;
+      try {
+        await C.rpc('sci2_recurso', { p_operacao: op().id, p_id: x.id, p_dados: { situacao: 'designado', setor_id: setor.value || null, grupo_id: grupo.value || null, destino: local.value.trim() } });
+        fechar();
+        UI.aviso(x.nome + ' designado.', 'ok');
+        await carregar();
+      } catch (e) { erro.textContent = e.message; erro.hidden = false; btn.disabled = false; }
+    });
+    var fechar = UI.abrirModal(form);
+  }
+  async function moverRecurso(c, x, destino) {
+    if (!pode() || x.situacao === destino) return;
+    if (destino === 'designado') { designarRecurso(c, x); return; }
+    var dados = { situacao: destino };
+    if (destino === 'indisponivel') {
+      var r = await UI.confirmar({ titulo: x.nome + ': fora de serviço', texto: 'O recurso sai da conta dos disponíveis até voltar.', ok: 'Marcar fora de serviço', campo: { rotulo: 'Motivo (opcional)', valor: '', max: 300 } });
+      if (!r) return;
+      if (r.texto) dados.observacao = r.texto;
+    }
+    if (destino === 'desmobilizado') {
+      var d1 = await UI.confirmar({ titulo: 'Desmobilizar "' + x.nome + '"?', texto: 'O recurso é liberado da ocorrência. Ele sai do quadro e fica no histórico (dá para trazer de volta).', ok: 'Desmobilizar' });
+      if (!d1) return;
+    }
+    await salvarRecurso(x.id, dados, x.nome + ': ' + ({ a_caminho: 'a caminho', disponivel: 'disponível na Área de Espera', indisponivel: 'fora de serviço', desmobilizado: 'desmobilizado' })[destino] + '.');
+  }
+
   // Arrastar com o dedo ou o mouse (eventos de ponteiro): o cartão vira uma "sombra" que acompanha o ponteiro e a
   // coluna sob ele acende. No toque, arrasta-se pela alça ⠿ (o resto do cartão continua rolando a página).
   function ligarArrasto(cartaoEl, quadro, aoSoltar) {
@@ -829,72 +955,148 @@
     cartaoEl.addEventListener('pointerup', fim);
     cartaoEl.addEventListener('pointercancel', fim);
   }
-  function quadroRecursos(c) {
+  function seletorMover(rotulo, opcoes, aoEscolher) {
+    var sel = el('select', { classe: 'campo sci2-kb-mover', 'aria-label': rotulo }, [el('option', { value: '', texto: 'Mover para…' })].concat(opcoes.map(function (o) { return el('option', { value: o[0], texto: o[1] }); })));
+    sel.addEventListener('change', function () { var v = sel.value; sel.value = ''; if (v) aoEscolher(v); });
+    return sel;
+  }
+  function alca(nome) { return el('button', { type: 'button', classe: 'sci2-kb-alca', 'aria-label': 'Arrastar ' + nome, title: 'Arrastar para outra coluna', texto: '⠿' }); }
+  function cartaoEquipe(c, g, col, quadro) {
     var RE = window.RecursosEquipe, editavel = pode();
-    var quadro = el('div', { classe: 'sci2-kb', role: 'list', 'aria-label': 'Equipes por situação' });
+    var x = c.equipes.missao.filter(function (m) { return m.grupo.id === g.id; })[0];
+    var membros = Pn().membros(g.id).length;
+    var rs = RE && RE.recursosDe ? RE.recursosDe(g.id) : [];
+    var mover = editavel ? seletorMover('Mover a equipe ' + g.nome + ' para', [['disponivel', 'Disponíveis'], ['designado', 'Designados (enviar destino)'], ['indisponivel:em_descanso', 'Fora de serviço · em descanso'], ['indisponivel:indisponivel', 'Fora de serviço · indisponível']]
+      .filter(function (o) { return o[0].split(':')[0] !== col.id || col.id === 'indisponivel'; }), function (v) { var p = v.split(':'); moverEquipe(c, g, p[0], p[1]); }) : null;
+    var cartaoEl = el('article', { classe: 'sci2-kb-cartao sci2-kb-equipe', role: 'listitem', 'data-grupo': g.id }, [
+      el('div', { classe: 'sci2-kb-cab' }, [editavel ? alca('a equipe ' + g.nome) : null, el('i', { classe: 'sci2-cor', style: 'background:' + (g.cor || '#888') }), el('strong', { texto: g.nome }), el('span', { classe: 'sci2-kb-tipo', texto: 'equipe' })]),
+      el('div', { classe: 'sci2-kb-meta' }, [
+        el('span', { texto: '👥 ' + membros + (membros === 1 ? ' pessoa' : ' pessoas') }),
+        x ? el('span', { classe: x.missao.status === 'retorno_atrasado' ? 'sci2-kb-atraso' : '', texto: ROTULO_MISSAO[x.missao.status] || x.missao.status }) : null,
+        x ? el('span', { texto: haQuanto(c, x.missao.enviada_em) }) : null,
+        !x && col.id === 'indisponivel' ? el('span', { texto: g.disponibilidade === 'em_descanso' ? 'em descanso' : 'indisponível' }) : null,
+      ]),
+      x ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + (x.missao.setor_nome || x.missao.nome || 'destino') }) : null,
+      !x && g.disponibilidade_obs && col.id !== 'disponivel' ? el('div', { classe: 'sci2-kb-tarefa', texto: g.disponibilidade_obs }) : null,
+      rs.length ? el('div', { classe: 'sci2-kb-rec' }, rs.slice(0, 4).map(function (r) {
+        var T = RE.TIPOS[r.tipo] || { icone: '•', rotulo: r.tipo };
+        return el('span', { classe: 'sci2-kb-chip', title: T.rotulo, texto: T.icone + ' ' + (r.identificacao || T.rotulo) + (r.quantidade > 1 ? ' ×' + r.quantidade : '') });
+      })) : null,
+      el('div', { classe: 'sci2-kb-acoes' }, [mover, botao('Abrir', function () { Pn().abrirGrupos(g.id); }), RE ? botao('Recursos', function () { RE.abrir(g.id); }) : null]),
+    ]);
+    if (editavel && quadro) ligarArrasto(cartaoEl, quadro, function (destino) { moverEquipe(c, g, destino); });
+    return cartaoEl;
+  }
+  function cartaoRecurso(c, x, col, quadro) {
+    var editavel = pode(), K = CAT_RECURSO[x.categoria] || CAT_RECURSO.outro;
+    var onde = x.situacao === 'designado' ? ondeDoRecurso(c, x) : '';
+    var mover = editavel ? seletorMover('Mover ' + x.nome + ' para', [['a_caminho', 'A caminho'], ['disponivel', 'Disponíveis (chegou)'], ['designado', 'Designados…'], ['indisponivel', 'Fora de serviço'], ['desmobilizado', 'Desmobilizar (sai da ocorrência)']]
+      .filter(function (o) { return o[0] !== x.situacao; }), function (v) { moverRecurso(c, x, v); }) : null;
+    var cartaoEl = el('article', { classe: 'sci2-kb-cartao sci2-kb-avulso', role: 'listitem', 'data-recurso': x.id }, [
+      el('div', { classe: 'sci2-kb-cab' }, [editavel ? alca(x.nome) : null, el('span', { classe: 'sci2-kb-ico', 'aria-hidden': 'true', texto: K[0] }), el('strong', { texto: x.nome + (x.quantidade > 1 ? ' ×' + x.quantidade : '') }), el('span', { classe: 'sci2-kb-tipo', texto: K[1].toLowerCase() })]),
+      el('div', { classe: 'sci2-kb-meta' }, [
+        x.instituicao ? el('span', { texto: x.instituicao }) : null,
+        x.situacao === 'designado' && x.designado_em ? el('span', { texto: 'designado ' + haQuanto(c, x.designado_em) }) : null,
+        x.situacao === 'disponivel' && x.checkin_em ? el('span', { texto: 'na espera ' + haQuanto(c, x.checkin_em) }) : null,
+        x.situacao === 'a_caminho' ? el('span', { texto: 'solicitado ' + haQuanto(c, x.criado_em) }) : null,
+      ]),
+      onde ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + onde }) : null,
+      x.observacao ? el('div', { classe: 'sci2-kb-tarefa muted', texto: x.observacao }) : null,
+      editavel ? el('div', { classe: 'sci2-kb-acoes' }, [mover,
+        x.situacao === 'a_caminho' ? botao('✔ Chegou', function () { moverRecurso(c, x, 'disponivel'); }, 'btn-ok') : null,
+        x.situacao === 'disponivel' ? botao('Designar', function () { designarRecurso(c, x); }, 'btn-escuro') : null,
+        botao('Editar', function () { formRecurso(x); })]) : null,
+    ]);
+    if (editavel && quadro) ligarArrasto(cartaoEl, quadro, function (destino) { moverRecurso(c, x, destino); });
+    return cartaoEl;
+  }
+  function quadroRecursos(c) {
+    var editavel = pode();
+    var quadro = el('div', { classe: 'sci2-kb', role: 'list', 'aria-label': 'Recursos por situação' });
     COLUNAS_RECURSOS.forEach(function (col) {
       var equipes = c.grupos.filter(function (g) { return colunaDaEquipe(c, g) === col.id; }).sort(function (x, y) { return x.nome.localeCompare(y.nome, 'pt-BR'); });
-      var lista = el('div', { classe: 'sci2-kb-lista' }, equipes.map(function (g) {
-        var x = c.equipes.missao.filter(function (m) { return m.grupo.id === g.id; })[0];
-        var membros = Pn().membros(g.id).length;
-        var rs = RE && RE.recursosDe ? RE.recursosDe(g.id) : [];
-        var mover = editavel ? el('select', { classe: 'campo sci2-kb-mover', 'aria-label': 'Mover a equipe ' + g.nome + ' para' },
-          [el('option', { value: '', texto: 'Mover para…' })].concat(COLUNAS_RECURSOS.filter(function (k) { return k.id !== col.id; }).map(function (k) { return el('option', { value: k.id, texto: k.titulo }); }))) : null;
-        if (mover) mover.addEventListener('change', function () { var d = mover.value; mover.value = ''; if (d) moverEquipe(c, g, d); });
-        var cartaoEl = el('article', { classe: 'sci2-kb-cartao', role: 'listitem', 'data-grupo': g.id }, [
-          el('div', { classe: 'sci2-kb-cab' }, [
-            editavel ? el('button', { type: 'button', classe: 'sci2-kb-alca', 'aria-label': 'Arrastar a equipe ' + g.nome, title: 'Arrastar para outra coluna', texto: '⠿' }) : null,
-            el('i', { classe: 'sci2-cor', style: 'background:' + (g.cor || '#888') }), el('strong', { texto: g.nome }),
-          ]),
-          el('div', { classe: 'sci2-kb-meta' }, [
-            el('span', { texto: membros + (membros === 1 ? ' pessoa' : ' pessoas') }),
-            x ? el('span', { classe: x.missao.status === 'retorno_atrasado' ? 'sci2-kb-atraso' : '', texto: ROTULO_MISSAO[x.missao.status] || x.missao.status }) : null,
-            x ? el('span', { texto: 'há ' + D.duracao(c.agora - Date.parse(x.missao.enviada_em)) }) : null,
-          ]),
-          x ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + (x.missao.setor_nome || x.missao.nome || 'destino') }) : null,
-          !x && g.disponibilidade_obs && col.id !== 'disponivel' ? el('div', { classe: 'sci2-kb-tarefa', texto: g.disponibilidade_obs }) : null,
-          rs.length ? el('div', { classe: 'sci2-kb-rec' }, rs.slice(0, 4).map(function (r) {
-            var T = RE.TIPOS[r.tipo] || { icone: '•', rotulo: r.tipo };
-            return el('span', { classe: 'sci2-kb-chip', title: T.rotulo, texto: T.icone + ' ' + (r.identificacao || T.rotulo) + (r.quantidade > 1 ? ' ×' + r.quantidade : '') });
-          })) : null,
-          el('div', { classe: 'sci2-kb-acoes' }, [mover, botao('Abrir', function () { Pn().abrirGrupos(g.id); }), RE ? botao('Recursos', function () { RE.abrir(g.id); }) : null]),
-        ]);
-        if (editavel) ligarArrasto(cartaoEl, quadro, function (destino) { moverEquipe(c, g, destino); });
-        return cartaoEl;
-      }));
-      if (!equipes.length) lista.appendChild(el('p', { classe: 'sci2-kb-vazio muted', texto: editavel ? 'Solte uma equipe aqui' : 'Nenhuma equipe' }));
+      var avulsos = c.recursos.filter(function (x) { return x.situacao === col.id; }).sort(function (x, y) { return x.nome.localeCompare(y.nome, 'pt-BR'); });
+      var lista = el('div', { classe: 'sci2-kb-lista' }, equipes.map(function (g) { return cartaoEquipe(c, g, col, quadro); }).concat(avulsos.map(function (x) { return cartaoRecurso(c, x, col, quadro); })));
+      if (!equipes.length && !avulsos.length) lista.appendChild(el('p', { classe: 'sci2-kb-vazio muted', texto: editavel ? 'Solte um recurso aqui' : 'Nenhum recurso' }));
       quadro.appendChild(el('section', { classe: 'sci2-kb-coluna sci2-kb-' + col.cor, 'data-coluna': col.id, 'aria-label': col.titulo }, [
-        el('header', { classe: 'sci2-kb-topo' }, [el('strong', { texto: col.titulo }), el('span', { classe: 'sci2-kb-n', texto: String(equipes.length) }), el('small', { texto: col.sub })]),
+        el('header', { classe: 'sci2-kb-topo' }, [el('strong', { texto: col.titulo }), el('span', { classe: 'sci2-kb-n', texto: String(equipes.length + avulsos.length) }), el('small', { texto: col.sub })]),
         lista,
       ]));
     });
     return quadro;
   }
-  function blocoQuadro(c) {
-    return bloco('Quadro de recursos', [
-      c.grupos.length ? el('p', { classe: 'muted sci2-kb-dica', texto: pode() ? 'Arraste a equipe para a coluna da nova situação (no celular, pela alça ⠿) ou use "Mover para".' : 'Somente visualização.' }) : null,
-      c.grupos.length ? quadroRecursos(c) : el('p', { classe: 'muted', texto: 'Nenhuma equipe (grupo) criada. Crie os grupos para organizar os recursos.' }),
-    ], [botao('Grupos', function () { Pn().abrirGrupos(); }), botao('Deslocamentos', function () { Pn().abrirMissoes(); }),
-      window.RecursosEquipe ? botao('Recursos das equipes', function () { window.RecursosEquipe.abrir(); }) : null], 'sci2-bloco-quadro');
+  function avisoSemRecursos() {
+    return est.semRecursos ? el('p', { classe: 'nota', texto: 'O cadastro de recursos avulsos (viaturas, ambulâncias, equipamentos) ainda não está no servidor: rode a migração 080_sci_recursos.sql no Supabase. As equipes aparecem normalmente.' }) : null;
   }
-  function paginaEspera(c) {
-    var eq = c.equipes;
-    return [cabSecao(c, 'SEÇÃO DE OPERAÇÕES · ÁREA DE ESPERA', 'Área de Espera', 'ops'),
-      el('div', { classe: 'sci2-kpis sci2-kpis-4' }, [kpi(eq.disponivel.length, 'equipes disponíveis', null, eq.disponivel.length ? 'verde' : 'laranja'), kpi(eq.descanso.length, 'em descanso'), kpi(eq.missao.length, 'designadas'), kpi(eq.indisponivel.length, 'indisponíveis')]),
-      !eq.disponivel.length && c.grupos.length ? el('p', { classe: 'nota sci2-bloco-alerta', texto: 'Reserva abaixo do mínimo: nenhuma equipe disponível para substituição ou intervenção rápida.' }) : null,
-      blocoQuadro(c)];
-  }
+
+  // RECURSOS (Seção de Planejamento · Unidade de Recursos): o quadro completo e o cadastro
   function paginaRecursos(c) {
-    var linhas = c.grupos.map(function (g) {
-      var x = c.equipes.missao.filter(function (m) { return m.grupo.id === g.id; })[0];
-      return el('tr', null, [g.nome, x ? 'designada' : ({ em_descanso: 'em descanso', indisponivel: 'indisponível' })[g.disponibilidade] || 'disponível', x ? (x.missao.setor_nome || x.missao.nome) : '—',
-        String(Pn().membros(g.id).length), x ? D.duracao(c.agora - Date.parse(x.missao.enviada_em)) : '—'].map(function (t) { return el('td', { texto: t }); }));
-    });
-    return [cabSecao(c, 'SEÇÃO DE PLANEJAMENTO · RECURSOS', 'Recursos e fatores humanos', 'plan'),
-      el('div', { classe: 'sci2-kpis sci2-kpis-4' }, [kpi(c.balanco.total, 'pessoas na operação'), kpi(c.balanco.emCampo, 'em campo'), kpi(c.balanco.militares, 'militares'), kpi(c.balanco.civis, 'civis')]),
-      blocoQuadro(c),
-      bloco('Equipes em tabela', [linhas.length ? el('div', { classe: 'sci2-tabela-rol' }, [el('table', { classe: 'sci2-tabela' }, [el('thead', null, [el('tr', null, ['Equipe', 'Situação', 'Setor / tarefa', 'Membros', 'Designada há'].map(function (t) { return el('th', { texto: t }); }))]), el('tbody', null, linhas)])])
-        : el('p', { classe: 'muted', texto: 'Nenhum grupo criado.' })], [botao('Equipe de responsáveis', function () { Pn().abrirEquipe(); }), pode() ? botao('Convidar', function () { Pn().abrirConvite(); }) : null]),
+    var total = c.grupos.length + c.recursos.length;
+    var cont = function (id) { return c.grupos.filter(function (g) { return colunaDaEquipe(c, g) === id; }).length + c.recursos.filter(function (x) { return x.situacao === id; }).length; };
+    var porTipo = {};
+    c.recursos.forEach(function (x) { porTipo[x.categoria] = (porTipo[x.categoria] || 0) + (x.quantidade || 1); });
+    return [cabSecao(c, 'SEÇÃO DE PLANEJAMENTO · UNIDADE DE RECURSOS', 'Recursos', 'plan'),
+      el('p', { classe: 'muted sci2-intro', texto: 'Tudo o que a ocorrência emprega, em qualquer situação: as equipes e os recursos avulsos (viaturas, ambulâncias, embarcações, equipamentos, materiais).' }),
+      el('div', { classe: 'sci2-kpis sci2-kpis-4' }, [kpi(total, 'recursos na ocorrência', c.grupos.length + ' equipes · ' + c.recursos.length + ' avulsos'), kpi(cont('disponivel'), 'disponíveis', null, cont('disponivel') ? 'verde' : 'laranja', 'espera'),
+        kpi(cont('designado'), 'designados'), kpi(cont('indisponivel') + cont('a_caminho'), 'fora de serviço ou a caminho', cont('a_caminho') + ' a caminho')]),
+      avisoSemRecursos(),
+      bloco('Quadro de recursos', [
+        el('p', { classe: 'muted sci2-kb-dica', texto: pode() ? 'Arraste o cartão para a coluna da nova situação (no celular, pela alça ⠿) ou use "Mover para". Soltar em "Designados" pede o destino.' : 'Somente visualização.' }),
+        total ? quadroRecursos(c) : el('p', { classe: 'muted', texto: 'Nenhum recurso ainda. Cadastre um recurso ou crie as equipes (grupos).' }),
+      ], [pode() ? botao('＋ Novo recurso', function () { formRecurso(null); }, 'btn-escuro', { id: 'sci2-novo-recurso' }) : null, botao('Equipes (grupos)', function () { Pn().abrirGrupos(); }),
+        window.RecursosEquipe ? botao('Recursos das equipes', function () { window.RecursosEquipe.abrir(); }) : null], 'sci2-bloco-quadro'),
+      bloco('Resumo por tipo', [el('div', { classe: 'sci2-tabela-rol' }, [el('table', { classe: 'sci2-tabela' }, [
+        el('thead', null, [el('tr', null, ['Tipo', 'Quantidade', 'Disponíveis', 'Designados'].map(function (t) { return el('th', { texto: t }); }))]),
+        el('tbody', null, [el('tr', null, ['👥 Equipes', String(c.grupos.length), String(c.grupos.filter(function (g) { return colunaDaEquipe(c, g) === 'disponivel'; }).length), String(c.equipes.missao.length)].map(function (t) { return el('td', { texto: t }); }))]
+          .concat(Object.keys(porTipo).map(function (k) {
+            var soma = function (sit) { return c.recursos.filter(function (x) { return x.categoria === k && x.situacao === sit; }).reduce(function (t, x) { return t + (x.quantidade || 1); }, 0); };
+            return el('tr', null, [(CAT_RECURSO[k] || CAT_RECURSO.outro).join(' '), String(porTipo[k]), String(soma('disponivel')), String(soma('designado'))].map(function (t) { return el('td', { texto: t }); }));
+          }))),
+      ])]), el('p', { classe: 'muted', texto: c.balanco.total + ' pessoas na operação · ' + c.balanco.emCampo + ' em campo · ' + c.balanco.militares + ' militares · ' + c.balanco.civis + ' civis' })],
+        [botao('Equipe de responsáveis', function () { Pn().abrirEquipe(); }), pode() ? botao('Convidar', function () { Pn().abrirConvite(); }) : null]),
+      c.desmobilizados.length ? bloco('Desmobilizados (' + c.desmobilizados.length + ')', [el('ul', { classe: 'sci2-lista' }, c.desmobilizados.map(function (x) {
+        return el('li', { classe: 'sci2-linha' }, [el('span', { texto: (CAT_RECURSO[x.categoria] || CAT_RECURSO.outro)[0] }), el('strong', { texto: x.nome + (x.quantidade > 1 ? ' ×' + x.quantidade : '') }),
+          el('span', { classe: 'muted', texto: [x.instituicao, 'liberado ' + haQuanto(c, x.atualizado_em)].filter(Boolean).join(' · ') }),
+          pode() ? botao('Trazer de volta', function () { salvarRecurso(x.id, { situacao: 'disponivel' }, x.nome + ' de volta à Área de Espera.'); }) : null]);
+      }))]) : null,
+    ];
+  }
+
+  // ÁREA DE ESPERA (Seção de Operações): só o que aguarda designação e o que está chegando. Daqui se designa.
+  function paginaEspera(c) {
+    var eq = c.equipes, RE = window.RecursosEquipe;
+    var prontos = c.recursos.filter(function (x) { return x.situacao === 'disponivel'; }), chegando = c.recursos.filter(function (x) { return x.situacao === 'a_caminho'; });
+    var nProntos = eq.disponivel.length + prontos.length;
+    function linhaEquipe(x) {
+      var g = x.grupo, n = Pn().membros(g.id).length;
+      return el('li', { classe: 'sci2-espera-item' }, [el('i', { classe: 'sci2-cor', style: 'background:' + (g.cor || '#888') }),
+        el('div', { classe: 'sci2-espera-txt' }, [el('strong', { texto: g.nome }), el('small', { texto: 'equipe · ' + n + (n === 1 ? ' pessoa' : ' pessoas') })]),
+        el('div', { classe: 'sci2-espera-acoes' }, [pode() ? botao('Designar', function () { moverEquipe(c, g, 'designado'); }, 'btn-escuro') : null, botao('Abrir', function () { Pn().abrirGrupos(g.id); })])]);
+    }
+    function linhaRecurso(x, chegandoAgora) {
+      var K = CAT_RECURSO[x.categoria] || CAT_RECURSO.outro;
+      return el('li', { classe: 'sci2-espera-item' }, [el('span', { classe: 'sci2-kb-ico', 'aria-hidden': 'true', texto: K[0] }),
+        el('div', { classe: 'sci2-espera-txt' }, [el('strong', { texto: x.nome + (x.quantidade > 1 ? ' ×' + x.quantidade : '') }),
+          el('small', { texto: [K[1].toLowerCase(), x.instituicao, chegandoAgora ? 'solicitado ' + haQuanto(c, x.criado_em) : (x.checkin_em ? 'na espera ' + haQuanto(c, x.checkin_em) : null)].filter(Boolean).join(' · ') })]),
+        pode() ? el('div', { classe: 'sci2-espera-acoes' }, [chegandoAgora ? botao('✔ Registrar chegada', function () { moverRecurso(c, x, 'disponivel'); }, 'btn-ok') : botao('Designar', function () { designarRecurso(c, x); }, 'btn-escuro'),
+          botao('Editar', function () { formRecurso(x); })]) : null]);
+    }
+    return [cabSecao(c, 'SEÇÃO DE OPERAÇÕES · ÁREA DE ESPERA', 'Área de Espera', 'ops'),
+      el('p', { classe: 'muted sci2-intro', texto: 'O que já chegou, fez o check-in e aguarda designação, pronto para sair. O quadro com todas as situações fica em Planejamento → Recursos.' }),
+      el('div', { classe: 'sci2-kpis sci2-kpis-4' }, [kpi(nProntos, 'prontos para designar', eq.disponivel.length + ' equipes · ' + prontos.length + ' avulsos', nProntos ? 'verde' : 'laranja'), kpi(chegando.length, 'a caminho'),
+        kpi(eq.missao.length + c.recursos.filter(function (x) { return x.situacao === 'designado'; }).length, 'já designados', null, null, 'recursos'), kpi(eq.descanso.length, 'equipes em descanso')]),
+      !eq.disponivel.length && c.grupos.length ? el('p', { classe: 'nota sci2-bloco-alerta', texto: 'Reserva abaixo do mínimo: nenhuma equipe disponível para substituição ou intervenção rápida.' }) : null,
+      avisoSemRecursos(),
+      bloco('Prontos para designar (' + nProntos + ')', [nProntos ? el('ul', { classe: 'sci2-espera' }, eq.disponivel.map(linhaEquipe).concat(prontos.map(function (x) { return linhaRecurso(x, false); })))
+        : el('p', { classe: 'muted', texto: 'Nada aguardando na Área de Espera agora.' })],
+        [pode() ? botao('＋ Check-in de recurso', function () { formRecurso(null); }, 'btn-escuro') : null, botao('Ver todos os recursos', function () { ir('recursos'); })]),
+      chegando.length ? bloco('A caminho (' + chegando.length + ')', [el('ul', { classe: 'sci2-espera' }, chegando.map(function (x) { return linhaRecurso(x, true); }))]) : null,
+      eq.descanso.length ? bloco('Equipes em descanso (' + eq.descanso.length + ')', [el('ul', { classe: 'sci2-espera' }, eq.descanso.map(function (x) {
+        var g = x.grupo;
+        return el('li', { classe: 'sci2-espera-item' }, [el('i', { classe: 'sci2-cor', style: 'background:' + (g.cor || '#888') }),
+          el('div', { classe: 'sci2-espera-txt' }, [el('strong', { texto: g.nome }), el('small', { texto: g.disponibilidade_obs || 'em descanso' })]),
+          pode() ? el('div', { classe: 'sci2-espera-acoes' }, [botao('Voltou: disponível', function () { moverEquipe(c, g, 'disponivel'); })]) : null]);
+      }))]) : null,
     ];
   }
   function paginaLogistica(c) {

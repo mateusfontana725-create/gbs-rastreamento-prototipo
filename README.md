@@ -148,6 +148,24 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Modo SCI: recursos avulsos, Área de Espera separada e menu mais claro (migração 080)
+
+No SCI, recurso é tudo o que a ocorrência emprega, não só gente. Além das equipes (grupos do painel), agora dá para
+cadastrar **recursos avulsos**: ambulância, viatura, caminhão, embarcação, aeronave/drone, motosserra, gerador, material.
+
+- **Recursos** (Planejamento · Unidade de Recursos; antes "Recursos e fatores humanos"): o quadro completo, com equipes e
+  recursos avulsos nas colunas **A caminho**, **Disponíveis**, **Designados** e **Fora de serviço**. **＋ Novo recurso**
+  cadastra (nome, tipo, quantidade, instituição, se já chegou ou está a caminho). Arrastar o cartão (ou "Mover para")
+  muda a situação; soltar em "Designados" pede o destino: um setor, uma equipe ou um local escrito. "Desmobilizar" tira o
+  recurso da ocorrência e o guarda no histórico (dá para trazer de volta). Há também o resumo por tipo.
+- **Área de Espera** (Operações): deixou de ser a mesma tela. Mostra só o que **já chegou e aguarda designação** (equipes
+  e recursos), o que está **a caminho** (com "Registrar chegada") e as equipes em descanso. Daqui se designa.
+- Cada cadastro e mudança de situação entra no diário da operação ("SCI · Recurso designado: Motosserra ×3 → …").
+- **Menu do SCI:** o nome da seção fica em destaque, o chefe da seção em letra pequena embaixo e as páginas recuadas,
+  com uma linha separando as seções.
+- **Banco:** a tabela `sci2_recursos` e a função `sci2_recurso` vêm da migração `080_sci_recursos.sql` (só acréscimos).
+  Sem ela o SCI abre normalmente, com o aviso de que o cadastro de recursos avulsos precisa da migração.
+
 ### LDK pelos blocos, destaque da trilha, data de criação, funções do militar e tipo de área
 
 - **LDK do AlpineQuest:** quando a árvore de pastas do pacote não pode ser lida, cada item é achado pelo marcador do bloco

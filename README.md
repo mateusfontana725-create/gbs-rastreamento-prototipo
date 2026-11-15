@@ -148,6 +148,25 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### LDK pelos blocos, destaque da trilha, data de criação, funções do militar e tipo de área
+
+- **LDK do AlpineQuest:** quando a árvore de pastas do pacote não pode ser lida, cada item é achado pelo marcador do bloco
+  de dados e lido normalmente, **com o nome dele**, os pontos e as áreas. No modo de recuperação, o nome gravado antes do
+  traçado é aproveitado; sem nome no arquivo, vale o nome do arquivo importado. Trilha com vários segmentos vira
+  "Nome", "Nome (2)"…
+- **Fechar o balão tira o destaque da trilha** (no × ou tocando fora). Os botões do balão mantêm o destaque para a janela
+  que abrem.
+- **Data e hora de criação em tudo:** os balões de setor, ponto, trilha desenhada ou importada, foto, relato e áreas
+  mostram "Criado em dd/mm/aaaa hh:mm por Fulano"; as janelas de detalhe usam a data completa (antes a data sumia quando
+  era de hoje).
+- **Militar sempre com as funções dele:** "Criar setor" e "Marcar ponto" apareciam só depois que o mapa carregava do
+  servidor; sem internet (ou numa falha) sumiam do menu. Agora vêm ligadas e só somem se o responsável desligar em
+  "Funções dos militares" (a última resposta fica guardada no aparelho). O que o militar cria ele edita ou exclui tocando
+  no item.
+- **Tipo de área ao criar um setor (responsável):** Setor de busca (normal), **Área proibida** (ninguém entra; alerta se
+  alguém entrar) ou **Área de perigo** (avisa quem entrar). A proibida usa o mesmo desenho; a de perigo vira o ponto de
+  risco com o raio que cobre o desenho (até 5 km).
+
 ### Importação: LDK, trilha vinculada igual à gravada, sem duplicar e sem setas soltas
 
 - **Excluir uma trilha importada tira também as setas de sentido** (ficavam soltas no mapa).

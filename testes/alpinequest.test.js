@@ -210,5 +210,24 @@ console.log('Modo de recuperação (leiaute desconhecido)');
   chk(!rv.linhas.length && /não tem itens/.test(rv.diagnostico || ''), 'pacote sem itens: diagnóstico claro', rv.diagnostico);
 }
 
+console.log('LDK com a árvore de pastas ilegível: leitura pelos blocos de dados');
+{
+  const b = Uint8Array.from(ldk());
+  const raiz = Number(new DataView(b.buffer).getBigInt64(8));
+  b[raiz + 3] = 0x00;   // estraga o marcador da pasta raiz: a árvore não pode mais ser percorrida
+  const r = AQ.ler(b, 'operacao.ldk');
+  chk(r.linhas.some((l) => l.nome === 'Trilha Alfa' && l.pts.length === 3), 'a trilha vem inteira, com o nome dela', r.linhas.map((l) => [l.nome, l.pts.length]));
+  chk(r.pontos.some((p) => p.nome === 'Base') && r.areas.some((a) => a.nome === 'Mata fechada'), 'pontos e áreas também, com os nomes', [r.pontos.map((p) => p.nome), r.areas.map((a) => a.nome)]);
+}
+{
+  // recuperação: o nome gravado antes do traçado é aproveitado
+  const w = new Escritor().uint(0x4C444B3A).int(1).long(999999).bytes(new Array(40).fill(0x7F));
+  w.str('name').int(Buffer.byteLength('Varredura do córrego')).bytes(Buffer.from('Varredura do córrego'));
+  [[-25.2526, -48.8128], [-25.2530, -48.8120], [-25.2536, -48.8111]].forEach((q) => loc(w, q[0], q[1]));
+  w.bytes(new Array(16).fill(0));
+  const r = AQ.ler(w.saida(), 'estranho.ldk');
+  chk(r.linhas.length === 1 && r.linhas[0].nome === 'Varredura do córrego', 'traçado recuperado com o nome do arquivo', r.linhas.map((l) => l.nome));
+}
+
 console.log('\n' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

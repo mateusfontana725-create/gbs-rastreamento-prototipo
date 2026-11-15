@@ -339,10 +339,11 @@
         r.pontos.push(limpo({ nome: nomeDe(w.meta, 'Ponto ' + (++cont.ponto)), lat: r7(w.pos.lat), lng: r7(w.pos.lng), descricao: desc(w.meta) }));
       });
       if (a.tipo === 'trk') {
-        var nome = nomeDe(a.meta, 'Trilha ' + (++cont.trilha));
+        var nomeBase = nomeDe(a.meta, 'Trilha ' + (++cont.trilha)), nSeg = 0;
         a.segmentos.forEach(function (seg) {
           var s = seg.filter(ok);
           if (s.length < 2) return;
+          var nome = nomeBase + (++nSeg > 1 ? ' (' + nSeg + ')' : '');
           var tempos = s.map(function (q) { return q.t; }).filter(function (t) { return t > 0; });
           r.linhas.push(limpo({ nome: nome, pts: s.map(function (q) { return [r7(q.lat), r7(q.lng)]; }), formato: formato, descricao: desc(a.meta),
             inicio: tempos.length ? iso(Math.min.apply(null, tempos)) : null, fim: tempos.length ? iso(Math.max.apply(null, tempos)) : null }));
@@ -363,8 +364,27 @@
    * atrás de sequências de posições: cada posição é "tamanho, longitude, latitude" (inteiros × 1e-7) e, numa trilha,
    * elas vêm uma depois da outra. Uma sequência de 3 ou mais posições plausíveis e próximas vira uma trilha.
    * Não recupera nomes nem pontos soltos, mas não deixa a pessoa sem o traçado. */
+  // Nomes gravados nos metadados: a chave "name" (4 bytes) seguida do tamanho e do texto. Devolve [{ pos, nome }].
+  function nomesNoArquivo(bytes) {
+    var v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), fim = bytes.byteLength, r = [];
+    for (var i = 0; i + 12 <= fim; i++) {
+      if (bytes[i + 4] !== 0x6E || bytes[i + 5] !== 0x61 || bytes[i + 6] !== 0x6D || bytes[i + 7] !== 0x65 || v.getInt32(i) !== 4) continue;   // int 4 + "name"
+      var tam = v.getInt32(i + 8);
+      if (tam < 1 || tam > 200 || i + 12 + tam > fim) continue;
+      var txt = utf8(bytes.subarray(i + 12, i + 12 + tam)).replace(/[\u0000-\u001f]/g, ' ').trim();
+      if (txt && txt.indexOf('\ufffd') === -1) r.push({ pos: i, nome: txt });
+    }
+    return r;
+  }
   function recuperarTrilhas(bytes) {
     var v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), fim = bytes.byteLength, linhas = [];
+    var nomes = nomesNoArquivo(bytes), fimAnterior = 0;
+    // o nome mais próximo ANTES do traçado e depois do traçado anterior (o do próprio item); senão, o último nome visto
+    function nomePara(inicio) {
+      var achado = null, qualquer = null;
+      for (var k = 0; k < nomes.length && nomes[k].pos < inicio; k++) { qualquer = nomes[k].nome; if (nomes[k].pos >= fimAnterior) achado = nomes[k].nome; }
+      return achado || qualquer;
+    }
     function pos(i) {
       if (i + 12 > fim) return null;
       var tam = v.getInt32(i);
@@ -387,12 +407,42 @@
       }
       if (seq.length >= 3) {
         var parados = seq.every(function (q) { return q.lat === seq[0].lat && q.lng === seq[0].lng; });
-        if (!parados) linhas.push(seq.map(function (q) { return [r7(q.lat), r7(q.lng)]; }));
+        if (!parados) { var pts = seq.map(function (q) { return [r7(q.lat), r7(q.lng)]; }); pts.nome = nomePara(i); linhas.push(pts); }
+        fimAnterior = p.prox;
         i = p.prox;
       } else i++;
     }
+    // o mesmo nome em vários pedaços (trilha com mais de um segmento): "Nome", "Nome (2)"…
+    var usados = {};
+    linhas.forEach(function (pts) { if (!pts.nome) return; usados[pts.nome] = (usados[pts.nome] || 0) + 1; if (usados[pts.nome] > 1) pts.nome = pts.nome + ' (' + usados[pts.nome] + ')'; });
     return linhas;
   }
+  /* ---------- LDK pelos blocos de dados ----------
+   * Se a árvore de pastas não puder ser lida (leiaute diferente), cada item do pacote ainda está num bloco de dados
+   * que começa com um marcador fixo. Esta leitura acha os blocos pelo marcador, junta as partes de cada um e lê o item
+   * normalmente (com o nome e os pontos). O item que não puder ser lido passa pela recuperação, já dentro do bloco
+   * inteiro (o traçado não sai quebrado nas emendas do pacote). */
+  function lerLdkPorBlocos(bytes) {
+    var l = new Leitor(bytes), v = l.v, fim = bytes.byteLength, arquivos = [], recuperados = 0;
+    for (var i = 8; i + 32 <= fim; i++) {
+      if (v.getInt32(i) !== DADOS) continue;
+      var bloco;
+      try { bloco = lerBloco(l, i); } catch (e) { continue; }
+      var tipo = TIPO_NO_LDK[bloco[0]];
+      if (!tipo || bloco.length < 12) continue;
+      try {
+        var lido = lerArquivo(bloco.subarray(1), tipo);
+        if (temConteudo(lido)) { lido.pasta = ''; arquivos.push(lido); continue; }
+      } catch (e2) { /* tenta recuperar abaixo */ }
+      recuperarTrilhas(bloco).forEach(function (pts) {
+        recuperados++;
+        arquivos.push({ tipo: 'trk', meta: { name: pts.nome || '' }, pontos: [], areas: [], pasta: '',
+          segmentos: [pts.map(function (q) { return { lat: q[0], lng: q[1] }; })] });
+      });
+    }
+    return { arquivos: arquivos, recuperados: recuperados };
+  }
+
   function textoMotivos(m) {
     var ks = Object.keys(m || {}).sort(function (x, y) { return m[y] - m[x]; }).slice(0, 3);
     return ks.map(function (k) { return m[k] + '× ' + k; }).join('; ');
@@ -417,10 +467,21 @@
       var detalhe = textoMotivos(pac.motivos);
       if (pac.ignorados) r.avisos.push(pac.ignorados + ' item(ns) do pacote LDK não puderam ser lidos' + (detalhe ? ' (' + detalhe + ')' : '') + '.');
       if (!r.pontos.length && !r.linhas.length && !r.areas.length) {
-        // nada pela estrutura: tenta recuperar pelo menos os traçados
+        // nada pela árvore de pastas: lê item por item pelos blocos de dados (com nomes e pontos)
+        var porBlocos = { arquivos: [], recuperados: 0 };
+        try { porBlocos = lerLdkPorBlocos(bytes); } catch (eB) { /* segue para a recuperação */ }
+        if (porBlocos.arquivos.length) {
+          var rb = paraImportador(porBlocos.arquivos, 'ldk');
+          if (rb.pontos.length || rb.linhas.length || rb.areas.length) {
+            rb.avisos = r.avisos.filter(function (x) { return !/não puderam ser lidos/.test(x); });
+            if (porBlocos.recuperados) rb.avisos.push(porBlocos.recuperados + ' traçado(s) deste pacote vieram pelo modo de recuperação (sem os horários). Confira no mapa.');
+            return rb;
+          }
+        }
+        // último recurso: varre o arquivo inteiro atrás dos traçados
         var rec = recuperarTrilhas(bytes);
-        rec.forEach(function (pts, k) { r.linhas.push({ nome: 'Trilha recuperada ' + (k + 1), pts: pts, formato: 'ldk' }); });
-        if (rec.length) r.avisos.push('O pacote LDK está num leiaute que o leitor não conhece: ' + rec.length + ' traçado(s) foram recuperados sem nome e sem os pontos soltos. Confira no mapa.');
+        rec.forEach(function (pts, k) { r.linhas.push({ nome: pts.nome || 'Trilha recuperada ' + (k + 1), pts: pts.slice(), formato: 'ldk' }); });
+        if (rec.length) r.avisos.push('O pacote LDK está num leiaute que o leitor não conhece: ' + rec.length + ' traçado(s) foram recuperados, sem os pontos soltos. Confira no mapa.');
         r.diagnostico = erroLdk ? 'estrutura do pacote não reconhecida (' + erroLdk.message + ')'
           : pac.itens ? pac.itens + ' item(ns) no pacote, nenhum lido' + (detalhe ? ': ' + detalhe : '')
           : 'o pacote não tem itens na árvore de pastas (ou a árvore está num leiaute diferente)';
@@ -435,8 +496,9 @@
       var rec1 = recuperarTrilhas(bytes);
       if (!rec1.length) throw eUm;
       var r1 = paraImportador([], porExtensao || 'trk');
-      rec1.forEach(function (pts, k) { r1.linhas.push({ nome: 'Trilha recuperada ' + (k + 1), pts: pts, formato: porExtensao || 'trk' }); });
-      r1.avisos.push('Arquivo num leiaute que o leitor não conhece: ' + rec1.length + ' traçado(s) recuperados sem nome. Confira no mapa.');
+      var base = String(nome || '').replace(/^.*[\\/]/, '').replace(/\.[a-z]+$/i, '');
+      rec1.forEach(function (pts, k) { r1.linhas.push({ nome: pts.nome || (base ? base + (rec1.length > 1 ? ' (' + (k + 1) + ')' : '') : 'Trilha recuperada ' + (k + 1)), pts: pts.slice(), formato: porExtensao || 'trk' }); });
+      r1.avisos.push('Arquivo num leiaute que o leitor não conhece: ' + rec1.length + ' traçado(s) recuperados. Confira no mapa.');
       return r1;
     }
     return paraImportador([um], um.tipo);

@@ -793,25 +793,50 @@
   // Um clique num item do mapa abre um balão pequeno preso a ele (nome e o essencial).
   // O painel lateral (ficha, detalhes) abre com dois cliques, clicar e segurar, ou pelo
   // botão do balão. Na lista lateral um clique continua abrindo direto.
+  // Data e hora completas de criação (dia/mês/ano hora:minuto), para os balões e as janelas de detalhe de tudo o que
+  // está no mapa (setor, ponto, trilha, foto, relato, áreas). C.hora omite a data quando é de hoje.
+  function dataHoraCriacao(v) {
+    var ms = C.paraMs(v);
+    if (ms == null) return null;
+    var d = new Date(ms), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function criadoEm(d, verbo) {
+    var t = d && dataHoraCriacao(d.criado_em || d.criada_em || d.registrada_em);
+    return t ? (verbo || 'Criado') + ' em ' + t + (d.criado_por_nome ? ' por ' + d.criado_por_nome : '') : null;
+  }
+
   function abrirBalao(latlng, info, detalhes) {
     if (!est.mapa) return;
     var corpo = UI.el('div', { classe: 'balao-corpo' }, [
       UI.el('strong', { classe: 'balao-titulo', texto: info.titulo }),
       info.sub ? UI.el('small', { classe: 'balao-sub', texto: info.sub }) : null,
       info.texto ? UI.el('p', { classe: 'balao-texto', texto: info.texto }) : null,
+      info.criado ? UI.el('small', { classe: 'balao-sub balao-criado', texto: info.criado }) : null,
       detalhes ? UI.el('button', { classe: 'balao-detalhes', type: 'button', id: 'balao-detalhes', texto: info.botao || 'Detalhes ›',
         title: 'Dica: dois cliques ou clicar e segurar no mapa abrem direto',
-        onclick: function () { fecharBalao(); detalhes(); } }) : null,
+        onclick: function () { est.balaoManterRealce = true; fecharBalao(); detalhes(); } }) : null,
     ].concat((info.extras || []).map(function (x) {
       return UI.el('button', { classe: 'balao-detalhes balao-secundario', type: 'button', id: x.id || null, texto: x.texto,
-        onclick: function () { fecharBalao(); x.acao(); } });
+        onclick: function () { est.balaoManterRealce = true; fecharBalao(); x.acao(); } });
     })));
     if (!est.balao) {
       est.balao = L.popup({ className: 'balao-mapa', closeButton: true, autoPan: true, autoPanPadding: [30, 30], maxWidth: 240, minWidth: 120, offset: [0, -8] });
+      // Fechar o balão (no × ou tocando fora) tira o destaque da trilha que ele mostrava. Antes a trilha continuava
+      // em destaque depois do ×. Os botões do balão (Detalhes, Ficha…) mantêm o destaque para a janela que abrem.
+      est.balao.on('remove', function () {
+        var realce = est.balaoRealce, manter = est.balaoManterRealce;
+        est.balaoManterRealce = false;
+        setTimeout(function () {
+          if (manter || !realce || !est.mapa || est.mapa.hasLayer(est.balao)) return;
+          if (est.trilhaRealce === realce) realcarTrilha(null);
+        }, 0);
+      });
     }
     est.balao.setLatLng(latlng).setContent(corpo);
     est.balao.options.offset = L.point(0, info.deslocY || -8);
     est.balao.openOn(est.mapa);
+    est.balaoRealce = est.trilhaRealce || null;   // a trilha que este balão destacou (se for de trilha)
   }
 
   function fecharBalao() {
@@ -5358,7 +5383,7 @@
       info: function () {
         if (m.categoria === 'VITIMA') return infoVitimaLocalizada(m, mk);
         return { latlng: mk.getLatLng(), titulo: cat.rotulo, sub: nomeDoParticipante(m.participante_id, m.remetente_nome) + ' · ' + C.hora(m.criada_em, false),
-          texto: resumoTexto(m.texto, 90), deslocY: -10 };
+          texto: resumoTexto(m.texto, 90), criado: criadoEm({ criado_em: m.criada_em }, 'Enviado'), deslocY: -10 };
       },
       detalhes: function () { abrirRelato(m.id); },
     });
@@ -5797,7 +5822,7 @@
         ligarCliquesMapa(mk, {
           info: function () {
             return { latlng: mk.getLatLng(), titulo: 'Foto', sub: nomeDoParticipante(f.participante_id, f.autor_nome) + ' · ' + dataHoraCurta(f.capturada_em || f.registrada_em),
-              texto: f.setor_nome ? 'Setor ' + f.setor_nome : null, botao: 'Ver a foto ›', deslocY: -10 };
+              texto: f.setor_nome ? 'Setor ' + f.setor_nome : null, criado: criadoEm({ criado_em: f.capturada_em || f.registrada_em }, 'Tirada'), botao: 'Ver a foto ›', deslocY: -10 };
           },
           detalhes: function () { abrirFoto(f.id); },
         });
@@ -6526,7 +6551,7 @@
     camada.bindTooltip(htmlRotuloSetor(d), { permanent: true, direction: 'center', className: 'rotulo-setor', opacity: 1, pane: 'rotulosSetor' });
     ligarCliquesMapa(camada, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante o desenho o clique é do mapa
-      info: function () { return { titulo: 'Setor ' + d.nome, sub: situacaoSetor(d.status).rotulo }; },
+      info: function () { return { titulo: 'Setor ' + d.nome, sub: situacaoSetor(d.status).rotulo, criado: criadoEm(d) }; },
       detalhes: function () { abrirSetor(d.id); },
       sobrepostos: itensSobrepostosEm,
     });
@@ -6629,7 +6654,7 @@
           extras.push({ id: 'balao-ponto-editar', texto: '✎ Editar', acao: function () { abrirFormPontoInt(p.d); } });
           extras.push({ id: 'balao-ponto-excluir', texto: '🗑 Excluir', acao: function () { excluirPontoInt(p.d); } });
         }
-        return { latlng: mk.getLatLng(), titulo: d.titulo, sub: cat.rotulo, texto: resumoTexto(d.descricao, 90), deslocY: -30, extras: extras };
+        return { latlng: mk.getLatLng(), titulo: d.titulo, sub: cat.rotulo, texto: resumoTexto(d.descricao, 90), criado: criadoEm(d), deslocY: -30, extras: extras };
       },
       detalhes: function () { abrirPontoInt(d.id); },
     });
@@ -7024,11 +7049,25 @@
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btnSalvar = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'setor-salvar', texto: novo ? 'Criar setor' : 'Salvar' });
     var salvo = false;
+    // Na criação: a área desenhada pode ser um setor de busca (padrão), uma área PROIBIDA (ninguém entra; quem entrar gera
+    // alerta) ou uma área de PERIGO (quem entrar é avisado). As duas últimas usam o que o app já tem para isso: a área
+    // proibida (mesmo desenho) e o ponto de risco com raio (o círculo que cobre o desenho).
+    var tipoArea = novo ? UI.el('select', { classe: 'campo', id: 'setor-tipo-area' }, [
+      UI.el('option', { value: 'busca', texto: 'Setor de busca (normal)' }),
+      UI.el('option', { value: 'proibida', texto: '⛔ Área proibida (ninguém entra)' }),
+      UI.el('option', { value: 'perigo', texto: '⚠ Área de perigo (avisa quem entrar)' }),
+    ]) : null;
+    if (tipoArea) tipoArea.addEventListener('change', function () {
+      var especial = tipoArea.value !== 'busca';
+      [status, part, equipe, visSetor].forEach(function (c) { c.disabled = especial; });
+      btnSalvar.textContent = tipoArea.value === 'proibida' ? 'Marcar área proibida' : tipoArea.value === 'perigo' ? 'Marcar área de perigo' : 'Criar setor';
+    });
     var form = UI.el('form', { classe: 'form-setor form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: novo ? 'Novo setor' : 'Editar setor' }),
       UI.secao(null, [
         UI.grade([
           UI.campo('Nome', nome, { para: 'setor-nome', dica: 'Nome, número ou código que a equipe reconhece no rádio.' }),
+          tipoArea ? UI.campo('Tipo de área', tipoArea, { para: 'setor-tipo-area', dica: 'Proibida: ninguém deve entrar; o painel alerta se alguém entrar. Perigo: quem entrar recebe o aviso de risco no celular e o painel é alertado. As duas aparecem para todos.' }) : null,
           raio ? UI.campo('Raio (m)', raio, { para: 'setor-raio' }) : null,
           UI.campo('Situação', status, { para: 'setor-status' }),
           UI.campo('Responsável', part, { para: 'setor-participante' }),
@@ -7070,6 +7109,38 @@
         }
       }
       btnSalvar.disabled = true;
+      if (tipoArea && tipoArea.value !== 'busca') {
+        try {
+          var raioM = d.forma === 'circulo' ? dados.raio_m : null;
+          if (tipoArea.value === 'proibida') {
+            var anel = d.forma === 'circulo' ? window.Arquivos.circulo(d.centro_lat, d.centro_lng, raioM, 48).map(function (q) { return [Math.round(q[0] * 1e7) / 1e7, Math.round(q[1] * 1e7) / 1e7]; }) : d.pontos;
+            var criada = await C.rpc('salvar_area_proibida', { p_operacao: est.op.id, p_id: null, p_dados: { nome: dados.nome, pontos: anel, motivo: dados.observacoes } });
+            var ap = { d: criada, camada: null };
+            est.areasProibidas.set(criada.id, ap);
+            desenharAreaProibida(ap);
+            UI.aviso('Área proibida "' + criada.nome + '" marcada.', 'ok');
+          } else {
+            var cLat = d.centro_lat, cLng = d.centro_lng;
+            if (d.forma !== 'circulo') {   // polígono: o círculo que cobre todos os cantos
+              cLat = d.pontos.reduce(function (t, q) { return t + q[0]; }, 0) / d.pontos.length;
+              cLng = d.pontos.reduce(function (t, q) { return t + q[1]; }, 0) / d.pontos.length;
+              raioM = d.pontos.reduce(function (m, q) { return Math.max(m, C.distancia(cLat, cLng, q[0], q[1])); }, 0);
+            }
+            if (raioM > 5000) throw new Error('a área de perigo pode ter no máximo 5 km de raio (esta tem ' + Math.round(raioM) + ' m). Desenhe uma área menor ou marque como proibida.');
+            var pr = await C.rpc('salvar_ponto', { p_operacao: est.op.id, p_id: null, p_dados: { categoria: 'RISCO', titulo: dados.nome, descricao: dados.observacoes, lat: cLat, lng: cLng, raio_m: Math.max(10, Math.round(raioM)) } });
+            aplicarPontos([pr]);
+            UI.aviso('Área de perigo "' + dados.nome + '" marcada (raio de ' + Math.max(10, Math.round(raioM)) + ' m).', 'ok');
+          }
+          salvo = true;
+          fechar(true);
+          cancelarDesenho();
+        } catch (e) {
+          erro.textContent = 'Não foi possível salvar: ' + e.message;
+          erro.hidden = false;
+          btnSalvar.disabled = false;
+        }
+        return;
+      }
       try {
         var res = await C.rpc('salvar_setor', { p_operacao: est.op.id, p_id: d.id || null, p_dados: dados });
         salvo = true;
@@ -7466,7 +7537,7 @@
         d.forma === 'circulo' ? ['Raio', Math.round(d.raio_m).toLocaleString('pt-BR') + ' m'] : ['Cantos', String(d.pontos.length)],
         ['Responsável', nomeResponsavelSetor(d)],
         ['Equipe', d.equipe || 'não informada'],
-        ['Criado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome, true],
+        ['Criado', dataHoraCriacao(d.criado_em) + ' por ' + d.criado_por_nome, true],
         d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome, true] : null,
       ]),
       d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
@@ -7936,7 +8007,7 @@
         d.categoria === 'RISCO' ? ['Alarme de proximidade', 'raio de ' + Math.round(d.raio_m || RAIO_ALERTA_PADRAO) + ' m'] : null,
         d.categoria === 'BASE' ? ['Raio da base', Math.round(d.raio_m || RAIO_BASE_PADRAO) + ' m · chegada do grupo; dentro dele a trilha continua gravada, mas não aparece no mapa'] : null,
         ['Visível para', (d.visibilidade || visibilidadePadraoPonto(d.categoria)) === 'publico' ? 'Todos os participantes' : 'Responsáveis e quem receber'],
-        ['Registrado', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
+        ['Registrado', dataHoraCriacao(d.criado_em) + ' por ' + d.criado_por_nome],
         d.concluido_em ? ['Concluído', C.hora(d.concluido_em) + ' por ' + (d.concluido_por_nome || '—')] : null,
         d.relatado_por_nome ? ['Relatado por', d.relatado_por_nome + ' (participante)'] : null,
         d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterado', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
@@ -8734,7 +8805,7 @@
     if (!ponteiroDentroSemTrilha(fim)) L.circleMarker(fim, Object.assign({ radius: Math.max(3, 4 * ft), color: cor, weight: 2, fillColor: '#0b1220', fillOpacity: 0.9 }, opc)).addTo(g);
     ligarCliquesMapa(g, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },   // durante um desenho o toque é do mapa
-      info: function () { var quem = equipeDaTrilha(d); return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : '') }; },
+      info: function () { var quem = equipeDaTrilha(d); return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : ''), criado: criadoEm(d, 'Criada') }; },
       detalhes: function () { abrirTrilhaManual(d.id); },
     });
     g.addTo(est.camadaTrilhasManuais);
@@ -8769,10 +8840,11 @@
           return { titulo: 'Trilha de ' + nomeExibido(pessoa), deslocY: -2, botao: 'Detalhes da trilha ›',
             sub: [TIPOS[tipoDe(pessoa.dados)].rotulo, gp ? gp.nome : null, d.comprimento_m ? window.Rotas.formatarDistancia(d.comprimento_m) : null,
               d.percorrida_em ? C.hora(d.percorrida_em, false) : null, 'importada (' + d.nome + ')'].filter(Boolean).join(' · '),
+            criado: criadoEm(d, 'Importada'),
             extras: [{ id: 'balao-ficha', texto: 'Ficha de ' + nomeExibido(pessoa), acao: function () { selecionar(pessoa.id); } }] };
         }
         var quem = equipeDaTrilha(d);
-        return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : '') };
+        return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : ''), criado: criadoEm(d, 'Importada') };
       },
       detalhes: function () { realcarTrilha(t.chave); abrirTrilhaManual(d.id); },
     });
@@ -9428,7 +9500,7 @@
         ['Equipe', equipeDaTrilha(d) || 'não informada'],
         ['Percurso feito por', meioDe(d).ico + ' ' + meioDe(d).rotulo],
         ['Origem', d.origem === 'importada' ? 'Importada de arquivo' + (d.arquivo ? ' (' + d.arquivo + ')' : '') + ' · não é rastro de GPS do app' : 'Desenhada à mão no mapa · não é rastro de GPS', true],
-        ['Criada', C.hora(d.criado_em) + ' por ' + d.criado_por_nome],
+        ['Criada', dataHoraCriacao(d.criado_em) + ' por ' + d.criado_por_nome],
         d.atualizado_por_nome && d.atualizado_em !== d.criado_em ? ['Alterada', C.hora(d.atualizado_em) + ' por ' + d.atualizado_por_nome] : null,
       ]),
       d.observacoes ? secaoDetalhe('Observações', UI.el('p', { classe: 'detalhe-texto', texto: d.observacoes })) : null,
@@ -9617,7 +9689,7 @@
       fill: false, className: 'area-sem-trilha' });
     ligarCliquesMapa(c, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },
-      info: function () { return { titulo: '◌ ' + (d.nome || 'Área sem trilha'), sub: (d.ativa ? 'Trilhas ocultas aqui' : 'Desativada') + ' · raio de ' + Math.round(d.raio_m) + ' m' }; },
+      info: function () { return { titulo: '◌ ' + (d.nome || 'Área sem trilha'), sub: (d.ativa ? 'Trilhas ocultas aqui' : 'Desativada') + ' · raio de ' + Math.round(d.raio_m) + ' m', criado: criadoEm(d, 'Criada') }; },
       detalhes: function () { abrirAreaSemTrilha(d.id); },
     });
     c.addTo(est.camadaAreasSemTrilha);
@@ -10314,7 +10386,7 @@
     var pol = L.polygon(a.d.pontos, Object.assign({ pane: 'trilhasDesenhadas', className: 'area-proibida' }, ESTILO_PROIBIDA));
     ligarCliquesMapa(pol, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },
-      info: function () { return { titulo: '⛔ ' + a.d.nome, sub: 'Área proibida' + (a.d.motivo ? ' · ' + a.d.motivo : '') }; },
+      info: function () { return { titulo: (a.d.tipo === 'perigo' ? '⚠ ' : '⛔ ') + a.d.nome, sub: (a.d.tipo === 'perigo' ? 'Área de perigo' : 'Área proibida') + (a.d.motivo ? ' · ' + a.d.motivo : ''), criado: criadoEm(a.d, 'Criada') }; },
       detalhes: function () { abrirAreaProibida(a.d.id); },
       sobrepostos: itensSobrepostosEm,
     });
@@ -10410,7 +10482,7 @@
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-trilha' }, [
       UI.el('h2', { id: 'modal-titulo', texto: '⛔ ' + d.nome }),
       UI.el('p', { classe: 'detalhe-texto', texto: d.motivo || 'Sem motivo informado.' }),
-      UI.el('p', { classe: 'muted', texto: d.pontos.length + ' cantos · criada por ' + d.criado_por_nome + ' em ' + C.hora(d.criado_em) }),
+      UI.el('p', { classe: 'muted', texto: d.pontos.length + ' cantos · criada por ' + d.criado_por_nome + ' em ' + dataHoraCriacao(d.criado_em) }),
       rodapeDetalhe([
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'area-proibida-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirAreaProibida(d); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),

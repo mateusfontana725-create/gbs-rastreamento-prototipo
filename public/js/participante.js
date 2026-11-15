@@ -515,6 +515,7 @@
       var destino = militar ? $('folha-legenda') : document.querySelector('.mapa-civil-caixa');
       if (destino && leg.parentNode !== destino) destino.appendChild(leg);
     }
+    atualizarFerramentasMilitar();   // também sem a carga do mapa (sem internet): as funções do militar aparecem
   }
 
   // CPF: opcional para todos. Celular: obrigatório para civis, opcional para militares.
@@ -1861,7 +1862,12 @@
       return;
     }
     if (!estado.mapa || !dados) return;
-    estado.permissoes = estado.part && estado.part.tipo === 'militar' && dados.permissoes ? dados.permissoes : {};
+    // Só o que o servidor mandou vira regra. Sem a resposta (sem internet) vale o que estava guardado; sem nada, liberado
+    // (o servidor confere de qualquer jeito ao gravar).
+    if (estado.part && estado.part.tipo === 'militar' && dados.permissoes && typeof dados.permissoes === 'object') {
+      estado.permissoes = dados.permissoes;
+      try { localStorage.setItem(CHAVE_PERM_MIL, JSON.stringify({ op: estado.part.operacao_id || estado.token, p: dados.permissoes })); } catch (ePerm) { /* vale nesta tela */ }
+    }
     atualizarFerramentasMilitar();
     desenharEquipe(dados.equipe || []);
     desenharExtras(dados.setores || [], dados.pontos || [], dados.areas_proibidas || []);
@@ -2026,7 +2032,7 @@
     estado.camSetores.clearLayers();
     estado.camPontos.clearLayers();
     estado.camProibidas.clearLayers();
-    var perm = estado.permissoes || {};
+    var perm = permMil();
     setores.forEach(function (st) {
       var meu = st.meu === undefined ? true : st.meu;   // servidor antigo: só vinham os atribuídos a mim
       var estilo = meu
@@ -2084,19 +2090,38 @@
   var STATUS_SETOR_P = { pendente: 'Pendente', andamento: 'Em andamento', concluido: 'Concluído' };
   var CATS_PONTO_MILITAR = ['VESTIGIO', 'POSSIVEL_LOCALIZACAO', 'RISCO', 'ENCONTRO', 'BASE', 'OUTRO'];
 
+  // Funções do militar (criar setor, marcar ponto, mudar a situação do setor). Vêm ligadas por padrão; só somem quando o
+  // responsável desligou em "Funções dos militares". Antes, sem a resposta do servidor (campo sem internet, falha na
+  // carga do mapa) todas sumiam do menu, e o militar ficava sem criar nada.
+  var CHAVE_PERM_MIL = 'gbs-perm-militar';
+  function permMil() {
+    if (!estado.part || estado.part.tipo !== 'militar') return {};
+    var p = estado.permissoes;
+    if (!p) {
+      try {
+        var g = JSON.parse(localStorage.getItem(CHAVE_PERM_MIL) || 'null');
+        if (g && g.p && g.op === (estado.part.operacao_id || estado.token)) p = g.p;
+      } catch (e) { /* sem armazenamento */ }
+    }
+    p = p || {};
+    return { setores: p.setores !== false, pontos: p.pontos !== false, situacao_setor: p.situacao_setor !== false, ver_setores: p.ver_setores !== false };
+  }
   function atualizarFerramentasMilitar() {
-    var perm = estado.permissoes || {};
+    var perm = permMil();
     var caixa = $('ferramentas-militar');
     if (!caixa) return;
-    var algum = Boolean(perm.setores || perm.pontos || perm.situacao_setor);
-    caixa.hidden = !algum;
+    var militar = Boolean(estado.part && estado.part.tipo === 'militar');
+    caixa.hidden = !militar;
     $('fm-setor').hidden = !perm.setores;
     $('fm-ponto').hidden = !perm.pontos;
-    $('fm-dica').textContent = perm.situacao_setor ? 'Toque num setor do mapa para mudar a situação dele (pendente, em andamento ou concluído).' : '';
+    var desligadas = militar ? [!perm.setores ? 'criar setor' : null, !perm.pontos ? 'marcar ponto' : null].filter(Boolean) : [];
+    $('fm-dica').textContent = [perm.situacao_setor ? 'Toque num setor do mapa para mudar a situação dele (pendente, em andamento ou concluído).' : '',
+      perm.setores || perm.pontos ? 'O que você criar pode ser editado ou excluído por você: toque no setor ou no ponto.' : '',
+      desligadas.length ? 'O responsável desligou nesta operação: ' + desligadas.join(' e ') + '.' : ''].filter(Boolean).join(' ');
   }
 
   function corpoSetorMilitar(st) {
-    var perm = estado.permissoes || {};
+    var perm = permMil();
     var botoes = [];
     if (perm.situacao_setor) {
       Object.keys(STATUS_SETOR_P).forEach(function (k) {
@@ -4559,7 +4584,7 @@
       return;
     }
     var texto = UI.el('span', { classe: 'pro-mira-coord mono' }), sub = UI.el('span', { classe: 'pro-mira-sub' });
-    var perm = estado.permissoes || {};
+    var perm = permMil();
     pro.mira = {
       cruz: UI.el('div', { classe: 'pro-mira-cruz', 'aria-hidden': 'true' }),
       faixa: UI.el('div', { classe: 'pro-mira-faixa', role: 'status' }, [

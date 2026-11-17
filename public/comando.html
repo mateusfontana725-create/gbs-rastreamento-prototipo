@@ -31,6 +31,7 @@
           <small>Rastreamento GBS · Acesso restrito</small>
         </div>
       </div>
+      <button class="versao-selo" type="button" data-versao></button>
       <div class="grupo">
         <label class="rotulo" for="login-email">E-mail</label>
         <input class="campo" id="login-email" type="email" autocomplete="username" required>
@@ -43,7 +44,6 @@
       <p class="erro-form" id="login-erro" role="alert" hidden></p>
       <p class="ajuda">Somente militares cadastrados como responsáveis podem acessar este painel.</p>
       <p class="ajuda ajuda-link">Ainda não tem acesso? <button class="link-botao" type="button" id="btn-solicitar-acesso">Pedir acesso</button></p>
-      <p class="versao-app"><button class="link-botao" type="button" data-versao>Versão</button></p>
     </form>
   </section>
 
@@ -102,6 +102,7 @@
       <div class="marca">
         <img class="marca-icone marca-brasao" src="img/brasao-cbmpr.png" alt="Corpo de Bombeiros Militar do Paraná" width="44" height="44">
         <div><h1>Operações de busca</h1><small id="usuario-nome"></small></div>
+        <button class="versao-selo" type="button" data-versao></button>
       </div>
       <div class="barra-espaco"></div>
       <div class="menu-topo" id="menu-topo">
@@ -245,6 +246,7 @@
         <button type="button" id="modo-operacao" class="ativo" aria-pressed="true" title="Mapa operacional">Operação</button>
         <button type="button" id="modo-sci" aria-pressed="false" title="Modo SCI: Posto de Comando, organograma, períodos, vítimas e formulários">SCI</button>
       </div>
+      <button class="versao-selo" type="button" data-versao></button>
       <span class="pilula-conexao" id="pilula" role="status"><span class="ponto ponto-aguardando"></span><span>Conectando…</span></span>
       <!-- Ações mais usadas, sempre à vista no topo (no celular, numa faixa logo abaixo) -->
       <div class="acoes-topo" id="acoes-topo" role="toolbar" aria-label="Ações rápidas">
@@ -353,7 +355,6 @@
                   </div>
                 </div>
                 <p class="menu-sol" id="menu-sol" hidden></p>
-                <button class="menu-item menu-versao" type="button" id="menu-versao" data-versao>Versão</button>
                 </div>
               </section>
             </nav>

@@ -168,6 +168,7 @@ legível, elas não aparecem.
   novidade 1.0.0 → 1.1.0. Aparece no login e no menu da lista de operações do painel, em Ferramentas › Ajustes, nas telas
   do participante (início, código, encerrada) e no menu do militar, e no dashboard. Tocar no número mostra as
   **novidades** de cada versão. Dentro do aplicativo Android aparece também a versão do aplicativo instalado.
+- O número aparece como um **selo no cabeçalho** de cada tela (lista de operações, painel da operação, login, cabeçalho do participante e dashboard). Tocar nele mostra as novidades.
 - A página aberta há muito tempo avisa quando há versão nova e diz qual ("Há uma versão nova (1.1.0); você está na 1.0.0").
 
 ### IPO (Diário): o IPO de cada dia junto com o diário (migração 083)

@@ -3224,3 +3224,13 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 /* Retomar operação encerrada (migração 082): botão na faixa de "somente visualização" */
 #faixa-encerrada:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .faixa-retomar { margin-left: auto; background: var(--alerta); color: #1a1205; border-color: var(--alerta); font-weight: 700; }
+
+/* IPO (Diário): o IPO de cada dia no topo do dia (migração 083) */
+.campo-bloco[hidden] { display: none; }
+.ipo-dia-cartao { border: 1px solid var(--borda, #2a3340); border-left: 4px solid var(--responsavel, #06b6d4); border-radius: 8px; padding: 8px 10px; margin: 4px 0 10px; display: grid; gap: 3px; background: rgba(6, 182, 212, .06); }
+.ipo-dia-cartao.vazio { border-left-color: var(--alerta, #f59e0b); background: transparent; }
+.ipo-dia-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ipo-dia-acoes { margin-left: auto; display: flex; gap: 6px; }
+.ipo-dia-selo { background: var(--responsavel, #06b6d4); color: #04131a; font-weight: 700; }
+.ipo-dia-linha { margin: 0; font-size: .86rem; line-height: 1.35; white-space: pre-line; overflow-wrap: anywhere; }
+.form-ipo-dia textarea { min-height: 70px; }

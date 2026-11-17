@@ -119,6 +119,76 @@
     return r;
   }
 
+  // IPO de cada dia (o que o diário guarda além do desdobramento e do efetivo): procedimentos feitos no dia, recursos
+  // empregados, órgãos de apoio, a situação ao fim do dia (o que fica para o dia seguinte) e quem preencheu.
+  function diasValidos(lista) {
+    if (!Array.isArray(lista)) return [];
+    var vistos = {};
+    return lista.map(function (x) {
+      x = x || {};
+      var dia = diaValido(x.dia);
+      if (!dia || vistos[dia]) return null;
+      var r = { dia: dia, procedimentos: procedimentosValidos(x.procedimentos), procedimentos_outros: texto(x.procedimentos_outros, MAX_TEXTO),
+        recursos: textoLongo(x.recursos, 4000), orgaos: textoLongo(x.orgaos, 4000), situacao: textoLongo(x.situacao, 4000),
+        por: texto(x.por, 120), em: dataIso(x.em) };
+      if (!r.procedimentos.length && !r.procedimentos_outros && !r.recursos && !r.orgaos && !r.situacao) return null;
+      vistos[dia] = true;
+      return r;
+    }).filter(Boolean).sort(function (a, b) { return a.dia < b.dia ? -1 : a.dia > b.dia ? 1 : 0; }).slice(0, 400);
+  }
+
+  // O IPO de um dia, juntando as três listas guardadas por dia (desdobramentos, efetivo e dias) e os registros antigos do
+  // diário daquele dia (procedimento, recurso, desdobramento). Devolve { dia, texto, qtd, nomes, procedimentos,
+  // procedimentos_outros, recursos, orgaos, situacao, por, em, vazio }.
+  function ipoDoDia(ipo, dia, diario) {
+    var i = normalizarIpo(ipo || {});
+    var des = i.desdobramentos.filter(function (x) { return x.dia === dia; }).map(function (x) { return x.texto; });
+    var ef = i.efetivo.filter(function (x) { return x.dia === dia; })[0] || {};
+    var d = i.dias.filter(function (x) { return x.dia === dia; })[0] || {};
+    var proc = (d.procedimentos || []).slice();
+    var recAntigos = [], desAntigos = [];
+    (diario || []).forEach(function (e) {
+      if (diaDoRegistro(e.ocorrido_em) !== dia) return;
+      if (e.tipo === 'procedimento' && e.ref_id && proc.indexOf(e.ref_id) === -1 && PROCEDIMENTOS.some(function (p) { return p[0] === e.ref_id; })) proc.push(e.ref_id);
+      if (e.tipo === 'recurso' && e.detalhe) recAntigos.push(e.detalhe);
+      if (e.tipo === 'desdobramento' && e.detalhe) desAntigos.push(e.detalhe);
+    });
+    var r = {
+      dia: dia, texto: des.join('\n'), textoDiario: desAntigos.join('\n'), qtd: ef.qtd != null ? ef.qtd : null, nomes: ef.nomes || '',
+      procedimentos: proc, procedimentos_outros: d.procedimentos_outros || '', recursos: d.recursos || '', recursosDiario: recAntigos.join('\n'),
+      orgaos: d.orgaos || '', situacao: d.situacao || '', por: d.por || '', em: d.em || '',
+    };
+    r.vazio = !r.texto && !r.textoDiario && r.qtd == null && !r.nomes && !r.procedimentos.length && !r.procedimentos_outros && !r.recursos && !r.recursosDiario && !r.orgaos && !r.situacao;
+    return r;
+  }
+  // Grava o IPO de um dia dentro do IPO da operação (sem mexer nos outros dias nem nos dados gerais).
+  // reg: { dia, texto, qtd, nomes, procedimentos, procedimentos_outros, recursos, orgaos, situacao, por, em }
+  function gravarDia(ipo, reg) {
+    var base = JSON.parse(JSON.stringify(ipo || {}));
+    var dia = diaValido(reg && reg.dia);
+    if (!dia) return base;
+    function fora(lista) { return (Array.isArray(lista) ? lista : []).filter(function (x) { return !x || x.dia !== dia; }); }
+    base.desdobramentos = fora(base.desdobramentos);
+    if (String(reg.texto || '').trim()) base.desdobramentos.push({ dia: dia, texto: reg.texto });
+    base.efetivo = fora(base.efetivo);
+    if (reg.qtd != null && reg.qtd !== '' || String(reg.nomes || '').trim()) base.efetivo.push({ dia: dia, qtd: reg.qtd, nomes: reg.nomes || '' });
+    base.dias = fora(base.dias);
+    base.dias.push({ dia: dia, procedimentos: reg.procedimentos || [], procedimentos_outros: reg.procedimentos_outros || '', recursos: reg.recursos || '',
+      orgaos: reg.orgaos || '', situacao: reg.situacao || '', por: reg.por || '', em: reg.em || '' });
+    var n = normalizarIpo(base);
+    // os campos gerais continuam como estavam (normalizarIpo põe padrões); só as três listas por dia mudam
+    var out = JSON.parse(JSON.stringify(ipo || {}));
+    out.desdobramentos = n.desdobramentos; out.efetivo = n.efetivo; out.dias = n.dias;
+    return out;
+  }
+  // Dias que têm alguma coisa no IPO (em ordem)
+  function diasComIpo(ipo) {
+    var i = normalizarIpo(ipo || {});
+    var k = {};
+    i.desdobramentos.concat(i.efetivo, i.dias).forEach(function (x) { k[x.dia] = true; });
+    return Object.keys(k).sort();
+  }
+
   // Dados do formulário → objeto limpo, com tudo dentro dos limites que o banco aceita.
   // Campos do informe real (CBMPR): unidade e RGO no cabeçalho, localidade escrita, coordenada de referência, hora do
   // acionamento do CB, procedimentos marcados, recursos, efetivo e desdobramentos de cada dia e órgãos de apoio.
@@ -135,6 +205,7 @@
       recursos_cb: textoLongo(raw.recursos_cb, 4000),
       efetivo: listaPorDia(raw.efetivo, { qtd: 'qtd', nomes: 1000 }, 200),
       desdobramentos: listaPorDia(raw.desdobramentos, { texto: 4000 }, 200),
+      dias: diasValidos(raw.dias),
       orgaos_apoio: textoLongo(raw.orgaos_apoio, 4000),
       vitimas_docs: documentosValidos(raw.vitimas_docs),
       destinatarios: texto(raw.destinatarios, 120) || DESTINO_PADRAO,
@@ -175,12 +246,29 @@
   var SEXO = { M: 'Masculino', F: 'Feminino' };
   function rotuloDe(lista, chave) { var x = lista.filter(function (y) { return y[0] === chave; })[0]; return x ? x[1] : ''; }
 
+  // extra.dia ('AAAA-MM-DD'): o IPO daquele dia (efetivo, procedimentos, recursos, órgãos e desdobramento só do dia).
+  // extra.geral: só os dados gerais da ocorrência (sem nada que é de cada dia).
   function itens(op, extra) {
     op = op || {};
     extra = extra || {};
     var i = normalizarIpo(op.ipo || {});
     var vit = (extra.vitimas || []).filter(function (v) { return v && v.nome; });
     var diario = extra.diario || [];
+    var umDia = extra.dia ? ipoDoDia(op.ipo, extra.dia, diario) : null;
+    if (umDia || extra.geral) {
+      // num dia (ou nos dados gerais) os registros antigos do diário só entram pelo ipoDoDia
+      diario = [];
+      i.efetivo = umDia && (umDia.qtd != null || umDia.nomes) ? [{ dia: umDia.dia, qtd: umDia.qtd, nomes: umDia.nomes }] : [];
+      i.desdobramentos = umDia ? [umDia.texto, umDia.textoDiario].filter(Boolean).map(function (t) { return { dia: umDia.dia, texto: t }; }) : [];
+      if (umDia) {
+        if (umDia.procedimentos.length || umDia.procedimentos_outros) { i.procedimentos = umDia.procedimentos; i.procedimentos_outros = umDia.procedimentos_outros; }
+        var recDia = [umDia.recursos, umDia.recursosDiario].filter(Boolean).join('\n');
+        if (recDia) i.recursos_cb = recDia;
+        if (umDia.orgaos) i.orgaos_apoio = umDia.orgaos;
+      }
+      i.dias = umDia ? i.dias.filter(function (x) { return x.dia === umDia.dia; }) : [];
+      if (!umDia) i.bms_envolvidos = null;
+    }
     var out = [];
     function add(rotulo, valor) { if (valor != null && valor !== '') out.push({ rotulo: rotulo, valor: valor }); }
     // cabeçalho
@@ -212,6 +300,7 @@
     out.push({ rotulo: 'Buscas preliminares realizadas em casas de parentes, hospitais, etc.?', marcas: BUSCAS.map(function (b) { return [b[1], i.buscas_preliminares === b[0]]; }) });
     out.push({ rotulo: 'Possibilidade real de vida?', marcas: VIDA.map(function (b) { return [b[1], i.possibilidade_vida === b[0]]; }) });
     var proc = i.procedimentos.slice();
+    if (!umDia) i.dias.forEach(function (x) { x.procedimentos.forEach(function (k) { if (proc.indexOf(k) === -1) proc.push(k); }); });
     diario.forEach(function (e) { if (e.tipo === 'procedimento' && e.ref_id && proc.indexOf(e.ref_id) === -1 && PROCEDIMENTOS.some(function (p) { return p[0] === e.ref_id; })) proc.push(e.ref_id); });
     var marcasProc = PROCEDIMENTOS.filter(function (p) { return proc.indexOf(p[0]) !== -1; }).map(function (p) { return [p[1], true]; });
     if (i.procedimentos_outros) marcasProc.push([i.procedimentos_outros, true]);
@@ -219,6 +308,7 @@
     add('Contexto/histórico/cenário do desaparecimento', op.descricao || '');
     var rec = i.recursos_cb ? i.recursos_cb.split('\n').filter(function (l) { return l.trim(); }).map(function (l) { return /^[-•]/.test(l) ? l : '- ' + l; }) : [];
     diario.forEach(function (e) { if (e.tipo === 'recurso' && e.detalhe) rec.push('- ' + e.detalhe); });
+    if (!umDia) i.dias.forEach(function (x) { if (x.recursos) rec.push('- ' + diaBr(x.dia) + ': ' + x.recursos.replace(/\n+/g, '; ')); });
     if (rec.length) out.push({ rotulo: 'Recursos CB deslocados e sendo utilizados', linhas: rec });
     if (i.efetivo.length) {
       out.push({ rotulo: 'Quantidade de BMs diretamente envolvidos na resposta', linhas: i.efetivo.map(function (x) {
@@ -231,7 +321,10 @@
     diario.forEach(function (e) { if (e.tipo === 'desdobramento' && e.detalhe) { var k = diaDoRegistro(e.ocorrido_em); if (k) (porDia[k] = porDia[k] || []).push(e.detalhe); } });
     var dias = Object.keys(porDia).sort();
     if (dias.length) out.push({ rotulo: 'Desdobramentos/situação atual', linhas: dias.map(function (k) { return diaBr(k) + ': ' + porDia[k].join('\n'); }), espacado: true });
-    if (i.orgaos_apoio) out.push({ rotulo: 'Órgãos de Apoio', linhas: i.orgaos_apoio.split('\n').filter(function (l) { return l.trim(); }), espacado: true });
+    var orgaos = i.orgaos_apoio ? i.orgaos_apoio.split('\n').filter(function (l) { return l.trim(); }) : [];
+    if (!umDia) i.dias.forEach(function (x) { x.orgaos.split('\n').forEach(function (l) { l = l.trim(); if (l && orgaos.indexOf(l) === -1) orgaos.push(l); }); });
+    if (orgaos.length) out.push({ rotulo: 'Órgãos de Apoio', linhas: orgaos, espacado: true });
+    if (umDia && umDia.situacao) out.push({ rotulo: 'Situação ao fim do dia / próximos passos', linhas: umDia.situacao.split('\n').filter(function (l) { return l.trim(); }) });
     if (i.imagens_anexas != null) out.push({ rotulo: 'Imagens anexas junto a esta mensagem?', marcas: [['Sim', i.imagens_anexas === true], ['Não', i.imagens_anexas === false]] });
     if (i.responsavel_informacoes) out.push({ rotulo: 'Responsável pelas informações', valor: i.responsavel_informacoes, semPonto: true });
     return out;
@@ -241,6 +334,7 @@
   function textoWhatsApp(op, extra) {
     var i = normalizarIpo((op || {}).ipo || {});
     var l = ['*' + (i.destinatarios || DESTINO_PADRAO) + ' - Informe Padrão de Ocorrência (IPO)*', '', '*ATENÇÃO: uso exclusivo nos grupos do CBMPR.* ', '__________________________________________ ', ''];
+    if (extra && extra.dia) l.push('*IPO do dia ' + diaBr(extra.dia) + '*', '');
     itens(op, extra).forEach(function (x) {
       if (x.cabecalho) { l.push('*' + x.cabecalho + '*'); return; }
       if (l[l.length - 1] !== '') l.push('');
@@ -259,7 +353,7 @@
   }
 
   raiz.Ipo = {
-    normalizarIpo: normalizarIpo, itens: itens, textoWhatsApp: textoWhatsApp, dataExtensa: dataExtensa, dataCurta: dataCurta, diaValido: diaValido,
+    normalizarIpo: normalizarIpo, itens: itens, ipoDoDia: ipoDoDia, gravarDia: gravarDia, diasComIpo: diasComIpo, diaDoRegistro: diaDoRegistro, textoWhatsApp: textoWhatsApp, dataExtensa: dataExtensa, dataCurta: dataCurta, diaValido: diaValido,
     MEIOS: MEIOS, BUSCAS: BUSCAS, QUALIDADE_HORA: QUALIDADE_HORA, qualidadeHora: qualidadeHora, textoHoraVisto: textoHoraVisto, VIDA: VIDA, PROCEDIMENTOS: PROCEDIMENTOS, DESTINO_PADRAO: DESTINO_PADRAO,
     NATUREZAS: NATUREZAS, OUTRA_NATUREZA: OUTRA_NATUREZA, PERFIS_VITIMA: PERFIS_VITIMA,
     ehAquatica: ehAquatica, tipoDaNatureza: tipoDaNatureza,

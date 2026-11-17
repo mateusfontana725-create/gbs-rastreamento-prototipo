@@ -162,6 +162,23 @@ legível, elas não aparecem.
   empregados (K9, drone, embarcações…), os órgãos de apoio (só o nome do órgão, sem os nomes dos agentes) e a linha do
   tempo. Continua sem nomes, documentos, fotos, trilhas, posições e observações.
 
+### IPO (Diário): o IPO de cada dia junto com o diário (migração 083)
+
+- O **Diário** passou a se chamar **IPO (Diário)** (menu, lista de operações e relatórios). Em cada dia, no topo, fica o
+  **IPO do dia**: o que foi feito, o efetivo (quantidade e quem), os procedimentos de busca do dia, os recursos e órgãos de
+  apoio do dia e a **situação ao fim do dia / próximos passos** — quem chega no dia seguinte vê o que foi feito e como a
+  busca ficou. Botões: **+ IPO do dia**, Editar/Preencher no cartão de cada dia e **📋 Copiar** (texto do IPO só daquele
+  dia, para o WhatsApp). Atalhos no formulário: militares do app naquele dia, recursos do SCI e "Repetir do dia anterior".
+- **Dados gerais do IPO** (cabeçalho, local, vítima, buscas preliminares, recursos fixos) continuam numa tela própria,
+  aberta pelo IPO (Diário) ou pelo menu "IPO · dados gerais". O IPO completo para o WhatsApp junta todos os dias.
+- **Relatório IPO (Diário)**: um dia, um período (de… até…) ou tudo, do acionamento até hoje. Sai **separado dia a dia**:
+  um resumo com uma linha por dia, os dados gerais da ocorrência e, para cada dia, o IPO do dia, as pessoas que estiveram
+  em campo (horário e quilômetros), o mapa só com as trilhas do dia (setores trabalhados no dia em destaque), os setores
+  trabalhados (registros, equipes e trilhas que passaram dentro), encontros, o diário e os pontos daquele dia. O de um dia
+  já terminado fica guardado; o relatório diário automático usa o mesmo formato.
+- **Banco:** migração `083_ipo_diario.sql` (função `relatorio_trilhas_dias`: trilhas e quilômetros de cada pessoa em cada
+  dia, sem os trechos apagados e sem a base). Sem ela o relatório sai sem as trilhas e avisa.
+
 ### Retomar uma operação encerrada (migração 082)
 
 - **"↺ Retomar operação"** na faixa de "Somente visualização" da operação encerrada e no menu ⋯ da lista de operações.

@@ -153,5 +153,65 @@ teste('o relatório da imprensa não traz o IPO (tem nomes)', () => {
   assert.ok(/Procura por um homem de 19 anos/.test(tx));
 });
 
+console.log('IPO (Diário): IPO de cada dia e relatório separado por dia');
+teste('gravarDia grava só aquele dia e mantém os dados gerais e os outros dias', () => {
+  let ipo = { unidade: 'X', rgo: '1', desdobramentos: [{ dia: '2026-11-03', texto: 'Dia 3' }], efetivo: [{ dia: '2026-11-03', qtd: 4, nomes: 'A' }] };
+  ipo = I.gravarDia(ipo, { dia: '2026-11-04', texto: 'Varredura com K9', qtd: '6', nomes: 'B e C', procedimentos: ['k9', 'invalido'], recursos: 'ABTS 12', orgaos: 'PMPR', situacao: 'Amanhã: setor 4', por: 'Sgt Um' });
+  assert.strictEqual(ipo.unidade, 'X');
+  assert.deepStrictEqual(ipo.desdobramentos.map((x) => x.dia), ['2026-11-03', '2026-11-04']);
+  assert.strictEqual(ipo.efetivo[1].qtd, 6);
+  assert.deepStrictEqual(ipo.dias[0].procedimentos, ['k9']);
+  // regravar o dia troca (não duplica); dia vazio sai das listas
+  ipo = I.gravarDia(ipo, { dia: '2026-11-04', texto: 'Outro texto', qtd: null, nomes: '' });
+  assert.deepStrictEqual(ipo.desdobramentos.filter((x) => x.dia === '2026-11-04').map((x) => x.texto), ['Outro texto']);
+  assert.ok(!ipo.efetivo.some((x) => x.dia === '2026-11-04') && !ipo.dias.length);
+  assert.deepStrictEqual(I.diasComIpo(ipo), ['2026-11-03', '2026-11-04']);
+});
+teste('ipoDoDia junta o IPO do dia e os registros antigos do diário daquele dia', () => {
+  const ipo = I.gravarDia({}, { dia: '2026-11-04', texto: 'Feito', procedimentos: ['drone'], situacao: 'Pendente setor 2' });
+  const d = I.ipoDoDia(ipo, '2026-11-04', [{ tipo: 'procedimento', ref_id: 'k9', ocorrido_em: local(2026, 11, 4, 10, 0) }, { tipo: 'recurso', detalhe: 'Viatura', ocorrido_em: local(2026, 11, 4, 11, 0) }, { tipo: 'recurso', detalhe: 'Outro dia', ocorrido_em: local(2026, 11, 5, 11, 0) }]);
+  assert.deepStrictEqual(d.procedimentos, ['drone', 'k9']);
+  assert.strictEqual(d.recursosDiario, 'Viatura');
+  assert.ok(!d.vazio && I.ipoDoDia(ipo, '2026-11-05', []).vazio);
+});
+teste('texto do WhatsApp de um dia traz só aquele dia', () => {
+  let ipo = I.gravarDia(op.ipo, { dia: '2026-11-04', texto: 'Só do dia 4', qtd: 3, nomes: 'D', situacao: 'Continuar amanhã' });
+  const t = I.textoWhatsApp(Object.assign({}, op, { ipo }), { dia: '2026-11-04' });
+  assert.ok(/IPO do dia 04\/11\/2026/.test(t) && /Só do dia 4/.test(t) && /Continuar amanhã/.test(t));
+  assert.ok(!/03\/11\/2026:/.test(t), 'não traz outro dia');
+});
+teste('relatório do IPO (Diário) separa cada dia: IPO, pessoas, km, setores e diário só daquele dia', () => {
+  const setor = { id: 'S1', nome: 'Setor Margem', forma: 'poligono', pontos: [[-22.90, -51.67], [-22.90, -51.65], [-22.89, -51.65], [-22.89, -51.67]], status: 'andamento', missoes: [] };
+  const d = Object.assign({ gerado_em: new Date().toISOString(), gerado_por_nome: 'Sgt Um', vitimas: [], pontos: [], fotos: [], grupos: [] }, {
+    operacao: Object.assign({}, op, { ipo: I.gravarDia(Object.assign({}, op.ipo, { desdobramentos: [], efetivo: [] }), { dia: '2026-11-04', texto: 'Varredura na margem com K9', qtd: 5, nomes: 'Equipe Alfa' }) }),
+    setores: [setor],
+    participantes: [{ id: 'P1', nome: 'Cb Alves', tipo: 'militar', entrou_em: local(2026, 11, 3, 8, 0), grupos: [{ grupo: 'Alfa' }] }, { id: 'P2', nome: 'Voluntário Beto', tipo: 'civil', entrou_em: local(2026, 11, 4, 9, 0), grupos: [] }],
+    diario: [
+      { id: 1, ocorrido_em: local(2026, 11, 3, 10, 0), categoria: 'setor', tipo: 'setor_iniciado', titulo: 'Setor iniciado', ref_id: 'S1', autor_nome: 'Sistema', origem: 'auto' },
+      { id: 2, ocorrido_em: local(2026, 11, 4, 15, 0), categoria: 'observacao', tipo: 'observacao', titulo: 'Observação', detalhe: 'Chuva forte à tarde', autor_nome: 'Sgt Um', origem: 'manual' },
+    ],
+  });
+  const trilhas = [
+    { participante_id: 'P1', nome: 'Cb Alves', tipo: 'militar', dia: '2026-11-03', primeiro: local(2026, 11, 3, 8, 0), ultimo: local(2026, 11, 3, 16, 0), n: 40, km: 7.25, pontos: [[-22.895, -51.66], [-22.896, -51.661]] },
+    { participante_id: 'P1', nome: 'Cb Alves', tipo: 'militar', dia: '2026-11-04', primeiro: local(2026, 11, 4, 8, 0), ultimo: local(2026, 11, 4, 12, 0), n: 20, km: 3.1, pontos: [[-22.80, -51.60], [-22.81, -51.61]] },
+  ];
+  const dias = RP.separarDias(d, trilhas, RP.diasEntre('2026-11-03', '2026-11-04'));
+  assert.strictEqual(dias.length, 2);
+  assert.deepStrictEqual(dias[0].pessoas.map((p) => p.nome), ['Cb Alves']);
+  assert.deepStrictEqual(dias[1].pessoas.map((p) => p.nome).sort(), ['Cb Alves', 'Voluntário Beto']);
+  assert.ok(dias[1].pessoas.find((p) => p.nome === 'Voluntário Beto').semPosicao);
+  assert.strictEqual(dias[0].setores.length, 1, 'dia 3: setor com registro e trilha dentro');
+  assert.deepStrictEqual(dias[0].setores[0].pessoas, ['Cb Alves']);
+  assert.strictEqual(dias[1].setores.length, 0, 'dia 4: a trilha ficou fora do setor');
+  assert.strictEqual(dias[0].numero, 2);
+  assert.ok(dias[0].ipo.vazio && !dias[1].ipo.vazio);
+  const tx = textos(RP.montarIpoDiario(d, {}, { dias, subtitulo: 'De 03/11 a 04/11', titulo: 'IPO', marca: 'IPO' }).content).join(' | ');
+  assert.ok(/IPO \(DIÁRIO\) DA OPERAÇÃO/.test(tx) && /Resumo por dia/.test(tx));
+  assert.ok(/2º dia da operação/.test(tx) && /3º dia da operação/.test(tx));
+  assert.ok(/Varredura na margem com K9/.test(tx) && /Equipe Alfa/.test(tx) && /Chuva forte à tarde/.test(tx));
+  assert.ok(/7,3 km|7,2 km/.test(tx) && /IPO do dia não preenchido/.test(tx));
+  assert.ok(/dados gerais da ocorrência/.test(tx) && /RGO 20263BBM12221/.test(tx));
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes do IPO e do relatório resumido passaram.');

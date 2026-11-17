@@ -155,12 +155,54 @@
 
   function clonar(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
+  // Trilhas de cada dia (relatorio_trilhas_dias, migração 083) montadas com as posições guardadas no arquivo:
+  // mesmas regras do banco (precisão até 100 m, sem os trechos apagados, a linha sem os pontos na base, até 150 pontos).
+  function trilhasDiasDoArquivo(doc, args) {
+    var t = doc.tabelas || {};
+    var ini = String(args.p_ini || ''), fim = String(args.p_fim || '');
+    function dd(n) { return (n < 10 ? '0' : '') + n; }
+    function diaDe(v) { var d = new Date(v); return d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate()); }
+    function km(a, b) {
+      var k = Math.PI / 180, dLat = (b.lat - a.lat) * k, dLng = (b.lng - a.lng) * k;
+      var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * k) * Math.cos(b.lat * k) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      return 2 * 6371.0088 * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+    var ocultas = {};
+    (t.trilhas_ocultas || []).forEach(function (h) { ocultas[h.participante_id] = (h.intervalos || []).map(function (x) { return [Date.parse(x.de), Date.parse(x.ate)]; }); });
+    var pessoas = {};
+    (t.participantes || []).forEach(function (p) { pessoas[p.id] = p; });
+    var grupos = {};
+    (t.posicoes || []).forEach(function (q) {
+      if (q.precisao != null && q.precisao > 100) return;
+      var ms = Date.parse(q.registrado_em);
+      var dia = diaDe(ms);
+      if (dia < ini || dia > fim) return;
+      if ((ocultas[q.participante_id] || []).some(function (x) { return ms >= x[0] && ms <= x[1]; })) return;
+      var k = q.participante_id + '|' + dia;
+      (grupos[k] = grupos[k] || { participante_id: q.participante_id, dia: dia, pts: [] }).pts.push({ lat: Number(q.lat), lng: Number(q.lng), ms: ms, base: Boolean(q.na_base) });
+    });
+    return Object.keys(grupos).map(function (k) {
+      var g = grupos[k];
+      g.pts.sort(function (a, b) { return a.ms - b.ms; });
+      var linha = g.pts.filter(function (p) { return !p.base; });
+      var soma = 0;
+      for (var i = 1; i < linha.length; i++) { var d = km(linha[i - 1], linha[i]); if (d < 1.5) soma += d; }
+      var passo = Math.max(1, Math.ceil(linha.length / 150));
+      var p = pessoas[g.participante_id] || {};
+      return { participante_id: g.participante_id, nome: p.nome || '', tipo: p.tipo || '', dia: g.dia,
+        primeiro: new Date(g.pts[0].ms).toISOString(), ultimo: new Date(g.pts[g.pts.length - 1].ms).toISOString(), n: g.pts.length,
+        km: Math.round(soma * 100) / 100,
+        pontos: linha.filter(function (x, i) { return i === 0 || i === linha.length - 1 || (i + 1) % passo === 0; }).map(function (x) { return [x.lat, x.lng]; }) };
+    }).sort(function (a, b) { return a.dia < b.dia ? -1 : a.dia > b.dia ? 1 : String(a.nome).localeCompare(String(b.nome)); });
+  }
+
   // RPC: leitura guardada no arquivo, ou undefined (vai ao servidor)
   function resolverRpc(reg, nome, args) {
     var id = args && args.p_operacao;
     var e = id && reg[String(id)];
     if (!e) return undefined;
     var leituras = e.doc.leituras || {};
+    if (nome === 'relatorio_trilhas_dias') return trilhasDiasDoArquivo(e.doc, args);
     if (LEITURAS_DO_ARQUIVO.indexOf(nome) === -1) return undefined;
     if (leituras[nome] === undefined || leituras[nome] === null) {
       var erro = new Error('Esta leitura não foi guardada no arquivo da operação (' + nome + ').');

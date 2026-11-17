@@ -3531,5 +3531,44 @@ console.log('Retomar operação encerrada (migração 082)');
   chk(st === 'ativa', 'operação retomada há pouco não é encerrada pela salvaguarda dos 30 dias', st);
 }
 
-console.log('\nMigrações 007–082 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('IPO (Diário): trilhas de cada dia (migração 083)');
+{
+  await db.exec(ler('supabase/migracoes/083_ipo_diario.sql').replace(/^notify .*$/m, ''));
+  await db.exec(ler('supabase/migracoes/083_ipo_diario.sql').replace(/^notify .*$/m, ''));
+  chk(true, 'migração 083 executa duas vezes (idempotente)');
+  const op83 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 083', p_retencao_horas: 0 });
+  const an83 = [await usuario(null, true), await usuario(null, true)];
+  const p83 = [];
+  for (let i = 0; i < 2; i++) p83.push(await rpc(an83[i], 'ingressar', { p_token: op83.token_civil, p_nome: 'Dia ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+  // pessoa 1: 3 pontos no dia 10 (um na base, um com precisão ruim) e 2 no dia 11; pessoa 2: só no dia 11
+  const ins = (p, lat, quando, prec, base) => db.query(`insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em, recebido_em, na_base)
+    values ($1, $2, gen_random_uuid(), $3, -49.3, $4, ($5::timestamp at time zone 'America/Sao_Paulo'), now(), $6)`, [op83.id, p.participante_id, lat, prec, quando, base]);
+  await ins(p83[0], -25.500, '2026-11-10 08:00', 8, true);
+  await ins(p83[0], -25.501, '2026-11-10 09:00', 8, false);
+  await ins(p83[0], -25.510, '2026-11-10 10:00', 8, false);
+  await ins(p83[0], -25.600, '2026-11-10 11:00', 500, false);
+  await ins(p83[0], -25.520, '2026-11-11 23:30', 8, false);
+  await ins(p83[0], -25.530, '2026-11-11 23:50', 8, false);
+  await ins(p83[1], -25.400, '2026-11-11 07:00', 8, false);
+  await ins(p83[1], -25.401, '2026-11-11 07:10', 8, false);
+  const r = await rpc(resp1, 'relatorio_trilhas_dias', { p_operacao: op83.id, p_ini: '2026-11-10', p_fim: '2026-11-11', p_fuso: 'America/Sao_Paulo' });
+  const de = (nome, dia) => r.find((x) => x.nome === nome && x.dia === dia);
+  chk(r.length === 3, 'uma linha por pessoa e por dia', r.map((x) => x.nome + ' ' + x.dia));
+  const d10 = de('Dia 1', '2026-11-10');
+  chk(d10 && d10.n === 3 && d10.pontos.length === 2, 'dia 10: conta o ponto da base, mas a linha não passa por ele; precisão ruim fica de fora', d10);
+  chk(d10 && Math.abs(d10.km - 1.0) < 0.1, 'quilômetros do dia (sem a base)', d10 && d10.km);
+  chk(de('Dia 1', '2026-11-11') && de('Dia 1', '2026-11-11').n === 2, 'o dia é contado no fuso informado (23h30 e 23h50 ficam no dia 11)');
+  chk(de('Dia 2', '2026-11-11') && !de('Dia 2', '2026-11-10'), 'quem não andou no dia não aparece nele');
+  const so10 = await rpc(resp1, 'relatorio_trilhas_dias', { p_operacao: op83.id, p_ini: '2026-11-10', p_fim: '2026-11-10', p_fuso: 'Fuso/Invalido' });
+  chk(so10.length === 1 && so10[0].dia === '2026-11-10', 'período de um dia só (fuso inválido usa o de Brasília)', so10);
+  // trecho apagado com a borracha não entra
+  await rpc(resp1, 'salvar_trilha_oculta', { p_participante: p83[1].participante_id, p_intervalos: JSON.stringify([{ de: '2026-11-11T09:59:00Z', ate: '2026-11-11T10:11:00Z' }]) });
+  const r2 = await rpc(resp1, 'relatorio_trilhas_dias', { p_operacao: op83.id, p_ini: '2026-11-11', p_fim: '2026-11-11', p_fuso: 'America/Sao_Paulo' });
+  chk(!r2.find((x) => x.nome === 'Dia 2'), 'trecho apagado com a borracha não entra no relatório', r2.map((x) => x.nome));
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'relatorio_trilhas_dias', { p_operacao: op83.id, p_ini: '2026-11-10', p_fim: '2026-11-11' }))), 'quem não é responsável da operação não lê as trilhas');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'relatorio_trilhas_dias', { p_operacao: op83.id, p_ini: '2026-11-11', p_fim: '2026-11-10' }))), 'período invertido: recusado');
+  chk(/permission denied|sem_permissao/.test(await erroDe(como(null, `select public.relatorio_trilhas_dias($1, '2026-11-10', '2026-11-11')`, [op83.id], 'anon'))), 'anônimo não chama relatorio_trilhas_dias');
+}
+
+console.log('\nMigrações 007–083 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

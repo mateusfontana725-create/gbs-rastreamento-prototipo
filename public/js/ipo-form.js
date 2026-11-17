@@ -9,7 +9,10 @@
  *   Grava em operacoes.ipo (salvar_ipo_operacao). A natureza e o início das operações continuam no cadastro
  *   (mudam o tipo da operação). Registros antigos do diário (procedimento, recurso, desdobramento) continuam valendo:
  *   entram no informe junto com o que for escrito aqui.
- *   API: window.IpoForm = { abrir(op, opcoes), copiar(op) }.
+ *   O IPO é preenchido dia a dia no IPO (Diário): abrirDia(op, dia) grava o que foi feito, o efetivo, os procedimentos,
+ *   os recursos, os órgãos de apoio e a situação ao fim do dia (Ipo.gravarDia, só aquele dia). abrir(op) fica com os
+ *   dados gerais da ocorrência (cabeçalho, local, vítima, busca, recursos e órgãos fixos).
+ *   API: window.IpoForm = { abrir(op, opcoes), abrirDia(op, dia, opcoes), copiar(op), copiarDia(op, dia) }.
  * ===================================================================== */
 (function () {
   'use strict';
@@ -92,63 +95,6 @@
       .map(function (x) { return x.nome + (x.quantidade > 1 ? ' ×' + x.quantidade : '') + (x.instituicao ? ' - ' + x.instituicao : '') + '.'; });
   }
 
-  // Lista editável por dia (efetivo ou desdobramentos). campos: [{ chave, tipo: 'qtd'|'texto'|'area', rotulo, ph }]
-  function listaDias(itens, campos, rotuloNovo) {
-    var caixa = el('div', { classe: 'ipo-dias' });
-    var linhas = [];
-    function linha(x) {
-      var dia = el('input', { classe: 'campo', type: 'date', value: x.dia || hojeLocal(), 'aria-label': 'Dia' });
-      var ctrls = {};
-      var celulas = [el('div', { classe: 'ipo-dia-data' }, [dia])];
-      campos.forEach(function (c) {
-        var ctl = c.tipo === 'area' ? el('textarea', { classe: 'campo', rows: '3', maxlength: '4000', placeholder: c.ph || '', 'aria-label': c.rotulo })
-          : el('input', { classe: 'campo' + (c.tipo === 'qtd' ? ' ipo-qtd' : ''), type: c.tipo === 'qtd' ? 'number' : 'text', min: c.tipo === 'qtd' ? '0' : null, max: c.tipo === 'qtd' ? '999' : null,
-            inputmode: c.tipo === 'qtd' ? 'numeric' : null, maxlength: c.tipo === 'qtd' ? null : '1000', placeholder: c.ph || '', 'aria-label': c.rotulo });
-        ctl.value = x[c.chave] != null ? String(x[c.chave]) : '';
-        ctrls[c.chave] = ctl;
-        celulas.push(el('div', { classe: 'ipo-dia-' + c.chave }, [ctl]));
-      });
-      var reg = { dia: dia, ctrls: ctrls };
-      var tirar = el('button', { classe: 'btn btn-pequeno ipo-dia-tirar', type: 'button', texto: '✕', 'aria-label': 'Tirar este dia', onclick: function () {
-        linhas = linhas.filter(function (l) { return l !== reg; }); no.remove();
-      } });
-      var no = el('div', { classe: 'ipo-dia ipo-dia-' + campos.map(function (c) { return c.tipo; }).join('-') }, celulas.concat([tirar]));
-      reg.no = no;
-      linhas.push(reg);
-      caixa.appendChild(no);
-      return reg;
-    }
-    (itens || []).forEach(linha);
-    var api = {
-      elemento: el('div', null, [caixa]),
-      ler: function () {
-        return linhas.map(function (l) {
-          var r = { dia: l.dia.value };
-          campos.forEach(function (c) { r[c.chave] = l.ctrls[c.chave].value; });
-          return r;
-        });
-      },
-      adicionar: function (x) { var r = linha(x || {}); var prim = r.ctrls[campos[campos.length - 1].chave]; setTimeout(function () { prim.focus(); }, 30); return r; },
-      // completa os dias que ainda não têm linha (não mexe no que já foi escrito)
-      completar: function (lista) {
-        var tem = {};
-        linhas.forEach(function (l) { tem[l.dia.value] = l; });
-        var n = 0;
-        lista.forEach(function (x) {
-          var l = tem[x.dia];
-          if (!l) { linha(x); n++; return; }
-          var vazio = campos.every(function (c) { return !String(l.ctrls[c.chave].value || '').trim(); });
-          if (vazio) { campos.forEach(function (c) { l.ctrls[c.chave].value = x[c.chave] != null ? String(x[c.chave]) : ''; }); n++; }
-        });
-        // em ordem de dia
-        linhas.sort(function (a, b) { return a.dia.value < b.dia.value ? -1 : a.dia.value > b.dia.value ? 1 : 0; }).forEach(function (l) { caixa.appendChild(l.no); });
-        return n;
-      },
-    };
-    api.botaoNovo = el('button', { classe: 'btn btn-pequeno', type: 'button', texto: rotuloNovo || '+ Dia', onclick: function () { api.adicionar({ dia: hojeLocal() }); } });
-    return api;
-  }
-
   function radios(nome, lista, marcado) {
     return el('div', { classe: 'opcoes-ipo', role: 'radiogroup' }, lista.map(function (x) {
       return el('label', { classe: 'linha-opcao' }, [el('input', { type: 'radio', name: nome, value: x[0], checked: marcado === x[0] ? true : null }), ' ' + x[1]]);
@@ -200,21 +146,12 @@
     // recursos e efetivo
     var recursos = el('textarea', { classe: 'campo', id: 'ipo-recursos', rows: '4', maxlength: '4000', placeholder: 'Um por linha. Ex.:\nABS BM 13629 3ºBBM/2CIA/3PEL - Rolândia.\nABRESC BM 004 - Canil Setorial 3° BBM.' });
     recursos.value = ipo.recursos_cb;
-    var efetivo = listaDias(ipo.efetivo, [{ chave: 'qtd', tipo: 'qtd', rotulo: 'Quantidade de BMs', ph: 'Qtd' }, { chave: 'nomes', tipo: 'texto', rotulo: 'Quem', ph: 'Ex.: Sgt. Berzotti, Cb. Alves e Sd. Guimarães' }], '+ Dia');
-    var desdob = listaDias(ipo.desdobramentos, [{ chave: 'texto', tipo: 'area', rotulo: 'O que foi feito no dia', ph: 'O que foi feito e o que se apurou neste dia' }], '+ Hoje');
     var desdobDiario = extra.diario.filter(function (e) { return e.tipo === 'desdobramento'; }).length;
     var orgaos = el('textarea', { classe: 'campo', id: 'ipo-orgaos', rows: '3', maxlength: '4000', placeholder: 'Um por linha. Ex.:\nPMPR: 02 PMs - Patrulha Rural\nDefesa Civil de Guaraci' });
     orgaos.value = ipo.orgaos_apoio;
     var responsavel = el('input', { classe: 'campo', id: 'ipo-resp', maxlength: '1000', value: ipo.responsavel_informacoes, placeholder: 'Ex.: Cb. Alves/GBS' });
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
 
-    var btnEfetivoApp = el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '↻ Preencher pelos militares do app', title: 'Para cada dia, os militares e responsáveis que enviaram posição pelo app (não muda o que já foi escrito)',
-      onclick: function () {
-        var lista = efetivoPeloApp();
-        if (!lista.length) { UI.aviso('Nenhum militar com posição registrada nesta operação.', 'erro', 6000); return; }
-        var n = efetivo.completar(lista);
-        UI.aviso(n ? n + ' dia(s) preenchido(s) pelos militares do app. Confira os nomes.' : 'Os dias já estavam preenchidos.', 'ok', 6000);
-      } });
     var btnRecursosSci = el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '↻ Usar os recursos do SCI', onclick: async function () {
       try {
         var linhas = await recursosDoSci(op);
@@ -226,7 +163,7 @@
     } });
 
     var form = el('form', { classe: 'form-padrao form-ipo', novalidate: true }, [
-      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'IPO · Informe Padrão de Ocorrência' }, [UI.dica('Tudo do informe num lugar só, na ordem do IPO. O que já existe no app (início, vítimas, natureza) entra sozinho. "Copiar para o WhatsApp" monta o texto no formato dos grupos.')]),
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'IPO · dados gerais da ocorrência' }, [UI.dica('O que vale para a operação inteira, na ordem do IPO. O que já existe no app (início, vítimas, natureza) entra sozinho. O que muda a cada dia (efetivo, o que foi feito, situação) fica no IPO do dia, no IPO (Diário). "Copiar para o WhatsApp" monta o informe completo.')]),
       UI.secao('Cabeçalho', [UI.grade([
         UI.campo('IPO para (destinatários)', destino, { para: 'ipo-destino' }),
         UI.campo('Unidade', unidade, { para: 'ipo-unidade', opcional: true }),
@@ -247,15 +184,15 @@
         UI.campo('Possibilidade real de vida?', radios('ipo-vida', I.VIDA, ipo.possibilidade_vida), { largo: true }),
         UI.campo('Procedimentos de busca sendo realizados', el('div', null, [gradeProc, procOutros, procDiario ? el('small', { classe: 'muted', texto: procDiario + ' registro(s) de procedimento no diário também entram.' }) : null]), { largo: true }),
       ]),
-      UI.secao('Recursos e efetivo', [
-        UI.campo('Recursos CB deslocados e sendo utilizados', recursos, { para: 'ipo-recursos', largo: true }),
+      UI.secao('Recursos', [
+        UI.campo('Recursos CB deslocados e sendo utilizados (fixos da operação)', recursos, { para: 'ipo-recursos', largo: true, ajuda: 'O que foi empregado só num dia vai no IPO daquele dia.' }),
         el('div', { classe: 'acoes-linha' }, [btnRecursosSci]),
-        UI.campo('BMs diretamente envolvidos, por dia', efetivo.elemento, { largo: true }),
-        el('div', { classe: 'acoes-linha' }, [efetivo.botaoNovo, btnEfetivoApp]),
       ]),
-      UI.secao('Desdobramentos / situação atual', [
-        desdob.elemento,
-        el('div', { classe: 'acoes-linha' }, [desdob.botaoNovo]),
+      UI.secao('Cada dia: efetivo e desdobramentos', [
+        el('p', { classe: 'muted', texto: I.diasComIpo(op.ipo).length
+          ? 'Dias com IPO preenchido: ' + I.diasComIpo(op.ipo).map(function (k) { return k.split('-').reverse().slice(0, 2).join('/'); }).join(', ') + '. O efetivo, o que foi feito, os procedimentos e a situação de cada dia ficam no IPO do dia (IPO · Diário).'
+          : 'O efetivo, o que foi feito, os procedimentos e a situação de cada dia ficam no IPO do dia (IPO · Diário).' }),
+        editavel ? el('div', { classe: 'acoes-linha' }, [el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ipo-abrir-hoje', texto: '+ IPO de hoje', onclick: function () { abrirDia(op, hojeLocal(), { aoSalvar: opcoes.aoSalvar }); } })]) : null,
         desdobDiario ? el('small', { classe: 'muted', texto: desdobDiario + ' desdobramento(s) registrado(s) no diário também entram, no dia deles.' }) : null,
       ]),
       UI.secao('Fechamento', [UI.grade([
@@ -281,7 +218,7 @@
         acionamento_cb: isoLocal(acionCb.value), desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value,
         meio_liquido: aquatica ? marcadoEm(form, 'ipo-meio') : ipo.meio_liquido, pessoas_perdidas: pessoas.value, vitimas_docs: docsIpo,
         buscas_preliminares: marcadoEm(form, 'ipo-buscas'), possibilidade_vida: marcadoEm(form, 'ipo-vida'), procedimentos: proc, procedimentos_outros: procOutros.value,
-        recursos_cb: recursos.value, efetivo: efetivo.ler(), desdobramentos: desdob.ler(), orgaos_apoio: orgaos.value,
+        recursos_cb: recursos.value, orgaos_apoio: orgaos.value,
         imagens_anexas: img === 'sim' ? true : img === 'nao' ? false : null, responsavel_informacoes: responsavel.value,
       }));
     }
@@ -309,5 +246,157 @@
     var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo', empilhar: true });
   }
 
-  window.IpoForm = { abrir: abrir, copiar: copiar };
+  /* ---------- IPO do dia (fica no IPO · Diário) ---------- */
+  function diaBr(k) { var p = String(k).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function primeiroDia(op) { return diaDe(C.paraMs(op.acionado_em || op.criada_em) || Date.now()); }
+  async function ipoAtual(op) {
+    try {
+      var r = await C.consultar(C.cliente.from('operacoes').select('ipo').eq('id', op.id));
+      if (r && r[0]) return r[0].ipo || {};
+    } catch (e) { /* usa o que o painel tem */ }
+    return op.ipo || {};
+  }
+  async function copiarDia(op, dia) {
+    try { await mostrarTexto(I.textoWhatsApp(op, Object.assign(await dadosExtras(op), { dia: dia }))); }
+    catch (e) { UI.aviso('Não foi possível montar o IPO do dia: ' + (e.message || e), 'erro', 7000); }
+  }
+  // opcoes: { aoSalvar(op), editavel }
+  async function abrirDia(op, dia, opcoes) {
+    opcoes = opcoes || {};
+    if (!op) return;
+    var editavel = opcoes.editavel !== false && op.status === 'ativa';
+    var hoje = hojeLocal(), ini = primeiroDia(op);
+    dia = I.diaValido(dia) || hoje;
+    if (dia > hoje) dia = hoje;
+    var extra;
+    try { extra = await dadosExtras(op); } catch (e) { extra = { vitimas: [], diario: [], coordenada: coordTexto }; }
+    if (editavel) op.ipo = await ipoAtual(op);
+
+    var campoDia = el('input', { classe: 'campo', type: 'date', id: 'ipod-dia', value: dia, min: ini < hoje ? ini : hoje, max: hoje });
+    var feito = el('textarea', { classe: 'campo', id: 'ipod-feito', rows: '5', maxlength: '4000', placeholder: 'O que foi feito e o que se apurou neste dia: setores varridos, equipes, resultados, informações novas…' });
+    var qtd = el('input', { classe: 'campo ipo-qtd', id: 'ipod-qtd', type: 'number', min: '0', max: '999', inputmode: 'numeric', placeholder: 'Qtd' });
+    var nomes = el('input', { classe: 'campo', id: 'ipod-nomes', maxlength: '1000', placeholder: 'Ex.: Sgt. Berzotti, Cb. Alves e Sd. Guimarães' });
+    var procs = {};
+    var gradeProc = el('div', { classe: 'ipo-procs' }, I.PROCEDIMENTOS.map(function (p) {
+      var cb = el('input', { type: 'checkbox', value: p[0] });
+      procs[p[0]] = cb;
+      return el('label', { classe: 'linha-opcao' }, [cb, ' ' + p[1]]);
+    }));
+    var procOutros = el('input', { classe: 'campo', id: 'ipod-proc-outros', maxlength: '300', placeholder: 'Outro procedimento (opcional)' });
+    var recursos = el('textarea', { classe: 'campo', id: 'ipod-recursos', rows: '3', maxlength: '4000', placeholder: 'Um por linha. Ex.:\nABTS BM 1234 - 3º BBM\nDrone DJI M30 - SARP' });
+    var orgaos = el('textarea', { classe: 'campo', id: 'ipod-orgaos', rows: '3', maxlength: '4000', placeholder: 'Um por linha. Ex.:\nPMPR: 02 PMs - Patrulha Rural\nDefesa Civil' });
+    var situacao = el('textarea', { classe: 'campo', id: 'ipod-situacao', rows: '3', maxlength: '4000', placeholder: 'Como a busca ficou ao fim do dia e o que fica para o dia seguinte (setores pendentes, pistas a checar, apoio pedido…)' });
+    var antigos = el('p', { classe: 'muted', hidden: true });
+    var quem = el('p', { classe: 'muted', hidden: true });
+    var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+
+    function preencher(k) {
+      var d = I.ipoDoDia(op.ipo, k, []);
+      feito.value = d.texto; qtd.value = d.qtd != null ? d.qtd : ''; nomes.value = d.nomes;
+      Object.keys(procs).forEach(function (p) { procs[p].checked = d.procedimentos.indexOf(p) !== -1; });
+      procOutros.value = d.procedimentos_outros; recursos.value = d.recursos; orgaos.value = d.orgaos; situacao.value = d.situacao;
+      var velho = I.ipoDoDia({}, k, extra.diario);
+      var partes = [];
+      if (velho.textoDiario) partes.push('desdobramento');
+      if (velho.recursosDiario) partes.push('recurso');
+      if (velho.procedimentos.length) partes.push('procedimento');
+      antigos.textContent = partes.length ? 'Registros deste dia feitos pelo "+ Novo registro" (' + partes.join(', ') + ') também entram no IPO do dia.' : '';
+      antigos.hidden = !partes.length;
+      quem.textContent = d.por ? 'Preenchido por ' + d.por + (d.em ? ' em ' + new Date(d.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '') + '.' : '';
+      quem.hidden = !d.por;
+      titulo.textContent = 'IPO do dia ' + diaBr(k);
+    }
+    function ler() {
+      var P = window.Painel;
+      return { dia: campoDia.value, texto: feito.value, qtd: qtd.value === '' ? null : qtd.value, nomes: nomes.value,
+        procedimentos: Object.keys(procs).filter(function (p) { return procs[p].checked; }), procedimentos_outros: procOutros.value,
+        recursos: recursos.value, orgaos: orgaos.value, situacao: situacao.value,
+        por: P && P.meuNome ? P.meuNome() : '', em: new Date().toISOString() };
+    }
+    var btnApp = el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '↻ Militares do app neste dia', title: 'Os militares e responsáveis que enviaram posição pelo app neste dia', onclick: function () {
+      var x = efetivoPeloApp().filter(function (y) { return y.dia === campoDia.value; })[0];
+      if (!x) { UI.aviso('Nenhum militar com posição neste dia (no que o painel tem carregado).', 'erro', 6000); return; }
+      qtd.value = x.qtd; nomes.value = x.nomes;
+    } });
+    var btnSci = el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '↻ Recursos do SCI', onclick: async function () {
+      try {
+        var linhas = await recursosDoSci(op);
+        if (!linhas.length) { UI.aviso('Nenhum recurso cadastrado no SCI (Recursos).', 'erro', 6000); return; }
+        var atuais = recursos.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+        linhas.forEach(function (l) { if (atuais.indexOf(l) === -1) atuais.push(l); });
+        recursos.value = atuais.join('\n');
+      } catch (e) { UI.aviso('Os recursos do SCI não estão disponíveis (migração 080).', 'erro', 6000); }
+    } });
+    var btnOntem = el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '↧ Repetir do dia anterior', title: 'Copia efetivo, procedimentos, recursos e órgãos do dia anterior (não copia o que foi feito nem a situação)', onclick: function () {
+      var d = new Date(campoDia.value + 'T12:00:00'); d.setDate(d.getDate() - 1);
+      var ant = I.ipoDoDia(op.ipo, diaDe(d.getTime()), []);
+      if (ant.vazio) { UI.aviso('O dia anterior não tem IPO preenchido.', 'erro', 5000); return; }
+      if (!qtd.value && ant.qtd != null) qtd.value = ant.qtd;
+      if (!nomes.value) nomes.value = ant.nomes;
+      ant.procedimentos.forEach(function (p) { if (procs[p]) procs[p].checked = true; });
+      if (!procOutros.value) procOutros.value = ant.procedimentos_outros;
+      if (!recursos.value) recursos.value = ant.recursos;
+      if (!orgaos.value) orgaos.value = ant.orgaos;
+    } });
+    var titulo = el('span', { texto: 'IPO do dia' });
+    var form = el('form', { classe: 'form-padrao form-ipo form-ipo-dia', novalidate: true }, [
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [titulo, UI.dica('Um IPO por dia, junto com o diário: quem chega no dia seguinte vê o que foi feito e como a busca ficou. Os dados gerais (vítima, local, natureza) ficam em "Dados gerais do IPO". "Copiar IPO do dia" monta o texto para o WhatsApp só com este dia.')]),
+      UI.grade([UI.campo('Dia', campoDia, { para: 'ipod-dia' })]),
+      UI.secao('O que foi feito no dia', [feito, antigos]),
+      UI.secao('Efetivo do dia', [UI.grade([
+        UI.campo('BMs envolvidos', qtd, { para: 'ipod-qtd' }),
+        UI.campo('Quem', nomes, { para: 'ipod-nomes', largo: true }),
+      ]), el('div', { classe: 'acoes-linha' }, [btnApp, btnOntem])]),
+      UI.secao('Procedimentos de busca feitos no dia', [gradeProc, procOutros]),
+      UI.secao('Recursos e apoio no dia', [
+        UI.campo('Recursos CB empregados', recursos, { para: 'ipod-recursos', largo: true }),
+        el('div', { classe: 'acoes-linha' }, [btnSci]),
+        UI.campo('Órgãos de apoio', orgaos, { para: 'ipod-orgaos', largo: true }),
+      ]),
+      UI.secao('Situação ao fim do dia / próximos passos', [situacao]),
+      quem,
+      erro,
+      UI.rodape([
+        el('button', { classe: 'btn', type: 'button', texto: editavel ? 'Cancelar' : 'Fechar', onclick: function () { fechar(); } }),
+        el('button', { classe: 'btn', type: 'button', id: 'ipod-copiar', texto: '📋 Copiar IPO do dia', onclick: function () {
+          var prev = I.gravarDia(op.ipo, ler());
+          mostrarTexto(I.textoWhatsApp(Object.assign({}, op, { ipo: prev }), Object.assign({}, extra, { dia: campoDia.value })));
+        } }),
+        editavel ? el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'ipod-salvar', texto: 'Salvar IPO do dia' }) : null,
+      ]),
+    ]);
+    campoDia.addEventListener('change', function () {
+      if (!I.diaValido(campoDia.value) || campoDia.value > hoje) { campoDia.value = dia; return; }
+      dia = campoDia.value;
+      preencher(dia);
+    });
+    preencher(dia);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      if (!editavel) return;
+      erro.hidden = true;
+      var reg = ler();
+      var btn = form.querySelector('#ipod-salvar');
+      btn.disabled = true;
+      try {
+        var atual = await ipoAtual(op);   // outro responsável pode ter salvo outro dia enquanto esta tela estava aberta
+        var novo = I.gravarDia(atual, reg);
+        var r = await C.rpc('salvar_ipo_operacao', { p_operacao: op.id, p_ipo: novo });
+        op.ipo = (r && r.ipo) || novo;
+        if (r && r.atualizado_em) op.atualizado_em = r.atualizado_em;
+        fechar(true);
+        UI.aviso('IPO do dia ' + diaBr(reg.dia) + ' salvo.', 'ok');
+        if (opcoes.aoSalvar) opcoes.aoSalvar(op, reg.dia);
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + (e.message || e);
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    if (!editavel) Array.prototype.forEach.call(form.querySelectorAll('input, textarea, select'), function (c) { if (c !== campoDia) c.disabled = true; });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, tamanho: 'largo', empilhar: true });
+    setTimeout(function () { if (editavel) feito.focus(); }, 60);
+  }
+
+  window.IpoForm = { abrir: abrir, abrirDia: abrirDia, copiar: copiar, copiarDia: copiarDia };
 })();

@@ -984,6 +984,194 @@
     });
   }
 
+  /* ---------- relatório do IPO (Diário): um dia, um período ou tudo, separado dia a dia ---------- */
+  // Dias entre dois 'AAAA-MM-DD' (inclusive)
+  function diasEntre(ini, fim) {
+    var out = [];
+    var d = new Date(ini + 'T12:00:00'), f = new Date(fim + 'T12:00:00');
+    while (d <= f && out.length < 400) { out.push(chaveDia(d)); d.setDate(d.getDate() + 1); }
+    return out;
+  }
+  // O que aconteceu em cada dia, só daquele dia: IPO do dia, pessoas que andaram (trilhasDias: relatorio_trilhas_dias),
+  // setores trabalhados (registros, missões ou trilha passando dentro), diário, encontros, pontos e fotos.
+  function separarDias(d, trilhasDias, dias) {
+    var op = d.operacao;
+    var I = moduloIpo();
+    var inicioOp = chaveDia(op.acionado_em || op.criada_em);
+    var porId = {};
+    (d.participantes || []).forEach(function (p) { porId[p.id] = p; });
+    var setores = d.setores || [];
+    return dias.map(function (k) {
+      var ini = new Date(k + 'T00:00:00').getTime();
+      var fimD = new Date(k + 'T00:00:00'); fimD.setDate(fimD.getDate() + 1);
+      var fim = fimD.getTime();
+      function noDia(v) { var t = data(v); return Boolean(t) && t.getTime() >= ini && t.getTime() < fim; }
+      var todosDoDia = (d.diario || []).filter(function (e) { return noDia(e.ocorrido_em); });
+      var diario = registrosDiario({ diario: todosDoDia });
+      var trilhas = (trilhasDias || []).filter(function (t) { return t.dia === k; });
+      var pessoas = trilhas.map(function (t) {
+        var p = porId[t.participante_id] || {};
+        return { id: t.participante_id, nome: t.nome || p.nome || '—', tipo: t.tipo || p.tipo, grupos: (p.grupos || []).map(function (g) { return g.grupo; }),
+          primeiro: t.primeiro, ultimo: t.ultimo, km: Number(t.km) || 0, n: t.n, pontos: t.pontos || [] };
+      });
+      // quem entrou na operação no dia e não mandou posição também esteve no dia
+      (d.participantes || []).forEach(function (p) {
+        if (noDia(p.entrou_em) && !pessoas.some(function (x) { return x.id === p.id; })) {
+          pessoas.push({ id: p.id, nome: p.nome, tipo: p.tipo, grupos: (p.grupos || []).map(function (g) { return g.grupo; }), primeiro: p.entrou_em, ultimo: null, km: 0, n: 0, pontos: [], semPosicao: true });
+        }
+      });
+      pessoas.sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+      var setoresDia = [];
+      setores.forEach(function (s) {
+        var eventos = todosDoDia.filter(function (e) { return e.ref_id && String(e.ref_id) === String(s.id); });
+        var missoes = (s.missoes || []).filter(function (m) {
+          return [m.enviada_em, m.iniciada_em, m.chegou_setor_em, m.busca_finalizada_em, m.chegou_base_em].some(noDia);
+        });
+        var dentro = pessoas.filter(function (p) { return p.pontos.some(function (q) { return dentroSetor(s, q[0], q[1]); }); }).map(function (p) { return p.nome; });
+        if (!eventos.length && !missoes.length && !dentro.length) return;
+        setoresDia.push({ setor: s, eventos: eventos, grupos: missoes.map(function (m) { return m.grupo; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; }), pessoas: dentro,
+          concluido: eventos.some(function (e) { return e.tipo === 'setor_concluido'; }) });
+      });
+      return {
+        dia: k,
+        numero: inicioOp ? Math.floor((new Date(k + 'T12:00:00') - new Date(inicioOp + 'T12:00:00')) / 86400000) + 1 : null,
+        ipo: I ? I.ipoDoDia(op.ipo, k, d.diario || []) : null,
+        pessoas: pessoas,
+        km: pessoas.reduce(function (a, p) { return a + p.km; }, 0),
+        setores: setoresDia,
+        diario: diario,
+        encontros: diario.filter(function (e) { return e.categoria === 'encontro'; }),
+        pontos: (d.pontos || []).filter(function (p) { return noDia(p.criado_em); }),
+        fotos: (d.fotos || []).filter(function (f) { return noDia(f.capturada_em); }),
+      };
+    });
+  }
+  function kmTexto(km) { return km < 0.05 ? '0 km' : km.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' km'; }
+  function blocoIpoDia(dia) {
+    var x = dia.ipo, out = [];
+    if (!x || x.vazio) return [nota('IPO do dia não preenchido (IPO · Diário → IPO do dia).')];
+    var linhas = [];
+    var feito = [x.texto, x.textoDiario].filter(Boolean).join('\n');
+    if (feito) linhas.push(['O que foi feito', feito]);
+    if (x.qtd != null || x.nomes) linhas.push(['Efetivo (BMs)', (x.qtd != null ? dd(x.qtd) + ' BBMM' : '') + (x.nomes ? (x.qtd != null ? ' - ' : '') + x.nomes : '')]);
+    var procs = x.procedimentos.map(nomeProcedimento).concat(x.procedimentos_outros ? [x.procedimentos_outros] : []);
+    if (procs.length) linhas.push(['Procedimentos de busca', procs.join('; ')]);
+    var rec = [x.recursos, x.recursosDiario].filter(Boolean).join('\n');
+    if (rec) linhas.push(['Recursos CB empregados', rec]);
+    if (x.orgaos) linhas.push(['Órgãos de apoio', x.orgaos]);
+    if (x.situacao) linhas.push(['Situação ao fim do dia / próximos passos', x.situacao]);
+    out.push(ficha(linhas));
+    if (x.por) out.push(nota('IPO do dia preenchido por ' + x.por + (x.em ? ' em ' + dataHora(x.em) : '') + '.'));
+    return out;
+  }
+  // p = { dias: separarDias(...), subtitulo, titulo, marca }. recursos.mapasDia[dia] = imagem do mapa daquele dia.
+  function montarIpoDiario(d, recursos, p) {
+    recursos = recursos || {};
+    var op = d.operacao;
+    var I = moduloIpo();
+    var dias = p.dias || [];
+    ANO_REF = dias.length ? new Date(dias[0].dia + 'T12:00:00').getFullYear() : null;
+    var conteudo = [];
+    if (recursos.logo) conteudo.push({ image: recursos.logo, width: 150, margin: [0, 0, 0, 14] });
+    conteudo.push({ text: 'IPO (DIÁRIO) DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
+    conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
+    conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20 });
+    conteudo.push({ text: p.subtitulo, style: 'subtituloCapa', margin: [0, 4, 0, 12] });
+    var kmTotal = dias.reduce(function (a, x) { return a + x.km; }, 0);
+    var nomes = {};
+    dias.forEach(function (x) { x.pessoas.forEach(function (q) { nomes[q.id] = true; }); });
+    conteudo.push(ficha([
+      ['Acionamento', dataHora(op.acionado_em)],
+      ['Situação', op.status === 'encerrada' ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'Em andamento'],
+      ['Período', dias.length === 1 ? diaExtenso(dias[0].dia + 'T12:00:00') : dias.length ? diaExtenso(dias[0].dia + 'T12:00:00') + ' a ' + diaExtenso(dias[dias.length - 1].dia + 'T12:00:00') : '—'],
+      ['Dias no relatório', String(dias.length)],
+      ['Gerado', dataHora(d.gerado_em) + ' por ' + txt(d.gerado_por_nome)],
+    ]));
+    // resumo: uma linha por dia
+    conteudo.push(subtitulo('Resumo por dia'));
+    conteudo.push(tabela(['Dia', 'Data', 'Pessoas', 'Km', 'Setores', 'O que foi feito'], dias.map(function (x) {
+      var feito = x.ipo && !x.ipo.vazio ? [x.ipo.texto, x.ipo.textoDiario].filter(Boolean).join(' ') : '';
+      return [{ text: x.numero ? x.numero + 'º' : '—', style: 'td', bold: true }, { text: x.dia.split('-').reverse().join('/'), style: 'tdMono' }, String(x.pessoas.length), kmTexto(x.km),
+        String(x.setores.length), { text: feito ? (feito.length > 160 ? feito.slice(0, 157) + '…' : feito) : 'IPO do dia não preenchido', style: feito ? 'td' : 'tdNota' }];
+    }), [30, 58, 42, 44, 42, '*']));
+    conteudo.push(nota('No período: ' + Object.keys(nomes).length + ' pessoa(s) diferentes com posição, ' + kmTexto(kmTotal) + ' percorridos (sem os trechos dentro da base e os apagados do mapa).'));
+    // dados gerais da ocorrência (o que vale para a operação inteira)
+    if (I) {
+      conteudo.push({ text: 'IPO · dados gerais da ocorrência', style: 'h1', pageBreak: 'before', margin: [0, 0, 0, 4] });
+      conteudo.push({ text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.', style: 'nota', margin: [0, 0, 0, 10] });
+      var lista = I.itens(op, { vitimas: d.vitimas || [], geral: true, coordenada: function (lat, lng) { return coord(lat, lng); } });
+      var atual = [];
+      lista.forEach(function (x) {
+        if (x.cabecalho) { if (atual.length) { conteudo.push(ficha(atual)); atual = []; } conteudo.push({ text: x.cabecalho, bold: true, fontSize: 10, margin: [0, 0, 0, 2] }); return; }
+        if (x.valor != null) { atual.push([x.rotulo, x.valor]); return; }
+        if (x.marcas) { atual.push([x.rotulo, x.marcas.filter(function (m) { return m[1]; }).map(function (m) { return m[0]; }).join('; ') || 'não informado']); return; }
+        if (x.linhas) atual.push([x.rotulo, x.linhas.join('\n')]);
+      });
+      if (atual.length) conteudo.push(ficha(atual));
+    }
+    // cada dia
+    dias.forEach(function (x) {
+      conteudo.push({ text: (x.numero ? x.numero + 'º dia da operação' : 'Dia') + '  ·  ' + diaExtenso(x.dia + 'T12:00:00'), style: 'h1', pageBreak: 'before', margin: [0, 0, 0, 8] });
+      conteudo.push({
+        table: { widths: ['*', '*', '*', '*', '*'], body: [[
+          [String(x.pessoas.length), 'pessoas no dia'], [kmTexto(x.km), 'percorridos'], [String(x.setores.length), 'setores trabalhados'],
+          [String(x.setores.filter(function (s) { return s.concluido; }).length), 'setores concluídos'], [String(x.encontros.length), 'encontros e relatos'],
+        ].map(function (n) { return { stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }], fillColor: COR.fundo, margin: [8, 7, 4, 7] }; })] },
+        layout: { hLineWidth: function () { return 0; }, vLineWidth: function (i) { return i > 0 && i < 5 ? 3 : 0; }, vLineColor: function () { return '#ffffff'; },
+          paddingLeft: function () { return 0; }, paddingRight: function () { return 0; }, paddingTop: function () { return 0; }, paddingBottom: function () { return 0; } },
+        margin: [0, 0, 0, 12],
+      });
+      conteudo.push(subtitulo('IPO do dia'));
+      conteudo = conteudo.concat(blocoIpoDia(x));
+      var mapa = recursos.mapasDia && recursos.mapasDia[x.dia];
+      if (mapa) {
+        conteudo.push(subtitulo('Mapa do dia (trilhas do dia e setores trabalhados em destaque)'));
+        conteudo.push({ image: mapa, width: 515, margin: [0, 0, 0, 4] });
+        conteudo.push(legendaMapa());
+      }
+      conteudo.push(subtitulo('Pessoas no dia'));
+      if (!x.pessoas.length) conteudo.push(nota('Ninguém com posição registrada neste dia.'));
+      else conteudo.push(tabela(['Pessoa', 'Tipo', 'Grupo', 'Em campo', 'Km'], x.pessoas.map(function (q) {
+        return [{ text: q.nome, style: 'td', bold: true }, TIPO_PESSOA[q.tipo] || txt(q.tipo), txt(q.grupos.join(', ')),
+          q.semPosicao ? { text: 'entrou às ' + hora(q.primeiro) + ' (sem posição)', style: 'tdNota' } : hora(q.primeiro) + ' às ' + hora(q.ultimo), q.semPosicao ? '—' : kmTexto(q.km)];
+      }), ['*', 58, 100, 84, 46]));
+      conteudo.push(subtitulo('Setores trabalhados no dia'));
+      if (!x.setores.length) conteudo.push(nota('Nenhum setor trabalhado neste dia.'));
+      else conteudo.push(tabela(['Setor', 'Situação atual', 'No dia'], x.setores.map(function (z) {
+        var partes = z.eventos.map(function (e) { return hora(e.ocorrido_em) + ' ' + e.titulo; });
+        if (z.grupos.length) partes.push('Equipes: ' + z.grupos.join(', '));
+        if (z.pessoas.length) partes.push('Trilhas dentro: ' + z.pessoas.join(', '));
+        return [{ text: z.setor.nome, style: 'td', bold: true }, STATUS_SETOR[z.setor.status] || txt(z.setor.status), { text: partes.join('\n'), style: 'tdSuave' }];
+      }), [110, 74, '*']));
+      if (x.encontros.length) {
+        conteudo.push(subtitulo('Encontros e relatos do dia'));
+        conteudo.push(tabela(['Hora', 'Registro', 'Local', 'Por'], x.encontros.map(function (e) {
+          return [hora(e.ocorrido_em), { stack: [{ text: e.titulo, style: 'td', bold: true }, vazio(e.detalhe) ? null : { text: e.detalhe, style: 'tdSuave' }].filter(Boolean) },
+            { text: coord(e.lat, e.lng), style: 'tdMono' }, txt(e.autor_nome)];
+        }), [36, '*', 92, 80]));
+      }
+      conteudo.push(subtitulo('Diário do dia'));
+      if (!x.diario.length) conteudo.push(nota('Nenhum registro no diário neste dia.'));
+      else conteudo.push(tabela(['Hora', 'Tipo', 'Registro', 'Por'], x.diario.map(function (e) {
+        var obs = e.origem === 'manual';
+        return [{ text: hora(e.ocorrido_em), style: 'tdMono', bold: true }, { text: CATEGORIA[e.categoria] || e.categoria, style: 'tdSuave' },
+          { stack: [{ text: obs ? 'Observação' : e.titulo, style: 'td', bold: obs }, vazio(e.detalhe) ? null : { text: e.detalhe, style: obs ? 'td' : 'tdSuave' }].filter(Boolean) }, { text: txt(e.autor_nome), style: 'tdSuave' }];
+      }), [36, 64, '*', 80], { preenchimento: function (i) {
+        if (i === 0) return null;
+        var e = x.diario[i - 1];
+        return e.nivel === 'critico' ? COR.critico : e.origem === 'manual' ? COR.observacao : null;
+      } }));
+      if (x.pontos.length) {
+        conteudo.push(subtitulo('Pontos marcados no dia'));
+        conteudo.push(tabela(['Hora', 'Tipo', 'Título', 'Coordenadas'], x.pontos.map(function (q) {
+          return [hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria, { text: q.titulo, style: 'td', bold: true }, { text: coord(q.lat, q.lng), style: 'tdMono' }];
+        }), [36, 100, '*', 92]));
+      }
+      if (x.fotos.length) conteudo.push(nota(x.fotos.length + ' foto(s) registrada(s) neste dia (estão no relatório final detalhado).'));
+    });
+    return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'IPO (Diário) de operação de busca e salvamento', marca: p.marca });
+  }
+
   /* ---------- relatório da passagem de comando --------------------------- */
   // pas: a passagem (passagens_comando); linhas: o briefing do momento em linhas "RÓTULO: texto" (Briefing.textoPuro).
   var ESTADO_PASSAGEM = { pendente: 'Aguardando aceite', aceita: 'Aceita', recusada: 'Recusada', cancelada: 'Cancelada', assumida: 'Comando assumido' };
@@ -1048,7 +1236,7 @@
     return dentro;
   }
 
-  var api = { montarComandoGeral: montarComandoGeral, montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarIpoDiario: montarIpoDiario, separarDias: separarDias, diasEntre: diasEntre, montarComandoGeral: montarComandoGeral, montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

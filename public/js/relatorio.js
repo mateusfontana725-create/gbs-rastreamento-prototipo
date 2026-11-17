@@ -116,17 +116,21 @@
         'aria-pressed': String(c[0] === 'todas'), texto: c[1], onclick: function () { diario.filtro = c[0]; render(); } }));
     });
     // operação encerrada: diário só para leitura (o servidor também recusa, migração 026)
-    var btnNova = op.status === 'ativa' ? UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-nova', texto: '+ Novo registro', onclick: function () { formObservacao(null); } }) : null;
+    var btnNova = op.status === 'ativa' ? UI.el('button', { classe: 'btn', type: 'button', id: 'diario-nova', texto: '+ Novo registro', onclick: function () { formObservacao(null); } }) : null;
+    var IF = window.IpoForm;
+    function depoisIpo() { render(); }
+    var btnIpoDia = op.status === 'ativa' && IF ? UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-ipo-dia', texto: '+ IPO do dia', onclick: function () { IF.abrirDia(op, chaveDia(C.agora()), { aoSalvar: depoisIpo }); } }) : null;
+    var btnIpoGeral = IF ? UI.el('button', { classe: 'btn', type: 'button', id: 'diario-ipo-geral', texto: 'Dados gerais do IPO', onclick: function () { IF.abrir(op, { editavel: op.status === 'ativa', aoSalvar: depoisIpo }); } }) : null;
     var btnAtualizar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Atualizar', onclick: function () { recarregar(); } });
     var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatórios (PDF)', onclick: function () { abrirRelatoriosOperacao(op); } });
 
     var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-diario' }, [
       UI.el('div', { classe: 'diario-topo' }, [
         UI.el('div', null, [
-          UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Diário da operação' }, [UI.dica('Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.')]),
+          UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'IPO (Diário)' }, [UI.dica('O diário da operação, dia a dia, com o IPO de cada dia no topo: o que foi feito, o efetivo, os procedimentos, os recursos e como a busca ficou para o dia seguinte. Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.')]),
           resumo,
         ]),
-        UI.el('div', { classe: 'diario-acoes' }, [btnNova, btnRelatorio]),
+        UI.el('div', { classe: 'diario-acoes' }, [btnIpoDia, btnNova, btnIpoGeral, btnRelatorio]),
       ]),
       filtros,
       lista,
@@ -146,21 +150,23 @@
       var obs = todos.filter(function (e) { return e.origem === 'manual'; }).length;
       resumo.textContent = todos.length + ' registro(s) · ' + obs + ' observação(ões) · ' + op.codigo;
       lista.innerHTML = '';
-      if (!itens.length) {
+      // dias: os que têm registros (no filtro) e, sem filtro, também os que têm IPO e o de hoje (para preencher)
+      var porDia = {};
+      itens.forEach(function (e) { var k = chaveDia(e.ocorrido_em); (porDia[k] = porDia[k] || []).push(e); });
+      if (!cats && window.Ipo) {
+        window.Ipo.diasComIpo(op.ipo).forEach(function (k) { porDia[k] = porDia[k] || []; });
+        if (op.status === 'ativa') porDia[chaveDia(C.agora())] = porDia[chaveDia(C.agora())] || [];
+      }
+      var dias = Object.keys(porDia).sort().reverse();   // mais recente em cima
+      if (!dias.length) {
         lista.appendChild(UI.el('p', { classe: 'muted vazio', texto: cats ? 'Nada neste filtro.' : 'Nenhum registro ainda.' }));
         return;
       }
-      var diaAtual = null, ul = null;
-      // mais recente em cima (quem está acompanhando quer ver o que acabou de acontecer)
-      itens.slice().reverse().forEach(function (e) {
-        var k = chaveDia(e.ocorrido_em);
-        if (k !== diaAtual) {
-          diaAtual = k;
-          lista.appendChild(UI.el('h3', { classe: 'diario-dia', texto: rotuloDia(e.ocorrido_em) }));
-          ul = UI.el('ol', { classe: 'diario-itens' });
-          lista.appendChild(ul);
-        }
-        ul.appendChild(itemDiario(e));
+      var registrosIpo = todos.filter(function (e) { return TIPOS_IPO[e.tipo]; });
+      dias.forEach(function (k) {
+        lista.appendChild(UI.el('h3', { classe: 'diario-dia', texto: rotuloDia(k + 'T12:00:00') }));
+        if (!cats) { var c = cartaoIpoDia(op, k, registrosIpo, depoisIpo); if (c) lista.appendChild(c); }
+        if (porDia[k].length) lista.appendChild(UI.el('ol', { classe: 'diario-itens' }, porDia[k].slice().reverse().map(itemDiario)));
       });
     }
     diario.render = render;
@@ -175,6 +181,34 @@
     }
     assinarDiario(op.id);
     await recarregar();
+  }
+
+  // Cartão do IPO de um dia, no topo do dia no IPO (Diário): resumo e Editar/Preencher e Copiar
+  function cartaoIpoDia(op, k, registrosIpo, depois) {
+    var I = window.Ipo, IF = window.IpoForm;
+    if (!I || !IF) return null;
+    var d = I.ipoDoDia(op.ipo, k, registrosIpo);
+    var ativa = op.status === 'ativa';
+    if (d.vazio && !ativa) return null;
+    var linhas = [];
+    function linha(rotulo, texto) { if (texto) linhas.push(UI.el('p', { classe: 'ipo-dia-linha' }, [UI.el('strong', { texto: rotulo + ': ' }), String(texto)])); }
+    linha('Feito', [d.texto, d.textoDiario].filter(Boolean).join(' · '));
+    linha('Efetivo', (d.qtd != null ? d.qtd + ' BM' + (d.qtd === 1 ? '' : 's') : '') + (d.nomes ? (d.qtd != null ? ' — ' : '') + d.nomes : ''));
+    linha('Procedimentos', d.procedimentos.map(rotuloProcedimento).concat(d.procedimentos_outros ? [d.procedimentos_outros] : []).join(', '));
+    linha('Recursos', [d.recursos, d.recursosDiario].filter(Boolean).join('; ').replace(/\n+/g, '; '));
+    linha('Apoio', d.orgaos.replace(/\n+/g, '; '));
+    linha('Situação / próximos passos', d.situacao);
+    return UI.el('div', { classe: 'ipo-dia-cartao' + (d.vazio ? ' vazio' : ''), 'data-dia': k }, [
+      UI.el('div', { classe: 'ipo-dia-topo' }, [
+        UI.el('span', { classe: 'selo ipo-dia-selo', texto: 'IPO do dia' }),
+        d.vazio ? UI.el('span', { classe: 'muted', texto: 'Ainda não preenchido.' }) : d.por ? UI.el('small', { classe: 'muted', texto: 'por ' + d.por }) : null,
+        UI.el('span', { classe: 'ipo-dia-acoes' }, [
+          d.vazio ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📋 Copiar', title: 'Texto do IPO deste dia para o WhatsApp', onclick: function () { IF.copiarDia(op, k); } }),
+          ativa ? UI.el('button', { classe: 'btn btn-pequeno' + (d.vazio ? ' btn-primario' : ''), type: 'button', texto: d.vazio ? 'Preencher' : 'Editar', onclick: function () { IF.abrirDia(op, k, { aoSalvar: depois }); } })
+            : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver', onclick: function () { IF.abrirDia(op, k, { editavel: false }); } }),
+        ]),
+      ]),
+    ].concat(linhas));
   }
 
   function rotuloProcedimento(chave) {
@@ -422,10 +456,12 @@
       g.fillText(t, x, y);
     }
 
-    // setores
+    // setores (destaque: um setor; destaques: vários, ex. os trabalhados no dia)
+    var temDestaque = Boolean(o.destaque || (o.destaques && o.destaques.length));
+    function ehDestaque(s) { return o.destaques ? o.destaques.indexOf(s.id) !== -1 : o.destaque === s.id; }
     (o.setores || []).forEach(function (s) {
-      var dest = o.destaque && o.destaque === s.id;
-      var apagado = o.destaque && !dest;
+      var dest = ehDestaque(s);
+      var apagado = temDestaque && !dest;
       caminho(pontosSetor(s), true);
       g.globalAlpha = apagado ? 0.08 : dest ? 0.22 : 0.16;
       g.fillStyle = s.cor || '#3b82f6';
@@ -461,7 +497,7 @@
     // nomes dos setores: logo abaixo da borda de cima (o centro costuma ter marcadores)
     var nomes = [];
     (o.setores || []).forEach(function (s) {
-      if (o.destaque && o.destaque !== s.id) return;
+      if (temDestaque && !ehDestaque(s)) return;
       var pts = pontosSetor(s).map(function (p) { return px(p[0], p[1]); });
       var xs = pts.map(function (q) { return q[0]; }), ys = pts.map(function (q) { return q[1]; });
       var topo = Math.min.apply(null, ys), base = Math.max.apply(null, ys);
@@ -817,7 +853,7 @@
       UI.secao('Relatórios já gerados', [listaSalvos, UI.el('div', { classe: 'acoes-linha' }, [btnDiaHoje])],
         { dica: 'O relatório diário de cada dia da operação é gerado e guardado sozinho pelo painel aberto (dias já terminados; o de hoje a partir das 23h50). "Relatório de hoje" baixa agora o do dia, com o que houve até este momento.' }),
       UI.rodape([
-        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'Diário', onclick: function () { abrirDiario(op); } }),
+        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'IPO (Diário)', onclick: function () { abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });
@@ -923,7 +959,63 @@
     return r;
   }
 
-  // Relatório diário de um dia ('AAAA-MM-DD'): situação ao fim do dia e o que aconteceu nele.
+  // Trilhas de cada dia (migração 083). Sem a função no banco: sem trilhas (o relatório avisa).
+  function fusoDoAparelho() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { return null; } }
+  async function trilhasDosDias(op, ini, fim) {
+    try {
+      return { lista: (await C.rpc('relatorio_trilhas_dias', { p_operacao: op.id, p_ini: ini, p_fim: fim, p_fuso: fusoDoAparelho() }, 60000)) || [] };
+    } catch (e) {
+      if (e.codigo === 'funcao_ausente') return { lista: [], aviso: 'As trilhas de cada dia precisam da migração 083_ipo_diario.sql no banco.' };
+      throw e;
+    }
+  }
+  // IPO (Diário) de um dia ou de um período ('AAAA-MM-DD' a 'AAAA-MM-DD'), separado dia a dia. Devolve o documento.
+  // modo: 'dia' | 'periodo' | 'tudo' (só muda o subtítulo). passo(texto) mostra o andamento.
+  async function documentoIpoDiario(op, ini, fim, modo, passo) {
+    passo = passo || function () {};
+    var RP = window.RelatorioPDF;
+    passo('Buscando os dados da operação…');
+    var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+    dados.trilhasManuais = await trilhasDesenhadas(op.id);
+    passo('Buscando as trilhas de cada dia…');
+    var tr = await trilhasDosDias(op, ini, fim);
+    var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
+    var recursos = { logo: await carregarLogo(), mapasDia: {} };
+    // mapa de cada dia: só as trilhas e pontos do dia; setores trabalhados no dia em destaque (até 31 dias)
+    if (dias.length <= 31) {
+      for (var k = 0; k < dias.length; k++) {
+        var x = dias[k];
+        if (!x.pessoas.some(function (q) { return q.pontos.length > 1; }) && !x.setores.length && !x.pontos.length) continue;
+        passo('Desenhando o mapa do dia ' + x.dia.split('-').reverse().slice(0, 2).join('/') + ' (' + (k + 1) + '/' + dias.length + ')…');
+        var copia = Object.assign({}, dados, { trilhas: x.pessoas.map(function (q) { return { participante_id: q.id, tipo: q.tipo, pontos: q.pontos }; }),
+          pontos: x.pontos, fotos: [], diario: x.diario, trilhasManuais: [] });
+        var g = elementosMapa(copia, { fundo: true });
+        recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { destaques: x.setores.map(function (z) { return z.setor.id; }) }));
+      }
+    }
+    var br = function (k) { return k.split('-').reverse().join('/'); };
+    var subtitulo = modo === 'dia' ? (dias[0] && dias[0].numero ? dias[0].numero + 'º dia · ' : '') + br(ini)
+      : modo === 'tudo' ? 'Do acionamento (' + br(ini) + ') até ' + br(fim) : 'De ' + br(ini) + ' a ' + br(fim);
+    passo('Montando o documento…');
+    var doc = RP.montarIpoDiario(dados, recursos, {
+      dias: dias, subtitulo: subtitulo + (tr.aviso ? ' — ' + tr.aviso : ''),
+      titulo: 'IPO (Diário) ' + (ini === fim ? br(ini) : br(ini) + ' a ' + br(fim)) + ' — ' + op.codigo,
+      marca: 'IPO (DIÁRIO) ' + (ini === fim ? br(ini).slice(0, 5) : br(ini).slice(0, 5) + ' A ' + br(fim).slice(0, 5)),
+    });
+    return { doc: doc, aviso: tr.aviso };
+  }
+  // Período escolhido: só baixa. Um dia já terminado e ainda não guardado: guarda também.
+  async function gerarIpoDiario(op, ini, fim, modo, opcoes, passo) {
+    opcoes = opcoes || {};
+    var r0 = await documentoIpoDiario(op, ini, fim, modo, passo);
+    if (passo) passo('Gerando o PDF…');
+    var r = ini === fim && opcoes.guardar ? await salvarDocumento(op, r0.doc, 'diario', ini) : await gerarBlob(await carregarPdfMake(), r0.doc);
+    baixarBlob(r.blob, ini === fim ? nomeArquivoTipo(op, 'IPO-diario', ini.replace(/-/g, '')) : nomeArquivoTipo(op, 'IPO-diario', ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
+    if (r0.aviso) UI.aviso(r0.aviso, 'erro', 9000);
+    return r;
+  }
+
+  // Relatório diário de um dia ('AAAA-MM-DD'): o IPO (Diário) daquele dia (o mesmo formato do relatório por período).
   // reservar: pede a vez ao banco (dois painéis abertos não geram o mesmo dia). baixar: também baixa o PDF.
   async function gerarDiario(op, dia, opcoes) {
     opcoes = opcoes || {};
@@ -931,14 +1023,10 @@
       var vez = await C.rpc('relatorio_diario_reservar', { p_operacao: op.id, p_dia: dia });
       if (!vez || !vez.ok) return { pulado: vez ? vez.motivo : 'sem_resposta' };
     }
-    var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
-    dados.trilhasManuais = await trilhasDesenhadas(op.id);
-    var g = elementosMapa(dados, { fundo: true });
-    var recursos = { mapaGeral: await desenharMapa(g.geral), logo: await carregarLogo() };
-    var doc = window.RelatorioPDF.montarDiario(dados, recursos, dia);
+    var doc = (await documentoIpoDiario(op, dia, dia, 'dia')).doc;
     // salvar = false: só baixa (ex.: o de hoje antes de o dia terminar; o do dia completo é guardado sozinho)
     var r = opcoes.salvar === false ? await gerarBlob(await carregarPdfMake(), doc) : await salvarDocumento(op, doc, 'diario', dia);
-    if (opcoes.baixar) baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-diario', dia.replace(/-/g, '')));
+    if (opcoes.baixar) baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO-diario', dia.replace(/-/g, '')));
     return r;
   }
 
@@ -988,7 +1076,7 @@
     return d.getFullYear() + dd(d.getMonth() + 1) + dd(d.getDate()) + '-' + dd(d.getHours()) + dd(d.getMinutes());
   }
   function nomeSalvo(op, r) {
-    if (r.tipo === 'diario') return nomeArquivoTipo(op, 'Relatorio-diario', r.referencia);
+    if (r.tipo === 'diario') return nomeArquivoTipo(op, 'IPO-diario', String(r.referencia || '').replace(/-/g, ''));
     if (r.tipo === 'passagem') return nomeArquivoTipo(op, 'Relatorio-passagem', quandoArquivo(r.gerado_em));
     if (r.tipo === 'comando') return nomeArquivoTipo(op, 'Relatorio-comando', quandoArquivo(r.gerado_em));
     if (r.tipo === 'imprensa') return nomeArquivoTipo(op, 'Relatorio-imprensa', quandoArquivo(r.gerado_em));
@@ -1017,17 +1105,12 @@
     baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-comando', cmd.rotulo.replace(/\s+/g, '-')));
     return r;
   }
-  // Dia escolhido. Hoje (ainda aberto): só baixa; dias anteriores: guarda e baixa.
-  async function gerarDiarioEscolhido(op, dia) {
-    var guardar = dia < diaLocal(Date.now());
-    return gerarDiario(op, dia, { reservar: false, baixar: true, salvar: guardar });
-  }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
-  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
-  var TITULO_TIPO = { diario: 'Relatórios diários', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
+  var TIPO_ROTULO = { diario: 'IPO (Diário)', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
+  var TITULO_TIPO = { diario: 'IPO (Diário) guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
   var DICA_TIPO = {
-    diario: 'Um relatório por dia, do acionamento até hoje, com o IPO no fim. Dias anteriores ficam guardados; o de hoje só é baixado, pois ainda está aberto.',
+    diario: 'O IPO (Diário) de um dia, de um período (de… até…) ou de tudo até hoje, separado dia a dia: o IPO de cada dia, as pessoas que estiveram em campo com os quilômetros, o mapa com as trilhas do dia, os setores trabalhados, os encontros e o diário daquele dia. O de um dia já terminado fica guardado.',
     passagem: 'O documento do briefing entregue em cada passagem: quem passou, quem recebeu e a situação naquele momento.',
     comando: 'Escolha o comando (o que aconteceu sob um comandante, do início dele até a passagem, com o briefing entregue) ou "Todos os comandos" (a operação inteira, com cada comandante e período). O de um comando encerrado fica guardado. Todos trazem o IPO.',
     resumido: 'O relatório final da operação, direto ao ponto: situação e desfecho, números, mapa geral (setores, trilhas das pessoas e fotos, na área da operação), setores, pessoas, algumas fotos e o IPO completo.',
@@ -1200,21 +1283,41 @@
 
     function cartoes() {
       var out = [];
-      // Diário: escolhe o dia (entre o acionamento e hoje)
-      var dataCampo = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-data', value: hoje, min: primeiroDia, max: hoje });
+      // IPO (Diário): um dia, um período ou tudo até hoje, separado dia a dia
+      var fimOp = op.status === 'encerrada' && op.encerrada_em ? diaLocal(C.paraMs(op.encerrada_em)) : hoje;
+      if (fimOp > hoje) fimOp = hoje;
+      var minDia = primeiroDia < fimOp ? primeiroDia : fimOp;
+      var modo = UI.el('select', { classe: 'campo', id: 'rel-dia-modo' }, [
+        UI.el('option', { value: 'dia', texto: 'Um dia' }), UI.el('option', { value: 'periodo', texto: 'Período (de… até…)' }),
+        UI.el('option', { value: 'tudo', texto: 'Tudo, do acionamento até ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) }),
+      ]);
+      var dataCampo = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-data', value: fimOp, min: minDia, max: fimOp });
+      var dataAte = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-ate', value: fimOp, min: minDia, max: fimOp });
+      var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-dia-data' });
+      var campoAte = UI.campo('Até', dataAte, { para: 'rel-dia-ate' });
+      var progressoDia = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
+      function ajustarModo() {
+        campoDe.hidden = modo.value === 'tudo';
+        campoAte.hidden = modo.value !== 'periodo';
+        var r = campoDe.querySelector('.rotulo, label'); if (r) r.textContent = modo.value === 'periodo' ? 'De' : 'Dia';
+      }
+      modo.addEventListener('change', ajustarModo);
       var botaoDia = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-dia-gerar', texto: 'Gerar' });
       botaoDia.addEventListener('click', function () {
-        var dia = dataCampo.value;
-        if (!dia || dia < primeiroDia || dia > hoje) { UI.aviso('Escolha um dia entre o acionamento e hoje.', 'erro', 5000); return; }
+        var ini = modo.value === 'tudo' ? minDia : dataCampo.value;
+        var fim = modo.value === 'tudo' ? fimOp : modo.value === 'periodo' ? dataAte.value : dataCampo.value;
+        if (!ini || !fim || ini < minDia || fim > fimOp || ini > fim) { UI.aviso('Escolha dias entre o acionamento e ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) + ' (o início antes do fim).', 'erro', 6000); return; }
+        progressoDia.hidden = false;
         ocupar(botaoDia, 'Gerando…', async function () {
-          var guardado = dados.porDia[dia];
-          if (guardado) { await baixarSalvo(guardado, op); return; }
-          await gerarDiarioEscolhido(op, dia);
-          await atualizar();
-        });
+          // um dia já terminado e ainda não guardado fica guardado com os relatórios
+          var guardar = ini === fim && fim < hoje && !dados.porDia[ini];
+          await gerarIpoDiario(op, ini, fim, modo.value, { guardar: guardar }, function (t) { progressoDia.textContent = t; });
+          if (guardar) await atualizar();
+        }).then(function () { progressoDia.hidden = true; });
       });
-      out.push(cartao('diario', contar(dados.diarios.length, 'diário', 'diários'),
-        UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Dia', dataCampo, { para: 'rel-dia-data' })]), [botaoDia]));
+      ajustarModo();
+      out.push(cartao('diario', contar(dados.diarios.length, 'dia', 'dias'),
+        UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-dia-modo' }), UI.grade([campoDe, campoAte]), progressoDia]), [botaoDia]));
 
       // Comando: escolher um comando (comandante) ou todos. O de um comando encerrado fica guardado; o em andamento e o
       // geral só são baixados (mudam até o fim da operação).
@@ -1332,7 +1435,7 @@
       var l = listaDoTipo(listaAberta.tipo);
       listaAberta.box.innerHTML = '';
       listaAberta.box.appendChild(UI.secao(null, [
-        l.n ? listaRelatorios(l.itens) : semRelatorios(listaAberta.tipo === 'diario' ? 'Nenhum diário guardado ainda. Gere pelo cartão Diário.'
+        l.n ? listaRelatorios(l.itens) : semRelatorios(listaAberta.tipo === 'diario' ? 'Nenhum dia guardado ainda. Gere pelo cartão IPO (Diário).'
           : listaAberta.tipo === 'imprensa' ? 'Nenhum relatório para imprensa guardado ainda.'
           : listaAberta.tipo === 'final' ? 'Nenhum relatório final detalhado guardado ainda.'
           : listaAberta.tipo === 'resumido' ? 'Nenhum relatório final guardado ainda.' : 'Nada para listar ainda.'),

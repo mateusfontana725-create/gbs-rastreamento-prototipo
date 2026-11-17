@@ -1023,7 +1023,7 @@
       var funcoes = [];
       funcoes.push({ texto: op.status === 'ativa' ? 'Abrir painel' : 'Ver painel (só leitura)', acao: function () { abrirOperacao(op); } });
       if (window.Relatorio) {
-        funcoes.push({ texto: 'Diário da operação', acao: function () { window.Relatorio.abrirDiario(op); } });
+        funcoes.push({ texto: 'IPO (Diário)', acao: function () { window.Relatorio.abrirDiario(op); } });
         funcoes.push({ texto: 'Relatórios (diário, comando e final)', acao: function () { window.Relatorio.abrirRelatoriosOperacao(op); } });
       }
       // Operação antiga (só com o nome): continua válida; o painel sugere completar.

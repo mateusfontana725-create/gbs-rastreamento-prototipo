@@ -185,7 +185,8 @@
     // Sem link (ou pedido pelo código ainda esperando resposta): a pessoa entra com o código e espera os bombeiros aceitarem
     if (!estado.token || (C.local.ler(CHAVE_PEDIDO, null) && !participacaoAtiva())) return iniciarPorCodigo();
     var term = C.local.ler(CHAVE_TERMINADA, null);
-    if (term && term.token === estado.token && !participacaoAtiva()) return terminouAoAbrir(term.motivo || 'encerrada', term.operacao || '', true);
+    // Liberado/removido: vale a anotação. Busca encerrada: confere no servidor, porque o Comando pode ter retomado a operação.
+    if (term && term.token === estado.token && !participacaoAtiva() && (term.motivo === 'liberado' || term.motivo === 'removido')) return terminouAoAbrir(term.motivo, term.operacao || '', true);
     if (term && term.token !== estado.token) C.local.apagar(CHAVE_TERMINADA);   // outro link: a anotação antiga não vale mais
 
     try {
@@ -201,8 +202,9 @@
       return mostrarErro('Link de operação inválido. Peça um novo link aos bombeiros.');
     }
     if (!estado.info.ativa) {
-      return terminouAoAbrir('encerrada', estado.info.operacao);
+      return terminouAoAbrir('encerrada', estado.info.operacao, Boolean(term && term.token === estado.token));
     }
+    if (term && term.token === estado.token) C.local.apagar(CHAVE_TERMINADA);   // operação retomada: segue a entrada normal
 
     // Tela inicial
     $('ini-operacao').textContent = estado.info.operacao;
@@ -618,8 +620,9 @@
     nota.textContent = 'A busca anterior' + (operacao ? ' (' + operacao + ')' : '') + ' ' + (TEXTO_TERMINOU[m] || TEXTO_TERMINOU.encerrada) +
       '. Para entrar em outra busca, digite o código dela abaixo. ';
     // chamado de volta para a mesma busca (os bombeiros reincluíram): tenta abrir de novo o link antigo
-    if (tokenAntigo && (m === 'liberado' || m === 'removido')) {
-      nota.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Fui chamado de volta para a busca anterior', onclick: function () {
+    // (busca encerrada: o Comando pode tê-la retomado; abrir o link de novo confere no servidor)
+    if (tokenAntigo && (m === 'liberado' || m === 'removido' || m === 'encerrada')) {
+      nota.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: m === 'encerrada' ? 'A busca anterior foi retomada? Abrir de novo' : 'Fui chamado de volta para a busca anterior', onclick: function () {
         C.local.apagar(CHAVE_TERMINADA);
         try { history.replaceState(null, '', location.pathname + location.search + '#t=' + tokenAntigo + (NATIVO ? '&app=1' : '')); } catch (e) { /* segue */ }
         location.reload();

@@ -310,6 +310,7 @@
     $('btn-voltar').addEventListener('click', function () { location.hash = ''; });
     $('btn-convite').addEventListener('click', abrirConvite);
     $('btn-encerrar').addEventListener('click', encerrarOperacao);
+    $('faixa-retomar').addEventListener('click', function () { if (est.op) retomarOperacao(est.op); });
     // um botão só: o texto diz o que o toque vai fazer
     $('busca').addEventListener('input', function () { est.listaSuja = true; renderizarLista(); });
     $('btn-recolher').addEventListener('click', alternarLateral);
@@ -1029,6 +1030,7 @@
       var incompleta = 'tipo' in op && window.Cadastro.incompleto(op);
       if (incompleta) funcoes.push({ texto: 'Completar cadastro', acao: function () { window.Cadastro.abrirDados(op, { aoSalvar: function () { mostrarOperacoes(); } }); } });
       if (op.status === 'ativa') funcoes.push({ texto: 'Encerrar operação', perigo: true, acao: function () { encerrarPelaLista(op); } });
+      if (podeRetomar(op)) funcoes.push({ texto: '↺ Retomar operação', acao: function () { retomarOperacao(op); } });
       if (podeArquivar(op)) funcoes.push({ texto: 'Arquivar agora (liberar espaço)', acao: function () { arquivarOperacao(op); } });
       if (podeExcluir(op)) funcoes.push({ texto: 'Excluir operação', perigo: true, acao: function () { excluirOperacao(op); } });
       var acoes = UI.el('div', { classe: 'op-acoes' }, funcoes.length ? [menuLinha(funcoes)] : []);
@@ -2076,6 +2078,7 @@
     if (op.status !== 'ativa' && est.compartilhando) pararMinhaPosicao(true);
     var faixa = $('faixa-encerrada');
     faixa.hidden = op.status === 'ativa' && !est.publico;
+    $('faixa-retomar').hidden = !podeRetomar(op);
     if (est.publico) {
       faixa.hidden = false;
       $('faixa-encerrada-texto').innerHTML = '<span class="selo selo-neutro">Somente visualização</span> Link público do painel' +
@@ -5002,6 +5005,33 @@
     if (!op || op.status !== 'ativa') return;
     if (jaOfereceu !== true && !(await oferecerRelatorio(op, 'Depois de encerrar o painel fica só para consulta.', function () { encerrarOperacao(true); }))) return;
     abrirEncerramento();
+  }
+
+  /* ---------- Retomar uma operação encerrada (migração 082) ---------- */
+  // Volta a operação para "ativa": painel, participantes, setores e registros voltam a aceitar alterações. O motivo fica
+  // no diário. Arquivada ou com os dados apagados pela regra antiga não volta (o servidor recusa; aqui o botão nem aparece).
+  function podeRetomar(op) {
+    return Boolean(op && op.status === 'encerrada' && !op.arquivada_em && !op.dados_apagados_em && !est.publico && est.responsavel);
+  }
+  async function retomarOperacao(op) {
+    if (!podeRetomar(op)) return;
+    var r = await UI.confirmar({
+      titulo: 'Retomar a operação ' + op.codigo + '?',
+      texto: 'A operação volta a ficar ativa: o painel, os setores e os registros voltam a aceitar alterações e os participantes podem voltar pelo mesmo link ou pelo código. O desfecho registrado continua (dá para trocar ao encerrar de novo). O motivo fica no diário.',
+      campo: { rotulo: 'Motivo da retomada', valor: '', max: 500, obrigatorio: true },
+      ok: 'Retomar operação',
+    });
+    if (!r) return;
+    if (r.texto.replace(/\s+/g, ' ').trim().length < 3) { UI.aviso('Escreva o motivo da retomada (pelo menos 3 letras).', 'erro', 6000); return; }
+    try {
+      var atual = await C.rpc('reabrir_operacao', { p_operacao: op.id, p_motivo: r.texto });
+      UI.aviso('Operação ' + op.codigo + ' retomada. Avise os participantes para voltarem pelo link ou pelo código.', 'ok', 9000);
+      if (est.op && est.op.id === op.id) { abrirPainel(op.id); return; }   // painel aberto nela: recarrega já ativa
+      Object.assign(op, atual || { status: 'ativa' });
+      if (location.hash === '#op=' + op.id) abrirPainel(op.id); else abrirOperacao(op);
+    } catch (e) {
+      UI.aviso(e.codigo === 'funcao_ausente' ? 'Para retomar operações, o banco precisa da migração 082_reabrir_operacao.sql.' : e.message, 'erro', 9000);
+    }
   }
 
   // "Encerrar operação" no menu da lista: abre o painel e segue o mesmo fluxo do botão Encerrar

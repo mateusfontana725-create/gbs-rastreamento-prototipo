@@ -162,6 +162,19 @@ legível, elas não aparecem.
   empregados (K9, drone, embarcações…), os órgãos de apoio (só o nome do órgão, sem os nomes dos agentes) e a linha do
   tempo. Continua sem nomes, documentos, fotos, trilhas, posições e observações.
 
+### Retomar uma operação encerrada (migração 082)
+
+- **"↺ Retomar operação"** na faixa de "Somente visualização" da operação encerrada e no menu ⋯ da lista de operações.
+  Pede o motivo (obrigatório, fica no diário junto com "Operação reaberta") e volta a operação para **ativa**: painel,
+  setores, pontos, mensagens e registros voltam a aceitar alterações. O desfecho registrado continua (dá para trocar ao
+  encerrar de novo). Só os responsáveis da operação retomam.
+- **Participantes** voltam pelo mesmo link ou pelo código da operação. O aplicativo que tinha guardado "busca encerrada"
+  confere no servidor ao abrir e, se a operação foi retomada, mostra a entrada normal; na tela do código há o botão
+  "A busca anterior foi retomada? Abrir de novo".
+- Não retoma operação **arquivada** (os dados estão no arquivo do Storage) nem a que teve os dados apagados pela regra
+  antiga. A salvaguarda que encerra operações esquecidas abertas há mais de 30 dias passa a contar da retomada.
+- **Banco:** migração `082_reabrir_operacao.sql` (função `reabrir_operacao`, colunas `reaberta_em`/`reaberta_por_nome`).
+
 ### Relatórios: um só de comando, relatório resumido, mapa na área da operação e IPO completo (migração 081)
 
 - **Um relatório de comando só.** Saiu o cartão "Passagem" da tela de Relatórios: o relatório de cada comando já traz a

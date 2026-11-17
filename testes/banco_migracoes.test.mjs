@@ -3494,5 +3494,42 @@ console.log('Relatório resumido e IPO completo (migração 081)');
   chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_ipo_operacao', { p_operacao: op81.id, p_ipo: J({ natureza: 'x' }) }))), 'quem não é responsável da operação não altera o IPO');
 }
 
-console.log('\nMigrações 007–081 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Retomar operação encerrada (migração 082)');
+{
+  const J = (o) => JSON.stringify(o);
+  await db.exec(ler('supabase/migracoes/082_reabrir_operacao.sql'));
+  await db.exec(ler('supabase/migracoes/082_reabrir_operacao.sql'));
+  chk(true, 'migração 082 executa duas vezes (idempotente)');
+  const op82 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 082', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op82.id });
+  chk(/motivo_obrigatorio/.test(await erroDe(rpc(resp1, 'reabrir_operacao', { p_operacao: op82.id, p_motivo: '  a ' }))), 'retomar sem motivo: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'reabrir_operacao', { p_operacao: op82.id, p_motivo: 'quero retomar' }))), 'quem não é responsável da operação não retoma');
+  const re = await rpc(resp1, 'reabrir_operacao', { p_operacao: op82.id, p_motivo: 'Vítima avistada por morador,  retomar buscas' });
+  chk(re.status === 'ativa' && re.encerrada_em === null && re.expira_em === null && re.reaberta_em && re.reaberta_por_nome === 'Sgt Um', 'retomar volta a operação para ativa e guarda quem retomou', re);
+  const dia82 = (await db.query(`select tipo, detalhe from public.diario where operacao_id = $1 and tipo in ('operacao_reaberta_motivo') `, [op82.id])).rows;
+  chk(dia82.length === 1 && dia82[0].detalhe === 'Vítima avistada por morador, retomar buscas', 'o motivo da retomada fica no diário', dia82);
+  const reab = (await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and titulo ilike '%reaberta%'`, [op82.id])).rows[0].n;
+  chk(reab >= 1, 'o diário registra "Operação reaberta"', reab);
+  const de2 = await rpc(resp1, 'reabrir_operacao', { p_operacao: op82.id, p_motivo: 'de novo' });
+  chk(de2.status === 'ativa', 'retomar operação já ativa não faz nada');
+  // a operação retomada aceita alterações de novo e pode ser encerrada outra vez
+  const enc2 = await rpc(resp1, 'encerrar_operacao', { p_operacao: op82.id });
+  chk(enc2.status === 'encerrada', 'operação retomada pode ser encerrada de novo', enc2);
+  // arquivada / dados apagados: não volta
+  await db.exec('alter table public.operacoes disable trigger operacoes_cadastro_encerrada');   // só para montar o caso
+  await db.query(`update public.operacoes set arquivada_em = now() where id = $1`, [op82.id]);
+  chk(/reabrir_arquivada/.test(await erroDe(rpc(resp1, 'reabrir_operacao', { p_operacao: op82.id, p_motivo: 'quero retomar' }))), 'operação arquivada não é retomada');
+  await db.query(`update public.operacoes set arquivada_em = null, dados_apagados_em = now() where id = $1`, [op82.id]);
+  await db.exec('alter table public.operacoes enable trigger operacoes_cadastro_encerrada');
+  chk(/reabrir_dados_apagados/.test(await erroDe(rpc(resp1, 'reabrir_operacao', { p_operacao: op82.id, p_motivo: 'quero retomar' }))), 'operação com dados apagados não é retomada');
+  chk(/permission denied|sem_permissao/.test(await erroDe(como(null, `select public.reabrir_operacao($1, 'x y z')`, [op82.id], 'anon'))), 'anônimo não chama reabrir_operacao');
+  // salvaguarda dos 30 dias conta da retomada
+  const op82b = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 082B', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  await db.query(`update public.operacoes set criada_em = now() - interval '40 days', reaberta_em = now() - interval '2 days' where id = $1`, [op82b.id]);
+  await db.query(`select public.purgar_expiradas()`);
+  const st = (await db.query(`select status from public.operacoes where id = $1`, [op82b.id])).rows[0].status;
+  chk(st === 'ativa', 'operação retomada há pouco não é encerrada pela salvaguarda dos 30 dias', st);
+}
+
+console.log('\nMigrações 007–082 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

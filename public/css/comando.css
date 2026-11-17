@@ -3220,3 +3220,7 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
   .ipo-vitimas li { grid-template-columns: minmax(0, 1fr); }
   .form-ipo .ipo-par { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Retomar operação encerrada (migração 082): botão na faixa de "somente visualização" */
+#faixa-encerrada:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.faixa-retomar { margin-left: auto; background: var(--alerta); color: #1a1205; border-color: var(--alerta); font-weight: 700; }

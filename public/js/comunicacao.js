@@ -88,6 +88,8 @@
     responsavel_fora_da_operacao: 'Só dá para ligar a função a um responsável desta operação (Equipe de responsáveis).',
     ponto_invalido: 'O ponto escolhido não é desta operação.',
     motivo_obrigatorio: 'Escreva o motivo (pelo menos 3 letras).',
+    reabrir_arquivada: 'Esta operação já foi arquivada (os dados estão no arquivo da operação) e não pode ser retomada. Crie uma operação nova.',
+    reabrir_dados_apagados: 'Os dados pessoais desta operação foram apagados pela regra antiga de retenção: ela não pode ser retomada. Crie uma operação nova.',
     periodo_invalido: 'Período operacional inválido: o fim precisa ser depois do início (até 72 h).',
     localizacao_ja_no_quadro: 'Esta vítima encontrada já está no quadro de vítimas.',
     vitima_sci_sem_equipe: 'Escolha a equipe que vai fazer a remoção.',

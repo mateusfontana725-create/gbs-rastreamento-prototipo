@@ -3234,3 +3234,7 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .ipo-dia-selo { background: var(--responsavel, #06b6d4); color: #04131a; font-weight: 700; }
 .ipo-dia-linha { margin: 0; font-size: .86rem; line-height: 1.35; white-space: pre-line; overflow-wrap: anywhere; }
 .form-ipo-dia textarea { min-height: 70px; }
+
+/* Versão no menu de Ferramentas e no menu da lista de operações */
+.menu-item.menu-versao { justify-content: center; color: var(--texto-3); font-size: .78rem; min-height: 34px; text-decoration: underline dotted; }
+.menu-topo-item.menu-topo-versao { color: var(--texto-3); font-size: .8rem; }

@@ -2887,3 +2887,9 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { width: auto; min-width: 104
 .civil-em-rastreio .btn-tema { display: none; }   /* no mapa o tema fica em Camadas */
 .cod-nota-anterior { margin: 0 0 14px; }
 .cod-nota-anterior .btn { display: block; width: 100%; max-width: 100%; height: auto; min-height: 40px; margin-top: 8px; padding: 8px 10px; white-space: normal; text-align: left; line-height: 1.25; }
+
+/* Número da versão (js/versao.js): discreto, no pé das telas e dos menus; toque mostra as novidades */
+.versao-app { text-align: center; margin: 14px 0 4px; font-size: .78rem; }
+.versao-app .link-botao, .versao-menu { background: none; border: 0; color: var(--texto-3); font-size: .78rem; text-decoration: underline dotted; text-transform: none; letter-spacing: 0; }
+.novidades-versao h3 { margin: 14px 0 4px; font-size: .95rem; }
+.novidades-versao ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }

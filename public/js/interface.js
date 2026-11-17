@@ -222,7 +222,7 @@
         if (!j || !j.versao || j.versao === minha || avisado) return;
         avisado = true;
         var faixa = el('div', { classe: 'faixa-versao', role: 'status' }, [
-          el('span', { texto: 'Há uma versão nova desta página.' }),
+          el('span', { texto: 'Há uma versão nova (' + j.versao + '); você está na ' + minha + '.' }),
           el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'Atualizar agora', onclick: function () { window.GBS_RECARREGANDO = true; location.reload(); } }),
         ]);
         document.body.appendChild(faixa);

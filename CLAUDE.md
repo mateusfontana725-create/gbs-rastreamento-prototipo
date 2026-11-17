@@ -47,5 +47,6 @@ App de rastreamento GPS de equipes em buscas (Bombeiros). Sem build: HTML/JS/CSS
 - Mudança de banco = nova migração numerada + atualizar `schema.sql` (sem o `notify` da migração) + testes em `banco_migracoes.test.mjs`.
 - Nunca desativar RLS nem apagar dados reais. Escrita só por RPC `SECURITY DEFINER`.
 - Interface: sem frameworks; usar `UI.el`, `UI.abrirModal`, `C.rpc`, `C.consultar`. Modais: título em `h2#modal-titulo` (vai para o cabeçalho com ×), explicação no `UI.dica`, campos com `UI.campo`/`UI.secao`/`UI.grade`, ações no `UI.rodape`.
+- Versão: toda atualização sobe o número em `public/js/versao.js` (`NUMERO`, `DATA` e a versão nova no topo de `NOVIDADES`, em texto para quem usa; correção 1.2.3→1.2.4, novidade →1.3.0), em `public/versao.json` e no `<meta name="gbs-versao">` de `comando.html` e `participante.html` (`testes/versao.test.js` confere). Aparece em `[data-versao]` (login e menu da lista de operações, Ferramentas › Ajustes, telas do participante e menu do militar, dashboard); no app Android mostra também a versão do APK.
 - Commit e push na branch `v1` a cada mudança; não mexer em `main` nem `v2` sem pedido.
 - Não incluir nome de modelo em commits, PRs ou código.

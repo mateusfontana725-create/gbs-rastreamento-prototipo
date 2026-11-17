@@ -120,7 +120,27 @@
     var IF = window.IpoForm;
     function depoisIpo() { render(); }
     var btnIpoDia = op.status === 'ativa' && IF ? UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'diario-ipo-dia', texto: '+ IPO do dia', onclick: function () { IF.abrirDia(op, chaveDia(C.agora()), { aoSalvar: depoisIpo }); } }) : null;
-    var btnIpoGeral = IF ? UI.el('button', { classe: 'btn', type: 'button', id: 'diario-ipo-geral', texto: 'Dados gerais do IPO', onclick: function () { IF.abrir(op, { editavel: op.status === 'ativa', aoSalvar: depoisIpo }); } }) : null;
+    // O IPO é um só: os dados da ocorrência (o que vale para a operação inteira) ficam no cartão do topo; o de cada dia, no
+    // topo de cada dia.
+    var cartaoOcorrencia = UI.el('div', { classe: 'ipo-ocorrencia', id: 'diario-ipo-ocorrencia' });
+    function desenharOcorrencia() {
+      var I = window.Ipo;
+      cartaoOcorrencia.innerHTML = '';
+      if (!I || !IF) { cartaoOcorrencia.hidden = true; return; }
+      var i = I.normalizarIpo(op.ipo || {});
+      var partes = [i.natureza, i.unidade, i.rgo ? 'RGO ' + i.rgo : '', i.localidade || op.local_endereco].filter(Boolean);
+      cartaoOcorrencia.appendChild(UI.el('div', { classe: 'ipo-dia-topo' }, [
+        UI.el('span', { classe: 'selo ipo-dia-selo', texto: 'Dados da ocorrência' }),
+        UI.el('span', { classe: 'ipo-dia-acoes' }, [
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'diario-ipo-copiar', texto: '📋 Copiar IPO', title: 'O IPO completo (todos os dias) para o WhatsApp', onclick: function () { IF.copiar(op); } }),
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'diario-ipo-geral', texto: op.status === 'ativa' ? 'Editar' : 'Ver',
+            onclick: function () { IF.abrir(op, { editavel: op.status === 'ativa', aoSalvar: function () { desenharOcorrencia(); render(); } }); } }),
+        ]),
+      ]));
+      cartaoOcorrencia.appendChild(UI.el('p', { classe: 'ipo-dia-linha' + (partes.length ? '' : ' muted'),
+        texto: partes.length ? partes.join(' · ') : 'Natureza, vítima, local, buscas preliminares e recursos fixos ainda não preenchidos.' }));
+    }
+    desenharOcorrencia();
     var btnAtualizar = UI.el('button', { classe: 'btn', type: 'button', texto: 'Atualizar', onclick: function () { recarregar(); } });
     var btnRelatorio = UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Relatórios (PDF)', onclick: function () { abrirRelatoriosOperacao(op); } });
 
@@ -130,8 +150,9 @@
           UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'IPO (Diário)' }, [UI.dica('O diário da operação, dia a dia, com o IPO de cada dia no topo: o que foi feito, o efetivo, os procedimentos, os recursos e como a busca ficou para o dia seguinte. Os eventos automáticos vêm dos setores, deslocamentos, alertas, relatos e pessoas e não podem ser alterados. As observações podem ser editadas por qualquer responsável da operação; cada edição fica registrada.')]),
           resumo,
         ]),
-        UI.el('div', { classe: 'diario-acoes' }, [btnIpoDia, btnNova, btnIpoGeral, btnRelatorio]),
+        UI.el('div', { classe: 'diario-acoes' }, [btnIpoDia, btnNova, btnRelatorio]),
       ]),
+      cartaoOcorrencia,
       filtros,
       lista,
       UI.rodape([btnAtualizar, UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),

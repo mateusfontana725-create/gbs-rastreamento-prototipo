@@ -210,7 +210,7 @@ teste('relatório do IPO (Diário) separa cada dia: IPO, pessoas, km, setores e 
   assert.ok(/2º dia da operação/.test(tx) && /3º dia da operação/.test(tx));
   assert.ok(/Varredura na margem com K9/.test(tx) && /Equipe Alfa/.test(tx) && /Chuva forte à tarde/.test(tx));
   assert.ok(/7,3 km|7,2 km/.test(tx) && /IPO do dia não preenchido/.test(tx));
-  assert.ok(/dados gerais da ocorrência/.test(tx) && /RGO 20263BBM12221/.test(tx));
+  assert.ok(/Dados da ocorrência/.test(tx) && /RGO 20263BBM12221/.test(tx));
 });
 
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }

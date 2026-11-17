@@ -1097,7 +1097,7 @@
     conteudo.push(nota('No período: ' + Object.keys(nomes).length + ' pessoa(s) diferentes com posição, ' + kmTexto(kmTotal) + ' percorridos (sem os trechos dentro da base e os apagados do mapa).'));
     // dados gerais da ocorrência (o que vale para a operação inteira)
     if (I) {
-      conteudo.push({ text: 'IPO · dados gerais da ocorrência', style: 'h1', pageBreak: 'before', margin: [0, 0, 0, 4] });
+      conteudo.push({ text: 'Dados da ocorrência', style: 'h1', pageBreak: 'before', margin: [0, 0, 0, 4] });
       conteudo.push({ text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.', style: 'nota', margin: [0, 0, 0, 10] });
       var lista = I.itens(op, { vitimas: d.vitimas || [], geral: true, coordenada: function (lat, lng) { return coord(lat, lng); } });
       var atual = [];

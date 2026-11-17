@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.1.0';
+  var NUMERO = '1.1.1';
   var DATA = '2026-11-17';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.1.1', data: '2026-11-17', itens: [
+      'O IPO é um só: tudo fica no IPO (Diário). Os dados da ocorrência (natureza, vítima, local) estão no cartão do topo, com Copiar IPO; saiu o item separado "IPO · dados gerais" do menu.',
+    ] },
     { versao: '1.1.0', data: '2026-11-17', itens: [
       'Tirar a localização de uma pessoa do mapa (ficha › ⋮ Mais › Tirar do mapa): para quem entrou de longe só para acompanhar ou testar. Some do mapa, da trilha e do link público; nada é apagado e dá para mostrar de novo. Se a pessoa entrar de novo na operação, volta ao mapa.',
     ] },

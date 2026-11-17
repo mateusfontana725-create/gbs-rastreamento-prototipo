@@ -469,8 +469,7 @@
       UI.el('p', { classe: 'meta-area dados-op-meta', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
       UI.rodape([
         window.IpoForm ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-ipo-copiar', texto: '📋 Copiar IPO', title: 'Texto do IPO pronto para o WhatsApp', onclick: function () { window.IpoForm.copiar(op); } }) : null,
-        window.IpoForm ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-ipo', texto: 'IPO', title: 'Preencher o IPO (informe da ocorrência)', onclick: function () {
-          window.IpoForm.abrir(op, { editavel: editavel, aoSalvar: function (atual) { if (opcoes.aoSalvar) opcoes.aoSalvar(atual); } }); } }) : null,
+        window.Relatorio ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-ipo', texto: 'IPO (Diário)', title: 'O IPO: dados da ocorrência e o de cada dia', onclick: function () { window.Relatorio.abrirDiario(op); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { editarDados(op, opcoes); } }) : null,
       ]),
     ]), { tamanho: 'largo' });

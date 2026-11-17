@@ -190,8 +190,9 @@ legível, elas não aparecem.
   apoio do dia e a **situação ao fim do dia / próximos passos** — quem chega no dia seguinte vê o que foi feito e como a
   busca ficou. Botões: **+ IPO do dia**, Editar/Preencher no cartão de cada dia e **📋 Copiar** (texto do IPO só daquele
   dia, para o WhatsApp). Atalhos no formulário: militares do app naquele dia, recursos do SCI e "Repetir do dia anterior".
-- **Dados gerais do IPO** (cabeçalho, local, vítima, buscas preliminares, recursos fixos) continuam numa tela própria,
-  aberta pelo IPO (Diário) ou pelo menu "IPO · dados gerais". O IPO completo para o WhatsApp junta todos os dias.
+- **O IPO é um só: o IPO (Diário).** No topo dele fica o cartão **Dados da ocorrência** (cabeçalho, local, vítima, buscas
+  preliminares, recursos fixos), com Editar e **📋 Copiar IPO** (o IPO completo, todos os dias, para o WhatsApp). Não há
+  mais item separado de IPO no menu; o botão "IPO (Diário)" em Dados da operação abre o mesmo lugar.
 - **Relatório IPO (Diário)**: um dia, um período (de… até…) ou tudo, do acionamento até hoje. Sai **separado dia a dia**:
   um resumo com uma linha por dia, os dados gerais da ocorrência e, para cada dia, o IPO do dia, as pessoas que estiveram
   em campo (horário e quilômetros), o mapa só com as trilhas do dia (setores trabalhados no dia em destaque), os setores

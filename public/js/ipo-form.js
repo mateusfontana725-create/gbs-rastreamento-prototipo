@@ -163,7 +163,7 @@
     } });
 
     var form = el('form', { classe: 'form-padrao form-ipo', novalidate: true }, [
-      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'IPO · dados gerais da ocorrência' }, [UI.dica('O que vale para a operação inteira, na ordem do IPO. O que já existe no app (início, vítimas, natureza) entra sozinho. O que muda a cada dia (efetivo, o que foi feito, situação) fica no IPO do dia, no IPO (Diário). "Copiar para o WhatsApp" monta o informe completo.')]),
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'IPO (Diário) · dados da ocorrência' }, [UI.dica('O que vale para a operação inteira, na ordem do IPO. O que já existe no app (início, vítimas, natureza) entra sozinho. O que muda a cada dia (efetivo, o que foi feito, situação) fica no IPO do dia, no IPO (Diário). "Copiar para o WhatsApp" monta o informe completo.')]),
       UI.secao('Cabeçalho', [UI.grade([
         UI.campo('IPO para (destinatários)', destino, { para: 'ipo-destino' }),
         UI.campo('Unidade', unidade, { para: 'ipo-unidade', opcional: true }),
@@ -190,8 +190,8 @@
       ]),
       UI.secao('Cada dia: efetivo e desdobramentos', [
         el('p', { classe: 'muted', texto: I.diasComIpo(op.ipo).length
-          ? 'Dias com IPO preenchido: ' + I.diasComIpo(op.ipo).map(function (k) { return k.split('-').reverse().slice(0, 2).join('/'); }).join(', ') + '. O efetivo, o que foi feito, os procedimentos e a situação de cada dia ficam no IPO do dia (IPO · Diário).'
-          : 'O efetivo, o que foi feito, os procedimentos e a situação de cada dia ficam no IPO do dia (IPO · Diário).' }),
+          ? 'Dias com IPO preenchido: ' + I.diasComIpo(op.ipo).map(function (k) { return k.split('-').reverse().slice(0, 2).join('/'); }).join(', ') + '. O efetivo, o que foi feito, os procedimentos e a situação de cada dia ficam no IPO do dia, no próprio IPO (Diário).'
+          : 'O efetivo, o que foi feito, os procedimentos e a situação de cada dia ficam no IPO do dia, no próprio IPO (Diário).' }),
         editavel ? el('div', { classe: 'acoes-linha' }, [el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ipo-abrir-hoje', texto: '+ IPO de hoje', onclick: function () { abrirDia(op, hojeLocal(), { aoSalvar: opcoes.aoSalvar }); } })]) : null,
         desdobDiario ? el('small', { classe: 'muted', texto: desdobDiario + ' desdobramento(s) registrado(s) no diário também entram, no dia deles.' }) : null,
       ]),
@@ -340,7 +340,7 @@
     } });
     var titulo = el('span', { texto: 'IPO do dia' });
     var form = el('form', { classe: 'form-padrao form-ipo form-ipo-dia', novalidate: true }, [
-      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [titulo, UI.dica('Um IPO por dia, junto com o diário: quem chega no dia seguinte vê o que foi feito e como a busca ficou. Os dados gerais (vítima, local, natureza) ficam em "Dados gerais do IPO". "Copiar IPO do dia" monta o texto para o WhatsApp só com este dia.')]),
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [titulo, UI.dica('Um IPO por dia, junto com o diário: quem chega no dia seguinte vê o que foi feito e como a busca ficou. Os dados gerais (vítima, local, natureza) ficam no cartão "Dados da ocorrência", no topo do IPO (Diário). "Copiar IPO do dia" monta o texto para o WhatsApp só com este dia.')]),
       UI.grade([UI.campo('Dia', campoDia, { para: 'ipod-dia' })]),
       UI.secao('O que foi feito no dia', [feito, antigos]),
       UI.secao('Efetivo do dia', [UI.grade([

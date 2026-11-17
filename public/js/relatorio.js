@@ -992,7 +992,7 @@
     if (r.tipo === 'passagem') return nomeArquivoTipo(op, 'Relatorio-passagem', quandoArquivo(r.gerado_em));
     if (r.tipo === 'comando') return nomeArquivoTipo(op, 'Relatorio-comando', quandoArquivo(r.gerado_em));
     if (r.tipo === 'imprensa') return nomeArquivoTipo(op, 'Relatorio-imprensa', quandoArquivo(r.gerado_em));
-    if (r.tipo === 'resumido') return nomeArquivoTipo(op, 'Relatorio-resumido', quandoArquivo(r.gerado_em));
+    if (r.tipo === 'resumido') return nomeArquivoTipo(op, 'Relatorio-final', quandoArquivo(r.gerado_em));
     return nomeArquivo(op, r.gerado_em);
   }
   async function dadosDoPeriodo(op) {
@@ -1000,6 +1000,14 @@
     dados.trilhasManuais = await trilhasDesenhadas(op.id);
     var g = elementosMapa(dados, { fundo: true });
     return { dados: dados, recursos: { mapaGeral: await desenharMapa(g.geral), mapaNota: g.nota, logo: await carregarLogo() } };
+  }
+  // Todos os comandos: a operação inteira, com cada comandante e o período dele. Só baixa (muda até o fim).
+  async function gerarComandoGeral(op, comandos) {
+    var p = await dadosDoPeriodo(op);
+    var doc = window.RelatorioPDF.montarComandoGeral(p.dados, p.recursos, comandos);
+    var r = await gerarBlob(await carregarPdfMake(), doc);
+    baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-comandos', quandoArquivo(Date.now())));
+    return r;
   }
   // Comando já encerrado: guarda e baixa. Em andamento: só baixa (o guardado ficaria desatualizado).
   async function gerarComando(op, cmd) {
@@ -1016,15 +1024,15 @@
   }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
-  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Resumido', final: 'Final', imprensa: 'Imprensa' };
-  var TITULO_TIPO = { diario: 'Relatórios diários', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios resumidos', final: 'Relatórios finais', imprensa: 'Relatórios para imprensa' };
+  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
+  var TITULO_TIPO = { diario: 'Relatórios diários', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
   var DICA_TIPO = {
-    diario: 'Um relatório por dia, do acionamento até hoje. Dias anteriores ficam guardados; o de hoje só é baixado, pois ainda está aberto.',
+    diario: 'Um relatório por dia, do acionamento até hoje, com o IPO no fim. Dias anteriores ficam guardados; o de hoje só é baixado, pois ainda está aberto.',
     passagem: 'O documento do briefing entregue em cada passagem: quem passou, quem recebeu e a situação naquele momento.',
-    comando: 'O que cada comando fez, do início até a passagem seguinte, com a situação entregue na passagem (o briefing). Gerado de um comando encerrado, ele fica guardado. O documento da passagem também fica em cada item da lista.',
-    resumido: 'O essencial em poucas páginas: mapa geral (setores, trilhas das pessoas e fotos, na área da operação), números, setores, pessoas, algumas fotos e o IPO.',
-    final: 'Tudo da operação: cadastro, pessoas, setores, diário, desfecho e todas as fotos. Só o administrador pode excluir.',
-    imprensa: 'Versão para divulgação, com dados reduzidos: números gerais, desfecho geral e linha do tempo. Sem nomes, documentos, fotos, trilhas ou posições.',
+    comando: 'Escolha o comando (o que aconteceu sob um comandante, do início dele até a passagem, com o briefing entregue) ou "Todos os comandos" (a operação inteira, com cada comandante e período). O de um comando encerrado fica guardado. Todos trazem o IPO.',
+    resumido: 'O relatório final da operação, direto ao ponto: situação e desfecho, números, mapa geral (setores, trilhas das pessoas e fotos, na área da operação), setores, pessoas, algumas fotos e o IPO completo.',
+    final: 'Tudo da operação em detalhe: IPO, pessoas, setores um a um (com mapa), pontos, diário completo, desfecho e todas as fotos. Só o administrador pode excluir.',
+    imprensa: 'Versão para divulgação: situação, natureza e local, a pessoa procurada sem o nome, os números do esforço (dias, militares, voluntários, área e quilômetros), os meios empregados, os órgãos de apoio e a linha do tempo. Sem nomes, documentos, fotos, trilhas ou posições.',
   };
   function rotuloDesfecho(chave) {
     var r = RESULTADOS.filter(function (x) { return x[0] === chave; })[0];
@@ -1100,7 +1108,7 @@
     passo('Gerando o PDF…');
     var doc = window.RelatorioPDF.montarResumido(dados, recursos);
     var r = await salvarDocumento(op, doc, 'resumido', null);
-    baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-resumido', quandoArquivo(Date.now())));
+    baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-final', quandoArquivo(Date.now())));
     return r;
   }
 
@@ -1208,34 +1216,26 @@
       out.push(cartao('diario', contar(dados.diarios.length, 'diário', 'diários'),
         UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Dia', dataCampo, { para: 'rel-dia-data' })]), [botaoDia]));
 
-      // Comando: Gerar/Baixar o comando mais recente (em andamento: baixa o que houve até agora)
-      var ultCmd = dados.comandos[dados.comandos.length - 1];
-      var guardadoCmd = ultCmd && dados.porRef[ultCmd.ref];
-      var botaoCmd = ultCmd && guardadoCmd && ultCmd.fim
-        ? botaoBaixar(guardadoCmd)
-        : UI.el('button', { classe: 'btn ' + (ultCmd && ultCmd.fim ? 'btn-primario' : ''), type: 'button', id: 'rel-cmd-gerar', texto: ultCmd && ultCmd.fim ? 'Gerar' : 'Baixar agora', onclick: function (ev) {
-          ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, ultCmd); await atualizar(); });
-        } });
-      out.push(cartao('comando', contar(dados.comandos.filter(function (c) { return dados.porRef[c.ref]; }).length, 'comando', 'comandos'),
-        ultCmd ? UI.el('div', { classe: 'rel-card-extra', texto: 'Último: ' + ultCmd.rotulo + ' · ' + (ultCmd.fim ? 'encerrado' : 'em andamento') }) : null, [botaoCmd]));
-
-      // IPO: preencher (tela própria) e copiar para o WhatsApp
-      if (window.IpoForm) {
-        var ipoAtual = window.Ipo.normalizarIpo(op.ipo || {});
-        var preench = [ipoAtual.localidade || op.local_endereco, ipoAtual.efetivo.length, ipoAtual.desdobramentos.length, ipoAtual.recursos_cb, ipoAtual.responsavel_informacoes].filter(Boolean).length;
-        out.push(UI.el('section', { classe: 'rel-card', 'data-tipo': 'ipo' }, [
-          UI.el('div', { classe: 'rel-card-topo' }, [
-            UI.el('h3', { classe: 'rel-card-titulo', texto: 'IPO' }),
-            UI.dica('Informe Padrão de Ocorrência do CBMPR. Entra nos relatórios resumido e final e sai pronto para colar no WhatsApp.'),
-            UI.el('small', { classe: 'muted rel-card-contagem', texto: ipoAtual.desdobramentos.length ? ipoAtual.desdobramentos.length + ' dia(s) de desdobramento' : preench ? 'em preenchimento' : 'ainda não preenchido' }),
-          ]),
-          UI.el('div', { classe: 'rel-card-acoes' }, [
-            UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-ipo-editar', texto: 'Preencher', onclick: function () {
-              window.IpoForm.abrir(op, { editavel: !(P() && P().publico && P().publico()), aoSalvar: function () { atualizar(); } }); } }),
-            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'rel-ipo-copiar', texto: '📋 WhatsApp', onclick: function () { window.IpoForm.copiar(op); } }),
-          ]),
-        ]));
-      }
+      // Comando: escolher um comando (comandante) ou todos. O de um comando encerrado fica guardado; o em andamento e o
+      // geral só são baixados (mudam até o fim da operação).
+      var selCmd = UI.el('select', { classe: 'campo', id: 'rel-cmd-escolha' }, [UI.el('option', { value: 'todos', texto: 'Todos os comandos (geral)' })].concat(
+        dados.comandos.map(function (c, k) {
+          return UI.el('option', { value: String(k),
+            texto: c.rotulo + ' · ' + (c.comandante || '—') + ' · ' + dataHora(c.ini).slice(0, 5) + (c.fim ? ' a ' + dataHora(c.fim).slice(0, 5) : ' (em andamento)') });
+        })));
+      var botaoCmd = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-cmd-gerar', texto: 'Gerar', onclick: function (ev) {
+        var v = selCmd.value;
+        ocupar(ev.currentTarget, 'Gerando…', async function () {
+          if (v === 'todos') { await gerarComandoGeral(op, dados.comandos); return; }
+          var c = dados.comandos[Number(v)];
+          var guardado = c && c.fim && dados.porRef[c.ref];
+          if (guardado) { await baixarSalvo(guardado, op); return; }
+          await gerarComando(op, c);
+          await atualizar();
+        });
+      } });
+      out.push(cartao('comando', contar(dados.comandos.filter(function (c) { return dados.porRef[c.ref]; }).length, 'comando', 'comandos') + ' · ' + dados.comandos.length + ' no total',
+        UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Comando', selCmd, { para: 'rel-cmd-escolha' })]), [botaoCmd]));
 
       // Resumido: mapa, números, setores, pessoas, algumas fotos e o IPO
       var progressoRes = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
@@ -1243,7 +1243,7 @@
         progressoRes.hidden = false;
         ocupar(ev.currentTarget, 'Gerando…', async function () {
           await gerarResumido(op, function (t) { progressoRes.textContent = t; });
-          UI.aviso('Relatório resumido gerado.', 'ok');
+          UI.aviso('Relatório final gerado.', 'ok');
           await atualizar();
         }).then(function () { progressoRes.hidden = true; });
       } });
@@ -1258,7 +1258,7 @@
         progressoFinal.hidden = false;
         try {
           await gerarFinal(op, { fotos: 'todas', fundo: true }, function (t) { progressoFinal.textContent = t; });
-          UI.aviso('Relatório final gerado.', 'ok');
+          UI.aviso('Relatório final detalhado gerado.', 'ok');
           await atualizar();
         } catch (e) {
           progressoFinal.hidden = true;
@@ -1334,8 +1334,8 @@
       listaAberta.box.appendChild(UI.secao(null, [
         l.n ? listaRelatorios(l.itens) : semRelatorios(listaAberta.tipo === 'diario' ? 'Nenhum diário guardado ainda. Gere pelo cartão Diário.'
           : listaAberta.tipo === 'imprensa' ? 'Nenhum relatório para imprensa guardado ainda.'
-          : listaAberta.tipo === 'final' ? 'Nenhum relatório final guardado ainda.'
-          : listaAberta.tipo === 'resumido' ? 'Nenhum relatório resumido guardado ainda.' : 'Nada para listar ainda.'),
+          : listaAberta.tipo === 'final' ? 'Nenhum relatório final detalhado guardado ainda.'
+          : listaAberta.tipo === 'resumido' ? 'Nenhum relatório final guardado ainda.' : 'Nada para listar ainda.'),
       ], { classe: 'rel-lista-cartao' }));
     }
 

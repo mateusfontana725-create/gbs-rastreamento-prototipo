@@ -148,6 +148,20 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Relatórios: escolha do comando, Final e Final detalhado, IPO dentro de todos e imprensa mais completa
+
+- **Tela de Relatórios:** Diário, Comando, **Final** (o antigo "resumido") , **Final detalhado** (o antigo "final") e
+  Imprensa. O cartão "IPO" saiu: o IPO não é um relatório à parte, ele vai **dentro** do diário, do de comando, do final e
+  do final detalhado (o da imprensa não, porque tem nomes). Preencher o IPO continua em Ferramentas → IPO e em Dados da
+  operação → IPO.
+- **Relatório de comando:** escolha o comando (o que aconteceu sob aquele comandante, do início dele até a passagem, com o
+  briefing entregue) ou **Todos os comandos** (a operação inteira, com a tabela de cada comandante e período e o briefing de
+  cada passagem). O de um comando encerrado fica guardado; o em andamento e o geral só são baixados.
+- **Imprensa:** situação em destaque, natureza e cidade, a pessoa procurada sem o nome ("um homem de 19 anos"), os números
+  do esforço (dias de buscas, militares, voluntários, setores concluídos, área varrida e quilômetros percorridos), os meios
+  empregados (K9, drone, embarcações…), os órgãos de apoio (só o nome do órgão, sem os nomes dos agentes) e a linha do
+  tempo. Continua sem nomes, documentos, fotos, trilhas, posições e observações.
+
 ### Relatórios: um só de comando, relatório resumido, mapa na área da operação e IPO completo (migração 081)
 
 - **Um relatório de comando só.** Saiu o cartão "Passagem" da tela de Relatórios: o relatório de cada comando já traz a

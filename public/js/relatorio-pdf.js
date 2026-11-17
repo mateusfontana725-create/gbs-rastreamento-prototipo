@@ -36,6 +36,9 @@
   var DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
+  // o módulo do IPO (no navegador, window.Ipo; nos testes do Node pode não existir)
+  function moduloIpo() { return typeof window !== 'undefined' && window.Ipo ? window.Ipo : (raiz.Ipo || null); }
+
   /* ---------- formatação ------------------------------------------------ */
   function dd(n) { return (n < 10 ? '0' : '') + n; }
   function data(v) { if (!v) return null; var d = new Date(v); return isNaN(d) ? null : d; }
@@ -187,7 +190,7 @@
     // Logo do Corpo de Bombeiros também na capa (acima do título), como no cabeçalho das páginas
     var topo = recursos.logo ? [{ image: recursos.logo, width: 180, margin: [0, 26, 0, 22] }] : [];
     return topo.concat([
-      { text: 'RELATÓRIO FINAL DE OPERAÇÃO', style: 'sobretitulo', margin: [0, recursos.logo ? 0 : 30, 0, 6] },
+      { text: 'RELATÓRIO FINAL DETALHADO DE OPERAÇÃO', style: 'sobretitulo', margin: [0, recursos.logo ? 0 : 30, 0, 6] },
       { canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 14] },
       { text: op.codigo, style: 'tituloCapa' },
       { text: txt(window.Ipo.normalizarIpo(op.ipo || {}).natureza, ''), style: 'subtituloCapa', margin: [0, 6, 0, 22] },
@@ -579,7 +582,7 @@
       .concat(secaoDiario(d))
       .concat(secaoBusca(d, 5))
       .concat(secaoResultado(d, d.busca ? 6 : 5));
-    return documento(d, recursos, conteudo, { titulo: 'Relatório final — ' + op.codigo, assunto: 'Relatório final de operação de busca e salvamento', marca: 'RELATÓRIO FINAL' });
+    return documento(d, recursos, conteudo, { titulo: 'Relatório final detalhado — ' + op.codigo, assunto: 'Relatório final detalhado de operação de busca e salvamento', marca: 'RELATÓRIO FINAL DETALHADO' });
   }
 
   /* ---------- relatório resumido ------------------------------------------ */
@@ -617,7 +620,7 @@
     ];
     var conteudo = [];
     if (recursos.logo) conteudo.push({ image: recursos.logo, width: 150, margin: [0, 0, 0, 12] });
-    conteudo.push({ text: 'RELATÓRIO RESUMIDO DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
+    conteudo.push({ text: 'RELATÓRIO FINAL DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
     conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
     conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20 });
     conteudo.push({ text: txt(ipo.natureza, ''), style: 'subtituloCapa', margin: [0, 4, 0, 10] });
@@ -657,8 +660,8 @@
     }), ['*', 60, 140, 60]));
     var fotosRes = (recursos.fotosResumo || []).filter(function (f) { return recursos.fotos[f.id]; });
     if (fotosRes.length) conteudo.push(gradeFotos(fotosRes, recursos, 'Fotos (' + fotosRes.length + ' de ' + (d.fotos || []).length + ')'));
-    conteudo.push(nota('Distâncias aproximadas, pelas trilhas resumidas do GPS. O relatório final traz o diário, os pontos, cada setor com o mapa próprio e todas as fotos.'));
-    return documento(d, recursos, conteudo.concat(secaoOcorrencia(d, recursos)), { titulo: 'Relatório resumido — ' + op.codigo, assunto: 'Relatório resumido de operação de busca e salvamento', marca: 'RELATÓRIO RESUMIDO' });
+    conteudo.push(nota('Distâncias aproximadas, pelas trilhas resumidas do GPS. O relatório final detalhado traz o diário, os pontos, cada setor com o mapa próprio e todas as fotos.'));
+    return documento(d, recursos, conteudo.concat(secaoOcorrencia(d, recursos)), { titulo: 'Relatório final — ' + op.codigo, assunto: 'Relatório final de operação de busca e salvamento', marca: 'RELATÓRIO FINAL' });
   }
 
   // Relatório para imprensa (divulgação): dados reduzidos. Sem nomes, documentos, telefones, fotos, trilhas, posições,
@@ -667,46 +670,77 @@
   function montarImprensa(d, recursos) {
     recursos = recursos || {};
     var op = d.operacao;
-    var pessoas = d.participantes.filter(function (p) { return !p.removido; }).length;
-    var concluidos = d.setores.filter(function (s) { return s.status === 'concluido'; }).length;
+    var IPO = moduloIpo();
+    var ipo = IPO ? IPO.normalizarIpo(op.ipo || {}) : {};
+    var ativos = d.participantes.filter(function (p) { return !p.removido; });
+    var militares = ativos.filter(function (p) { return p.tipo === 'militar' || p.tipo === 'responsavel'; }).length;
+    var voluntarios = ativos.filter(function (p) { return p.tipo === 'civil'; }).length;
+    var concluidos = d.setores.filter(function (s) { return s.status === 'concluido'; });
+    var areaVarrida = concluidos.reduce(function (a, s) { return a + (areaSetor(s) || 0); }, 0);
+    var km = (d.trilhas || []).reduce(function (a, t) { return a + kmTrilha(t.pontos); }, 0);
+    var inicio = op.acionado_em || op.criada_em;
+    var fim = op.encerrada_em || d.gerado_em || new Date().toISOString();
+    var dias = inicio ? Math.max(1, Math.round((new Date(chaveDia(fim) + 'T12:00:00') - new Date(chaveDia(inicio) + 'T12:00:00')) / 86400000) + 1) : null;
+    // efetivo: a soma do IPO por dia (militares-dia), quando houver
+    var militaresDia = (ipo.efetivo || []).reduce(function (a, x) { return a + (x.qtd || 0); }, 0);
     var numeros = [
-      [String(pessoas), 'pessoas de campo'],
-      [String(d.setores.length), 'setores de busca'],
-      [concluidos + ' / ' + d.setores.length, 'setores concluídos'],
-      [String(d.vitimas.length), 'pessoas procuradas'],
+      [dias ? String(dias) : '—', dias === 1 ? 'dia de buscas' : 'dias de buscas'],
+      [String(militares), 'militares'],
+      [String(voluntarios), 'voluntários e civis'],
+      [concluidos.length + ' / ' + d.setores.length, 'setores concluídos'],
+      [areaVarrida ? textoArea(areaVarrida) : '—', 'área varrida'],
+      [km ? km.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' km' : '—', 'percorridos a pé'],
     ];
     var marcos = (d.diario || []).filter(function (e) {
       return e.origem !== 'manual' && (e.categoria === 'operacao' || e.categoria === 'setor');
     });
-    var resultado = op.resultado && RESULTADO[op.resultado] ? RESULTADO[op.resultado].rotulo : 'Não apurado';
-    var periodo = 'Início: ' + dataHora(op.acionado_em || op.criada_em) + '   ·   ' +
-      (op.encerrada_em ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'em andamento');
-    // Resumo em texto corrido: só números, tipo e datas (sem nomes, sem o texto livre do resultado)
-    var grupos = (d.grupos || []).length;
+    var r = op.resultado && RESULTADO[op.resultado] ? RESULTADO[op.resultado] : null;
+    var situacaoTxt = r ? r.rotulo : op.status === 'encerrada' ? 'Buscas encerradas sem localização da vítima' : 'Buscas em andamento';
     var tipoOp = { aquatica: 'aquática', terrestre: 'terrestre', aerea: 'aérea', sarp: 'com SARP', brec: 'em estrutura colapsada (BREC)' }[op.tipo] || (op.tipo_outro ? op.tipo_outro.toLowerCase() : null);
-    var fim = op.encerrada_em || Date.now();
+    // a pessoa procurada, sem nome: "homem de 19 anos"
+    var vit = (d.vitimas || []).map(function (v) {
+      var q = v.sexo === 'M' ? 'um homem' : v.sexo === 'F' ? 'uma mulher' : 'uma pessoa';
+      return q + (v.idade != null ? ' de ' + v.idade + ' anos' : '');
+    });
+    // local: só cidade/região (o que estiver antes do primeiro traço ou vírgula da localidade do IPO)
+    var local = String(ipo.localidade || op.local_endereco || '').split(/\s[-–]\s|,/)[0].trim();
+    // meios empregados: os procedimentos marcados no IPO (sem nomes)
+    var meios = IPO ? IPO.PROCEDIMENTOS.filter(function (pr) { return (ipo.procedimentos || []).indexOf(pr[0]) !== -1; }).map(function (pr) { return pr[1]; }) : [];
+    // órgãos de apoio: só o nome do órgão (o que vem antes de ":"); linhas sem ":" só se forem curtas
+    var orgaos = String(ipo.orgaos_apoio || '').split('\n').map(function (l) {
+      var t = l.replace(/^[-•]\s*/, '').trim();
+      var k = t.indexOf(':');
+      t = k > 0 ? t.slice(0, k) : t.length <= 40 ? t.replace(/\.$/, '') : '';
+      return t.trim();
+    }).filter(Boolean);
     var frases = [
-      'Operação de busca' + (tipoOp ? ' ' + tipoOp : '') + ', acionada em ' + dataHora(op.acionado_em || op.criada_em) +
-        (op.encerrada_em ? ' e encerrada em ' + dataHora(op.encerrada_em) + ' (duração de ' + duracao(op.acionado_em || op.criada_em, fim) + ')' : ', ainda em andamento') + '.',
-      pessoas + (pessoas === 1 ? ' pessoa de campo participou' : ' pessoas de campo participaram') +
-        (grupos ? ', organizadas em ' + grupos + (grupos === 1 ? ' equipe' : ' equipes') : '') + '.',
-      d.setores.length ? 'Foram trabalhados ' + d.setores.length + (d.setores.length === 1 ? ' setor' : ' setores') +
-        ' de busca, ' + concluidos + ' deles concluídos.' : 'Nenhum setor de busca foi definido.',
-    ];
+      'Operação de busca' + (tipoOp ? ' ' + tipoOp : '') + (local ? ' em ' + local : '') + ', iniciada em ' + dataHora(inicio) +
+        (op.encerrada_em ? ' e encerrada em ' + dataHora(op.encerrada_em) + ' (duração de ' + duracao(inicio, op.encerrada_em) + ')' : ', ainda em andamento') + '.',
+      vit.length ? 'Procura por ' + (vit.length === 1 ? vit[0] : vit.length + ' pessoas (' + vit.join('; ') + ')') + '.' : null,
+      ativos.length ? militares + (militares === 1 ? ' militar' : ' militares') + (voluntarios ? ' e ' + voluntarios + (voluntarios === 1 ? ' voluntário' : ' voluntários') : '') + ' participaram' +
+        ((d.grupos || []).length ? ', organizados em ' + d.grupos.length + ((d.grupos.length === 1) ? ' equipe' : ' equipes') : '') + (militaresDia ? ', somando ' + militaresDia + ' militares-dia' : '') + '.' : null,
+      d.setores.length ? 'Foram definidos ' + d.setores.length + (d.setores.length === 1 ? ' setor' : ' setores') + ' de busca, ' + concluidos.length + ' deles concluídos' +
+        (areaVarrida ? ', cobrindo ' + textoArea(areaVarrida) : '') + '.' : 'Nenhum setor de busca foi definido.',
+      km ? 'As equipes percorreram cerca de ' + km.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' km a pé, registrados por GPS.' : null,
+    ].filter(Boolean);
     var conteudo = [
       { text: 'DIVULGAÇÃO PÚBLICA', style: 'sobretitulo', margin: [0, 0, 0, 10] },
       { text: 'Operação de busca e salvamento', style: 'tituloCapa' },
-      { text: op.codigo, fontSize: 14, bold: true, margin: [0, 8, 0, 4] },
-      { text: periodo, style: 'subtituloCapa', margin: [0, 0, 0, 22] },
-      { columns: numeros.map(function (n) {
-        return { width: '*', stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }] };
-      }), columnGap: 10, margin: [0, 0, 0, 22] },
+      { text: op.codigo, fontSize: 14, bold: true, margin: [0, 8, 0, 2] },
+      { text: [ipo.natureza || null, local || null].filter(Boolean).join('  ·  ') || ' ', style: 'subtituloCapa', margin: [0, 0, 0, 4] },
+      { text: 'Início: ' + dataHora(inicio) + '   ·   ' + (op.encerrada_em ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'em andamento'), style: 'subtituloCapa', margin: [0, 0, 0, 16] },
+      { table: { widths: ['*'], body: [[{ stack: [{ text: 'SITUAÇÃO', style: 'rotuloCaixa', color: r ? r.cor : COR.suave }, { text: situacaoTxt, fontSize: 14, bold: true, color: r ? r.cor : COR.texto, margin: [0, 2, 0, 0] }],
+        fillColor: r ? r.fundo : COR.fundo, margin: [10, 8, 10, 8] }]] }, layout: 'noBorders', margin: [0, 0, 0, 16] },
+      { table: { widths: ['*', '*', '*'], body: [numeros.slice(0, 3), numeros.slice(3)].map(function (lin) {
+        return lin.map(function (n) { return { stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }], fillColor: COR.fundo, margin: [8, 7, 4, 7] }; });
+      }) }, layout: { hLineWidth: function (i) { return i === 1 ? 3 : 0; }, hLineColor: function () { return '#ffffff'; }, vLineWidth: function (i) { return i > 0 && i < 3 ? 3 : 0; }, vLineColor: function () { return '#ffffff'; },
+        paddingLeft: function () { return 0; }, paddingRight: function () { return 0; }, paddingTop: function () { return 0; }, paddingBottom: function () { return 0; } }, margin: [0, 0, 0, 18] },
       { text: 'Resumo', style: 'h2' },
-      { text: frases.join(' '), fontSize: 10, lineHeight: 1.35, margin: [0, 0, 0, 14] },
-      { text: 'Resultado geral', style: 'h2' },
-      { text: resultado, fontSize: 11, bold: true, margin: [0, 0, 0, 16] },
-      { text: 'Linha do tempo', style: 'h2' },
+      { text: frases.join(' '), fontSize: 10, lineHeight: 1.35, margin: [0, 0, 0, 12] },
     ];
+    if (meios.length) conteudo.push({ text: 'Meios empregados', style: 'h2' }, { ul: meios, fontSize: 10, margin: [0, 0, 0, 12] });
+    if (orgaos.length) conteudo.push({ text: 'Órgãos de apoio', style: 'h2' }, { ul: orgaos, fontSize: 10, margin: [0, 0, 0, 12] });
+    conteudo.push({ text: 'Linha do tempo', style: 'h2' });
     if (marcos.length) {
       conteudo.push({ table: { headerRows: 1, widths: [96, '*'], body: [
         [{ text: 'HORÁRIO', style: 'rotuloCaixa' }, { text: 'O QUE ACONTECEU', style: 'rotuloCaixa' }],
@@ -716,10 +750,11 @@
     } else {
       conteudo.push({ text: 'Nenhum marco registrado até agora.', color: COR.suave });
     }
-    conteudo.push({ text: 'Documento preparado para divulgação. Não traz nomes, documentos, telefones, fotos, trilhas, posições nem observações de campo.',
+    conteudo.push({ text: 'Documento preparado para divulgação. Não traz nomes, documentos, telefones, fotos, trilhas, posições nem observações de campo. Distâncias e áreas aproximadas.',
       fontSize: 8, color: COR.suave, margin: [0, 18, 0, 0] });
     return documento(d, recursos, conteudo, { titulo: 'Relatório para imprensa — ' + op.codigo, assunto: 'Relatório para divulgação', marca: 'DIVULGAÇÃO', publico: true });
   }
+
 
   // Página com cabeçalho (logo e código), rodapé (gerado em, página X de Y) e estilos comuns aos relatórios.
   // o: { titulo, assunto, marca (texto do cabeçalho), cabecalhoNaPrimeira }
@@ -877,6 +912,19 @@
       conteudo.push(subtitulo('Situação ao passar o comando'));
       conteudo.push(p.fechamento.length ? ficha(p.fechamento) : nota('Briefing indisponível.'));
     }
+    if (p.comandos && p.comandos.length) {
+      conteudo.push(subtitulo('Comandos da operação'));
+      conteudo.push(tabela(['Comando', 'Comandante', 'Início', 'Fim', 'Passado a'], p.comandos.map(function (c) {
+        return [{ text: c.rotulo, style: 'td', bold: true }, txt(c.comandante), dataHora(c.ini), c.fim ? dataHora(c.fim) : 'em andamento', txt(c.passadoA)];
+      }), [60, '*', 80, 80, '*']));
+      p.comandos.forEach(function (c) {
+        if (!c.fechamento || !c.fechamento.length) return;
+        conteudo.push(subtitulo('Situação ao passar o ' + c.rotulo.toLowerCase() + ' (' + txt(c.comandante) + ' → ' + txt(c.passadoA) + ')'));
+        conteudo.push(ficha(c.fechamento));
+      });
+    }
+    // o IPO vai dentro de todos os relatórios internos (não no da imprensa)
+    if (p.ipo !== false && moduloIpo()) conteudo = conteudo.concat(secaoOcorrencia(d, recursos));
     return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: p.assunto, marca: p.marca });
   }
 
@@ -915,6 +963,24 @@
         ['Passado a', txt(cmd.passadoA)],
       ],
       fechamento: cmd.fechamento || null,
+    });
+  }
+
+  // Todos os comandos: a operação inteira (do acionamento até agora ou o encerramento), com a tabela dos comandos e o
+  // briefing entregue em cada passagem.
+  function montarComandoGeral(d, recursos, comandos) {
+    var op = d.operacao;
+    var ini = data(op.acionado_em || op.criada_em) || new Date();
+    var fimMs = op.encerrada_em ? data(op.encerrada_em).getTime() + 1 : Date.now() + 1;
+    var lista = comandos || [];
+    return montarPeriodo(d, recursos, {
+      ini: ini.getTime(), fim: fimMs, ref: ini,
+      sobretitulo: 'RELATÓRIO DE COMANDO · TODOS OS COMANDOS', subtitulo: lista.length + (lista.length === 1 ? ' comando' : ' comandos') + ' na operação',
+      rotuloMapa: 'Mapa geral da operação', geradoTexto: 'pelo painel, com os dados do momento da geração',
+      titulo: 'Relatório de comando (todos) — ' + op.codigo, assunto: 'Relatório de comando de operação de busca e salvamento', marca: 'RELATÓRIO DE COMANDO',
+      sufixo: 'da operação',
+      linhasExtra: [['Comandante atual', txt(lista.length ? lista[lista.length - 1].comandante : op.comando_nome)], ['Período', dataHora(ini) + ' até ' + (op.encerrada_em ? dataHora(op.encerrada_em) : 'agora')]],
+      comandos: lista,
     });
   }
 
@@ -982,7 +1048,7 @@
     return dentro;
   }
 
-  var api = { montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarComandoGeral: montarComandoGeral, montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

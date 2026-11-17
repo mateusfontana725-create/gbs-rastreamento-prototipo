@@ -116,18 +116,41 @@ const dados = {
 teste('mapa, números, setores, pessoas com a distância, fotos e o IPO', () => {
   const doc = RP.montarResumido(dados, { mapaGeral: 'data:image/jpeg;base64,AA==', mapaNota: 'Mapa enquadrado num raio de 1,2 km em volta do local da operação.', fotos: { f1: 'data:image/jpeg;base64,AA==' }, fotosResumo: dados.fotos });
   const tx = textos(doc.content).join(' | ');
-  assert.ok(/RELATÓRIO RESUMIDO DA OPERAÇÃO/.test(tx) && /Rio Rondon/.test(tx));
+  assert.ok(/RELATÓRIO FINAL DA OPERAÇÃO/.test(tx) && /Rio Rondon/.test(tx));
   assert.ok(/1 \/ 2/.test(tx), 'setores concluídos');
   assert.ok(/Mapa enquadrado num raio/.test(tx), 'nota do enquadramento');
   assert.ok(/Sgt Borotta/.test(tx) && /0,2 km/.test(tx), 'distância da pessoa sem contar o salto para outra cidade');
   assert.ok(/Fotos \(1 de 1\)/.test(tx));
   assert.ok(/Informe Padrão de Ocorrência/.test(tx) && /20263BBM12221/.test(tx) && /Buscas com emprego de K9/.test(tx) && /Helicóptero BPMOA/.test(tx), 'IPO completo');
-  assert.strictEqual(doc.info.title, 'Relatório resumido — Rio Rondon');
+  assert.strictEqual(doc.info.title, 'Relatório final — Rio Rondon');
 });
 teste('relatório final também traz o IPO completo', () => {
   const doc = RP.montarDocumento(Object.assign({ relatorios_anteriores: [] }, dados), {});
   const tx = textos(doc.content).join(' | ');
   assert.ok(/RGO 20263BBM12221/.test(tx) && /Desdobramentos\/situação atual/.test(tx) && /Gustavo Teixeira da Silva\/129\.590\.679-16/.test(tx));
+});
+
+console.log('IPO dentro dos relatórios e relatório de comando');
+teste('relatório diário e de um comando trazem o IPO', () => {
+  const dia = RP.montarDiario(dados, {}, '2026-11-03');
+  const cmd = RP.montarComando(dados, {}, { rotulo: 'Comando 2', ini: new Date(2026, 10, 3, 8).getTime(), fim: new Date(2026, 10, 4, 8).getTime(), comandante: 'Sgt Dinardi', passadoA: 'Sgt Borotta' });
+  [dia, cmd].forEach((doc) => { const tx = textos(doc.content).join(' | '); assert.ok(/Informe Padrão de Ocorrência/.test(tx) && /RGO 20263BBM12221/.test(tx)); });
+});
+teste('todos os comandos: tabela com cada comandante e o briefing de cada passagem', () => {
+  const comandos = [
+    { rotulo: 'Comando 1', comandante: 'Sgt Berzotti', ini: new Date(2026, 10, 2, 17).getTime(), fim: new Date(2026, 10, 5, 8).getTime(), passadoA: 'Sgt Dinardi', fechamento: [['Objetivo', 'varrer a margem direita']] },
+    { rotulo: 'Comando 2', comandante: 'Sgt Dinardi', ini: new Date(2026, 10, 5, 8).getTime(), fim: null, passadoA: null, fechamento: null },
+  ];
+  const tx = textos(RP.montarComandoGeral(dados, {}, comandos).content).join(' | ');
+  assert.ok(/TODOS OS COMANDOS/.test(tx) && /Comandos da operação/.test(tx));
+  assert.ok(/Sgt Berzotti/.test(tx) && /Sgt Dinardi/.test(tx) && /em andamento/.test(tx));
+  assert.ok(/varrer a margem direita/.test(tx), 'briefing da passagem');
+  assert.ok(/Informe Padrão de Ocorrência/.test(tx), 'IPO');
+});
+teste('o relatório da imprensa não traz o IPO (tem nomes)', () => {
+  const tx = JSON.stringify(RP.montarImprensa(dados, {}));
+  assert.ok(!/Informe Padrão de Ocorrência/.test(tx) && !/Gustavo/.test(tx) && !/Berzotti/.test(tx) && !/Correa/.test(tx));
+  assert.ok(/Procura por um homem de 19 anos/.test(tx));
 });
 
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }

@@ -3570,5 +3570,59 @@ console.log('IPO (Diário): trilhas de cada dia (migração 083)');
   chk(/permission denied|sem_permissao/.test(await erroDe(como(null, `select public.relatorio_trilhas_dias($1, '2026-11-10', '2026-11-11')`, [op83.id], 'anon'))), 'anônimo não chama relatorio_trilhas_dias');
 }
 
-console.log('\nMigrações 007–083 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Tirar a localização de uma pessoa do mapa (migração 084)');
+{
+  const migr84 = ler('supabase/migracoes/084_tirar_do_mapa.sql').replace(/^notify .*$/m, '');
+  await db.exec(migr84);
+  await db.exec(migr84);
+  chk(true, 'migração 084 executa duas vezes (idempotente)');
+  const op84 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 084', p_retencao_horas: 0, p_dados: JSON.stringify({ tipo: 'terrestre', local_lat: -25.5, local_lng: -49.3 }) });
+  const an84 = [await usuario(null, true), await usuario(null, true)];
+  const p84 = [];
+  for (let i = 0; i < 2; i++) p84.push(await rpc(an84[i], 'ingressar', { p_token: op84.token_civil, p_nome: 'Longe ' + (i + 1), p_tipo: 'civil', p_cpf: cpf, p_telefone: tel }));
+  const k84 = (n) => 9700 + n;
+  await enviaT(an84[0], p84[0].participante_id, [pt(k84(1), -23.0, -50.0, Date.now() - 9000), pt(k84(2), -23.001, -50.0, Date.now() - 8000)]);
+  await enviaT(an84[1], p84[1].participante_id, [pt(k84(3), -25.5, -49.3, Date.now() - 7000), pt(k84(4), -25.5001, -49.3, Date.now() - 6000)]);
+  const lk84 = await rpc(resp1, 'comando_publico_gerar', { p_operacao: op84.id });
+  const antes = await anonRpc('comando_publico', lk84.token, null);
+  chk(antes.tabelas.participantes.length === 2 && antes.tabelas.posicoes.length === 4, 'antes: as duas pessoas e as quatro posições no link público');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'tirar_do_mapa', { p_participante: p84[0].participante_id, p_fora: true }))), 'quem não é responsável da operação não tira ninguém do mapa');
+  chk(/permission denied|sem_permissao/.test(await erroDe(como(null, `select public.tirar_do_mapa($1, true)`, [p84[0].participante_id], 'anon'))), 'anônimo não chama tirar_do_mapa');
+  const t = await rpc(resp1, 'tirar_do_mapa', { p_participante: p84[0].participante_id, p_fora: true });
+  chk(t.fora_do_mapa_em && t.fora_do_mapa_por_nome === 'Sgt Um', 'tirar do mapa guarda quando e quem', t);
+  const nPos = (await db.query(`select count(*)::int n from public.posicoes where participante_id = $1`, [p84[0].participante_id])).rows[0].n;
+  chk(nPos === 2, 'nenhuma posição é apagada', nPos);
+  const dep = await anonRpc('comando_publico', lk84.token, null);
+  chk(dep.tabelas.participantes.length === 1 && dep.tabelas.posicoes.length === 2 && dep.tabelas.posicoes.every((x) => x.participante_id === p84[1].participante_id), 'o link público não traz a pessoa nem as posições dela', dep.tabelas.participantes.length);
+  const pg = await anonRpc('comando_publico_posicoes', lk84.token, 0, 5000);
+  chk(pg.posicoes.length === 2 && pg.posicoes.every((x) => x.participante_id === p84[1].participante_id), 'as posições em partes do link público também não trazem a pessoa');
+  const eq = await rpc(an84[1], 'trilhas_da_equipe', { p_participante: p84[1].participante_id });
+  chk(eq.length === 0, 'o mapa dos colegas não traz a trilha de quem está fora do mapa', eq.length);
+  const dia84 = (await db.query(`select titulo, detalhe from public.diario where operacao_id = $1 and tipo = 'pessoa_fora_do_mapa'`, [op84.id])).rows;
+  chk(dia84.length === 1 && dia84[0].detalhe === 'Longe 1', 'o diário registra quem foi tirado do mapa', dia84);
+  const de2 = await rpc(resp1, 'tirar_do_mapa', { p_participante: p84[0].participante_id, p_fora: true });
+  chk(de2.fora_do_mapa_em === t.fora_do_mapa_em && (await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'pessoa_fora_do_mapa'`, [op84.id])).rows[0].n === 1, 'tirar de novo não muda nada nem repete no diário');
+  // continua mandando posição: segue fora do mapa
+  await enviaT(an84[0], p84[0].participante_id, [pt(k84(5), -23.002, -50.0, Date.now() - 3000)]);
+  chk((await rpc(resp1, 'tirar_do_mapa', { p_participante: p84[0].participante_id, p_fora: true })).fora_do_mapa_em === t.fora_do_mapa_em, 'a pessoa que segue mandando posição continua fora do mapa');
+  // entra de novo: volta ao mapa
+  await rpc(an84[0], 'ingressar', { p_token: op84.token_civil, p_nome: 'Longe 1', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const volta = (await db.query(`select fora_do_mapa_em, fora_do_mapa_por_nome from public.participantes where id = $1`, [p84[0].participante_id])).rows[0];
+  chk(volta.fora_do_mapa_em === null && volta.fora_do_mapa_por_nome === null, 'quem entra de novo na operação volta ao mapa', volta);
+  // mostrar de novo, pelo responsável
+  await rpc(resp1, 'tirar_do_mapa', { p_participante: p84[1].participante_id, p_fora: true });
+  const mostra = await rpc(resp1, 'tirar_do_mapa', { p_participante: p84[1].participante_id, p_fora: false });
+  chk(mostra.fora_do_mapa_em === null && (await db.query(`select count(*)::int n from public.diario where operacao_id = $1 and tipo = 'pessoa_no_mapa'`, [op84.id])).rows[0].n === 1, 'mostrar de novo limpa e registra no diário', mostra);
+  // responsável também pode ser tirado
+  const rr = await rpc(resp1, 'entrar_como_responsavel', { p_operacao: op84.id });
+  const tr = await rpc(resp1, 'tirar_do_mapa', { p_participante: rr.id, p_fora: true });
+  chk(tr.fora_do_mapa_em, 'um responsável também pode ser tirado do mapa');
+  await rpc(resp1, 'entrar_como_responsavel', { p_operacao: op84.id });
+  chk((await db.query(`select fora_do_mapa_em from public.participantes where id = $1`, [rr.id])).rows[0].fora_do_mapa_em !== null, 'abrir o painel de novo não traz o responsável de volta ao mapa');
+  // operação encerrada: não muda
+  await rpc(resp1, 'encerrar_operacao', { p_operacao: op84.id });
+  chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'tirar_do_mapa', { p_participante: p84[1].participante_id, p_fora: true }))), 'operação encerrada: não tira ninguém do mapa');
+}
+
+console.log('\nMigrações 007–084 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

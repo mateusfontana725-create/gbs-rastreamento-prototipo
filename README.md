@@ -162,6 +162,18 @@ legível, elas não aparecem.
   empregados (K9, drone, embarcações…), os órgãos de apoio (só o nome do órgão, sem os nomes dos agentes) e a linha do
   tempo. Continua sem nomes, documentos, fotos, trilhas, posições e observações.
 
+### Tirar a localização de uma pessoa do mapa (migração 084, versão 1.1.0)
+
+- Quem entrou na operação de longe só para acompanhar ou testar deixava um ponto distante no mapa. Na ficha da pessoa
+  (**⋮ Mais › Tirar do mapa**, ou na aba Dados) o responsável **tira a localização do mapa**: o marcador e a trilha somem do
+  painel, do **link público** e do mapa dos colegas, e a lista mostra a etiqueta **⊘ mapa**. Vale para militares, civis e
+  responsáveis.
+- **Nada é apagado**: as posições continuam guardadas (relatórios e arquivo) e o registro vai para o diário. **Mostrar no
+  mapa** na mesma ficha desfaz. Se a pessoa **entrar de novo** na operação (link ou código), volta ao mapa sozinha; quem
+  continua mandando posição sem entrar de novo segue fora do mapa.
+- **Banco:** migração `084_tirar_do_mapa.sql` (colunas `fora_do_mapa_em`/`fora_do_mapa_por_nome` e a função `tirar_do_mapa`).
+  Sem ela, o botão avisa que falta a migração.
+
 ### Número da versão (1.0.0)
 
 - O sistema tem um número de versão (ex.: **Versão 1.0.0**), que sobe a cada atualização: correção 1.0.0 → 1.0.1,

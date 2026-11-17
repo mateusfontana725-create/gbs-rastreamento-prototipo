@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#06080a">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="gbs-versao" content="1.0.0">
+  <meta name="gbs-versao" content="1.1.0">
   <title>Rastreamento GBS — Comando</title>
   <link rel="icon" type="image/png" sizes="256x256" href="img/brasao-cbmpr.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -700,6 +700,7 @@
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-gravacao" hidden title="Liga ou desliga a gravação do caminho desta pessoa (a posição atual continua aparecendo)">⏹ Desativar a gravação da trilha</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-apagar-trechos" hidden title="Borracha: apaga trechos da trilha desta pessoa do mapa (os pontos continuam guardados)">✂ Apagar trechos da trilha</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-restaurar-trechos" hidden title="Volta a mostrar os trechos da trilha que foram apagados">↺ Restaurar trechos apagados</button>
+                <button class="menu-linha-item" role="menuitem" type="button" id="ficha-fora-mapa-menu" hidden title="Some do mapa e do link público: a localização e a trilha. Nada é apagado.">⊘ Tirar do mapa</button>
                 <button class="menu-linha-item" role="menuitem" type="button" id="ficha-vitima" hidden title="Registrar que esta pessoa encontrou a vítima">✚ Encontrou a vítima</button>
                 <a class="menu-linha-item" role="menuitem" id="ficha-ligar" href="#" hidden>📞 Ligar</a>
               </div>
@@ -748,6 +749,10 @@
             <div class="ficha-sub ficha-trilha-acoes">
               <button class="btn btn-pequeno" type="button" id="ficha-estatisticas">📈 Estatísticas da trilha</button>
               <button class="btn btn-pequeno" type="button" id="ficha-exportar">⤓ Exportar trilha</button>
+            </div>
+            <div class="ficha-sub ficha-fora-mapa" id="ficha-fora-mapa-caixa">
+              <p class="muted ficha-fora-mapa-info" id="ficha-fora-mapa-info" hidden></p>
+              <button class="btn btn-pequeno" type="button" id="ficha-fora-mapa" title="Some do mapa (e do link público): a localização e a trilha. Nada é apagado.">⊘ Tirar do mapa</button>
             </div>
             <button class="btn-link-perigo" type="button" id="ficha-remover">Remover participante da operação</button>
           </section>

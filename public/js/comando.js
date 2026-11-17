@@ -328,6 +328,8 @@
     $('areas-apagar-trechos').addEventListener('click', function () { escolherTrilhaGpsParaApagar(); });
     ligarMenuAcoes($('ficha-menu'));
     $('ficha-remover').addEventListener('click', removerParticipante);
+    $('ficha-fora-mapa').addEventListener('click', alternarForaDoMapa);
+    $('ficha-fora-mapa-menu').addEventListener('click', function () { var m = $('ficha-menu'); if (m && m.querySelector('.menu-linha')) m.querySelector('.menu-linha').hidden = true; alternarForaDoMapa(); });
     $('gps-alerta-tentar').addEventListener('click', garantirMinhaPosicao);
     $('gps-alerta-como').addEventListener('click', mostrarComoLiberarMinha);
     $('btn-minha-conta').addEventListener('click', abrirMinhaConta);
@@ -3238,6 +3240,8 @@
         p.dados.ultima_posicao_em = antigo.ultima_posicao_em;
       }
       if (antigo.tipo !== row.tipo) atribuirCores();
+      // outro responsável tirou a pessoa do mapa (ou a devolveu): a trilha acompanha
+      if (Boolean(antigo.fora_do_mapa_em) !== Boolean(p.dados.fora_do_mapa_em)) { atualizarMarcador(p); desenharTrilha(p); est.rotulos.agendar(); }
     }
     atualizarMarcador(p);
     est.listaSuja = true;
@@ -4344,6 +4348,7 @@
       (fad && fad.descansando ? '<span class="li-descanso" title="Descansando na base há ' + window.Fadiga.textoMinutos(fad.descansando.min) + (fad.descansando.longo ? ' (descanso longo: a contagem de fadiga foi zerada)' : '') + '">☕ ' + window.Fadiga.textoMinutos(fad.descansando.min) + '</span>' : '') +
       (ajuda ? '<span class="li-aviso li-aviso-ajuda" title="Pediu ajuda">SOS</span>' : '') +
       (saida ? '<span class="li-aviso li-aviso-saida" title="Pediu para sair">Saída</span>' : '') +
+      (foraDoMapa(p) ? '<span class="li-aviso li-aviso-fora" title="Fora do mapa: a localização foi escondida pelo responsável (abra a ficha para mostrar de novo)">⊘ mapa</span>' : '') +
       (novas ? '<span class="li-aviso li-aviso-msg" title="' + (novas === 1 ? 'Mensagem nova' : novas + ' mensagens novas') + '">✉' + (novas > 1 ? novas : '') + '</span>' : '');
 
     var dica = e.rot + (gpsRuim ? ' · ' + textoGps(d.gps_estado) : '') +
@@ -4741,6 +4746,15 @@
     $('ficha-hist').innerHTML = linhasHist || '<tr><td colspan="5" class="muted">Sem posições registradas.</td></tr>';
 
     $('ficha-remover').hidden = d.removido || est.op.status !== 'ativa' || ehResp;
+    var botFora = $('ficha-fora-mapa'), infoFora = $('ficha-fora-mapa-info');
+    $('ficha-fora-mapa-caixa').hidden = !podeAlterar() || (!foraDoMapa(p) && !posicaoAtual(p));
+    botFora.textContent = foraDoMapa(p) ? '◉ Mostrar no mapa' : '⊘ Tirar do mapa';
+    var botForaMenu = $('ficha-fora-mapa-menu');
+    botForaMenu.hidden = $('ficha-fora-mapa-caixa').hidden;
+    botForaMenu.textContent = botFora.textContent;
+    infoFora.hidden = !foraDoMapa(p);
+    infoFora.textContent = foraDoMapa(p) ? 'Fora do mapa' + (d.fora_do_mapa_em ? ' desde ' + C.hora(d.fora_do_mapa_em, false) : '') + (d.fora_do_mapa_por_nome ? ' por ' + d.fora_do_mapa_por_nome : '') +
+      '. A localização e a trilha não aparecem no mapa nem no link público; nada foi apagado. Se a pessoa entrar de novo na operação, volta ao mapa.' : '';
     atualizarSituacaoFicha(p);
   }
 
@@ -4946,6 +4960,34 @@
       UI.aviso('Pedido recusado e mensagem enviada.', 'ok');
     } catch (e) {
       UI.aviso(e.message, 'erro');
+    }
+  }
+
+  // Tirar a localização de uma pessoa do mapa (ou mostrar de novo): quem entrou de longe só para acompanhar ou testar.
+  async function alternarForaDoMapa() {
+    var p = est.participantes.get(est.selecionado);
+    if (!p || !podeAlterar()) return;
+    var tirar = !foraDoMapa(p);
+    if (tirar) {
+      var r = await UI.confirmar({
+        titulo: 'Tirar ' + nomeExibido(p) + ' do mapa?',
+        texto: 'A localização e a trilha dela somem do mapa, do link público e do mapa dos colegas. Nada é apagado: as posições continuam guardadas e você pode mostrar de novo pela ficha. Se a pessoa entrar de novo na operação, volta ao mapa.',
+        ok: 'Tirar do mapa',
+      });
+      if (!r) return;
+    }
+    try {
+      var row = await C.rpc('tirar_do_mapa', { p_participante: p.id, p_fora: tirar });
+      p.dados.fora_do_mapa_em = (row && row.fora_do_mapa_em) || null;
+      p.dados.fora_do_mapa_por_nome = (row && row.fora_do_mapa_por_nome) || null;
+      atualizarMarcador(p);
+      desenharTrilha(p);
+      est.rotulos.agendar();
+      atualizarFicha();
+      renderizarLista();
+      UI.aviso(tirar ? 'Localização de ' + nomeExibido(p) + ' tirada do mapa.' : nomeExibido(p) + ' de volta ao mapa.', 'ok');
+    } catch (e) {
+      UI.aviso(e.codigo === 'funcao_ausente' ? 'Para tirar pessoas do mapa, o banco precisa da migração 084_tirar_do_mapa.sql.' : e.message, 'erro', 8000);
     }
   }
 
@@ -10801,7 +10843,7 @@
     v.itens = [];
     est.participantes.forEach(function (p) {
       var pos = posicaoAtual(p);
-      if (!pos || p.dados.removido) return;
+      if (!pos || p.dados.removido || foraDoMapa(p)) return;
       v.itens.push({ lng: pos.lng, lat: pos.lat, tipo: 'pessoa', nome: nomeExibido(p),
         titulo: nomeExibido(p) + ' — posição ' + C.idade(pos.t), html: htmlSimbolo(p), antigo: posicaoAntiga(p) });
     });
@@ -12211,7 +12253,11 @@
   function filtroAtivo() { return est.filtroGrupos.size > 0; }
 
   // Foco de uma pessoa (botão de olho da lista): no mapa só ela e o que é dela.
+  // Localização tirada do mapa pelo responsável (migração 084): some o marcador, a trilha e a contagem; nada é apagado.
+  function foraDoMapa(p) { return Boolean(p && p.dados && p.dados.fora_do_mapa_em); }
+
   function visivelNoMapa(p) {
+    if (foraDoMapa(p)) return false;
     if (est.focoPessoa && p.id !== est.focoPessoa) return false;
     if (est.filtroDia && !temAtividadeNoDia(p)) return false;   // inclui "Ocultar" e "Todos os dias"
     return visivelNoFiltro(p);

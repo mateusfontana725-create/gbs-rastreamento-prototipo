@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.0.0';
+  var NUMERO = '1.1.0';
   var DATA = '2026-11-17';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.1.0', data: '2026-11-17', itens: [
+      'Tirar a localização de uma pessoa do mapa (ficha › ⋮ Mais › Tirar do mapa): para quem entrou de longe só para acompanhar ou testar. Some do mapa, da trilha e do link público; nada é apagado e dá para mostrar de novo. Se a pessoa entrar de novo na operação, volta ao mapa.',
+    ] },
     { versao: '1.0.0', data: '2026-11-17', itens: [
       'Número da versão no painel, na página do participante e no aplicativo, com esta lista de novidades.',
       'IPO (Diário): o IPO de cada dia junto com o diário (o que foi feito, efetivo, procedimentos, recursos, apoio e situação para o dia seguinte).',

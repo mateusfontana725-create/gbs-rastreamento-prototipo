@@ -3238,3 +3238,8 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 /* Versão no menu de Ferramentas e no menu da lista de operações */
 .menu-item.menu-versao { justify-content: center; color: var(--texto-3); font-size: .78rem; min-height: 34px; text-decoration: underline dotted; }
 .menu-topo-item.menu-topo-versao { color: var(--texto-3); font-size: .8rem; }
+
+/* Localização tirada do mapa (migração 084) */
+.li-aviso-fora { color: var(--texto-3, #9aa4af); }
+.ficha-fora-mapa { display: grid; gap: 6px; margin-top: 8px; }
+.ficha-fora-mapa-info { margin: 0; font-size: .82rem; }

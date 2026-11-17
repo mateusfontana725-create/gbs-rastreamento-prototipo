@@ -148,6 +148,29 @@ trilha de GPS feita pelo app: linha cheia com contorno escuro, setas de sentido,
 As setas agora ficam inteiras **dentro** da linha (painel e participante); numa linha fina demais para caber uma seta
 legível, elas não aparecem.
 
+### Relatórios: um só de comando, relatório resumido, mapa na área da operação e IPO completo (migração 081)
+
+- **Um relatório de comando só.** Saiu o cartão "Passagem" da tela de Relatórios: o relatório de cada comando já traz a
+  situação entregue na passagem (o briefing). O documento da passagem continua sendo guardado sozinho quando a passagem é
+  aceita e fica no item do comando, na lista ("Passagem" para baixar, "Gerar passagem" se faltar).
+- **Relatório resumido** (cartão novo): situação e desfecho, números (pessoas, setores concluídos, área varrida, km
+  percorridos, fotos), o **mapa geral** com setores, trilhas das pessoas e fotos, a tabela de setores, as pessoas com quanto
+  cada uma andou, até 9 fotos espalhadas pelo tempo da operação e o **IPO**. Fica guardado como os outros.
+- **Mapa geral enquadrado na área da operação** (resumido, final, diário e comando): o centro é o local da operação (sem
+  ele, a base; sem base, o meio dos setores) e o raio cobre todos os setores, com 1 km no mínimo. Quem entrou na operação
+  de outra cidade não puxa mais o mapa para longe; uma nota abaixo do mapa diz o raio e avisa quando ficou algo de fora.
+- **IPO num lugar só** (Ferramentas → IPO, Relatórios → IPO ou Dados da operação → IPO), na ordem do informe do CBMPR:
+  unidade e RGO, localidade escrita (não some ao marcar o ponto no mapa), coordenada de referência (em branco: o último
+  local visto da ficha ou o local da operação), acionamento do CB, desaparecimento provável, vítimas pelas fichas (com o
+  documento), buscas preliminares, possibilidade de vida, procedimentos (agora com K9, drone, varredura terrestre, dentro
+  do rio e maquinário), recursos, **efetivo por dia**, **desdobramentos por dia**, órgãos de apoio, imagens e responsável.
+  Atalhos: "Preencher pelos militares do app" (o efetivo de cada dia pelos militares que mandaram posição naquele dia),
+  "Usar os recursos do SCI" e "+ Hoje" para o desdobramento do dia. **"Copiar para o WhatsApp"** monta o texto no formato
+  dos grupos (com os asteriscos do negrito). Os registros antigos do diário (procedimento, recurso, desdobramento)
+  continuam entrando no informe. A natureza "BUSCA TERRESTRE/AQUÁTICA – PESSOA" entrou na lista.
+- **Banco:** a migração `081_relatorio_resumido_ipo.sql` aceita o tipo "resumido" e aumenta o limite do IPO de 30 mil para
+  200 mil caracteres (uma operação de duas semanas com um parágrafo por dia passava do limite antigo).
+
 ### Participante e aplicativo: busca antiga não prende mais, tema escuro e botão de tema
 
 - **Abrir numa busca que já terminou para a pessoa** (saída liberada, participação encerrada, busca encerrada ou

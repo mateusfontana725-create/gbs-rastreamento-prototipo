@@ -3471,5 +3471,28 @@ console.log('SCI: recursos avulsos (migração 080)');
   chk(ex.excluido === true && (await como(resp1, 'select count(*)::int n from public.sci2_recursos where operacao_id = $1', [op8.id])).rows[0].n === 1, 'excluir do cadastro', ex);
 }
 
-console.log('\nMigrações 007–080 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Relatório resumido e IPO completo (migração 081)');
+{
+  const J = (o) => JSON.stringify(o);
+  await db.exec(ler('supabase/migracoes/081_relatorio_resumido_ipo.sql'));
+  await db.exec(ler('supabase/migracoes/081_relatorio_resumido_ipo.sql'));
+  chk(true, 'migração 081 executa duas vezes (idempotente)');
+  const op81 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 081', p_retencao_horas: 0, p_dados: J({ tipo: 'terrestre' }) });
+  const cam81 = (n) => op81.id + '/81818181-0000-4000-8000-' + String(n).padStart(12, '0') + '.pdf';
+  for (const n of [1, 2]) await como(resp1, `insert into storage.objects (bucket_id, name) values ('relatorios', $1)`, [cam81(n)]);
+  const rs = await rpc(resp1, 'registrar_documento', { p_operacao: op81.id, p_caminho: cam81(1), p_paginas: 4, p_bytes: 900, p_sha256: null, p_tipo: 'resumido', p_referencia: null });
+  chk(rs.tipo === 'resumido' && rs.referencia === null, 'relatório resumido: registrado sem referência', rs);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'registrar_documento', { p_operacao: op81.id, p_caminho: cam81(2), p_paginas: 1, p_bytes: 1, p_sha256: null, p_tipo: 'resumido', p_referencia: 'x' }))), 'resumido com referência: recusado');
+  const dia81 = (await como(resp1, `select titulo from public.diario where operacao_id = $1 and tipo = 'relatorio_resumido'`, [op81.id])).rows;
+  chk(dia81.length === 1 && dia81[0].titulo === 'Relatório resumido gerado', 'o diário registra o relatório resumido', dia81);
+  // IPO de muitos dias (passava do limite antigo de 30 mil caracteres)
+  const desd = Array.from({ length: 30 }, (_, k) => ({ dia: '2026-11-' + String((k % 28) + 1).padStart(2, '0'), texto: 'x'.repeat(1500) }));
+  const ipoGrande = { natureza: 'BUSCA TERRESTRE – PESSOA', desdobramentos: desd };
+  const sv = await rpc(resp1, 'salvar_ipo_operacao', { p_operacao: op81.id, p_ipo: J(ipoGrande) });
+  chk(sv.ipo && sv.ipo.desdobramentos && sv.ipo.desdobramentos.length === 30, 'IPO com 30 dias de desdobramento (mais de 30 mil caracteres) é aceito');
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_ipo_operacao', { p_operacao: op81.id, p_ipo: J({ texto: 'x'.repeat(210000) }) }))), 'IPO acima de 200 mil caracteres: recusado');
+  chk(/sem_permissao/.test(await erroDe(rpc(resp2, 'salvar_ipo_operacao', { p_operacao: op81.id, p_ipo: J({ natureza: 'x' }) }))), 'quem não é responsável da operação não altera o IPO');
+}
+
+console.log('\nMigrações 007–081 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

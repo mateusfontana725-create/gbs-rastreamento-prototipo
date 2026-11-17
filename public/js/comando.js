@@ -281,6 +281,7 @@
     $('btn-nova-op').addEventListener('click', abrirNovaOperacao);
     // Cadastro completo da operação nova: tipo, acionamento, local e descrição
     $('menu-dados-op').addEventListener('click', abrirDadosOperacao);
+    $('menu-ipo').addEventListener('click', function () { fecharMenu(false); abrirIpoOperacao(); });
     $('menu-dashboard').addEventListener('click', abrirDashboardOperacao);
     // menu do cabeçalho: um botão abre a lista de ações
     $('btn-menu-topo').addEventListener('click', function (ev) {
@@ -1618,6 +1619,13 @@
     return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: o, relatos: relatos };
   }
 
+  // IPO: tela própria, na ordem do informe (js/ipo-form.js)
+  function abrirIpoOperacao() {
+    if (!est.op || !window.IpoForm) return;
+    // o IPO costuma ser fechado depois de encerrar a busca: só o link público é somente leitura (o servidor confere o responsável)
+    window.IpoForm.abrir(est.op, { editavel: !est.publico,
+      aoSalvar: function (atual) { if (est.op && atual && atual.id === est.op.id) est.op.ipo = atual.ipo; } });
+  }
   function abrirDadosOperacao() {
     if (!est.op) return;
     window.Cadastro.abrirDados(est.op, {

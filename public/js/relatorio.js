@@ -595,6 +595,49 @@
   }
 
   // Elementos do mapa geral (todos os registrados, também as fotos) e a base dos mapas de setor.
+  /* ---------- Área do mapa geral: um raio em volta do local da operação ----------
+   * Antes o mapa geral enquadrava TUDO o que estava registrado; quem entrou na operação de outra cidade (ou abriu o
+   * app em casa) puxava o mapa para longe e os setores ficavam minúsculos. Agora o centro é o local da operação (sem
+   * ele, a base; sem base, o meio dos setores) e o raio cobre todos os setores, com 1 km no mínimo. Sem setores, entra
+   * o que estiver a até 15 km do centro. O que fica fora do raio continua no relatório, só não estica o mapa. */
+  var RAIO_MINIMO_MAPA_M = 1000, LONGE_MAPA_M = 15000;
+  function distanciaM(a, b) {
+    var dLat = (b[0] - a[0]) * Math.PI / 180, dLng = (b[1] - a[1]) * Math.PI / 180;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a[0] * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 12742000 * Math.asin(Math.sqrt(h));
+  }
+  function areaDoMapa(dados, outros) {
+    var op = dados.operacao;
+    var ptsSetores = [];
+    dados.setores.forEach(function (s) { pontosSetor(s).forEach(function (p) { ptsSetores.push(p); }); });
+    var centro = null, origem = '';
+    if (op.local_lat != null && op.local_lng != null) { centro = [op.local_lat, op.local_lng]; origem = 'do local da operação'; }
+    else {
+      var base = (dados.pontos || []).filter(function (p) { return p.categoria === 'BASE' && p.lat != null; })[0];
+      if (base) { centro = [base.lat, base.lng]; origem = 'da base'; }
+      else if (ptsSetores.length) {
+        centro = [ptsSetores.reduce(function (a, p) { return a + p[0]; }, 0) / ptsSetores.length, ptsSetores.reduce(function (a, p) { return a + p[1]; }, 0) / ptsSetores.length];
+        origem = 'do centro dos setores';
+      }
+    }
+    if (!centro) return null;
+    var raio = RAIO_MINIMO_MAPA_M;
+    ptsSetores.forEach(function (p) { raio = Math.max(raio, distanciaM(centro, p)); });
+    if (!ptsSetores.length) (outros || []).forEach(function (p) { var dm = distanciaM(centro, p); if (dm <= LONGE_MAPA_M) raio = Math.max(raio, dm); });
+    // enquadra o que está dentro do raio (setores, o centro e o que foi registrado ali): o mapa fica justo na área da busca
+    var dentro = [centro].concat(ptsSetores).concat((outros || []).filter(function (p) { return distanciaM(centro, p) <= raio * 1.05; }));
+    var fora = (outros || []).length - (dentro.length - 1 - ptsSetores.length);
+    if (dentro.length < 3) {   // só o centro: um quadrado do raio mínimo em volta dele
+      var dLat = raio / 111320, dLng = raio / (111320 * Math.cos(centro[0] * Math.PI / 180));
+      dentro = [[centro[0] + dLat, centro[1] + dLng], [centro[0] - dLat, centro[1] - dLng]];
+    }
+    return {
+      enquadrar: dentro,
+      nota: 'Mapa enquadrado num raio de ' + (raio >= 1000 ? (Math.round(raio / 100) / 10).toLocaleString('pt-BR') + ' km' : Math.round(raio) + ' m') + ' em volta ' + origem +
+        (ptsSetores.length ? ', cobrindo todos os setores.' : '.') + (fora > 0 ? ' Posições registradas fora dessa área (por exemplo, de quem estava longe da busca) não aparecem.' : ''),
+    };
+  }
+
   function elementosMapa(dados, opcoes) {
     var op = dados.operacao;
     var trilhas = dados.trilhas || [];
@@ -611,8 +654,9 @@
     fotosMapa.forEach(function (f) { enquadrarTudo.push([f.lat, f.lng]); });
     if (op.local_lat != null) enquadrarTudo.push([op.local_lat, op.local_lng]);
     var base = { setores: dados.setores, trilhas: trilhas, manuais: manuais, pontos: dados.pontos, achados: achados, local: op.local_lat != null ? [op.local_lat, op.local_lng] : null, fundo: opcoes.fundo !== false };
+    var area = areaDoMapa(dados, enquadrarTudo);
 
-    return { base: base, geral: Object.assign({ largura: 1200, altura: 760, enquadrar: enquadrarTudo, fotos: fotosMapa }, base) };
+    return { base: base, nota: area ? area.nota : null, geral: Object.assign({ largura: 1200, altura: 760, enquadrar: area ? area.enquadrar : enquadrarTudo, fotos: fotosMapa }, base) };
   }
 
   // Monta todos os recursos (mapas e fotos) e o documento. progresso(texto)
@@ -628,6 +672,7 @@
     progresso('Desenhando o mapa geral…');
     // mapa geral: todos os elementos registrados (também as fotos), haja ou não setores
     recursos.mapaGeral = await desenharMapa(g.geral);
+    recursos.mapaNota = g.nota;
     for (var i = 0; i < dados.setores.length; i++) {
       var s = dados.setores[i];
       progresso('Desenhando o mapa do setor ' + s.nome + ' (' + (i + 1) + '/' + dados.setores.length + ')…');
@@ -927,6 +972,7 @@
         ref: k === 0 ? 'inicio' : pas[k - 1].id,
         comandante: k === 0 ? (pas[0] ? pas[0].de_nome : op.comando_nome) : pas[k - 1].para_nome,
         passadoA: k < pas.length ? pas[k].para_nome : null,
+        passagem: k < pas.length ? pas[k] : null,   // a passagem que encerrou este comando (o briefing entregue)
         fechamento: k < pas.length ? linhasBriefing(pas[k]) : null,
       });
     }
@@ -946,13 +992,14 @@
     if (r.tipo === 'passagem') return nomeArquivoTipo(op, 'Relatorio-passagem', quandoArquivo(r.gerado_em));
     if (r.tipo === 'comando') return nomeArquivoTipo(op, 'Relatorio-comando', quandoArquivo(r.gerado_em));
     if (r.tipo === 'imprensa') return nomeArquivoTipo(op, 'Relatorio-imprensa', quandoArquivo(r.gerado_em));
+    if (r.tipo === 'resumido') return nomeArquivoTipo(op, 'Relatorio-resumido', quandoArquivo(r.gerado_em));
     return nomeArquivo(op, r.gerado_em);
   }
   async function dadosDoPeriodo(op) {
     var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
     dados.trilhasManuais = await trilhasDesenhadas(op.id);
     var g = elementosMapa(dados, { fundo: true });
-    return { dados: dados, recursos: { mapaGeral: await desenharMapa(g.geral), logo: await carregarLogo() } };
+    return { dados: dados, recursos: { mapaGeral: await desenharMapa(g.geral), mapaNota: g.nota, logo: await carregarLogo() } };
   }
   // Comando já encerrado: guarda e baixa. Em andamento: só baixa (o guardado ficaria desatualizado).
   async function gerarComando(op, cmd) {
@@ -969,12 +1016,13 @@
   }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
-  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', final: 'Final', imprensa: 'Imprensa' };
-  var TITULO_TIPO = { diario: 'Relatórios diários', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', final: 'Relatórios finais', imprensa: 'Relatórios para imprensa' };
+  var TIPO_ROTULO = { diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Resumido', final: 'Final', imprensa: 'Imprensa' };
+  var TITULO_TIPO = { diario: 'Relatórios diários', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios resumidos', final: 'Relatórios finais', imprensa: 'Relatórios para imprensa' };
   var DICA_TIPO = {
     diario: 'Um relatório por dia, do acionamento até hoje. Dias anteriores ficam guardados; o de hoje só é baixado, pois ainda está aberto.',
     passagem: 'O documento do briefing entregue em cada passagem: quem passou, quem recebeu e a situação naquele momento.',
-    comando: 'O que cada comando fez, do início até a passagem seguinte. Gerado de um comando encerrado, ele fica guardado.',
+    comando: 'O que cada comando fez, do início até a passagem seguinte, com a situação entregue na passagem (o briefing). Gerado de um comando encerrado, ele fica guardado. O documento da passagem também fica em cada item da lista.',
+    resumido: 'O essencial em poucas páginas: mapa geral (setores, trilhas das pessoas e fotos, na área da operação), números, setores, pessoas, algumas fotos e o IPO.',
     final: 'Tudo da operação: cadastro, pessoas, setores, diário, desfecho e todas as fotos. Só o administrador pode excluir.',
     imprensa: 'Versão para divulgação, com dados reduzidos: números gerais, desfecho geral e linha do tempo. Sem nomes, documentos, fotos, trilhas ou posições.',
   };
@@ -1021,6 +1069,38 @@
     var up = await C.cliente.storage.from('relatorios').upload(caminho, r.blob, { contentType: 'application/pdf', upsert: false });
     if (up.error) throw new Error('O PDF foi baixado, mas a cópia não foi guardada no servidor: ' + (up.error.message || up.error));
     await C.rpc('registrar_relatorio', { p_operacao: op.id, p_caminho: caminho, p_paginas: r.paginas || null, p_bytes: r.blob.size, p_sha256: await sha256(r.blob) });
+    return r;
+  }
+
+  // Relatório resumido: o mapa geral (setores, pessoas e fotos, na área da operação), os números, setores, pessoas,
+  // até 9 fotos e o IPO. Baixa e guarda uma cópia, como os outros.
+  async function gerarResumido(op, passo) {
+    passo = passo || function () {};
+    passo('Buscando os dados da operação…');
+    var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+    dados.trilhasManuais = await trilhasDesenhadas(op.id);
+    var g = elementosMapa(dados, { fundo: true });
+    passo('Desenhando o mapa…');
+    var recursos = { mapaGeral: await desenharMapa(g.geral), mapaNota: g.nota, logo: await carregarLogo(), fotos: {}, fotosVitimas: {} };
+    // fotos: até 9, espalhadas pelo tempo da operação (primeira, última e as do meio)
+    var todas = (dados.fotos || []).filter(function (f) { return f.caminho; });
+    var escolhidas = todas.length <= 9 ? todas : Array.from({ length: 9 }, function (_, k) { return todas[Math.round(k * (todas.length - 1) / 8)]; });
+    for (var j = 0; j < escolhidas.length; j++) {
+      passo('Baixando fotos (' + (j + 1) + '/' + escolhidas.length + ')…');
+      var url = await fotoReduzida('fotos', escolhidas[j].caminho, 900);
+      if (url) recursos.fotos[escolhidas[j].id] = url;
+    }
+    recursos.fotosResumo = escolhidas;
+    for (var v = 0; v < (dados.vitimas || []).length; v++) {
+      if (dados.vitimas[v].foto_caminho) {
+        var fv = await fotoReduzida('vitimas', dados.vitimas[v].foto_caminho, 600);
+        if (fv) recursos.fotosVitimas[dados.vitimas[v].id] = fv;
+      }
+    }
+    passo('Gerando o PDF…');
+    var doc = window.RelatorioPDF.montarResumido(dados, recursos);
+    var r = await salvarDocumento(op, doc, 'resumido', null);
+    baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-resumido', quandoArquivo(Date.now())));
     return r;
   }
 
@@ -1071,12 +1151,13 @@
     }
 
     async function carregar() {
-      var [diarios, comandos, salvosComando, passagens, salvosPassagem, finais, imprensa] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
-        listarSalvos(op, 'comando'), listarPassagensAceitas(op), listarSalvos(op, 'passagem'), listarSalvos(op, 'final'), listarSalvos(op, 'imprensa')]);
+      var [diarios, comandos, salvosComando, passagens, salvosPassagem, finais, imprensa, resumidos] = await Promise.all([listarSalvos(op, 'diario'), listarComandos(op),
+        listarSalvos(op, 'comando'), listarPassagensAceitas(op), listarSalvos(op, 'passagem'), listarSalvos(op, 'final'), listarSalvos(op, 'imprensa'),
+        listarSalvos(op, 'resumido').catch(function () { return []; })]);
       var porDia = {}; diarios.forEach(function (x) { porDia[x.referencia] = x; });
       var porRef = {}; salvosComando.forEach(function (x) { porRef[x.referencia] = x; });
       var porPas = {}; salvosPassagem.forEach(function (x) { porPas[x.referencia] = x; });
-      dados = { diarios: diarios, comandos: comandos, passagens: passagens, finais: finais, imprensa: imprensa, porDia: porDia, porRef: porRef, porPas: porPas };
+      dados = { diarios: diarios, comandos: comandos, passagens: passagens, finais: finais, imprensa: imprensa, resumidos: resumidos, porDia: porDia, porRef: porRef, porPas: porPas };
     }
 
     // Quantos itens a lista do tipo tem (Ver lista só fica habilitado com pelo menos um)
@@ -1085,6 +1166,7 @@
       if (tipo === 'passagem') return dados.passagens.length;
       if (tipo === 'comando') return dados.comandos.length;
       if (tipo === 'final') return dados.finais.length;
+      if (tipo === 'resumido') return dados.resumidos.length;
       return dados.imprensa.length;
     }
     // "1 diário guardado", "2 passagens guardadas" (concordância com o nome)
@@ -1126,18 +1208,6 @@
       out.push(cartao('diario', contar(dados.diarios.length, 'diário', 'diários'),
         UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Dia', dataCampo, { para: 'rel-dia-data' })]), [botaoDia]));
 
-      // Passagem de comando: Gerar/Baixar a passagem mais recente (as outras estão na lista)
-      var ultPas = dados.passagens[dados.passagens.length - 1];
-      var botaoPas = ultPas
-        ? (dados.porPas[ultPas.id]
-          ? botaoBaixar(dados.porPas[ultPas.id])
-          : UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-pas-gerar', texto: 'Gerar', onclick: function (ev) {
-            ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, ultPas); await atualizar(); });
-          } }))
-        : UI.el('button', { classe: 'btn', type: 'button', disabled: true, texto: 'Gerar' });
-      out.push(cartao('passagem', contar(Object.keys(dados.porPas).length, 'passagem', 'passagens', true) + (ultPas ? '' : ' (nenhuma ainda)'),
-        ultPas ? UI.el('div', { classe: 'rel-card-extra', texto: 'Última: ' + (ultPas.de_nome || '—') + ' → ' + ultPas.para_nome }) : null, [botaoPas]));
-
       // Comando: Gerar/Baixar o comando mais recente (em andamento: baixa o que houve até agora)
       var ultCmd = dados.comandos[dados.comandos.length - 1];
       var guardadoCmd = ultCmd && dados.porRef[ultCmd.ref];
@@ -1148,6 +1218,36 @@
         } });
       out.push(cartao('comando', contar(dados.comandos.filter(function (c) { return dados.porRef[c.ref]; }).length, 'comando', 'comandos'),
         ultCmd ? UI.el('div', { classe: 'rel-card-extra', texto: 'Último: ' + ultCmd.rotulo + ' · ' + (ultCmd.fim ? 'encerrado' : 'em andamento') }) : null, [botaoCmd]));
+
+      // IPO: preencher (tela própria) e copiar para o WhatsApp
+      if (window.IpoForm) {
+        var ipoAtual = window.Ipo.normalizarIpo(op.ipo || {});
+        var preench = [ipoAtual.localidade || op.local_endereco, ipoAtual.efetivo.length, ipoAtual.desdobramentos.length, ipoAtual.recursos_cb, ipoAtual.responsavel_informacoes].filter(Boolean).length;
+        out.push(UI.el('section', { classe: 'rel-card', 'data-tipo': 'ipo' }, [
+          UI.el('div', { classe: 'rel-card-topo' }, [
+            UI.el('h3', { classe: 'rel-card-titulo', texto: 'IPO' }),
+            UI.dica('Informe Padrão de Ocorrência do CBMPR. Entra nos relatórios resumido e final e sai pronto para colar no WhatsApp.'),
+            UI.el('small', { classe: 'muted rel-card-contagem', texto: ipoAtual.desdobramentos.length ? ipoAtual.desdobramentos.length + ' dia(s) de desdobramento' : preench ? 'em preenchimento' : 'ainda não preenchido' }),
+          ]),
+          UI.el('div', { classe: 'rel-card-acoes' }, [
+            UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-ipo-editar', texto: 'Preencher', onclick: function () {
+              window.IpoForm.abrir(op, { editavel: !(P() && P().publico && P().publico()), aoSalvar: function () { atualizar(); } }); } }),
+            UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'rel-ipo-copiar', texto: '📋 WhatsApp', onclick: function () { window.IpoForm.copiar(op); } }),
+          ]),
+        ]));
+      }
+
+      // Resumido: mapa, números, setores, pessoas, algumas fotos e o IPO
+      var progressoRes = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
+      var btnRes = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-resumido-gerar', texto: 'Gerar', onclick: function (ev) {
+        progressoRes.hidden = false;
+        ocupar(ev.currentTarget, 'Gerando…', async function () {
+          await gerarResumido(op, function (t) { progressoRes.textContent = t; });
+          UI.aviso('Relatório resumido gerado.', 'ok');
+          await atualizar();
+        }).then(function () { progressoRes.hidden = true; });
+      } });
+      out.push(cartao('resumido', contar(dados.resumidos.length, 'relatório', 'relatórios'), UI.el('div', { classe: 'rel-card-extra' }, [progressoRes]), [btnRes]));
 
       // Final: tudo da operação. Não pede desfecho: sai o que estiver registrado (ou "Não apurado").
       var progressoFinal = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
@@ -1201,7 +1301,19 @@
             ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarComando(op, c); await atualizar(); });
           } })];
           var andamento = c.fim ? null : UI.el('span', { classe: 'selo selo-alerta', texto: 'em andamento' });
+          // o documento da passagem que encerrou este comando (o briefing entregue) fica junto, no mesmo item
+          if (c.passagem) {
+            var xp = dados.porPas[c.passagem.id];
+            acoes.push(xp ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Passagem', title: 'Documento da passagem de comando (briefing entregue)', onclick: function () { baixarSalvo(xp, op); } })
+              : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Gerar passagem', onclick: function (ev) {
+                ocupar(ev.currentTarget, 'Gerando…', async function () { await gerarPassagem(op, c.passagem); await atualizar(); });
+              } }));
+          }
           return itemRelatorio('comando', c.rotulo + ' · ' + (c.comandante || '—'), quando, acoes, andamento);
+        });
+      } else if (tipo === 'resumido') {
+        itens = dados.resumidos.map(function (x) {
+          return itemRelatorio('resumido', dataHora(x.gerado_em), quemQuando(x), [botaoBaixar(x), botaoExcluir(x)]);
         });
       } else if (tipo === 'final') {
         itens = dados.finais.map(function (x) {
@@ -1222,7 +1334,8 @@
       listaAberta.box.appendChild(UI.secao(null, [
         l.n ? listaRelatorios(l.itens) : semRelatorios(listaAberta.tipo === 'diario' ? 'Nenhum diário guardado ainda. Gere pelo cartão Diário.'
           : listaAberta.tipo === 'imprensa' ? 'Nenhum relatório para imprensa guardado ainda.'
-          : listaAberta.tipo === 'final' ? 'Nenhum relatório final guardado ainda.' : 'Nada para listar ainda.'),
+          : listaAberta.tipo === 'final' ? 'Nenhum relatório final guardado ainda.'
+          : listaAberta.tipo === 'resumido' ? 'Nenhum relatório resumido guardado ainda.' : 'Nada para listar ainda.'),
       ], { classe: 'rel-lista-cartao' }));
     }
 
@@ -1287,6 +1400,7 @@
     quantosRelatorios: quantosRelatorios,
     gerarDiario: gerarDiario,
     gerarPassagem: gerarPassagem,
+    gerarResumido: gerarResumido,
     abrirRelatoriosOperacao: abrirRelatoriosOperacao,
     desenharMapa: desenharMapa,
     prepararDocumento: prepararDocumento,

@@ -281,6 +281,7 @@
         out.push(subtitulo('Mapa geral da operação'));
         out.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
         out.push(legendaMapa());
+        if (recursos.mapaNota) out.push(nota(recursos.mapaNota));
       }
       return out;
     }
@@ -290,6 +291,7 @@
     if (recursos.mapaGeral) {
       out.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
       out.push(legendaMapa());
+      if (recursos.mapaNota) out.push(nota(recursos.mapaNota));
     }
     out.push(tabela(['Setor', 'Situação', 'Equipe / grupo', 'Início', 'Fim', 'Duração', 'Área'], d.setores.map(function (s) {
       var grupos = (s.missoes || []).map(function (m) { return m.grupo; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ');
@@ -512,74 +514,54 @@
     return (d.diario || []).filter(function (e) { return ['procedimento', 'recurso', 'desdobramento'].indexOf(e.tipo) === -1; });
   }
 
-  // Dados da ocorrência, no formato do IPO do CBMPR. O IPO é o próprio cadastro da operação:
-  // cada dado aparece uma só vez no relatório.
+  // Dados da ocorrência, no formato do IPO do CBMPR (Ipo.itens: a mesma montagem do texto que vai para o WhatsApp).
+  // As fichas das vítimas (com foto) vêm logo depois do informe.
+  function blocoIpo(d) {
+    var op = d.operacao;
+    var I = window.Ipo;
+    var lista = I.itens(op, { vitimas: d.vitimas || [], diario: d.diario || [], coordenada: function (lat, lng) { return coord(lat, lng); } });
+    var out = [], fichaAtual = [];
+    function fecharFicha() { if (fichaAtual.length) { out.push(ficha(fichaAtual)); fichaAtual = []; } }
+    lista.forEach(function (x) {
+      if (x.cabecalho) { fecharFicha(); out.push({ text: x.cabecalho, bold: true, fontSize: 10, margin: [0, 0, 0, 2] }); return; }
+      if (x.valor != null) { fichaAtual.push([x.rotulo, x.valor]); return; }
+      fecharFicha();
+      out.push(subtitulo(x.rotulo));
+      if (x.marcas) out.push(listaIpo(x.marcas.map(function (m) { return (m[1] ? '(X) ' : '(   ) ') + m[0]; })));
+      else out.push({ stack: x.linhas.map(function (t) { return { text: t, style: 'corpo', margin: [0, 0, 0, x.espacado ? 6 : 1] }; }), margin: [0, 0, 0, 10] });
+    });
+    fecharFicha();
+    return out;
+  }
   function secaoOcorrencia(d, recursos) {
     var op = d.operacao;
     var i = window.Ipo.normalizarIpo(op.ipo || {});
     var sexo = { M: 'Masculino', F: 'Feminino' };
     var fotos = (recursos && recursos.fotosVitimas) || {};
-    var vitimas = (d.vitimas || []).length
-      ? d.vitimas.map(function (v) {
-        var dados = ficha([
-          ['VÍTIMA', txt(v.nome) + (v.nascimento ? ' (nascim: ' + v.nascimento + ')' : '')],
-          ['Sexo / idade', txt(sexo[v.sexo]) + ' / ' + (v.idade != null ? v.idade + ' anos' : '—')],
-          ['Origem da vítima', txt(v.origem)],
-          vazio(v.caracteristicas) ? null : ['Características físicas', v.caracteristicas],
-          vazio(v.roupas) ? null : ['Roupas', v.roupas],
-          vazio(v.observacoes) ? null : ['Observações', v.observacoes],
-        ]);
-        var foto = fotos[v.id];
-        return foto
-          ? { columns: [{ image: foto, fit: [110, 140], width: 120 }, Object.assign({ width: '*' }, dados)], columnGap: 10, margin: [0, 0, 0, 10], unbreakable: true }
-          : dados;
-      })
-      : [nota('Nenhuma vítima informada.')];
-    var procedimentos = registrosIpo(d, 'procedimento');
-    var recursosCb = registrosIpo(d, 'recurso');
-    var desdobramentos = registrosIpo(d, 'desdobramento');
-    var marcadosProc = procedimentos.map(function (e) { return e.ref_id; });
-
-    var partes = [
+    var vitimas = (d.vitimas || []).map(function (v) {
+      var dados = ficha([
+        ['VÍTIMA', txt(v.nome) + (v.nascimento ? ' (nascim: ' + v.nascimento + ')' : '')],
+        ['Sexo / idade', txt(sexo[v.sexo]) + ' / ' + (v.idade != null ? v.idade + ' anos' : '—')],
+        ['Origem da vítima', txt(v.origem)],
+        vazio(v.caracteristicas) ? null : ['Características físicas', v.caracteristicas],
+        vazio(v.roupas) ? null : ['Roupas', v.roupas],
+        vazio(v.observacoes) ? null : ['Observações', v.observacoes],
+      ]);
+      var foto = fotos[v.id];
+      return foto
+        ? { columns: [{ image: foto, fit: [110, 140], width: 120 }, Object.assign({ width: '*' }, dados)], columnGap: 10, margin: [0, 0, 0, 10], unbreakable: true }
+        : dados;
+    });
+    return [
       { text: 'IPO: ' + i.destinatarios, style: 'h2', pageBreak: 'before', margin: [0, 0, 0, 2] },
       { text: 'Informe Padrão de Ocorrência - IPO', style: 'h1', margin: [0, 0, 0, 4] },
       { text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.', style: 'nota', margin: [0, 0, 0, 12] },
-      ficha([
-        ['Natureza', txt(i.natureza)],
-        ['Nome do solicitante', txt(i.solicitante_nome) + (i.solicitante_documento ? ' (' + i.solicitante_documento + ')' : '')],
-        ['Localidade / município / região', txt(op.local_endereco)],
-        ['Início das operações (acionamento do CB)', op.acionado_em ? dataHora(op.acionado_em) : '—'],
-        ['Coordenadas de referência (último avistamento)', coord(op.local_lat, op.local_lng)],
-        ['Data e hora do último momento visto', (window.Ipo ? window.Ipo.textoHoraVisto(i, dataHora) : (i.desaparecimento ? dataHora(i.desaparecimento) : '')) || '—'],
-        ['Nº de pessoas perdidas', i.pessoas_perdidas != null ? String(i.pessoas_perdidas) : '—'],
-      ]),
-      subtitulo('Vítima(s)'),
-    ].concat(vitimas);
-    if (i.meio_liquido) partes.push(subtitulo('Meio líquido'), listaIpo(marcas(window.Ipo.MEIOS, [i.meio_liquido])));
-    return partes.concat([
-      subtitulo('Buscas preliminares (casas de parentes, hospitais etc.)?'),
-      listaIpo(marcas(window.Ipo.BUSCAS, i.buscas_preliminares ? [i.buscas_preliminares] : [])),
-      subtitulo('Possibilidade real de vida?'),
-      listaIpo(marcas(window.Ipo.VIDA, i.possibilidade_vida ? [i.possibilidade_vida] : [])),
-      subtitulo('Procedimentos de busca sendo realizados'),
-      listaIpo(marcas(window.Ipo.PROCEDIMENTOS, marcadosProc)),
-      listaIpo(procedimentos.map(function (e) {
-        return hora(e.ocorrido_em) + ' · ' + nomeProcedimento(e.ref_id) + (vazio(e.detalhe) ? '' : ' — ' + e.detalhe);
-      })),
-      subtitulo('Descrição da ocorrência'),
-      { text: txt(op.descricao), style: 'corpo', margin: [0, 0, 0, 10] },
-      subtitulo('Recursos CB deslocados e sendo utilizados'),
-      listaIpo(recursosCb.map(function (e) { return dataHora(e.ocorrido_em) + ' · ' + e.detalhe; })),
-      ficha([['Quantidade de BMs diretamente envolvidos na resposta', i.bms_envolvidos != null ? String(i.bms_envolvidos) : '—']]),
-      subtitulo('Desdobramentos / situação atual'),
-      listaIpo(desdobramentos.map(function (e) { return dataHora(e.ocorrido_em) + ' · ' + e.detalhe; })),
-      subtitulo('Imagens anexas junto a esta mensagem?'),
-      listaIpo(marcas([['sim', 'Sim'], ['nao', 'Não']], i.imagens_anexas === true ? ['sim'] : i.imagens_anexas === false ? ['nao'] : [])),
-      ficha([
-        ['Responsável pelas informações', txt(i.responsavel_informacoes)],
+    ].concat(blocoIpo(d))
+      .concat(vitimas.length ? [subtitulo('Ficha da(s) vítima(s)')].concat(vitimas) : [])
+      .concat([ficha([
+        i.solicitante_nome ? ['Solicitante', i.solicitante_nome + (i.solicitante_documento ? ' (' + i.solicitante_documento + ')' : '')] : null,
         ['Guarda dos dados', op.dados_apagados_em ? 'Dados pessoais apagados em ' + dataHora(op.dados_apagados_em) + ' (regra antiga de retenção)' : 'Guardados até a exclusão da operação'],
-      ]),
-    ]);
+      ])]);
   }
 
   function montarDocumento(d, recursos) {
@@ -598,6 +580,85 @@
       .concat(secaoBusca(d, 5))
       .concat(secaoResultado(d, d.busca ? 6 : 5));
     return documento(d, recursos, conteudo, { titulo: 'Relatório final — ' + op.codigo, assunto: 'Relatório final de operação de busca e salvamento', marca: 'RELATÓRIO FINAL' });
+  }
+
+  /* ---------- relatório resumido ------------------------------------------ */
+  // O essencial em poucas páginas: situação, números, o mapa geral (setores, trilhas das pessoas e fotos, enquadrado na
+  // área da operação), os setores, as pessoas com o quanto andaram, algumas fotos e o IPO.
+  function kmTrilha(pontos) {
+    var m = 0;
+    for (var k = 1; k < (pontos || []).length; k++) {
+      var a = pontos[k - 1], b = pontos[k];
+      var dLat = (b[0] - a[0]) * Math.PI / 180, dLng = (b[1] - a[1]) * Math.PI / 180;
+      var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a[0] * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      var seg = 12742000 * Math.asin(Math.sqrt(h));
+      if (seg < 1500) m += seg;   // salto grande (falha de sinal, outro lugar) não conta como caminhada
+    }
+    return m / 1000;
+  }
+  function montarResumido(d, recursos) {
+    recursos = recursos || {};
+    recursos.fotos = recursos.fotos || {};
+    var op = d.operacao;
+    var ref = data(op.acionado_em || op.criada_em);
+    ANO_REF = ref ? ref.getFullYear() : null;
+    var ipo = window.Ipo.normalizarIpo(op.ipo || {});
+    var kmPorPessoa = {};
+    (d.trilhas || []).forEach(function (t) { kmPorPessoa[t.participante_id] = (kmPorPessoa[t.participante_id] || 0) + kmTrilha(t.pontos); });
+    var kmTotal = Object.keys(kmPorPessoa).reduce(function (a, k) { return a + kmPorPessoa[k]; }, 0);
+    var concluidos = d.setores.filter(function (s) { return s.status === 'concluido'; });
+    var areaConcluida = concluidos.reduce(function (a, s) { return a + (areaSetor(s) || 0); }, 0);
+    var numeros = [
+      [String(d.participantes.length), 'pessoas de campo'],
+      [concluidos.length + ' / ' + d.setores.length, 'setores concluídos'],
+      [areaConcluida ? textoArea(areaConcluida) : '—', 'área varrida (concluídos)'],
+      [kmTotal ? kmTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' km' : '—', 'percorridos (trilhas)'],
+      [String((d.fotos || []).length), 'fotos'],
+    ];
+    var conteudo = [];
+    if (recursos.logo) conteudo.push({ image: recursos.logo, width: 150, margin: [0, 0, 0, 12] });
+    conteudo.push({ text: 'RELATÓRIO RESUMIDO DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
+    conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
+    conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20 });
+    conteudo.push({ text: txt(ipo.natureza, ''), style: 'subtituloCapa', margin: [0, 4, 0, 10] });
+    conteudo.push(ficha([
+      ['Local', txt(ipo.localidade || op.local_endereco || (op.local_lat != null ? coord(op.local_lat, op.local_lng) : ''))],
+      ['Início das operações', dataHora(op.acionado_em)],
+      ['Situação', op.status === 'encerrada' ? 'Encerrada em ' + dataHora(op.encerrada_em) : 'Em andamento'],
+      ['Duração', duracao(op.acionado_em || op.criada_em, op.encerrada_em || d.gerado_em)],
+      ['Responsável (criador)', txt(op.criador_nome)],
+    ]));
+    conteudo.push(caixaResultado(op));
+    conteudo.push({
+      table: { widths: ['*', '*', '*', '*', '*'], body: [numeros.map(function (n) {
+        return { stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }], fillColor: COR.fundo, margin: [8, 7, 4, 7] };
+      })] },
+      layout: { hLineWidth: function () { return 0; }, vLineWidth: function (i) { return i > 0 && i < 5 ? 3 : 0; }, vLineColor: function () { return '#ffffff'; },
+        paddingLeft: function () { return 0; }, paddingRight: function () { return 0; }, paddingTop: function () { return 0; }, paddingBottom: function () { return 0; } },
+      margin: [0, 0, 0, 14],
+    });
+    if (recursos.mapaGeral) {
+      conteudo.push(subtitulo('Mapa da operação'));
+      conteudo.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
+      conteudo.push(legendaMapa());
+      if (recursos.mapaNota) conteudo.push(nota(recursos.mapaNota));
+    }
+    conteudo.push(subtitulo('Setores'));
+    if (!d.setores.length) conteudo.push(nota('Nenhum setor de busca definido.'));
+    else conteudo.push(tabela(['Setor', 'Situação', 'Equipe / grupo', 'Área'], d.setores.map(function (s) {
+      var grupos = (s.missoes || []).map(function (m) { return m.grupo; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ');
+      return [{ text: s.nome, style: 'td', bold: true }, STATUS_SETOR[s.status] || s.status, txt([s.equipe, grupos].filter(Boolean).join(' · ')), textoArea(areaSetor(s))];
+    }), ['*', 80, 150, 60]));
+    conteudo.push(subtitulo('Pessoas de campo'));
+    if (!d.participantes.length) conteudo.push(nota('Nenhum participante de campo entrou na operação.'));
+    else conteudo.push(tabela(['Nome', 'Tipo', 'Grupo', 'Percorreu'], d.participantes.slice().sort(function (a, b) { return (kmPorPessoa[b.id] || 0) - (kmPorPessoa[a.id] || 0); }).map(function (p) {
+      var km = kmPorPessoa[p.id];
+      return [{ text: p.nome, style: 'td', bold: true }, TIPO_PESSOA[p.tipo] || p.tipo, txt(nomesGrupos(p)), km ? km.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' km' : '—'];
+    }), ['*', 60, 140, 60]));
+    var fotosRes = (recursos.fotosResumo || []).filter(function (f) { return recursos.fotos[f.id]; });
+    if (fotosRes.length) conteudo.push(gradeFotos(fotosRes, recursos, 'Fotos (' + fotosRes.length + ' de ' + (d.fotos || []).length + ')'));
+    conteudo.push(nota('Distâncias aproximadas, pelas trilhas resumidas do GPS. O relatório final traz o diário, os pontos, cada setor com o mapa próprio e todas as fotos.'));
+    return documento(d, recursos, conteudo.concat(secaoOcorrencia(d, recursos)), { titulo: 'Relatório resumido — ' + op.codigo, assunto: 'Relatório resumido de operação de busca e salvamento', marca: 'RELATÓRIO RESUMIDO' });
   }
 
   // Relatório para imprensa (divulgação): dados reduzidos. Sem nomes, documentos, telefones, fotos, trilhas, posições,
@@ -781,6 +842,7 @@
       conteudo.push(subtitulo(p.rotuloMapa));
       conteudo.push({ image: recursos.mapaGeral, width: 515, margin: [0, 0, 0, 4] });
       conteudo.push(legendaMapa());
+      if (recursos.mapaNota) conteudo.push(nota(recursos.mapaNota));
     }
     conteudo.push(subtitulo('Setores'));
     if (!d.setores.length) conteudo.push(nota('Nenhum setor de busca definido.'));
@@ -920,7 +982,7 @@
     return dentro;
   }
 
-  var api = { montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

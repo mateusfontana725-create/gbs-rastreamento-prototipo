@@ -3196,3 +3196,27 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .sci2-espera-txt small { color: var(--texto-2); font-size: .76rem; }
 .sci2-espera-acoes { flex: none; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 @media (max-width: 599px) { .sci2-espera-item { flex-wrap: wrap; } .sci2-espera-acoes { flex: 1 1 100%; justify-content: flex-start; } }
+
+/* ---- IPO: tela do informe (js/ipo-form.js) ---- */
+.form-ipo .ipo-fixo { margin: 0; padding: 8px 0; color: var(--texto-2); font-size: .88rem; }
+.form-ipo .ipo-par { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.form-ipo .ipo-qtd { max-width: 110px; }
+.ipo-procs { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 14px; margin-bottom: 8px; }
+.ipo-vitimas { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.ipo-vitimas li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 220px); gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: var(--superficie-2); }
+.ipo-vitimas li > div { display: grid; gap: 2px; min-width: 0; }
+.ipo-dias { display: grid; gap: 6px; margin-bottom: 6px; }
+.ipo-dia { display: grid; gap: 6px; align-items: start; padding: 6px; border: 1px solid var(--borda); border-radius: 8px; background: var(--superficie-2); }
+.ipo-dia-qtd-texto { grid-template-columns: 150px 80px minmax(0, 1fr) auto; }
+.ipo-dia-area { grid-template-columns: 150px minmax(0, 1fr) auto; }
+.ipo-dia .campo { width: 100%; }
+.ipo-dia-tirar { min-width: 36px; }
+.ipo-texto { width: 100%; font-size: .8rem; line-height: 1.4; white-space: pre-wrap; }
+@media (max-width: 640px) {
+  .ipo-dia-qtd-texto { grid-template-columns: minmax(0, 1fr) 80px auto; }
+  .ipo-dia-qtd-texto .ipo-dia-nomes { grid-column: 1 / -1; grid-row: 2; }
+  .ipo-dia-area { grid-template-columns: minmax(0, 1fr) auto; }
+  .ipo-dia-area .ipo-dia-texto { grid-column: 1 / -1; grid-row: 2; }
+  .ipo-vitimas li { grid-template-columns: minmax(0, 1fr); }
+  .form-ipo .ipo-par { grid-template-columns: minmax(0, 1fr); }
+}

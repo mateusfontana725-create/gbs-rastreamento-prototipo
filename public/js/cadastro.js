@@ -335,7 +335,7 @@
         var tipCriacao = window.Ipo.tipoDaNatureza(naturezaValor());
         dados.tipo = tipCriacao.tipo;
         dados.tipo_outro = tipCriacao.tipo_outro;
-        dados.ipo = window.Ipo.normalizarIpo({ natureza: naturezaValor(), solicitante_nome: solicNome.value });
+        dados.ipo = window.Ipo.normalizarIpo(Object.assign({}, op.ipo || {}, { natureza: naturezaValor(), solicitante_nome: solicNome.value }));
         return dados;
       }
       if (!acion.value) { acion.focus(); throw new Error('Informe a data e a hora do início das operações.'); }
@@ -351,13 +351,14 @@
         dados.tipo_outro = tip.tipo_outro;
       }
       dados.acionado_em = new Date(ms).toISOString();
-      dados.ipo = window.Ipo.normalizarIpo({
+      // parte do IPO é editada aqui; o resto (efetivo, desdobramentos, recursos…) fica na tela do IPO e é mantido
+      dados.ipo = window.Ipo.normalizarIpo(Object.assign({}, op.ipo || {}, {
         natureza: naturezaValor(), solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,
         destinatarios: destino.value, desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value, meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
         pessoas_perdidas: pessoas.value, buscas_preliminares: marcadoEm(nomeBuscas), possibilidade_vida: marcadoEm(nomeVida),
         bms_envolvidos: bms.value, imagens_anexas: marcadoEm(nomeImagens) === 'sim' ? true : marcadoEm(nomeImagens) === 'nao' ? false : null,
         responsavel_informacoes: responsavel.value,
-      });
+      }));
       return dados;
     }
 
@@ -467,6 +468,9 @@
       ]),
       UI.el('p', { classe: 'meta-area dados-op-meta', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
       UI.rodape([
+        window.IpoForm ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-ipo-copiar', texto: '📋 Copiar IPO', title: 'Texto do IPO pronto para o WhatsApp', onclick: function () { window.IpoForm.copiar(op); } }) : null,
+        window.IpoForm ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-ipo', texto: 'IPO', title: 'Preencher o IPO (informe da ocorrência)', onclick: function () {
+          window.IpoForm.abrir(op, { editavel: editavel, aoSalvar: function (atual) { if (opcoes.aoSalvar) opcoes.aoSalvar(atual); } }); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { editarDados(op, opcoes); } }) : null,
       ]),
     ]), { tamanho: 'largo' });

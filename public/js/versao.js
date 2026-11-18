@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.1.1';
-  var DATA = '2026-11-17';
+  var NUMERO = '1.2.0';
+  var DATA = '2026-11-18';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.2.0', data: '2026-11-18', itens: [
+      'Relatório da imprensa refeito: sem linha do tempo. Traz resumo, pessoa procurada (sem nome), como aconteceu, buscas realizadas e meios, estratégia e próximos passos, forças envolvidas (Bombeiros, voluntários e órgãos de apoio como PM, Guarda Municipal, Defesa Civil) e recursos empregados.',
+      'No IPO (Dados da ocorrência › Para a imprensa) você escreve "Como aconteceu" e "Estratégia e próximos passos"; em branco, sai um texto padrão com os dados da operação.',
+    ] },
     { versao: '1.1.1', data: '2026-11-17', itens: [
       'O IPO é um só: tudo fica no IPO (Diário). Os dados da ocorrência (natureza, vítima, local) estão no cartão do topo, com Copiar IPO; saiu o item separado "IPO · dados gerais" do menu.',
     ] },

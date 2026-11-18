@@ -157,10 +157,13 @@ legível, elas não aparecem.
 - **Relatório de comando:** escolha o comando (o que aconteceu sob aquele comandante, do início dele até a passagem, com o
   briefing entregue) ou **Todos os comandos** (a operação inteira, com a tabela de cada comandante e período e o briefing de
   cada passagem). O de um comando encerrado fica guardado; o em andamento e o geral só são baixados.
-- **Imprensa:** situação em destaque, natureza e cidade, a pessoa procurada sem o nome ("um homem de 19 anos"), os números
-  do esforço (dias de buscas, militares, voluntários, setores concluídos, área varrida e quilômetros percorridos), os meios
-  empregados (K9, drone, embarcações…), os órgãos de apoio (só o nome do órgão, sem os nomes dos agentes) e a linha do
-  tempo. Continua sem nomes, documentos, fotos, trilhas, posições e observações.
+- **Imprensa (refeito, versão 1.2.0):** sem linha do tempo. Traz situação e números do esforço, **resumo**, **pessoa
+  procurada** (só sexo e idade e o último momento visto, nunca nome), **como aconteceu**, **buscas realizadas** e meios
+  empregados, **estratégia e próximos passos**, **forças envolvidas** (Bombeiros, voluntários e os órgãos de apoio, só o nome
+  do órgão: PM, Polícia Civil, Guarda Municipal, Defesa Civil…) e **recursos empregados** (viaturas, aeronaves, drones,
+  cães). Os textos de "como aconteceu" e de "estratégia" são escritos no IPO (Dados da ocorrência › **Para a imprensa**) e
+  saem exatamente como escritos (a tela avisa para não pôr nomes); em branco, o relatório monta um texto padrão com os dados
+  da operação. Continua sem nomes, documentos, fotos, trilhas, posições e observações.
 
 ### Tirar a localização de uma pessoa do mapa (migração 084, versão 1.1.0)
 

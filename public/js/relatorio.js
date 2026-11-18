@@ -1136,7 +1136,7 @@
     comando: 'Escolha o comando (o que aconteceu sob um comandante, do início dele até a passagem, com o briefing entregue) ou "Todos os comandos" (a operação inteira, com cada comandante e período). O de um comando encerrado fica guardado. Todos trazem o IPO.',
     resumido: 'O relatório final da operação, direto ao ponto: situação e desfecho, números, mapa geral (setores, trilhas das pessoas e fotos, na área da operação), setores, pessoas, algumas fotos e o IPO completo.',
     final: 'Tudo da operação em detalhe: IPO, pessoas, setores um a um (com mapa), pontos, diário completo, desfecho e todas as fotos. Só o administrador pode excluir.',
-    imprensa: 'Versão para divulgação: situação, natureza e local, a pessoa procurada sem o nome, os números do esforço (dias, militares, voluntários, área e quilômetros), os meios empregados, os órgãos de apoio e a linha do tempo. Sem nomes, documentos, fotos, trilhas ou posições.',
+    imprensa: 'Versão para divulgação: resumo, como aconteceu, buscas realizadas e meios, estratégia e próximos passos, forças envolvidas (Bombeiros, voluntários e órgãos de apoio) e recursos empregados, com os números do esforço. O texto de "como aconteceu" e de "estratégia" você escreve no IPO (Dados da ocorrência › Para a imprensa); em branco, sai um texto padrão. Sem nomes, documentos, fotos, trilhas ou posições.',
   };
   function rotuloDesfecho(chave) {
     var r = RESULTADOS.filter(function (x) { return x[0] === chave; })[0];

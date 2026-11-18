@@ -691,9 +691,6 @@
       [areaVarrida ? textoArea(areaVarrida) : '—', 'área varrida'],
       [km ? km.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' km' : '—', 'percorridos a pé'],
     ];
-    var marcos = (d.diario || []).filter(function (e) {
-      return e.origem !== 'manual' && (e.categoria === 'operacao' || e.categoria === 'setor');
-    });
     var r = op.resultado && RESULTADO[op.resultado] ? RESULTADO[op.resultado] : null;
     var situacaoTxt = r ? r.rotulo : op.status === 'encerrada' ? 'Buscas encerradas sem localização da vítima' : 'Buscas em andamento';
     var tipoOp = { aquatica: 'aquática', terrestre: 'terrestre', aerea: 'aérea', sarp: 'com SARP', brec: 'em estrutura colapsada (BREC)' }[op.tipo] || (op.tipo_outro ? op.tipo_outro.toLowerCase() : null);
@@ -713,16 +710,72 @@
       t = k > 0 ? t.slice(0, k) : t.length <= 40 ? t.replace(/\.$/, '') : '';
       return t.trim();
     }).filter(Boolean);
+    var minuscula = function (t) { return t.charAt(0).toLowerCase() + t.slice(1); };
+    var unicos = function (lista) { var v = {}; return lista.filter(function (t) { var k = t.toLowerCase(); if (v[k]) return false; v[k] = true; return true; }); };
+    // buscas realizadas: os procedimentos marcados no IPO (geral e de cada dia) e os registrados no diário
+    var chavesMeios = (ipo.procedimentos || []).slice();
+    (ipo.dias || []).forEach(function (x) { (x.procedimentos || []).forEach(function (k) { if (chavesMeios.indexOf(k) === -1) chavesMeios.push(k); }); });
+    (d.diario || []).forEach(function (e) { if (e.tipo === 'procedimento' && e.ref_id && chavesMeios.indexOf(e.ref_id) === -1) chavesMeios.push(e.ref_id); });
+    meios = IPO ? IPO.PROCEDIMENTOS.filter(function (pr) { return chavesMeios.indexOf(pr[0]) !== -1; }).map(function (pr) { return pr[1]; }) : [];
+    if (ipo.procedimentos_outros) meios.push(ipo.procedimentos_outros);
+    // forças e órgãos de apoio (só o nome do órgão), do IPO geral e de cada dia
+    var textoOrgaos = [ipo.orgaos_apoio].concat((ipo.dias || []).map(function (x) { return x.orgaos; })).join('\n');
+    orgaos = unicos(textoOrgaos.split('\n').map(function (l) {
+      var t = l.replace(/^[-•]\s*/, '').trim();
+      var k = t.indexOf(':');
+      t = k > 0 ? t.slice(0, k) : t.length <= 40 ? t.replace(/\.$/, '') : '';
+      return t.trim();
+    }).filter(Boolean));
+    // recursos empregados (viaturas, aeronaves, embarcações, equipamentos): as linhas do IPO e os registros do diário
+    var textoRecursos = [ipo.recursos_cb].concat((ipo.dias || []).map(function (x) { return x.recursos; }))
+      .concat((d.diario || []).filter(function (e) { return e.tipo === 'recurso' && e.detalhe; }).map(function (e) { return e.detalhe; })).join('\n');
+    var recursosUsados = unicos(textoRecursos.split('\n').map(function (l) { return l.replace(/^[-•]\s*/, '').replace(/[.;]\s*$/, '').trim(); }).filter(Boolean));
+    var pendentes = d.setores.length - concluidos.length;
+    var desap = IPO && ipo.desaparecimento ? IPO.textoHoraVisto(ipo, dataHora) : '';
+    var paragrafos = function (t) { return String(t || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean); };
+
+    // Resumo: o essencial em duas ou três frases
     var frases = [
       'Operação de busca' + (tipoOp ? ' ' + tipoOp : '') + (local ? ' em ' + local : '') + ', iniciada em ' + dataHora(inicio) +
         (op.encerrada_em ? ' e encerrada em ' + dataHora(op.encerrada_em) + ' (duração de ' + duracao(inicio, op.encerrada_em) + ')' : ', ainda em andamento') + '.',
+      r ? r.rotulo + '.' : null,
+    ].filter(Boolean);
+    // Pessoa procurada: só sexo e idade e o último momento visto (nunca nome, documento ou características)
+    var pessoa = [
       vit.length ? 'Procura por ' + (vit.length === 1 ? vit[0] : vit.length + ' pessoas (' + vit.join('; ') + ')') + '.' : null,
-      ativos.length ? militares + (militares === 1 ? ' militar' : ' militares') + (voluntarios ? ' e ' + voluntarios + (voluntarios === 1 ? ' voluntário' : ' voluntários') : '') + ' participaram' +
-        ((d.grupos || []).length ? ', organizados em ' + d.grupos.length + ((d.grupos.length === 1) ? ' equipe' : ' equipes') : '') + (militaresDia ? ', somando ' + militaresDia + ' militares-dia' : '') + '.' : null,
-      d.setores.length ? 'Foram definidos ' + d.setores.length + (d.setores.length === 1 ? ' setor' : ' setores') + ' de busca, ' + concluidos.length + ' deles concluídos' +
-        (areaVarrida ? ', cobrindo ' + textoArea(areaVarrida) : '') + '.' : 'Nenhum setor de busca foi definido.',
+      desap ? 'Último momento em que foi vista: ' + desap + '.' : null,
+    ].filter(Boolean);
+
+    // Como aconteceu: o texto escrito pelo comando para a imprensa; sem ele, um texto padrão com os dados do IPO
+    var comoAconteceu = paragrafos(ipo.imprensa_como);
+    if (!comoAconteceu.length) {
+      comoAconteceu = [
+        'O Corpo de Bombeiros foi acionado em ' + dataHora(inicio) + (vit.length ? ' para procurar ' + (vit.length === 1 ? vit[0] : vit.length + ' pessoas') : ' para uma operação de busca') + (local ? ', na região de ' + local : '') + '.',
+      ];
+    }
+    // Estratégia: idem
+    var estrategia = paragrafos(ipo.imprensa_estrategia);
+    if (!estrategia.length) {
+      estrategia = [op.encerrada_em
+        ? 'As buscas foram encerradas' + (r ? ': ' + minuscula(r.rotulo) : '') + '.'
+        : 'As equipes trabalham em setores de busca definidos pelo comando a partir das informações disponíveis' + (meios.length ? ', combinando ' + meios.map(minuscula).join(', ') : '') + '. ' +
+          (d.setores.length ? (pendentes > 0 ? 'Restam ' + pendentes + (pendentes === 1 ? ' setor' : ' setores') + ' a vistoriar; ' : 'Todos os setores definidos foram vistoriados; ') : '') +
+          'novas informações e o resultado de cada varredura orientam os próximos passos.'];
+    }
+    // Buscas: números e meios
+    var buscas = [
+      dias ? 'As buscas ' + (op.encerrada_em ? 'duraram ' : 'já somam ') + dias + (dias === 1 ? ' dia' : ' dias') + '.' : null,
+      d.setores.length ? 'O terreno foi dividido em ' + d.setores.length + (d.setores.length === 1 ? ' setor' : ' setores') + ', ' + concluidos.length + (concluidos.length === 1 ? ' concluído' : ' concluídos') +
+        (areaVarrida ? ', cobrindo cerca de ' + textoArea(areaVarrida) : '') + '.' : null,
       km ? 'As equipes percorreram cerca de ' + km.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' km a pé, registrados por GPS.' : null,
     ].filter(Boolean);
+    // Forças: bombeiros, voluntários e os órgãos de apoio
+    var forcas = [];
+    if (ativos.length) forcas.push('Corpo de Bombeiros: ' + militares + (militares === 1 ? ' militar' : ' militares') + (militaresDia ? ' (' + militaresDia + ' militares-dia no total)' : '') +
+      ((d.grupos || []).length ? ', em ' + d.grupos.length + (d.grupos.length === 1 ? ' equipe' : ' equipes') : ''));
+    if (voluntarios) forcas.push('Voluntários e civis: ' + voluntarios);
+    orgaos.forEach(function (o) { forcas.push(o); });
+
     var conteudo = [
       { text: 'DIVULGAÇÃO PÚBLICA', style: 'sobretitulo', margin: [0, 0, 0, 10] },
       { text: 'Operação de busca e salvamento', style: 'tituloCapa' },
@@ -735,21 +788,25 @@
         return lin.map(function (n) { return { stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }], fillColor: COR.fundo, margin: [8, 7, 4, 7] }; });
       }) }, layout: { hLineWidth: function (i) { return i === 1 ? 3 : 0; }, hLineColor: function () { return '#ffffff'; }, vLineWidth: function (i) { return i > 0 && i < 3 ? 3 : 0; }, vLineColor: function () { return '#ffffff'; },
         paddingLeft: function () { return 0; }, paddingRight: function () { return 0; }, paddingTop: function () { return 0; }, paddingBottom: function () { return 0; } }, margin: [0, 0, 0, 18] },
-      { text: 'Resumo', style: 'h2' },
-      { text: frases.join(' '), fontSize: 10, lineHeight: 1.35, margin: [0, 0, 0, 12] },
     ];
-    if (meios.length) conteudo.push({ text: 'Meios empregados', style: 'h2' }, { ul: meios, fontSize: 10, margin: [0, 0, 0, 12] });
-    if (orgaos.length) conteudo.push({ text: 'Órgãos de apoio', style: 'h2' }, { ul: orgaos, fontSize: 10, margin: [0, 0, 0, 12] });
-    conteudo.push({ text: 'Linha do tempo', style: 'h2' });
-    if (marcos.length) {
-      conteudo.push({ table: { headerRows: 1, widths: [96, '*'], body: [
-        [{ text: 'HORÁRIO', style: 'rotuloCaixa' }, { text: 'O QUE ACONTECEU', style: 'rotuloCaixa' }],
-      ].concat(marcos.map(function (e) {
-        return [{ text: dataHora(e.ocorrido_em), fontSize: 8.5, color: COR.suave }, { text: txt(e.titulo) }];
-      })) }, layout: 'lightHorizontalLines', margin: [0, 0, 0, 10] });
-    } else {
-      conteudo.push({ text: 'Nenhum marco registrado até agora.', color: COR.suave });
+    function secaoTexto(titulo, linhas) {
+      if (!linhas.length) return;
+      conteudo.push({ text: titulo, style: 'h2', headlineLevel: 1 });
+      linhas.forEach(function (t) { conteudo.push({ text: t, fontSize: 10, lineHeight: 1.35, margin: [0, 0, 0, 6] }); });
+      conteudo.push({ text: '', margin: [0, 0, 0, 6] });
     }
+    function secaoLista(titulo, itens) {
+      if (!itens.length) return;
+      conteudo.push({ text: titulo, style: 'h2', headlineLevel: 1 }, { ul: itens, fontSize: 10, margin: [0, 0, 0, 12] });
+    }
+    secaoTexto('Resumo', [frases.join(' ')]);
+    secaoTexto('Pessoa procurada', pessoa);
+    secaoTexto('Como aconteceu', comoAconteceu);
+    secaoTexto('Buscas realizadas', buscas);
+    secaoLista('Meios empregados nas buscas', meios);
+    secaoTexto('Estratégia e próximos passos', estrategia);
+    secaoLista('Forças envolvidas', forcas);
+    secaoLista('Recursos empregados', recursosUsados);
     conteudo.push({ text: 'Documento preparado para divulgação. Não traz nomes, documentos, telefones, fotos, trilhas, posições nem observações de campo. Distâncias e áreas aproximadas.',
       fontSize: 8, color: COR.suave, margin: [0, 18, 0, 0] });
     return documento(d, recursos, conteudo, { titulo: 'Relatório para imprensa — ' + op.codigo, assunto: 'Relatório para divulgação', marca: 'DIVULGAÇÃO', publico: true });

@@ -150,6 +150,10 @@
     var orgaos = el('textarea', { classe: 'campo', id: 'ipo-orgaos', rows: '3', maxlength: '4000', placeholder: 'Um por linha. Ex.:\nPMPR: 02 PMs - Patrulha Rural\nDefesa Civil de Guaraci' });
     orgaos.value = ipo.orgaos_apoio;
     var responsavel = el('input', { classe: 'campo', id: 'ipo-resp', maxlength: '1000', value: ipo.responsavel_informacoes, placeholder: 'Ex.: Cb. Alves/GBS' });
+    var impComo = el('textarea', { classe: 'campo', id: 'ipo-imp-como', rows: '4', maxlength: '3000', placeholder: 'Como aconteceu, em poucas linhas e sem nomes. Ex.: Um homem de 34 anos saiu para uma trilha na manhã de sábado e não retornou; a família acionou os Bombeiros à noite.' });
+    impComo.value = ipo.imprensa_como;
+    var impEstrategia = el('textarea', { classe: 'campo', id: 'ipo-imp-estrategia', rows: '4', maxlength: '3000', placeholder: 'Como as buscas estão sendo conduzidas e os próximos passos. Ex.: As equipes varrem a trilha e as encostas em setores, com apoio de cães e drone; amanhã o foco será a margem do rio.' });
+    impEstrategia.value = ipo.imprensa_estrategia;
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
 
     var btnRecursosSci = el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '↻ Usar os recursos do SCI', onclick: async function () {
@@ -195,6 +199,11 @@
         editavel ? el('div', { classe: 'acoes-linha' }, [el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'ipo-abrir-hoje', texto: '+ IPO de hoje', onclick: function () { abrirDia(op, hojeLocal(), { aoSalvar: opcoes.aoSalvar }); } })]) : null,
         desdobDiario ? el('small', { classe: 'muted', texto: desdobDiario + ' desdobramento(s) registrado(s) no diário também entram, no dia deles.' }) : null,
       ]),
+      UI.secao('Para a imprensa', [
+        el('p', { classe: 'muted', texto: 'Estes dois textos saem EXATAMENTE como escritos no relatório da imprensa. Não coloque nomes, documentos, telefones nem nada que identifique a pessoa ou a família. Em branco: o relatório monta um texto padrão com os dados da operação.' }),
+        UI.campo('Como aconteceu', impComo, { para: 'ipo-imp-como', largo: true }),
+        UI.campo('Estratégia e próximos passos', impEstrategia, { para: 'ipo-imp-estrategia', largo: true }),
+      ]),
       UI.secao('Fechamento', [UI.grade([
         UI.campo('Órgãos de apoio', orgaos, { para: 'ipo-orgaos', largo: true }),
         UI.campo('Imagens anexas junto a esta mensagem?', radios('ipo-imagens', [['sim', 'Sim'], ['nao', 'Não']], ipo.imagens_anexas === true ? 'sim' : ipo.imagens_anexas === false ? 'nao' : ''), {}),
@@ -218,7 +227,7 @@
         acionamento_cb: isoLocal(acionCb.value), desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value,
         meio_liquido: aquatica ? marcadoEm(form, 'ipo-meio') : ipo.meio_liquido, pessoas_perdidas: pessoas.value, vitimas_docs: docsIpo,
         buscas_preliminares: marcadoEm(form, 'ipo-buscas'), possibilidade_vida: marcadoEm(form, 'ipo-vida'), procedimentos: proc, procedimentos_outros: procOutros.value,
-        recursos_cb: recursos.value, orgaos_apoio: orgaos.value,
+        recursos_cb: recursos.value, orgaos_apoio: orgaos.value, imprensa_como: impComo.value, imprensa_estrategia: impEstrategia.value,
         imagens_anexas: img === 'sim' ? true : img === 'nao' ? false : null, responsavel_informacoes: responsavel.value,
       }));
     }

@@ -206,6 +206,8 @@
       efetivo: listaPorDia(raw.efetivo, { qtd: 'qtd', nomes: 1000 }, 200),
       desdobramentos: listaPorDia(raw.desdobramentos, { texto: 4000 }, 200),
       dias: diasValidos(raw.dias),
+      imprensa_como: textoLongo(raw.imprensa_como, 3000),
+      imprensa_estrategia: textoLongo(raw.imprensa_estrategia, 3000),
       orgaos_apoio: textoLongo(raw.orgaos_apoio, 4000),
       vitimas_docs: documentosValidos(raw.vitimas_docs),
       destinatarios: texto(raw.destinatarios, 120) || DESTINO_PADRAO,

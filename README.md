@@ -177,6 +177,12 @@ legível, elas não aparecem.
 - **Banco:** migração `084_tirar_do_mapa.sql` (colunas `fora_do_mapa_em`/`fora_do_mapa_por_nome` e a função `tirar_do_mapa`).
   Sem ela, o botão avisa que falta a migração.
 
+### Mapas dos relatórios em satélite (versão 1.2.1)
+
+- Os mapas desenhados nos relatórios em PDF (mapa geral, mapa de cada setor e mapa de cada dia do IPO (Diário)) agora têm
+  **imagem de satélite** no fundo (a mesma do painel, Esri), e não mais o mapa de ruas. O crédito da imagem vai no canto do
+  mapa e na nota do relatório. Sem conexão com o servidor de imagens, o relatório sai com fundo liso e avisa.
+
 ### Número da versão (1.0.0)
 
 - O sistema tem um número de versão (ex.: **Versão 1.0.0**), que sobe a cada atualização: correção 1.0.0 → 1.0.1,

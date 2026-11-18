@@ -302,7 +302,7 @@
         STATUS_SETOR[s.status] || s.status, txt([s.equipe, grupos].filter(Boolean).join(' · ')), dataHoraCurta(s.inicio_em), dataHoraCurta(s.fim_em),
         duracao(s.inicio_em, s.fim_em), textoArea(areaSetor(s))];
     }), ['*', 58, 88, 56, 56, 50, 46]));
-    out.push(nota('Início e fim correspondem à mudança de situação do setor no painel, registrada pelo sistema no diário. No mapa, contorno contínuo = setor concluído; tracejado = pendente ou em andamento. Mapa de fundo © colaboradores do OpenStreetMap.'));
+    out.push(nota('Início e fim correspondem à mudança de situação do setor no painel, registrada pelo sistema no diário. No mapa, contorno contínuo = setor concluído; tracejado = pendente ou em andamento. Imagens de satélite © Esri, Maxar, Earthstar Geographics.'));
 
     d.setores.forEach(function (s) {
       var bloco = [subtitulo('Setor ' + s.nome, { pageBreak: 'before', fontSize: 13, margin: [0, 0, 0, 8] })];

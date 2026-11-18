@@ -375,7 +375,8 @@
   /* MAPA EM CANVAS (para o PDF)                                          */
   /* ================================================================== */
   var cacheTiles = new Map();
-  function tileUrl(z, x, y) { return 'https://tile.openstreetmap.org/' + z + '/' + x + '/' + y + '.png'; }
+  // Fundo dos mapas dos relatórios: imagem de SATÉLITE (a mesma do painel). Atenção: a ordem no endereço é z/y/x.
+  function tileUrl(z, x, y) { return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/' + z + '/' + y + '/' + x; }
   function carregarTile(url) {
     if (cacheTiles.has(url)) return cacheTiles.get(url);
     var p = new Promise(function (resolve) {
@@ -430,7 +431,7 @@
     g.fillStyle = '#e8ecef';
     g.fillRect(0, 0, W, H);
 
-    // fundo (OpenStreetMap)
+    // fundo (satélite)
     var falhas = 0, total = 0;
     if (o.fundo !== false) {
       var tx0 = Math.floor(x0 / 256), ty0 = Math.floor(y0 / 256), tx1 = Math.floor((x0 + W) / 256), ty1 = Math.floor((y0 + H) / 256);
@@ -448,7 +449,7 @@
         }
       }
       await Promise.all(tarefas);
-      g.fillStyle = 'rgba(255,255,255,0.18)';   // clareia o fundo para os desenhos se destacarem
+      g.fillStyle = 'rgba(0,0,0,0.12)';   // escurece um pouco o satélite: os contornos brancos e coloridos se destacam
       g.fillRect(0, 0, W, H);
     }
     var semFundo = o.fundo === false || (total && falhas / total > 0.5);
@@ -484,7 +485,7 @@
       var dest = ehDestaque(s);
       var apagado = temDestaque && !dest;
       caminho(pontosSetor(s), true);
-      g.globalAlpha = apagado ? 0.08 : dest ? 0.22 : 0.16;
+      g.globalAlpha = apagado ? 0.08 : dest ? 0.24 : 0.18;
       g.fillStyle = s.cor || '#3b82f6';
       g.fill();
       g.globalAlpha = apagado ? 0.45 : 1;
@@ -567,7 +568,7 @@
     g.beginPath(); g.moveTo(W - 34, 20); g.lineTo(W - 42, 44); g.lineTo(W - 34, 38); g.lineTo(W - 26, 44); g.closePath(); g.fill();
     g.font = '700 11px Roboto, Arial, sans-serif'; g.textAlign = 'center'; g.fillText('N', W - 34, 54);
     // créditos
-    var cred = semFundo ? 'Mapa de fundo indisponível no momento da geração' : '© colaboradores do OpenStreetMap';
+    var cred = semFundo ? 'Mapa de fundo indisponível no momento da geração' : 'Imagens © Esri, Maxar, Earthstar Geographics';
     g.font = '12px Roboto, Arial, sans-serif'; g.textAlign = 'right';
     var tw = g.measureText(cred).width;
     g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(W - tw - 14, H - 22, tw + 14, 22);

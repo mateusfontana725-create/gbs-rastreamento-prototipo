@@ -1013,6 +1013,16 @@
           pontos: x.pontos, fotos: [], diario: x.diario, trilhasManuais: [] });
         var g = elementosMapa(copia, { fundo: true });
         recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { destaques: x.setores.map(function (z) { return z.setor.id; }) }, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
+        // um mapa por setor trabalhado (só no Diário detalhado; períodos curtos): o setor e as trilhas do dia sobre o satélite
+        if (opcoes.mapasSetor && dias.length <= 7) {
+          recursos.mapasSetorDia = recursos.mapasSetorDia || {};
+          var lista = x.setores.slice(0, 8);
+          for (var m = 0; m < lista.length; m++) {
+            passo('Desenhando o mapa do setor ' + lista[m].setor.nome + ' em ' + x.dia.split('-').reverse().slice(0, 2).join('/') + '…');
+            var gs = elementosMapa(copia, { fundo: true });
+            recursos.mapasSetorDia[x.dia + '|' + lista[m].setor.id] = await desenharMapa(Object.assign({}, gs.base, { largura: 1000, altura: 560, enquadrar: pontosSetor(lista[m].setor), destaque: lista[m].setor.id }));
+          }
+        }
       }
     }
     return { dados: dados, dias: dias, recursos: recursos, aviso: tr.aviso };
@@ -1025,7 +1035,7 @@
   // Relatório DIÁRIO (detalhado) de um dia, de um período ou de tudo até o momento, separado dia a dia. Devolve o documento.
   async function documentoDiario(op, ini, fim, modo, passo) {
     passo = passo || function () {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo);
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapasSetor: true });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarDiarioDias(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (c.aviso ? ' — ' + c.aviso : ''),

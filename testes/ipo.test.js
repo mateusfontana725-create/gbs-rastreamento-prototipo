@@ -210,6 +210,9 @@ teste('relatório diário (detalhado) separa cada dia: IPO, pessoas, km, setores
   assert.ok(/2º dia da operação/.test(tx) && /3º dia da operação/.test(tx));
   assert.ok(/Varredura na margem com K9/.test(tx) && /Equipe Alfa/.test(tx) && /Chuva forte à tarde/.test(tx));
   assert.ok(/7,3 km|7,2 km/.test(tx) && /IPO do dia não preenchido/.test(tx));
+  // mais detalhe: trilhas pessoa a pessoa (tempo e setores percorridos) e um bloco por setor
+  assert.ok(/Trilhas do dia, por pessoa/.test(tx) && /Setores percorridos/.test(tx) && /8 h/.test(tx), 'trilhas por pessoa com o tempo em campo');
+  assert.ok(/Setor Margem/.test(tx) && /Equipes|Trilhas dentro do setor/.test(tx), 'bloco do setor');
   assert.ok(/Dados da ocorrência/.test(tx) && /RGO 20263BBM12221/.test(tx));
 });
 

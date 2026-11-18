@@ -65,6 +65,28 @@ function resposta() {
     g.GBSNativo.onmessage({ data: 'não é json' });
   });
 
+  await teste('ponte: exportar a trilha pelo aplicativo (compartilhar e salvar) manda nome, tipo e base64', async () => {
+    const enviados = [];
+    const g = { GBSNativo: { postMessage: (m) => enviados.push(JSON.parse(m)) } };
+    const ARQ = path.join(__dirname, '..', 'public', 'js', 'app-nativo.js');
+    new Function('g', 'module', require('fs').readFileSync(ARQ, 'utf8').replace("typeof window !== 'undefined' ? window : globalThis", 'g'))(g, undefined);
+    const B = g.GBSApp;
+    const p1 = B.compartilharArquivo('Trilha.gpx', 'application/gpx+xml', 'QUJD');
+    assert.deepStrictEqual([enviados[0].acao, enviados[0].dados], ['compartilharArquivo', { nome: 'Trilha.gpx', mime: 'application/gpx+xml', base64: 'QUJD' }]);
+    g.GBSNativo.onmessage({ data: JSON.stringify({ id: enviados[0].id, dados: { ok: true, nome: 'Trilha.gpx' } }) });
+    assert.strictEqual((await p1).nome, 'Trilha.gpx');
+    const p2 = B.salvarArquivo('Trilha.csv', 'text/csv', 'QUJD');
+    assert.strictEqual(enviados[1].acao, 'salvarArquivo');
+    g.GBSNativo.onmessage({ data: JSON.stringify({ id: enviados[1].id, dados: { erro: 'sem_espaco' } }) });
+    assert.strictEqual((await p2).erro, 'sem_espaco');
+  });
+
+  await teste('o aplicativo (Java) atende as duas ações de arquivo que a página chama', () => {
+    const java = require('fs').readFileSync(path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'java', 'br', 'gbs', 'busca', 'MainActivity.java'), 'utf8');
+    ['compartilharArquivo', 'salvarArquivo'].forEach((a) => assert.ok(java.includes('case "' + a + '"'), 'MainActivity sem a ação ' + a));
+    assert.ok(/<cache-path name="exportar"/.test(require('fs').readFileSync(path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res', 'xml', 'arquivos.xml'), 'utf8')), 'FileProvider sem a pasta exportar');
+  });
+
   await teste('/api/app: informa o link de download', async () => {
     delete process.env.APP_ANDROID_URL;
     const r = resposta();

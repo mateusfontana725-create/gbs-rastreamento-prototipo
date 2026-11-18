@@ -4238,12 +4238,12 @@
     if (!mapaGira() || !anguloMapa()) return;
     est.mapa.setBearing(0);
   }
-  // a rosa gira ao contrário do mapa: o N aponta sempre para o norte de verdade
+  // a rosa gira junto com o mapa (sentido horário): o N aponta sempre para o norte de verdade
   function atualizarBussola(div) {
     var svg = div && div.querySelector('svg');
     if (!svg) return;
     var ang = anguloMapa();
-    svg.style.transform = 'rotate(' + (-est.mapa.getBearing()) + 'deg)';
+    svg.style.transform = 'rotate(' + est.mapa.getBearing() + 'deg)';   // o mapa gira no sentido horário: o N da rosa acompanha o norte de verdade
     div.classList.toggle('bussola-girada', ang !== 0);
     div.title = ang ? 'Mapa girado ' + ang + '°. Toque para voltar o norte para cima.' : 'Bússola: toque para voltar o norte para cima. Para girar o mapa: dois dedos, Shift + roda do mouse ou os botões ↺ ↻';
   }

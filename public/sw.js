@@ -15,9 +15,9 @@ var QUADROS = 'https://tile.openstreetmap.org/';
 // A página do participante inteira, para abrir sem internet já na primeira vez (cada arquivo à parte: um que falhe não
 // impede os outros). Online, a rede continua tendo prioridade (redePrimeiro).
 var PAGINA = ['participante.html', 'js/tema-participante.js', 'css/estilos.css', 'css/tema-claro-participante.css', '/api/config', 'js/comunicacao.js', 'js/interface.js', 'js/versao.js', 'js/fotos.js', 'js/gps.js',
-  'js/trilha-local.js', 'js/fila-estado.js', 'js/rotas.js', 'js/coords.js', 'js/trilha-geo.js', 'js/mapa-offline.js', 'js/mapa-vetor.js', 'js/app-nativo.js', 'js/participante.js'];
+  'js/trilha-local.js', 'js/fila-estado.js', 'js/rotas.js', 'js/coords.js', 'js/giro-mapa.js', 'js/alpinequest.js', 'js/arquivos.js', 'js/trilha-geo.js', 'js/mapa-offline.js', 'js/mapa-vetor.js', 'js/app-nativo.js', 'js/participante.js'];
 var BIBLIOTECAS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js',
   'https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js', 'https://unpkg.com/protomaps-leaflet@5.1.0/dist/protomaps-leaflet.js'];
 self.addEventListener('install', function (ev) {
   ev.waitUntil(caches.open(CACHE_APP).then(function (c) {

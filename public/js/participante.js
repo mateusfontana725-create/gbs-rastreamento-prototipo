@@ -264,6 +264,10 @@
 
     $('form-inicio').addEventListener('submit', aoIniciar);
     $('btn-saida').addEventListener('click', aoSolicitarSaida);
+    $('btn-arquivos').addEventListener('click', abrirArquivos);
+    // a bússola é também o botão de girar o mapa conforme o celular
+    $('bussola-civil').addEventListener('click', function (ev) { if (ev.target.closest && ev.target.closest('#bussola-ativar')) return; if (!estado.prefs) estado.prefs = lerPrefsMapa(); definirGiroMapa(!estado.prefs.girar); });
+    $('bussola-civil').addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); if (!estado.prefs) estado.prefs = lerPrefsMapa(); definirGiroMapa(!estado.prefs.girar); } });
     $('menu-saida').addEventListener('click', function () { abrirMenuFolha(false); aoSolicitarSaida(); });
     $('form-msg').addEventListener('submit', aoEnviarMensagem);
     $('btn-registrar').addEventListener('click', abrirRegistro);
@@ -1013,6 +1017,210 @@
   }
 
   // Tela "Mapas offline": os pacotes guardados, o espaço aproximado de cada um e o botão de apagar.
+  /* ---------- Exportar e importar (para quando a conexão com os bombeiros falha) ----------
+   * Exportar: a trilha que está neste aparelho (GPX, KML, GeoJSON ou CSV), para mandar por WhatsApp, e-mail ou levar em
+   *   cartão/pen drive; o painel importa o GPX e associa à pessoa. No aplicativo, o arquivo sai pela folha de compartilhar do
+   *   Android ou vai para Downloads (ponte GBSApp.compartilharArquivo / salvarArquivo).
+   * Importar: um arquivo recebido (GPX, KML, KMZ, GeoJSON, CSV, LDK/TRK do AlpineQuest) aparece no mapa como referência
+   *   (pontos, linhas e áreas) e fica guardado no aparelho para abrir sem internet. Nada é enviado aos bombeiros.
+   */
+  var CHAVE_IMPORTADOS = 'gbs-importados-participante';
+  var LIMITE_GUARDAR = 900 * 1024;   // acima disso o arquivo vale só nesta tela (localStorage é pequeno)
+  function slugArquivo(t) {
+    return String(t || 'trilha').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'trilha';
+  }
+  function dd2(n) { return (n < 10 ? '0' : '') + n; }
+  function carimboArquivo(ms) {
+    var d = new Date(ms || Date.now());
+    return d.getFullYear() + dd2(d.getMonth() + 1) + dd2(d.getDate()) + '-' + dd2(d.getHours()) + dd2(d.getMinutes());
+  }
+  // O que está neste aparelho: os segmentos da trilha (com horário) e o início e o fim.
+  function dadosParaExportar() {
+    var segs = estado.trilhaMinha || [], tempos = estado.temposMinha || [];
+    var nome = (estado.part && estado.part.nome) || 'Participante';
+    var segmentos = [];
+    var primeiro = null, ultimo = null;
+    segs.forEach(function (seg, i) {
+      var t = tempos[i] || [];
+      var lista = seg.map(function (c, k) { return { lat: c[0], lng: c[1], t: t[k] || null }; });
+      if (!lista.length) return;
+      segmentos.push(lista);
+      if (!primeiro) primeiro = lista[0];
+      ultimo = lista[lista.length - 1];
+    });
+    var pontos = [];
+    if (primeiro) pontos.push({ nome: 'Início da trilha', lat: primeiro.lat, lng: primeiro.lng, descricao: primeiro.t ? new Date(primeiro.t).toLocaleString('pt-BR') : '' });
+    if (ultimo && ultimo !== primeiro) pontos.push({ nome: 'Última posição', lat: ultimo.lat, lng: ultimo.lng, descricao: ultimo.t ? new Date(ultimo.t).toLocaleString('pt-BR') : '' });
+    var op = (estado.info && estado.info.operacao) || '';
+    return { nome: 'Trilha de ' + nome + (op ? ' — ' + op : ''), trilhas: segmentos.length ? [{ nome: 'Trilha de ' + nome, tipo: 'gps', cor: corMinha(), segmentos: segmentos }] : [], pontos: pontos, setores: [], quantidade: segmentos.reduce(function (n, s) { return n + s.length; }, 0), primeiro: primeiro, ultimo: ultimo };
+  }
+  function blobParaBase64(blob) {
+    return new Promise(function (ok, erro) {
+      var fr = new FileReader();
+      fr.onload = function () { ok(String(fr.result).split(',')[1] || ''); };
+      fr.onerror = function () { erro(new Error('leitura')); };
+      fr.readAsDataURL(blob);
+    });
+  }
+  // Entrega o arquivo: 'compartilhar' (folha de compartilhar do Android/navegador) ou 'salvar' (Downloads / pasta).
+  async function entregarArquivo(nome, blob, modo) {
+    if (APP.disponivel && (APP.compartilharArquivo || APP.salvarArquivo)) {
+      var b64 = await blobParaBase64(blob);
+      var r = modo === 'compartilhar' && APP.compartilharArquivo ? await APP.compartilharArquivo(nome, blob.type || 'application/octet-stream', b64)
+        : APP.salvarArquivo ? await APP.salvarArquivo(nome, blob.type || 'application/octet-stream', b64) : await APP.compartilharArquivo(nome, blob.type || 'application/octet-stream', b64);
+      if (r && r.erro) throw new Error(r.erro === 'acao_desconhecida' ? 'Esta versão do aplicativo ainda não envia arquivos: instale a versão nova.' : 'O aplicativo não conseguiu entregar o arquivo (' + r.erro + ').');
+      return { onde: modo === 'compartilhar' ? 'compartilhado' : 'downloads', nome: (r && r.nome) || nome };
+    }
+    if (modo === 'compartilhar' && navigator.share && typeof File === 'function') {
+      try {
+        var arq = new File([blob], nome, { type: blob.type || 'application/octet-stream' });
+        if (!navigator.canShare || navigator.canShare({ files: [arq] })) { await navigator.share({ files: [arq], title: nome }); return { onde: 'compartilhado', nome: nome }; }
+      } catch (e) { if (e && e.name === 'AbortError') return { onde: 'cancelado', nome: nome }; /* senão: baixa */ }
+    }
+    return window.Arquivos.salvar(nome, blob);
+  }
+  function textoEntrega(r) {
+    if (r.onde === 'compartilhado') return 'Arquivo pronto para enviar: ' + r.nome + '.';
+    if (r.onde === 'cancelado') return 'Compartilhamento cancelado.';
+    if (r.onde === 'downloads' && APP.disponivel) return 'Salvo em Downloads: ' + r.nome + '.';
+    return window.Arquivos.textoSalvo(r);
+  }
+
+  function lerImportados() {
+    try { var l = JSON.parse(localStorage.getItem(CHAVE_IMPORTADOS) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; }
+  }
+  function gravarImportados() {
+    var lista = (estado.importados || []).filter(function (x) { return x.guardar !== false; }).map(function (x) { return { id: x.id, nome: x.nome, em: x.em, dados: x.dados }; });
+    try { localStorage.setItem(CHAVE_IMPORTADOS, JSON.stringify(lista)); return true; } catch (e) { return false; }
+  }
+  // Desenha o que foi importado: pontos (marcadores), linhas e áreas, numa camada própria do mapa.
+  function desenharImportado(item) {
+    if (!estado.mapa || !window.L) return;
+    if (item.camada) { item.camada.remove(); item.camada = null; }
+    var g = L.layerGroup();
+    var d = item.dados || {};
+    (d.areas || []).forEach(function (a) {
+      if (!a.pts || a.pts.length < 3) return;
+      var p = L.polygon(a.pts, { color: a.cor || '#a855f7', weight: a.espessura || 2, fillOpacity: a.preenchimento != null ? Math.min(0.5, a.preenchimento) : 0.12, interactive: true });
+      if (a.nome) p.bindTooltip(a.nome, { sticky: true });
+      g.addLayer(p);
+    });
+    (d.linhas || []).forEach(function (l) {
+      if (!l.pts || l.pts.length < 2) return;
+      var p = L.polyline(l.pts, { color: l.cor || '#a855f7', weight: l.espessura || 3, opacity: l.opacidade != null ? l.opacidade : 0.9, dashArray: '2 6', interactive: true });
+      if (l.nome) p.bindTooltip(l.nome, { sticky: true });
+      g.addLayer(p);
+    });
+    (d.pontos || []).forEach(function (p) {
+      var m = L.circleMarker([p.lat, p.lng], { radius: 6, color: '#ffffff', weight: 2, fillColor: p.cor || '#a855f7', fillOpacity: 1 });
+      m.bindTooltip((p.nome || 'Ponto') + (p.descricao ? ' — ' + p.descricao : ''), { direction: 'top' });
+      g.addLayer(m);
+    });
+    g.addTo(estado.mapa);
+    item.camada = g;
+  }
+  function limitesImportado(item) {
+    var pts = [], d = item.dados || {};
+    (d.pontos || []).forEach(function (p) { pts.push([p.lat, p.lng]); });
+    (d.linhas || []).forEach(function (l) { (l.pts || []).forEach(function (q) { pts.push(q); }); });
+    (d.areas || []).forEach(function (a) { (a.pts || []).forEach(function (q) { pts.push(q); }); });
+    return pts.length ? L.latLngBounds(pts) : null;
+  }
+  function restaurarImportados() {
+    if (estado.importados) return;
+    estado.importados = lerImportados();
+    estado.importados.forEach(desenharImportado);
+  }
+  function resumoImportado(d) {
+    var p = [];
+    if ((d.pontos || []).length) p.push(d.pontos.length + ' ponto' + (d.pontos.length > 1 ? 's' : ''));
+    if ((d.linhas || []).length) p.push(d.linhas.length + ' trilha' + (d.linhas.length > 1 ? 's' : ''));
+    if ((d.areas || []).length) p.push(d.areas.length + ' área' + (d.areas.length > 1 ? 's' : ''));
+    return p.join(' · ') || 'vazio';
+  }
+  async function importarArquivoP(arquivo) {
+    if (!window.Arquivos) throw new Error('A leitura de arquivos não está disponível nesta versão da página.');
+    var r = await window.Arquivos.importar(arquivo, {});
+    if (r.imagens && r.imagens.length && !r.pontos.length && !r.linhas.length && !r.areas.length) throw new Error('Esse arquivo é uma imagem de mapa; aqui só entram pontos, trilhas e áreas.');
+    var dados = { pontos: r.pontos || [], linhas: r.linhas || [], areas: r.areas || [] };
+    var item = { id: 'i' + Date.now().toString(36), nome: arquivo.name || 'arquivo', em: Date.now(), dados: dados, guardar: JSON.stringify(dados).length <= LIMITE_GUARDAR };
+    restaurarImportados();
+    estado.importados.push(item);
+    desenharImportado(item);
+    var ok = item.guardar ? gravarImportados() : false;
+    var lim = limitesImportado(item);
+    if (lim && estado.mapa) { estado.seguindo = false; estado.mapa.fitBounds(lim.pad(0.1), { maxZoom: 17 }); }
+    return { item: item, guardado: ok, avisos: r.avisos || [] };
+  }
+  function removerImportado(id) {
+    restaurarImportados();
+    var i = estado.importados.findIndex(function (x) { return x.id === id; });
+    if (i < 0) return;
+    if (estado.importados[i].camada) estado.importados[i].camada.remove();
+    estado.importados.splice(i, 1);
+    gravarImportados();
+  }
+
+  function abrirArquivos() {
+    restaurarImportados();
+    var info = dadosParaExportar();
+    var formato = UI.el('select', { classe: 'campo', id: 'arq-formato' }, [['gpx', 'GPX (recomendado: os bombeiros importam no painel)'], ['kml', 'KML (Google Earth)'], ['geojson', 'GeoJSON'], ['csv', 'CSV (planilha)']].map(function (f) {
+      return UI.el('option', { value: f[0], texto: f[1] });
+    }));
+    var msg = UI.el('p', { classe: 'ajuda', id: 'arq-msg', role: 'status', hidden: true });
+    function mostrar(t, erro) { msg.textContent = t; msg.hidden = false; msg.classList.toggle('erro-form', Boolean(erro)); }
+    async function exportar(modo) {
+      var atual = dadosParaExportar();
+      if (!atual.quantidade) { mostrar('Ainda não há trilha neste aparelho para exportar.', true); return; }
+      var fmt = formato.value;
+      try {
+        var conteudo = window.Arquivos.exportar(fmt, atual);
+        var blob = new Blob([conteudo], { type: window.Arquivos.TIPOS_MIME[fmt] || 'application/octet-stream' });
+        var nome = 'Trilha-' + slugArquivo((estado.part && estado.part.nome) || 'participante') + '-' + carimboArquivo(Date.now()) + '.' + fmt;
+        var r = await entregarArquivo(nome, blob, modo);
+        mostrar(textoEntrega(r));
+      } catch (e) { mostrar('Não foi possível exportar: ' + (e.message || e), true); }
+    }
+    var lista = UI.el('ul', { classe: 'arq-lista', id: 'arq-lista' });
+    function desenharLista() {
+      lista.innerHTML = '';
+      if (!estado.importados.length) { lista.appendChild(UI.el('li', { classe: 'muted', texto: 'Nenhum arquivo importado.' })); return; }
+      estado.importados.forEach(function (x) {
+        lista.appendChild(UI.el('li', null, [
+          UI.el('div', null, [UI.el('strong', { texto: x.nome }), UI.el('small', { classe: 'muted', texto: resumoImportado(x.dados) + (x.guardar === false ? ' · só nesta tela (arquivo grande)' : '') })]),
+          UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { var l = limitesImportado(x); if (l && estado.mapa) { fechar(); estado.seguindo = false; estado.mapa.fitBounds(l.pad(0.1), { maxZoom: 17 }); } } }),
+          UI.el('button', { classe: 'btn btn-pequeno btn-perigo', type: 'button', texto: 'Tirar', onclick: function () { removerImportado(x.id); desenharLista(); } }),
+        ]));
+      });
+    }
+    var entrada = UI.el('input', { type: 'file', id: 'arq-arquivo', classe: 'sr-only', 'aria-label': 'Escolher o arquivo para importar' });
+    entrada.addEventListener('change', async function () {
+      var arq = entrada.files && entrada.files[0];
+      entrada.value = '';
+      if (!arq) return;
+      mostrar('Lendo ' + arq.name + '…');
+      try {
+        var r = await importarArquivoP(arq);
+        desenharLista();
+        mostrar('Importado: ' + resumoImportado(r.item.dados) + '.' + (r.guardado ? ' Fica guardado neste aparelho (abre sem internet).' : ' Vale só enquanto esta tela estiver aberta.') + (r.avisos.length ? ' ' + r.avisos.slice(0, 2).join(' ') : ''));
+      } catch (e) { mostrar('Não foi possível importar: ' + (e.message || e), true); }
+    });
+    desenharLista();
+    var texto = info.quantidade ? info.quantidade + ' pontos de trilha neste aparelho' + (info.primeiro && info.primeiro.t ? ', desde ' + new Date(info.primeiro.t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '') + '.' : 'Ainda não há trilha neste aparelho.';
+    var fechar = UI.abrirModal(UI.el('div', { classe: 'form-padrao' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Exportar e importar' }, [UI.dica('Para quando a conexão com os bombeiros falhar: leve a sua trilha em arquivo (e mande por WhatsApp ou e-mail) ou abra no mapa um arquivo que você recebeu. Nada disso depende de internet.')]),
+      UI.secao('Exportar a minha trilha', [UI.el('p', { classe: 'ajuda', texto: texto }), UI.campo('Formato', formato, { para: 'arq-formato' }),
+        UI.el('div', { classe: 'acoes-linha' }, [
+          UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'arq-compartilhar', texto: '📤 Compartilhar', onclick: function () { exportar('compartilhar'); } }),
+          UI.el('button', { classe: 'btn', type: 'button', id: 'arq-salvar', texto: '💾 Salvar no aparelho', onclick: function () { exportar('salvar'); } }),
+        ])]),
+      UI.secao('Importar um arquivo', [UI.el('p', { classe: 'ajuda', texto: 'GPX, KML, KMZ, GeoJSON, CSV ou arquivos do AlpineQuest (LDK, TRK…). Os pontos, trilhas e áreas aparecem no mapa como referência.' }),
+        UI.el('button', { classe: 'btn', type: 'button', id: 'arq-escolher', texto: '📂 Escolher arquivo…', onclick: function () { entrada.click(); } }), entrada, lista]),
+      msg,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } })]),
+    ]), { empilhar: true });
+  }
+
   function abrirMapasOffline() {
     var M = window.MapaOffline;
     var lista = UI.el('div', { classe: 'mapas-offline-lista' });
@@ -1703,7 +1911,8 @@
   function iniciarMapa() {
     if (estado.mapa) { setTimeout(function () { estado.mapa.invalidateSize(); }, 50); return; }
     if (!window.L) { document.querySelector('.mapa-civil-caixa').hidden = true; return; }
-    var mapa = L.map('mapa-civil', { zoomControl: true, attributionControl: true }).setView([-15.79, -47.88], 4);
+    // rotate: o mapa pode girar conforme a direção do celular (leaflet-rotate); sem gestos de giro (só pelo sensor), para não girar sem querer
+    var mapa = L.map('mapa-civil', { zoomControl: true, attributionControl: true, rotate: typeof L.Map.prototype.setBearing === 'function', bearing: 0, touchRotate: false, shiftKeyRotate: false, compassBearing: false, rotateControl: false }).setView([-15.79, -47.88], 4);
     estado.prefs = lerPrefsMapa();
     estado.bases = criarBasesMapa();
     estado.baseAtual = estado.bases[estado.prefs.base] ? estado.prefs.base : 'osm';
@@ -1713,6 +1922,8 @@
     estado.mapa = mapa;
     mapa.on('zoomend moveend', agendarDecoracoesTrilhas);
     montarCamadasCivil();
+    restaurarImportados();
+    if (estado.prefs.girar) definirGiroMapa(true, false);
     setTimeout(function () { mapa.invalidateSize(); }, 80);
     atualizarMeuMarcador();
     if (estado.vetorUrl) usarMapaVetor(estado.vetorUrl); else decidirMapaVetor();
@@ -2518,7 +2729,7 @@
   /* ------------------------------------------------------------------ */
   var CHAVE_PREFS_CIVIL = 'gbs-civil-mapa';
   var CHAVE_TEMA_CIVIL = 'gbs-tema-participante';   // chave nova: o padrão é o escuro (a antiga podia ter ficado em "claro")
-  var PADRAO_PREFS = { base: 'osm', setores: true, pontos: true, proibidas: true, trilhas: true };   // abre no mapa de ruas; o satélite fica na escolha de Camadas
+  var PADRAO_PREFS = { base: 'osm', setores: true, pontos: true, proibidas: true, trilhas: true, girar: false };   // abre no mapa de ruas; o satélite fica na escolha de Camadas
   var COR_TRILHA_EQUIPE = '#8aa0b8';   // única cor para as trilhas dos outros; a sua usa a cor do grupo (ou azul)
 
   function lerPrefsMapa() {
@@ -2693,6 +2904,13 @@
     painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Mostrar no mapa' }),
       chave('Setores', 'setores'), chave('Pontos de interesse', 'pontos'), chave('Áreas proibidas', 'proibidas'),
       chave('Trilhas da equipe', 'trilhas', function (ligou) { if (ligou) { estado.trilhasEquipeEm = 0; carregarTrilhasEquipe(); } })]));
+    if (typeof L.Map.prototype.setBearing === 'function') {
+      var inpGirar = UI.el('input', { type: 'checkbox', id: 'camadas-girar', checked: estado.prefs.girar ? true : null });
+      estado.chaveGirar = inpGirar;
+      inpGirar.addEventListener('change', function () { definirGiroMapa(inpGirar.checked); });
+      painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Direção do mapa' }),
+        UI.el('label', { classe: 'camadas-chave' }, [inpGirar, ' Girar o mapa conforme o celular (a frente do aparelho fica para cima)'])]));
+    }
     painel.appendChild(UI.el('div', { classe: 'camadas-grupo' }, [UI.el('span', { classe: 'camadas-rotulo', texto: 'Tema' }),
       seg('Tema', temaCivil(), [['escuro', 'Escuro'], ['claro', 'Claro']], aplicarTemaCivil)]));
     if (modelosPacote()) {
@@ -3187,6 +3405,41 @@
     var txt = DIRECAO_CURTA[Math.round(r.graus / 45) % 8] + ' ' + (Math.round(r.graus) % 360) + '°' + (r.fonte === 'gps' ? ' · GPS' : '');
     if ($('bussola-direcao').textContent !== txt) $('bussola-direcao').textContent = txt;
     if (r.fonte === 'sensor') $('bussola-ativar').hidden = true;   // pelo GPS, o botão continua para ligar o sensor
+    aplicarGiroDoMapa(r);
+  }
+
+  /* ---------- Girar o mapa conforme o celular (leaflet-rotate) ---------- */
+  // Ligado, o mapa gira para a frente do celular (ou a direção em que a pessoa anda, pelo GPS) ficar sempre para cima:
+  // dá para ver para onde o aparelho está apontando. Desligado, o norte fica em cima. Também se liga tocando na bússola.
+  function mapaGira() { return Boolean(estado.mapa && typeof estado.mapa.setBearing === 'function' && window.GiroMapa); }
+  function aplicarGiroDoMapa(r) {
+    if (!estado.prefs || !estado.prefs.girar || !mapaGira()) return;
+    var G = window.GiroMapa;
+    r = r || rumoAtual();
+    if (!r) return;
+    var alvo = G.bearingParaRumo(r.graus);
+    var atual = estado.giroAtual == null ? G.normalizar(estado.mapa.getBearing()) : estado.giroAtual;
+    if (!G.mudouBastante(atual, alvo, 3)) return;   // o sensor oscila alguns graus parado
+    estado.giroAtual = G.suavizar(atual, alvo, 0.4);
+    estado.mapa.setBearing(estado.giroAtual);
+  }
+  function definirGiroMapa(ligar, avisar) {
+    if (!estado.prefs) estado.prefs = lerPrefsMapa();
+    ligar = Boolean(ligar) && mapaGira();
+    estado.prefs.girar = ligar;
+    gravarPrefsMapa();
+    var caixa = $('bussola-civil');
+    if (caixa) { caixa.classList.toggle('girando', ligar); caixa.setAttribute('aria-pressed', String(ligar)); }
+    if (estado.chaveGirar) estado.chaveGirar.checked = ligar;
+    if (ligar) {
+      estado.giroAtual = mapaGira() ? window.GiroMapa.normalizar(estado.mapa.getBearing()) : null;
+      if (avisar !== false) UI.aviso(rumoAtual() ? 'O mapa gira conforme o celular: a frente do aparelho fica para cima. Toque na bússola para desligar.' : 'Mapa girando conforme o celular. Ainda sem direção: ative a bússola ou ande alguns passos.', 'ok', 6000);
+      aplicarGiroDoMapa();
+    } else {
+      estado.giroAtual = null;
+      if (mapaGira() && estado.mapa.getBearing()) estado.mapa.setBearing(0);
+      if (avisar !== false) UI.aviso(mapaGira() ? 'Mapa com o norte para cima.' : 'Este aparelho não consegue girar o mapa.', 'ok', 4000);
+    }
   }
 
   // Ao abrir a página. Alguns navegadores pedem permissão para os sensores de movimento (iPhone e, nas versões

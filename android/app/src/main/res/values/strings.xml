@@ -30,6 +30,7 @@
   <string name="sem_pagina_registrando">O registro continua: %1$d ponto(s) guardado(s) no celular, enviados quando o sinal voltar.</string>
   <string name="tentar_de_novo">Tentar de novo</string>
   <string name="sem_app_para_abrir">Nenhum aplicativo para abrir este link.</string>
+  <string name="compartilhar_arquivo">Enviar arquivo da trilha</string>
   <string name="webview_antiga_titulo">Atualize o Android System WebView</string>
   <string name="webview_antiga_texto">Este aplicativo precisa de uma versão mais nova do componente de páginas do Android.</string>
   <string name="atualizar_webview">Atualizar</string>

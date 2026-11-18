@@ -348,6 +348,8 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
         case "bateria": responder(id, new JSONObject().put("ignorando", pedirBateria())); break;
         case "configuracoes": abrirConfiguracoesDoApp(); responder(id, new JSONObject().put("ok", true)); break;
         case "localizacaoDoCelular": startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)); responder(id, new JSONObject().put("ok", true)); break;
+        case "compartilharArquivo": responder(id, entregarArquivo(d, true)); break;
+        case "salvarArquivo": responder(id, entregarArquivo(d, false)); break;
         case "notificar":
           Avisos.mensagem(this, d.has("id") ? d.optString("id") : null, d.optString("titulo"), d.optString("texto"), System.currentTimeMillis());
           responder(id, new JSONObject().put("ok", true));
@@ -357,6 +359,57 @@ public class MainActivity extends Activity implements Estado.Ouvinte {
     } catch (Exception e) {
       try { responder(id, new JSONObject().put("erro", "falha")); } catch (Exception ignorada) { /* sem resposta */ }
     }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Arquivos gerados pela página (exportar a trilha)                    */
+  /* ------------------------------------------------------------------ */
+  // A WebView não baixa blob:, então a página manda o conteúdo em base64. Só tipos de arquivo de mapa/planilha, nome limpo e
+  // tamanho limitado (ArquivoSeguro); a ponte só aceita mensagens da página do servidor da operação.
+  /** Compartilha o arquivo (folha de compartilhar do Android) ou o salva em Downloads (Android 10+; antes disso, compartilha). */
+  private JSONObject entregarArquivo(JSONObject d, boolean compartilhar) throws Exception {
+    String nome = ArquivoSeguro.nome(d.optString("nome", "arquivo.txt"));
+    String mime = ArquivoSeguro.mime(d.optString("mime", ""));
+    String b64 = d.optString("base64", "");
+    if (!ArquivoSeguro.tamanhoOk(b64)) return new JSONObject().put("erro", "dados_invalidos");
+    byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+    if (!compartilhar && Build.VERSION.SDK_INT >= 29) return salvarEmDownloads(nome, mime, bytes);
+    File pasta = new File(getCacheDir(), "exportar");
+    //noinspection ResultOfMethodCallIgnored
+    pasta.mkdirs();
+    File[] antigos = pasta.listFiles();
+    if (antigos != null) {
+      for (File a : antigos) {
+        //noinspection ResultOfMethodCallIgnored
+        if (System.currentTimeMillis() - a.lastModified() > 24L * 3600 * 1000) a.delete();
+      }
+    }
+    File f = new File(pasta, nome);
+    try (java.io.FileOutputStream out = new java.io.FileOutputStream(f)) { out.write(bytes); }
+    Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".arquivos", f);
+    Intent envio = new Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri)
+        .putExtra(Intent.EXTRA_SUBJECT, nome).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+    try {
+      startActivity(Intent.createChooser(envio, getString(R.string.compartilhar_arquivo)));
+    } catch (ActivityNotFoundException e) {
+      return new JSONObject().put("erro", "sem_app");
+    }
+    return new JSONObject().put("ok", true).put("nome", nome);
+  }
+
+  @androidx.annotation.RequiresApi(29)
+  private JSONObject salvarEmDownloads(String nome, String mime, byte[] bytes) throws Exception {
+    android.content.ContentValues v = new android.content.ContentValues();
+    v.put(MediaStore.MediaColumns.DISPLAY_NAME, nome);
+    v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+    v.put(MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/app busca gbs");
+    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+    if (uri == null) return new JSONObject().put("erro", "sem_espaco");
+    try (java.io.OutputStream out = getContentResolver().openOutputStream(uri)) {
+      if (out == null) return new JSONObject().put("erro", "sem_espaco");
+      out.write(bytes);
+    }
+    return new JSONObject().put("ok", true).put("nome", "Downloads/app busca gbs/" + nome);
   }
 
   /** A pessoa entrou pelo código e os bombeiros aceitaram: guarda a operação (como se o link tivesse sido aberto). */

@@ -177,6 +177,24 @@ legível, elas não aparecem.
 - **Banco:** migração `084_tirar_do_mapa.sql` (colunas `fora_do_mapa_em`/`fora_do_mapa_por_nome` e a função `tirar_do_mapa`).
   Sem ela, o botão avisa que falta a migração.
 
+### Participante: exportar/importar arquivos e girar o mapa conforme o celular (versão 1.6.0)
+
+- **💾 Arquivos** (canto inferior direito da tela do mapa, civil e militar): para quando a conexão com os bombeiros falha.
+  - **Exportar a minha trilha** em **GPX** (recomendado: o painel importa e associa à pessoa), **KML**, **GeoJSON** ou
+    **CSV**, com horários. **📤 Compartilhar** abre a folha de compartilhar (WhatsApp, e-mail, Bluetooth…) e **💾 Salvar no
+    aparelho** grava em Downloads. A trilha exportada é a que está neste aparelho (a desenhada na tela, até 300 pontos).
+  - **Importar um arquivo** recebido (GPX, KML, KMZ, GeoJSON, CSV, LDK/TRK do AlpineQuest): pontos, trilhas e áreas aparecem
+    no mapa como referência (tracejado) e ficam guardados no aparelho (abrem sem internet; arquivos acima de ~900 KB valem só
+    enquanto a tela estiver aberta). "Ver no mapa" e "Tirar" na lista. Nada é enviado aos bombeiros.
+- **Girar o mapa conforme o celular:** Camadas › "Girar o mapa conforme o celular" ou **tocar na bússola**. A frente do
+  aparelho (ou a direção em que a pessoa anda, pelo GPS) fica para cima, para saber para onde está apontando; a bússola ganha
+  um contorno laranja. Desligando, o norte volta para cima. Usa o plugin leaflet-rotate (também no cache offline da página).
+- **Aplicativo Android:** a página vem do servidor, então o giro e a tela de arquivos já valem sem trocar o APK. Mas, no
+  aplicativo, **compartilhar e salvar o arquivo exigem o APK novo** (ponte `compartilharArquivo`/`salvarArquivo`, pasta
+  `exportar/` do FileProvider, `ArquivoSeguro` com testes). O APK só é gerado pelo workflow quando `android/**` entra na
+  `main` (ou na `testes`).
+- No painel, a rosa da bússola do mapa girava para o lado errado ao girar o mapa; corrigido.
+
 ### Girar o mapa no painel do responsável (versão 1.5.0)
 
 - O mapa 2D do painel agora **gira** (antes só o relevo 3D girava): **dois dedos** no celular/tablet, **Shift + roda do mouse**

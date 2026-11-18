@@ -9,10 +9,15 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.5.0';
+  var NUMERO = '1.6.0';
   var DATA = '2026-11-18';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.6.0', data: '2026-11-18', itens: [
+      'Participante: botão 💾 Arquivos para exportar a própria trilha (GPX, KML, GeoJSON ou CSV) e mandar por WhatsApp/e-mail quando a conexão com os bombeiros falhar, e para importar um arquivo recebido (GPX, KML, KMZ, GeoJSON, CSV, AlpineQuest) que aparece no mapa e fica guardado para abrir sem internet. No aplicativo, o arquivo sai pela folha de compartilhar do Android ou vai para Downloads (precisa do APK novo).',
+      'Participante: o mapa pode girar conforme o celular (Camadas › Girar o mapa conforme o celular, ou toque na bússola): a frente do aparelho fica para cima, para saber para onde está apontando.',
+      'Painel: a rosa da bússola do mapa girava para o lado errado ao girar o mapa; corrigido.',
+    ] },
     { versao: '1.5.0', data: '2026-11-18', itens: [
       'Painel do responsável: girar o mapa em 2D. Dois dedos no celular, Shift + roda do mouse no computador, ou os botões ↺ ↻ (15° cada) ao lado do botão de enquadrar. A bússola do canto gira junto e, tocada, volta o norte para cima. No celular, o menu ☰ Mapa tem "Girar o mapa" e "Norte para cima".',
     ] },

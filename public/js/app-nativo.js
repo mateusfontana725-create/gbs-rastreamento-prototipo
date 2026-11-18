@@ -92,6 +92,10 @@
     API.bateria = function () { return pedir('bateria'); };
     API.configuracoes = function () { return pedir('configuracoes'); };
     API.localizacaoDoCelular = function () { return pedir('localizacaoDoCelular'); };
+    // Arquivos pelo aplicativo (o WebView não baixa blob:): compartilhar (folha do Android) ou salvar em Downloads.
+    // O conteúdo vai em base64; resposta { ok, nome } ou { erro }.
+    API.compartilharArquivo = function (nome, mime, base64) { return pedir('compartilharArquivo', { nome: nome, mime: mime, base64: base64 }, 60000); };
+    API.salvarArquivo = function (nome, mime, base64) { return pedir('salvarArquivo', { nome: nome, mime: mime, base64: base64 }, 60000); };
     API.notificar = function (titulo, texto, id) { return pedir('notificar', id ? { titulo: titulo, texto: texto, id: String(id) } : { titulo: titulo, texto: texto }); };
   }
 

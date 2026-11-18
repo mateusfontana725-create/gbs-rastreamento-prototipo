@@ -183,10 +183,11 @@ legível, elas não aparecem.
   efetivo, desdobramentos, órgãos de apoio e a situação ao fim do dia) e, embaixo, os **militares do dia só com graduação e
   QRA** (civis só em número, sem nome), os **setores varridos**, as **trilhas feitas** (pessoas em campo, quilômetros e o mapa
   do dia em satélite) e os **pontos de interesse do dia**, tudo resumido. Só baixa (não fica guardado).
-- **Diário (detalhado):** cada dia com o IPO do dia, o mapa do dia, as **trilhas pessoa a pessoa** (início, fim, tempo em
-  campo, quilômetros e setores percorridos), os **setores trabalhados** (tabela e, para cada um, um bloco com situação,
-  horários de início e conclusão, equipes, responsável, observações, cronologia e um **mapa em satélite com o setor e as
-  trilhas daquele dia**) — **todos** os setores do dia, sem limite (em períodos com muitos setores o mapa de cada um sai menor, para o PDF não ficar gigante), encontros, o diário completo e os pontos. O de um dia já terminado fica guardado.
+- **Diário (detalhado):** cada dia com o IPO do dia, **um único mapa do dia** (satélite, com o zoom pegando todos os
+  setores trabalhados no dia, as trilhas e os pontos daquele dia), as **trilhas pessoa a pessoa** (início, fim, tempo em
+  campo, quilômetros e setores percorridos), os **setores trabalhados** (tabela e, para cada um, um bloco em texto com
+  situação, horários de início e conclusão, equipes, responsável, observações e cronologia), encontros, o diário completo e
+  os pontos. O de um dia já terminado fica guardado.
 - Os dois têm **um dia, período (de… até…) ou tudo até o momento**, separado dia a dia (cada dia numa página). O IPO (Diário)
   da tela do painel continua sendo onde o IPO de cada dia é preenchido.
 - Sem migração nova.

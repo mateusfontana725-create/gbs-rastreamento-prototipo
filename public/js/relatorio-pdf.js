@@ -1186,7 +1186,7 @@
       conteudo = conteudo.concat(blocoIpoDia(x));
       var mapa = recursos.mapasDia && recursos.mapasDia[x.dia];
       if (mapa) {
-        conteudo.push(subtitulo('Mapa do dia (trilhas do dia e setores trabalhados em destaque)'));
+        conteudo.push(subtitulo('Mapa do dia (setores, trilhas e pontos do dia)'));
         conteudo.push({ image: mapa, width: 515, margin: [0, 0, 0, 4] });
         conteudo.push(legendaMapa());
       }
@@ -1221,9 +1221,7 @@
           var cronologia = z.eventos.map(function (e) { return hora(e.ocorrido_em) + '  ' + e.titulo + (vazio(e.detalhe) ? '' : ' — ' + e.detalhe); });
           corpo.push(ficha(linhas));
           if (cronologia.length) corpo.push({ ul: cronologia, style: 'tdSuave', margin: [0, 0, 0, 4] });
-          var mapaSetor = recursos.mapasSetorDia && recursos.mapasSetorDia[x.dia + '|' + z.setor.id];
-          if (mapaSetor) corpo.push({ image: mapaSetor, width: 400, margin: [0, 2, 0, 8] });
-          conteudo.push({ stack: corpo, unbreakable: Boolean(mapaSetor), margin: [0, 0, 0, 6] });
+          conteudo.push({ stack: corpo, margin: [0, 0, 0, 6] });
         });
       }
       if (x.encontros.length) {

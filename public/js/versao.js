@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.3.3';
+  var NUMERO = '1.3.4';
   var DATA = '2026-11-18';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.3.4', data: '2026-11-18', itens: [
+      'Relatório Diário: um único mapa por dia, com o zoom pegando todos os setores trabalhados no dia, as trilhas e os pontos daquele dia. Saíram os mapas setor por setor.',
+    ] },
     { versao: '1.3.3', data: '2026-11-18', itens: [
       'Relatório Diário: sem nenhum teto de mapas de setor. Todos os setores do dia saem com mapa.',
     ] },

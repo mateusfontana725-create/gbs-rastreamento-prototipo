@@ -1200,6 +1200,10 @@
             { text: hora(q.primeiro), style: 'tdMono' }, { text: hora(q.ultimo), style: 'tdMono' }, duracao(q.primeiro, q.ultimo), kmTexto(q.km), { text: txt((q.setoresNomes || []).join(', '), '—'), style: 'tdSuave' }];
         }), ['*', 74, 34, 34, 46, 40, 90]));
         conteudo.push(nota('Quilômetros pelo GPS, sem os trechos dentro da base nem os apagados do mapa. Tempo = do primeiro ao último ponto do dia.'));
+        x.pessoas.forEach(function (q) {
+          var mt = recursos.mapasTrilhaDia && recursos.mapasTrilhaDia[x.dia + '|' + q.id];
+          if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + hora(q.primeiro) + ' às ' + hora(q.ultimo) + '  ·  ' + kmTexto(q.km), style: 'dia', headlineLevel: 2 }, { image: mt, width: 400, margin: [0, 2, 0, 8] }], unbreakable: true });
+        });
       }
       // setores trabalhados no dia, um bloco por setor
       conteudo.push(subtitulo('Setores trabalhados no dia'));
@@ -1221,7 +1225,9 @@
           var cronologia = z.eventos.map(function (e) { return hora(e.ocorrido_em) + '  ' + e.titulo + (vazio(e.detalhe) ? '' : ' — ' + e.detalhe); });
           corpo.push(ficha(linhas));
           if (cronologia.length) corpo.push({ ul: cronologia, style: 'tdSuave', margin: [0, 0, 0, 4] });
-          conteudo.push({ stack: corpo, margin: [0, 0, 0, 6] });
+          var mapaSetor = recursos.mapasSetorDia && recursos.mapasSetorDia[x.dia + '|' + z.setor.id];
+          if (mapaSetor) corpo.push({ image: mapaSetor, width: 400, margin: [0, 2, 0, 8] });
+          conteudo.push({ stack: corpo, unbreakable: Boolean(mapaSetor), margin: [0, 0, 0, 6] });
         });
       }
       if (x.encontros.length) {
@@ -1298,12 +1304,20 @@
         conteudo.push(tabela(['Setor', 'Situação', 'Área'], x.setores.map(function (z) {
           return [{ text: z.setor.nome, style: 'td', bold: true }, z.concluido ? 'Concluído neste dia' : (STATUS_SETOR[z.setor.status] || txt(z.setor.status)), textoArea(areaSetor(z.setor))];
         }), ['*', 120, 70]));
+        x.setores.forEach(function (z) {
+          var ms = recursos.mapasSetorDia && recursos.mapasSetorDia[x.dia + '|' + z.setor.id];
+          if (ms) conteudo.push({ stack: [{ text: z.setor.nome, style: 'dia', headlineLevel: 2 }, { image: ms, width: 380, margin: [0, 2, 0, 8] }], unbreakable: true });
+        });
       } else conteudo.push(nota('Nenhum setor trabalhado neste dia.'));
       // trilhas feitas
       conteudo.push(subtitulo('Trilhas feitas'));
       conteudo.push(ficha([['Pessoas em campo', String(x.pessoas.filter(function (q) { return !q.semPosicao; }).length)], ['Percorrido', kmTexto(x.km)]]));
       var mapa = recursos.mapasDia && recursos.mapasDia[x.dia];
       if (mapa) { conteudo.push({ image: mapa, fit: [515, 330], margin: [0, 2, 0, 2] }); conteudo.push(legendaMapa()); }
+      x.pessoas.forEach(function (q) {
+        var mt = recursos.mapasTrilhaDia && recursos.mapasTrilhaDia[x.dia + '|' + q.id];
+        if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + kmTexto(q.km), style: 'dia', headlineLevel: 2 }, { image: mt, width: 380, margin: [0, 2, 0, 8] }], unbreakable: true });
+      });
       // pontos de interesse do dia
       if (x.pontos.length) {
         conteudo.push(subtitulo('Pontos de interesse do dia'));

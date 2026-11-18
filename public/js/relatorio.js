@@ -1004,30 +1004,60 @@
     var tr = await trilhasDosDias(op, ini, fim);
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
     var recursos = { logo: await carregarLogo(), mapasDia: {} };
-    // Um mapa por dia (satélite): só os setores trabalhados no dia, as trilhas do dia e os pontos do dia, com o zoom pegando
-    // tudo isso junto (até 31 dias).
+    // Mapas (satélite), conforme a escolha de quem gera (opcoes.mapas):
+    //   'um'       um mapa por dia com tudo: os setores trabalhados no dia, as trilhas e os pontos do dia, num zoom só (padrão)
+    //   'setores'  um mapa para cada setor trabalhado no dia (o setor e as trilhas do dia)
+    //   'trilhas'  um mapa para cada trilha do dia (uma por pessoa)
+    //   'todos'    os três
+    var tipoMapas = opcoes.mapas || 'um';
+    var querGeral = tipoMapas === 'um' || tipoMapas === 'todos', querSetores = tipoMapas === 'setores' || tipoMapas === 'todos', querTrilhas = tipoMapas === 'trilhas' || tipoMapas === 'todos';
+    recursos.mapasSetorDia = {}; recursos.mapasTrilhaDia = {};
+    var totalMapas = dias.reduce(function (a, x) {
+      return a + (querGeral ? 1 : 0) + (querSetores ? x.setores.length : 0) + (querTrilhas ? x.pessoas.filter(function (q) { return q.pontos.length > 1; }).length : 0);
+    }, 0);
+    var tam = totalMapas > 60 ? [600, 340] : totalMapas > 25 ? [760, 430] : [900, 520];   // muitos mapas: cada um sai menor, o PDF não fica gigante
+    var feitos = 0;
     if (dias.length <= (opcoes.maxMapas || 31)) {
       for (var k = 0; k < dias.length; k++) {
         var x = dias[k];
-        if (!x.pessoas.some(function (q) { return q.pontos.length > 1; }) && !x.setores.length && !x.pontos.length) continue;
-        passo('Desenhando o mapa do dia ' + x.dia.split('-').reverse().slice(0, 2).join('/') + ' (' + (k + 1) + '/' + dias.length + ')…');
-        var copia = Object.assign({}, dados, { setores: x.setores.map(function (z) { return z.setor; }),
-          trilhas: x.pessoas.map(function (q) { return { participante_id: q.id, tipo: q.tipo, pontos: q.pontos }; }),
+        var rotuloDia = x.dia.split('-').reverse().slice(0, 2).join('/');
+        var trilhasDia = x.pessoas.map(function (q) { return { participante_id: q.id, tipo: q.tipo, pontos: q.pontos }; });
+        var copia = Object.assign({}, dados, { setores: x.setores.map(function (z) { return z.setor; }), trilhas: trilhasDia,
           pontos: x.pontos, fotos: [], diario: x.diario, trilhasManuais: [] });
-        var g = elementosMapa(copia, { fundo: true });
-        // zoom: os setores do dia, as trilhas do dia e os pontos do dia, juntos (menos o que estiver a mais de 15 km do conjunto)
-        var alvo = [];
-        copia.setores.forEach(function (st) { pontosSetor(st).forEach(function (pt) { alvo.push(pt); }); });
-        var soltos = [];
-        copia.trilhas.forEach(function (t) { (t.pontos || []).forEach(function (pt) { soltos.push(pt); }); });
-        copia.pontos.forEach(function (pt) { soltos.push([pt.lat, pt.lng]); });
-        var centro = (alvo.length ? alvo : soltos.length ? soltos : [])[0];
-        if (centro) {
-          if (alvo.length) { var cLat = 0, cLng = 0; alvo.forEach(function (pt) { cLat += pt[0]; cLng += pt[1]; }); centro = [cLat / alvo.length, cLng / alvo.length]; }
-          var enq = alvo.concat(soltos.filter(function (pt) { return distanciaM(centro, pt) <= LONGE_MAPA_M; }));
-          if (enq.length) g.geral.enquadrar = enq;
+        if (querGeral && (x.pessoas.some(function (q) { return q.pontos.length > 1; }) || x.setores.length || x.pontos.length)) {
+          passo('Desenhando o mapa do dia ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
+          var g = elementosMapa(copia, { fundo: true });
+          // zoom: os setores do dia, as trilhas do dia e os pontos do dia, juntos (menos o que estiver a mais de 15 km do conjunto)
+          var alvo = [];
+          copia.setores.forEach(function (st) { pontosSetor(st).forEach(function (pt) { alvo.push(pt); }); });
+          var soltos = [];
+          trilhasDia.forEach(function (t) { (t.pontos || []).forEach(function (pt) { soltos.push(pt); }); });
+          copia.pontos.forEach(function (pt) { soltos.push([pt.lat, pt.lng]); });
+          var centro = (alvo.length ? alvo : soltos.length ? soltos : [])[0];
+          if (centro) {
+            if (alvo.length) { var cLat = 0, cLng = 0; alvo.forEach(function (pt) { cLat += pt[0]; cLng += pt[1]; }); centro = [cLat / alvo.length, cLng / alvo.length]; }
+            var enq = alvo.concat(soltos.filter(function (pt) { return distanciaM(centro, pt) <= LONGE_MAPA_M; }));
+            if (enq.length) g.geral.enquadrar = enq;
+          }
+          recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
         }
-        recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
+        if (querSetores) {
+          for (var m = 0; m < x.setores.length; m++) {
+            var st = x.setores[m].setor;
+            passo('Desenhando o mapa do setor ' + st.nome + ' em ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
+            var gs = elementosMapa(Object.assign({}, copia, { setores: [st] }), { fundo: true });
+            recursos.mapasSetorDia[x.dia + '|' + st.id] = await desenharMapa(Object.assign({}, gs.base, { largura: tam[0], altura: tam[1], enquadrar: pontosSetor(st), destaque: st.id }));
+          }
+        }
+        if (querTrilhas) {
+          for (var n = 0; n < x.pessoas.length; n++) {
+            var q = x.pessoas[n];
+            if (q.pontos.length < 2) continue;
+            passo('Desenhando a trilha de ' + q.nome + ' em ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
+            var gt = elementosMapa(Object.assign({}, copia, { trilhas: [{ participante_id: q.id, tipo: q.tipo, pontos: q.pontos }], pontos: [] }), { fundo: true });
+            recursos.mapasTrilhaDia[x.dia + '|' + q.id] = await desenharMapa(Object.assign({}, gt.base, { largura: tam[0], altura: tam[1], enquadrar: q.pontos }));
+          }
+        }
       }
     }
     return { dados: dados, dias: dias, recursos: recursos, aviso: tr.aviso };
@@ -1038,9 +1068,9 @@
       : modo === 'tudo' ? 'Do acionamento (' + brDia(ini) + ') até ' + brDia(fim) : 'De ' + brDia(ini) + ' a ' + brDia(fim);
   }
   // Relatório DIÁRIO (detalhado) de um dia, de um período ou de tudo até o momento, separado dia a dia. Devolve o documento.
-  async function documentoDiario(op, ini, fim, modo, passo) {
+  async function documentoDiario(op, ini, fim, modo, passo, mapas) {
     passo = passo || function () {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo);
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapas: mapas });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarDiarioDias(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (c.aviso ? ' — ' + c.aviso : ''),
@@ -1052,7 +1082,7 @@
   // Período escolhido: só baixa. Um dia já terminado e ainda não guardado: guarda também.
   async function gerarDiarioPeriodo(op, ini, fim, modo, opcoes, passo) {
     opcoes = opcoes || {};
-    var r0 = await documentoDiario(op, ini, fim, modo, passo);
+    var r0 = await documentoDiario(op, ini, fim, modo, passo, opcoes.mapas);
     if (passo) passo('Gerando o PDF…');
     var r = ini === fim && opcoes.guardar ? await salvarDocumento(op, r0.doc, 'diario', ini) : await gerarBlob(await carregarPdfMake(), r0.doc);
     baixarBlob(r.blob, ini === fim ? nomeArquivoTipo(op, 'Relatorio-diario', ini.replace(/-/g, '')) : nomeArquivoTipo(op, 'Relatorio-diario', ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
@@ -1061,9 +1091,9 @@
   }
   // Relatório IPO (curto): o IPO de cada dia no modelo do CBMPR + militares (graduação e QRA), setores varridos, trilhas e
   // pontos do dia. Só baixa (o IPO se preenche e se corrige ao longo do dia; o texto do WhatsApp sai do IPO (Diário)).
-  async function gerarIpoRelatorio(op, ini, fim, modo, passo) {
+  async function gerarIpoRelatorio(op, ini, fim, modo, passo, mapas) {
     passo = passo || function () {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10 });
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias),
@@ -1360,6 +1390,10 @@
         var dataAte = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-' + tipo + '-ate', value: fimOp, min: minDia, max: fimOp });
         var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-' + tipo + '-data' });
         var campoAte = UI.campo('Até', dataAte, { para: 'rel-' + tipo + '-ate' });
+        var selMapas = UI.el('select', { classe: 'campo', id: 'rel-' + tipo + '-mapas' }, [
+          UI.el('option', { value: 'um', texto: 'Um mapa com tudo do dia (setores, trilhas e pontos)' }), UI.el('option', { value: 'setores', texto: 'Setor por setor' }),
+          UI.el('option', { value: 'trilhas', texto: 'Trilha por trilha (uma por pessoa)' }), UI.el('option', { value: 'todos', texto: 'Todos: o do dia, os dos setores e os das trilhas' }),
+        ]);
         var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
         function ajustarModo() {
           campoDe.hidden = modo.value === 'tudo';
@@ -1374,17 +1408,17 @@
           if (!ini || !fim || ini < minDia || fim > fimOp || ini > fim) { UI.aviso('Escolha dias entre o acionamento e ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) + ' (o início antes do fim).', 'erro', 6000); return; }
           progresso.hidden = false;
           ocupar(botao, 'Gerando…', async function () {
-            await gerar(ini, fim, modo.value, function (t) { progresso.textContent = t; });
+            await gerar(ini, fim, modo.value, function (t) { progresso.textContent = t; }, selMapas.value);
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), UI.grade([campoDe, campoAte]), progresso]), [botao]);
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), UI.grade([campoDe, campoAte]), UI.campo('Mapas', selMapas, { para: 'rel-' + tipo + '-mapas' }), progresso]), [botao]);
       }
-      out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo) { return gerarIpoRelatorio(op, ini, fim, modo, passo); }));
-      out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo) {
-        // um dia já terminado e ainda não guardado fica guardado com os relatórios
-        var guardar = ini === fim && fim < hoje && !dados.porDia[ini];
-        await gerarDiarioPeriodo(op, ini, fim, modo, { guardar: guardar }, passo);
+      out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
+      out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {
+        // um dia já terminado e ainda não guardado fica guardado com os relatórios (só o padrão: um mapa com tudo)
+        var guardar = ini === fim && fim < hoje && !dados.porDia[ini] && (!mapas || mapas === 'um');
+        await gerarDiarioPeriodo(op, ini, fim, modo, { guardar: guardar, mapas: mapas }, passo);
         if (guardar) await atualizar();
       }));
 

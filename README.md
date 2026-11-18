@@ -188,6 +188,9 @@ legível, elas não aparecem.
   campo, quilômetros e setores percorridos), os **setores trabalhados** (tabela e, para cada um, um bloco em texto com
   situação, horários de início e conclusão, equipes, responsável, observações e cronologia), encontros, o diário completo e
   os pontos. O de um dia já terminado fica guardado.
+- **Mapas à escolha, na hora de gerar** (IPO e Diário): **um mapa com tudo do dia** (padrão: setores, trilhas e pontos do
+  dia num zoom só), **setor por setor**, **trilha por trilha** (uma por pessoa) ou **todos**. Com muitos mapas, cada um
+  sai menor para o PDF não ficar gigante. O Diário de um dia já terminado só é guardado com a opção padrão.
 - Os dois têm **um dia, período (de… até…) ou tudo até o momento**, separado dia a dia (cada dia numa página). O IPO (Diário)
   da tela do painel continua sendo onde o IPO de cada dia é preenchido.
 - Sem migração nova.

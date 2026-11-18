@@ -739,7 +739,7 @@
       el('div', { classe: 'sci2-colunas' }, [
         bloco('SCI 201 · Resumo do Incidente', [pre], [botao('Copiar', function () { copiar(texto); }, 'btn-escuro', { id: 'sci2-copiar-201' })]),
         el('div', { classe: 'sci2-coluna' }, [
-          bloco('Relatórios da operação', [el('p', { classe: 'muted', texto: 'IPO (Diário), passagem de comando, relatório final e relatório para a imprensa, em PDF, com as fotos.' }),
+          bloco('Relatórios da operação', [el('p', { classe: 'muted', texto: 'IPO, diário, passagem de comando, relatório final e relatório para a imprensa, em PDF, com as fotos.' }),
             el('div', { classe: 'sci2-acoes-pagina' }, [R ? botao('Abrir relatórios', function () { R.abrirRelatoriosOperacao(c.o); }, 'btn-escuro') : null, window.Briefing ? botao('Briefing e passagem de comando', function () { window.Briefing.abrir(); }) : null])]),
           bloco('Linha do tempo · SCI 214', [linhaDoTempo(est.dados.diario.slice(0, 30))], [R ? botao('Diário completo', function () { R.abrirDiario(c.o); }) : null]),
         ]),

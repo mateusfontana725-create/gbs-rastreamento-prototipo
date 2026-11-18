@@ -875,7 +875,7 @@
       UI.secao('Relatórios já gerados', [listaSalvos, UI.el('div', { classe: 'acoes-linha' }, [btnDiaHoje])],
         { dica: 'O relatório diário de cada dia da operação é gerado e guardado sozinho pelo painel aberto (dias já terminados; o de hoje a partir das 23h50). "Relatório de hoje" baixa agora o do dia, com o que houve até este momento.' }),
       UI.rodape([
-        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'IPO (Diário)', onclick: function () { abrirDiario(op); } }),
+        opcoes.aoFechar ? null : UI.el('button', { classe: 'btn', type: 'button', texto: 'IPO (Diário)', title: 'Abrir o IPO (Diário): o IPO e o diário de cada dia', onclick: function () { abrirDiario(op); } }),
         UI.el('button', { classe: 'btn', type: 'button', id: 'rel-fechar', texto: opcoes.textoFechar || 'Fechar', onclick: function () { fechar(); } }),
       ]),
     ]), { fecharNoFundo: false, tamanho: 'largo', aoFechar: function () { if (opcoes.aoFechar) opcoes.aoFechar(gerou); } });
@@ -991,10 +991,11 @@
       throw e;
     }
   }
-  // IPO (Diário) de um dia ou de um período ('AAAA-MM-DD' a 'AAAA-MM-DD'), separado dia a dia. Devolve o documento.
-  // modo: 'dia' | 'periodo' | 'tudo' (só muda o subtítulo). passo(texto) mostra o andamento.
-  async function documentoIpoDiario(op, ini, fim, modo, passo) {
-    passo = passo || function () {};
+  // Dados de cada dia de um período ('AAAA-MM-DD' a 'AAAA-MM-DD'), separados dia a dia, e o mapa de cada dia
+  // (satélite; só as trilhas e pontos do dia, com os setores trabalhados no dia em destaque; até 31 dias).
+  // opcoes.mapaAltura: altura do mapa (o IPO usa um mapa mais baixo).
+  async function carregarDiasDoPeriodo(op, ini, fim, passo, opcoes) {
+    opcoes = opcoes || {};
     var RP = window.RelatorioPDF;
     passo('Buscando os dados da operação…');
     var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
@@ -1003,8 +1004,7 @@
     var tr = await trilhasDosDias(op, ini, fim);
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
     var recursos = { logo: await carregarLogo(), mapasDia: {} };
-    // mapa de cada dia: só as trilhas e pontos do dia; setores trabalhados no dia em destaque (até 31 dias)
-    if (dias.length <= 31) {
+    if (dias.length <= (opcoes.maxMapas || 31)) {
       for (var k = 0; k < dias.length; k++) {
         var x = dias[k];
         if (!x.pessoas.some(function (q) { return q.pontos.length > 1; }) && !x.setores.length && !x.pontos.length) continue;
@@ -1012,32 +1012,57 @@
         var copia = Object.assign({}, dados, { trilhas: x.pessoas.map(function (q) { return { participante_id: q.id, tipo: q.tipo, pontos: q.pontos }; }),
           pontos: x.pontos, fotos: [], diario: x.diario, trilhasManuais: [] });
         var g = elementosMapa(copia, { fundo: true });
-        recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { destaques: x.setores.map(function (z) { return z.setor.id; }) }));
+        recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { destaques: x.setores.map(function (z) { return z.setor.id; }) }, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
       }
     }
-    var br = function (k) { return k.split('-').reverse().join('/'); };
-    var subtitulo = modo === 'dia' ? (dias[0] && dias[0].numero ? dias[0].numero + 'º dia · ' : '') + br(ini)
-      : modo === 'tudo' ? 'Do acionamento (' + br(ini) + ') até ' + br(fim) : 'De ' + br(ini) + ' a ' + br(fim);
+    return { dados: dados, dias: dias, recursos: recursos, aviso: tr.aviso };
+  }
+  function brDia(k) { return k.split('-').reverse().join('/'); }
+  function textoPeriodo(ini, fim, modo, dias) {
+    return modo === 'dia' ? (dias[0] && dias[0].numero ? dias[0].numero + 'º dia · ' : '') + brDia(ini)
+      : modo === 'tudo' ? 'Do acionamento (' + brDia(ini) + ') até ' + brDia(fim) : 'De ' + brDia(ini) + ' a ' + brDia(fim);
+  }
+  // Relatório DIÁRIO (detalhado) de um dia, de um período ou de tudo até o momento, separado dia a dia. Devolve o documento.
+  async function documentoDiario(op, ini, fim, modo, passo) {
+    passo = passo || function () {};
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo);
     passo('Montando o documento…');
-    var doc = RP.montarIpoDiario(dados, recursos, {
-      dias: dias, subtitulo: subtitulo + (tr.aviso ? ' — ' + tr.aviso : ''),
-      titulo: 'IPO (Diário) ' + (ini === fim ? br(ini) : br(ini) + ' a ' + br(fim)) + ' — ' + op.codigo,
-      marca: 'IPO (DIÁRIO) ' + (ini === fim ? br(ini).slice(0, 5) : br(ini).slice(0, 5) + ' A ' + br(fim).slice(0, 5)),
+    var doc = window.RelatorioPDF.montarDiarioDias(c.dados, c.recursos, {
+      dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (c.aviso ? ' — ' + c.aviso : ''),
+      titulo: 'Relatório diário ' + (ini === fim ? brDia(ini) : brDia(ini) + ' a ' + brDia(fim)) + ' — ' + op.codigo,
+      marca: 'RELATÓRIO DIÁRIO ' + (ini === fim ? brDia(ini).slice(0, 5) : brDia(ini).slice(0, 5) + ' A ' + brDia(fim).slice(0, 5)),
     });
-    return { doc: doc, aviso: tr.aviso };
+    return { doc: doc, aviso: c.aviso };
   }
   // Período escolhido: só baixa. Um dia já terminado e ainda não guardado: guarda também.
-  async function gerarIpoDiario(op, ini, fim, modo, opcoes, passo) {
+  async function gerarDiarioPeriodo(op, ini, fim, modo, opcoes, passo) {
     opcoes = opcoes || {};
-    var r0 = await documentoIpoDiario(op, ini, fim, modo, passo);
+    var r0 = await documentoDiario(op, ini, fim, modo, passo);
     if (passo) passo('Gerando o PDF…');
     var r = ini === fim && opcoes.guardar ? await salvarDocumento(op, r0.doc, 'diario', ini) : await gerarBlob(await carregarPdfMake(), r0.doc);
-    baixarBlob(r.blob, ini === fim ? nomeArquivoTipo(op, 'IPO-diario', ini.replace(/-/g, '')) : nomeArquivoTipo(op, 'IPO-diario', ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
+    baixarBlob(r.blob, ini === fim ? nomeArquivoTipo(op, 'Relatorio-diario', ini.replace(/-/g, '')) : nomeArquivoTipo(op, 'Relatorio-diario', ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
     if (r0.aviso) UI.aviso(r0.aviso, 'erro', 9000);
     return r;
   }
+  // Relatório IPO (curto): o IPO de cada dia no modelo do CBMPR + militares (graduação e QRA), setores varridos, trilhas e
+  // pontos do dia. Só baixa (o IPO se preenche e se corrige ao longo do dia; o texto do WhatsApp sai do IPO (Diário)).
+  async function gerarIpoRelatorio(op, ini, fim, modo, passo) {
+    passo = passo || function () {};
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10 });
+    passo('Montando o documento…');
+    var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
+      dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias),
+      titulo: 'IPO ' + (ini === fim ? brDia(ini) : brDia(ini) + ' a ' + brDia(fim)) + ' — ' + op.codigo,
+      marca: 'IPO ' + (ini === fim ? brDia(ini).slice(0, 5) : brDia(ini).slice(0, 5) + ' A ' + brDia(fim).slice(0, 5)),
+    });
+    passo('Gerando o PDF…');
+    var r = await gerarBlob(await carregarPdfMake(), doc);
+    baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO', ini === fim ? ini.replace(/-/g, '') : ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
+    if (c.aviso) UI.aviso(c.aviso, 'erro', 9000);
+    return r;
+  }
 
-  // Relatório diário de um dia ('AAAA-MM-DD'): o IPO (Diário) daquele dia (o mesmo formato do relatório por período).
+  // Relatório diário de um dia ('AAAA-MM-DD'): o diário detalhado daquele dia (o mesmo formato do relatório por período).
   // reservar: pede a vez ao banco (dois painéis abertos não geram o mesmo dia). baixar: também baixa o PDF.
   async function gerarDiario(op, dia, opcoes) {
     opcoes = opcoes || {};
@@ -1045,10 +1070,10 @@
       var vez = await C.rpc('relatorio_diario_reservar', { p_operacao: op.id, p_dia: dia });
       if (!vez || !vez.ok) return { pulado: vez ? vez.motivo : 'sem_resposta' };
     }
-    var doc = (await documentoIpoDiario(op, dia, dia, 'dia')).doc;
+    var doc = (await documentoDiario(op, dia, dia, 'dia')).doc;
     // salvar = false: só baixa (ex.: o de hoje antes de o dia terminar; o do dia completo é guardado sozinho)
     var r = opcoes.salvar === false ? await gerarBlob(await carregarPdfMake(), doc) : await salvarDocumento(op, doc, 'diario', dia);
-    if (opcoes.baixar) baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO-diario', dia.replace(/-/g, '')));
+    if (opcoes.baixar) baixarBlob(r.blob, nomeArquivoTipo(op, 'Relatorio-diario', dia.replace(/-/g, '')));
     return r;
   }
 
@@ -1098,7 +1123,7 @@
     return d.getFullYear() + dd(d.getMonth() + 1) + dd(d.getDate()) + '-' + dd(d.getHours()) + dd(d.getMinutes());
   }
   function nomeSalvo(op, r) {
-    if (r.tipo === 'diario') return nomeArquivoTipo(op, 'IPO-diario', String(r.referencia || '').replace(/-/g, ''));
+    if (r.tipo === 'diario') return nomeArquivoTipo(op, 'Relatorio-diario', String(r.referencia || '').replace(/-/g, ''));
     if (r.tipo === 'passagem') return nomeArquivoTipo(op, 'Relatorio-passagem', quandoArquivo(r.gerado_em));
     if (r.tipo === 'comando') return nomeArquivoTipo(op, 'Relatorio-comando', quandoArquivo(r.gerado_em));
     if (r.tipo === 'imprensa') return nomeArquivoTipo(op, 'Relatorio-imprensa', quandoArquivo(r.gerado_em));
@@ -1129,10 +1154,11 @@
   }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
-  var TIPO_ROTULO = { diario: 'IPO (Diário)', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
-  var TITULO_TIPO = { diario: 'IPO (Diário) guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
+  var TIPO_ROTULO = { ipo: 'IPO', diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
+  var TITULO_TIPO = { ipo: 'IPO', diario: 'Relatórios diários guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
   var DICA_TIPO = {
-    diario: 'O IPO (Diário) de um dia, de um período (de… até…) ou de tudo até hoje, separado dia a dia: o IPO de cada dia, as pessoas que estiveram em campo com os quilômetros, o mapa com as trilhas do dia, os setores trabalhados, os encontros e o diário daquele dia. O de um dia já terminado fica guardado.',
+    ipo: 'O IPO no modelo do CBMPR, curto: o informe do dia (local, vítima, procedimentos, recursos, efetivo, desdobramentos, órgãos de apoio e situação) e, embaixo, os militares (só graduação e QRA), os setores varridos, as trilhas feitas (com o mapa) e os pontos de interesse do dia. De um dia, de um período ou de tudo até o momento.',
+    diario: 'O relatório diário, detalhado: de um dia, de um período (de… até…) ou de tudo até o momento, separado dia a dia. Cada dia traz o IPO do dia, as pessoas em campo com horários e quilômetros, o mapa com as trilhas do dia, os setores trabalhados, os encontros, o diário completo e os pontos daquele dia. O de um dia já terminado fica guardado.',
     passagem: 'O documento do briefing entregue em cada passagem: quem passou, quem recebeu e a situação naquele momento.',
     comando: 'Escolha o comando (o que aconteceu sob um comandante, do início dele até a passagem, com o briefing entregue) ou "Todos os comandos" (a operação inteira, com cada comandante e período). O de um comando encerrado fica guardado. Todos trazem o IPO.',
     resumido: 'O relatório final da operação, direto ao ponto: situação e desfecho, números, mapa geral (setores, trilhas das pessoas e fotos, na área da operação), setores, pessoas, algumas fotos e o IPO completo.',
@@ -1275,6 +1301,7 @@
 
     // Quantos itens a lista do tipo tem (Ver lista só fica habilitado com pelo menos um)
     function totalDoTipo(tipo) {
+      if (tipo === 'ipo') return 0;
       if (tipo === 'diario') return dados.diarios.length;
       if (tipo === 'passagem') return dados.passagens.length;
       if (tipo === 'comando') return dados.comandos.length;
@@ -1290,7 +1317,7 @@
     // ----- cartão de cada tipo: Gerar e Ver lista -----
     function cartao(tipo, contagem, extra, acoes) {
       var n = totalDoTipo(tipo);
-      var ver = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + n + ')', disabled: n ? null : true,
+      var ver = tipo === 'ipo' ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + n + ')', disabled: n ? null : true,
         title: n ? null : 'Ainda não há relatórios deste tipo', onclick: function () { abrirLista(tipo); } });
       return UI.el('section', { classe: 'rel-card', 'data-tipo': tipo }, [
         UI.el('div', { classe: 'rel-card-topo' }, [
@@ -1299,47 +1326,52 @@
           UI.el('small', { classe: 'muted rel-card-contagem', texto: contagem }),
         ]),
         extra || null,
-        UI.el('div', { classe: 'rel-card-acoes' }, acoes.concat([ver])),
+        UI.el('div', { classe: 'rel-card-acoes' }, ver ? acoes.concat([ver]) : acoes),
       ]);
     }
 
     function cartoes() {
       var out = [];
-      // IPO (Diário): um dia, um período ou tudo até hoje, separado dia a dia
+      // IPO (curto) e Diário (detalhado): cada um de um dia, de um período ou de tudo até o momento, separado dia a dia
       var fimOp = op.status === 'encerrada' && op.encerrada_em ? diaLocal(C.paraMs(op.encerrada_em)) : hoje;
       if (fimOp > hoje) fimOp = hoje;
       var minDia = primeiroDia < fimOp ? primeiroDia : fimOp;
-      var modo = UI.el('select', { classe: 'campo', id: 'rel-dia-modo' }, [
-        UI.el('option', { value: 'dia', texto: 'Um dia' }), UI.el('option', { value: 'periodo', texto: 'Período (de… até…)' }),
-        UI.el('option', { value: 'tudo', texto: 'Tudo, do acionamento até ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) }),
-      ]);
-      var dataCampo = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-data', value: fimOp, min: minDia, max: fimOp });
-      var dataAte = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-dia-ate', value: fimOp, min: minDia, max: fimOp });
-      var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-dia-data' });
-      var campoAte = UI.campo('Até', dataAte, { para: 'rel-dia-ate' });
-      var progressoDia = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
-      function ajustarModo() {
-        campoDe.hidden = modo.value === 'tudo';
-        campoAte.hidden = modo.value !== 'periodo';
-        var r = campoDe.querySelector('.rotulo, label'); if (r) r.textContent = modo.value === 'periodo' ? 'De' : 'Dia';
+      function cartaoPorDia(tipo, contagem, gerar) {
+        var modo = UI.el('select', { classe: 'campo', id: 'rel-' + tipo + '-modo' }, [
+          UI.el('option', { value: 'dia', texto: 'Um dia' }), UI.el('option', { value: 'periodo', texto: 'Período (de… até…)' }),
+          UI.el('option', { value: 'tudo', texto: 'Tudo, do acionamento até ' + (fimOp === hoje ? 'o momento' : diaBr(fimOp)) }),
+        ]);
+        var dataCampo = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-' + tipo + '-data', value: fimOp, min: minDia, max: fimOp });
+        var dataAte = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-' + tipo + '-ate', value: fimOp, min: minDia, max: fimOp });
+        var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-' + tipo + '-data' });
+        var campoAte = UI.campo('Até', dataAte, { para: 'rel-' + tipo + '-ate' });
+        var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
+        function ajustarModo() {
+          campoDe.hidden = modo.value === 'tudo';
+          campoAte.hidden = modo.value !== 'periodo';
+          var r = campoDe.querySelector('.rotulo, label'); if (r) r.textContent = modo.value === 'periodo' ? 'De' : 'Dia';
+        }
+        modo.addEventListener('change', ajustarModo);
+        var botao = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-' + tipo + '-gerar', texto: 'Gerar' });
+        botao.addEventListener('click', function () {
+          var ini = modo.value === 'tudo' ? minDia : dataCampo.value;
+          var fim = modo.value === 'tudo' ? fimOp : modo.value === 'periodo' ? dataAte.value : dataCampo.value;
+          if (!ini || !fim || ini < minDia || fim > fimOp || ini > fim) { UI.aviso('Escolha dias entre o acionamento e ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) + ' (o início antes do fim).', 'erro', 6000); return; }
+          progresso.hidden = false;
+          ocupar(botao, 'Gerando…', async function () {
+            await gerar(ini, fim, modo.value, function (t) { progresso.textContent = t; });
+          }).then(function () { progresso.hidden = true; });
+        });
+        ajustarModo();
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), UI.grade([campoDe, campoAte]), progresso]), [botao]);
       }
-      modo.addEventListener('change', ajustarModo);
-      var botaoDia = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-dia-gerar', texto: 'Gerar' });
-      botaoDia.addEventListener('click', function () {
-        var ini = modo.value === 'tudo' ? minDia : dataCampo.value;
-        var fim = modo.value === 'tudo' ? fimOp : modo.value === 'periodo' ? dataAte.value : dataCampo.value;
-        if (!ini || !fim || ini < minDia || fim > fimOp || ini > fim) { UI.aviso('Escolha dias entre o acionamento e ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) + ' (o início antes do fim).', 'erro', 6000); return; }
-        progressoDia.hidden = false;
-        ocupar(botaoDia, 'Gerando…', async function () {
-          // um dia já terminado e ainda não guardado fica guardado com os relatórios
-          var guardar = ini === fim && fim < hoje && !dados.porDia[ini];
-          await gerarIpoDiario(op, ini, fim, modo.value, { guardar: guardar }, function (t) { progressoDia.textContent = t; });
-          if (guardar) await atualizar();
-        }).then(function () { progressoDia.hidden = true; });
-      });
-      ajustarModo();
-      out.push(cartao('diario', contar(dados.diarios.length, 'dia', 'dias'),
-        UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-dia-modo' }), UI.grade([campoDe, campoAte]), progressoDia]), [botaoDia]));
+      out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo) { return gerarIpoRelatorio(op, ini, fim, modo, passo); }));
+      out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo) {
+        // um dia já terminado e ainda não guardado fica guardado com os relatórios
+        var guardar = ini === fim && fim < hoje && !dados.porDia[ini];
+        await gerarDiarioPeriodo(op, ini, fim, modo, { guardar: guardar }, passo);
+        if (guardar) await atualizar();
+      }));
 
       // Comando: escolher um comando (comandante) ou todos. O de um comando encerrado fica guardado; o em andamento e o
       // geral só são baixados (mudam até o fim da operação).
@@ -1457,7 +1489,7 @@
       var l = listaDoTipo(listaAberta.tipo);
       listaAberta.box.innerHTML = '';
       listaAberta.box.appendChild(UI.secao(null, [
-        l.n ? listaRelatorios(l.itens) : semRelatorios(listaAberta.tipo === 'diario' ? 'Nenhum dia guardado ainda. Gere pelo cartão IPO (Diário).'
+        l.n ? listaRelatorios(l.itens) : semRelatorios(listaAberta.tipo === 'diario' ? 'Nenhum dia guardado ainda. Gere pelo cartão Diário.'
           : listaAberta.tipo === 'imprensa' ? 'Nenhum relatório para imprensa guardado ainda.'
           : listaAberta.tipo === 'final' ? 'Nenhum relatório final detalhado guardado ainda.'
           : listaAberta.tipo === 'resumido' ? 'Nenhum relatório final guardado ainda.' : 'Nada para listar ainda.'),

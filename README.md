@@ -177,6 +177,18 @@ legível, elas não aparecem.
 - **Banco:** migração `084_tirar_do_mapa.sql` (colunas `fora_do_mapa_em`/`fora_do_mapa_por_nome` e a função `tirar_do_mapa`).
   Sem ela, o botão avisa que falta a migração.
 
+### Relatórios IPO e Diário, separados (versão 1.3.0)
+
+- **IPO (curto):** o IPO no modelo do CBMPR (o mesmo informe do texto do WhatsApp: local, vítima, procedimentos, recursos,
+  efetivo, desdobramentos, órgãos de apoio e a situação ao fim do dia) e, embaixo, os **militares do dia só com graduação e
+  QRA** (civis só em número, sem nome), os **setores varridos**, as **trilhas feitas** (pessoas em campo, quilômetros e o mapa
+  do dia em satélite) e os **pontos de interesse do dia**, tudo resumido. Só baixa (não fica guardado).
+- **Diário (detalhado):** cada dia com o IPO do dia, as pessoas em campo (horários e quilômetros), o mapa, os setores
+  trabalhados, encontros, o diário completo e os pontos. O de um dia já terminado fica guardado.
+- Os dois têm **um dia, período (de… até…) ou tudo até o momento**, separado dia a dia (cada dia numa página). O IPO (Diário)
+  da tela do painel continua sendo onde o IPO de cada dia é preenchido.
+- Sem migração nova.
+
 ### Mapas dos relatórios em satélite (versão 1.2.1)
 
 - Os mapas desenhados nos relatórios em PDF (mapa geral, mapa de cada setor e mapa de cada dia do IPO (Diário)) agora têm

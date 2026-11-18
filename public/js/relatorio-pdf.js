@@ -519,10 +519,10 @@
 
   // Dados da ocorrência, no formato do IPO do CBMPR (Ipo.itens: a mesma montagem do texto que vai para o WhatsApp).
   // As fichas das vítimas (com foto) vêm logo depois do informe.
-  function blocoIpo(d) {
+  function blocoIpo(d, dia) {
     var op = d.operacao;
     var I = window.Ipo;
-    var lista = I.itens(op, { vitimas: d.vitimas || [], diario: d.diario || [], coordenada: function (lat, lng) { return coord(lat, lng); } });
+    var lista = I.itens(op, { vitimas: d.vitimas || [], diario: d.diario || [], dia: dia || null, coordenada: function (lat, lng) { return coord(lat, lng); } });
     var out = [], fichaAtual = [];
     function fecharFicha() { if (fichaAtual.length) { out.push(ficha(fichaAtual)); fichaAtual = []; } }
     lista.forEach(function (x) {
@@ -1041,7 +1041,7 @@
     });
   }
 
-  /* ---------- relatório do IPO (Diário): um dia, um período ou tudo, separado dia a dia ---------- */
+  /* ---------- relatório DIÁRIO (detalhado) e relatório IPO (curto): um dia, um período ou tudo, separados dia a dia ---------- */
   // Dias entre dois 'AAAA-MM-DD' (inclusive)
   function diasEntre(ini, fim) {
     var out = [];
@@ -1122,7 +1122,7 @@
     return out;
   }
   // p = { dias: separarDias(...), subtitulo, titulo, marca }. recursos.mapasDia[dia] = imagem do mapa daquele dia.
-  function montarIpoDiario(d, recursos, p) {
+  function montarDiarioDias(d, recursos, p) {
     recursos = recursos || {};
     var op = d.operacao;
     var I = moduloIpo();
@@ -1130,7 +1130,7 @@
     ANO_REF = dias.length ? new Date(dias[0].dia + 'T12:00:00').getFullYear() : null;
     var conteudo = [];
     if (recursos.logo) conteudo.push({ image: recursos.logo, width: 150, margin: [0, 0, 0, 14] });
-    conteudo.push({ text: 'IPO (DIÁRIO) DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
+    conteudo.push({ text: 'RELATÓRIO DIÁRIO DA OPERAÇÃO', style: 'sobretitulo', margin: [0, 0, 0, 6] });
     conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
     conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20 });
     conteudo.push({ text: p.subtitulo, style: 'subtituloCapa', margin: [0, 4, 0, 12] });
@@ -1226,7 +1226,69 @@
       }
       if (x.fotos.length) conteudo.push(nota(x.fotos.length + ' foto(s) registrada(s) neste dia (estão no relatório final detalhado).'));
     });
-    return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'IPO (Diário) de operação de busca e salvamento', marca: p.marca });
+    return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'Relatório diário de operação de busca e salvamento', marca: p.marca });
+  }
+
+  // Graduação e QRA a partir do nome digitado no app ("Cb. Souza", "1º Sgt Alves", "Sd. QPM 1-0 Fulano"): a graduação
+  // reconhecida no começo e o resto como QRA. Sem graduação: "—" e o texto todo.
+  function graduacaoQra(nome) {
+    var t = String(nome || '').replace(/\s+/g, ' ').trim();
+    var m = /^((?:[123][ºo°]\s*)?(?:Sd|Cb|Sgt|Subten|ST|Asp|Al|Cad|Ten|Cap|Maj|TC|Cel)\.?)(?:\s+(.*))?$/i.exec(t);
+    var qra = (m ? (m[2] || '') : t).replace(/^QPM\s*\d+-\d+\s*/i, '').trim();
+    return { grad: m ? m[1] : '—', qra: qra || t };
+  }
+
+  // Relatório IPO (curto): o IPO de cada dia no modelo do CBMPR e, embaixo, o resumo do dia: militares (graduação e QRA),
+  // setores varridos, trilhas feitas (números e mapa) e pontos de interesse. p = { dias: separarDias(...), subtitulo, titulo, marca }.
+  // recursos.mapasDia[dia] = mapa do dia (só quando o período é curto).
+  function montarIpo(d, recursos, p) {
+    recursos = recursos || {};
+    var op = d.operacao;
+    var I = moduloIpo();
+    var dias = p.dias || [];
+    ANO_REF = dias.length ? new Date(dias[0].dia + 'T12:00:00').getFullYear() : null;
+    var i = I ? I.normalizarIpo(op.ipo || {}) : { destinatarios: '' };
+    var conteudo = [];
+    if (recursos.logo) conteudo.push({ image: recursos.logo, width: 120, margin: [0, 0, 0, 8] });
+    conteudo.push({ text: 'IPO: ' + (i.destinatarios || ''), style: 'h2', margin: [0, 0, 0, 2] });
+    conteudo.push({ text: 'Informe Padrão de Ocorrência - IPO', style: 'h1', margin: [0, 0, 0, 2] });
+    conteudo.push({ text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.  ·  ' + p.subtitulo, style: 'nota', margin: [0, 0, 0, 10] });
+    dias.forEach(function (x, k) {
+      var mil = x.pessoas.filter(function (q) { return q.tipo === 'militar'; });
+      var civis = x.pessoas.filter(function (q) { return q.tipo === 'civil'; }).length;
+      var topo = { text: 'IPO do dia ' + x.dia.split('-').reverse().join('/') + (x.numero ? '  ·  ' + x.numero + 'º dia' : ''), style: 'h2', margin: [0, k ? 0 : 4, 0, 6] };
+      if (k) topo.pageBreak = 'before';
+      conteudo.push(topo);
+      // o informe do dia, no modelo (cabeçalho, local, vítima, procedimentos, recursos, efetivo, desdobramentos, órgãos)
+      conteudo = conteudo.concat(I ? blocoIpo(d, x.dia) : []);
+      // militares: só graduação e QRA
+      conteudo.push(subtitulo('Militares do dia'));
+      if (mil.length) {
+        var nomes = mil.map(function (q) { return graduacaoQra(q.nome); });
+        conteudo.push(tabela(['Graduação', 'QRA'], nomes.map(function (n) { return [{ text: n.grad, style: 'td' }, { text: n.qra, style: 'td', bold: true }]; }), [90, '*']));
+      } else conteudo.push(nota('Nenhum militar com posição registrada pelo app neste dia.'));
+      if (civis) conteudo.push(nota('Voluntários e civis em campo: ' + civis + '.'));
+      // setores varridos
+      conteudo.push(subtitulo('Setores varridos'));
+      if (x.setores.length) {
+        conteudo.push(tabela(['Setor', 'Situação', 'Área'], x.setores.map(function (z) {
+          return [{ text: z.setor.nome, style: 'td', bold: true }, z.concluido ? 'Concluído neste dia' : (STATUS_SETOR[z.setor.status] || txt(z.setor.status)), textoArea(areaSetor(z.setor))];
+        }), ['*', 120, 70]));
+      } else conteudo.push(nota('Nenhum setor trabalhado neste dia.'));
+      // trilhas feitas
+      conteudo.push(subtitulo('Trilhas feitas'));
+      conteudo.push(ficha([['Pessoas em campo', String(x.pessoas.filter(function (q) { return !q.semPosicao; }).length)], ['Percorrido', kmTexto(x.km)]]));
+      var mapa = recursos.mapasDia && recursos.mapasDia[x.dia];
+      if (mapa) { conteudo.push({ image: mapa, fit: [515, 330], margin: [0, 2, 0, 2] }); conteudo.push(legendaMapa()); }
+      // pontos de interesse do dia
+      if (x.pontos.length) {
+        conteudo.push(subtitulo('Pontos de interesse do dia'));
+        var linhas = x.pontos.slice(0, 12).map(function (q) { return [hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria, { text: q.titulo, style: 'td', bold: true }]; });
+        conteudo.push(tabela(['Hora', 'Tipo', 'Ponto'], linhas, [36, 110, '*']));
+        if (x.pontos.length > 12) conteudo.push(nota('+ ' + (x.pontos.length - 12) + ' outro(s) ponto(s) neste dia.'));
+      }
+    });
+    return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'Informe Padrão de Ocorrência (IPO)', marca: p.marca });
   }
 
   /* ---------- relatório da passagem de comando --------------------------- */
@@ -1293,7 +1355,7 @@
     return dentro;
   }
 
-  var api = { montarIpoDiario: montarIpoDiario, separarDias: separarDias, diasEntre: diasEntre, montarComandoGeral: montarComandoGeral, montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarDiarioDias: montarDiarioDias, montarIpo: montarIpo, graduacaoQra: graduacaoQra, separarDias: separarDias, diasEntre: diasEntre, montarComandoGeral: montarComandoGeral, montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

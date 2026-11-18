@@ -9,10 +9,15 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.2.1';
+  var NUMERO = '1.3.0';
   var DATA = '2026-11-18';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.3.0', data: '2026-11-18', itens: [
+      'Dois relatórios separados: IPO (curto, no modelo do CBMPR) e Diário (detalhado). Os dois podem ser de um dia, de um período ou de tudo até o momento, separados dia a dia.',
+      'Relatório IPO: o informe do dia, os militares só com graduação e QRA, os setores varridos, as trilhas feitas (com o mapa em satélite) e os pontos de interesse do dia, de forma resumida.',
+      'Relatório Diário: o detalhe de cada dia (IPO do dia, pessoas em campo, mapa, setores, encontros, diário completo e pontos).',
+    ] },
     { versao: '1.2.1', data: '2026-11-18', itens: [
       'Os mapas dos relatórios (setores, mapa geral, dia) agora usam imagem de satélite no fundo, e não o mapa de ruas.',
     ] },

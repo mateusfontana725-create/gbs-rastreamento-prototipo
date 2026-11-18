@@ -1148,7 +1148,6 @@
       ['Dias no relatório', String(dias.length)],
       ['Gerado', dataHora(d.gerado_em) + ' por ' + txt(d.gerado_por_nome)],
     ]));
-    if (recursos.mapasSetorOmitidos > 0) conteudo.push(nota('Para o arquivo não ficar pesado demais, ' + recursos.mapasSetorOmitidos + ' mapa(s) de setor dos últimos dias deste período ficaram de fora (as tabelas e os dados estão todos aqui). Gere por períodos menores para ter todos os mapas.'));
     // resumo: uma linha por dia
     conteudo.push(subtitulo('Resumo por dia'));
     conteudo.push(tabela(['Dia', 'Data', 'Pessoas', 'Km', 'Setores', 'O que foi feito'], dias.map(function (x) {

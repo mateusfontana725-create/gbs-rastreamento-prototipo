@@ -3244,3 +3244,6 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .ficha-fora-mapa { display: grid; gap: 6px; margin-top: 8px; }
 .ficha-fora-mapa-info { margin: 0; font-size: .82rem; }
 .ipo-ocorrencia { border: 1px solid var(--borda, #2a3340); border-left: 4px solid var(--alerta, #f59e0b); border-radius: 8px; padding: 8px 10px; margin: 8px 0; display: grid; gap: 4px; }
+
+/* Mapas do relatório: caixas para marcar o que entra */
+.rel-mapas-caixas { display: grid; gap: 6px; }

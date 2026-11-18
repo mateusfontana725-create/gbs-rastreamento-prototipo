@@ -1004,13 +1004,12 @@
     var tr = await trilhasDosDias(op, ini, fim);
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
     var recursos = { logo: await carregarLogo(), mapasDia: {} };
-    // Mapas (satélite), conforme a escolha de quem gera (opcoes.mapas):
-    //   'um'       um mapa por dia com tudo: os setores trabalhados no dia, as trilhas e os pontos do dia, num zoom só (padrão)
-    //   'setores'  um mapa para cada setor trabalhado no dia (o setor e as trilhas do dia)
-    //   'trilhas'  um mapa para cada trilha do dia (uma por pessoa)
-    //   'todos'    os três
-    var tipoMapas = opcoes.mapas || 'um';
-    var querGeral = tipoMapas === 'um' || tipoMapas === 'todos', querSetores = tipoMapas === 'setores' || tipoMapas === 'todos', querTrilhas = tipoMapas === 'trilhas' || tipoMapas === 'todos';
+    // Mapas (satélite), conforme as caixas marcadas por quem gera (opcoes.mapas = { geral, setores, trilhas }; qualquer combinação):
+    //   geral    um mapa por dia com tudo: os setores trabalhados no dia, as trilhas e os pontos do dia, num zoom só (padrão)
+    //   setores  um mapa para cada setor trabalhado no dia (o setor e as trilhas do dia)
+    //   trilhas  um mapa para cada trilha do dia (uma por pessoa)
+    var esc = opcoes.mapas && typeof opcoes.mapas === 'object' ? opcoes.mapas : { geral: true };   // { geral, setores, trilhas }: o que marcar; padrão: o mapa do dia
+    var querGeral = Boolean(esc.geral), querSetores = Boolean(esc.setores), querTrilhas = Boolean(esc.trilhas);
     recursos.mapasSetorDia = {}; recursos.mapasTrilhaDia = {};
     var totalMapas = dias.reduce(function (a, x) {
       return a + (querGeral ? 1 : 0) + (querSetores ? x.setores.length : 0) + (querTrilhas ? x.pessoas.filter(function (q) { return q.pontos.length > 1; }).length : 0);
@@ -1390,10 +1389,19 @@
         var dataAte = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-' + tipo + '-ate', value: fimOp, min: minDia, max: fimOp });
         var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-' + tipo + '-data' });
         var campoAte = UI.campo('Até', dataAte, { para: 'rel-' + tipo + '-ate' });
-        var selMapas = UI.el('select', { classe: 'campo', id: 'rel-' + tipo + '-mapas' }, [
-          UI.el('option', { value: 'um', texto: 'Um mapa com tudo do dia (setores, trilhas e pontos)' }), UI.el('option', { value: 'setores', texto: 'Setor por setor' }),
-          UI.el('option', { value: 'trilhas', texto: 'Trilha por trilha (uma por pessoa)' }), UI.el('option', { value: 'todos', texto: 'Todos: o do dia, os dos setores e os das trilhas' }),
+        // Mapas: caixas para marcar o que entra no relatório (pode ser um, vários ou nenhum)
+        var caixas = {};
+        function caixaMapa(chave, rotulo, marcada) {
+          var c = UI.el('input', { type: 'checkbox', id: 'rel-' + tipo + '-mapa-' + chave, checked: marcada ? true : null });
+          caixas[chave] = c;
+          return UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-' + tipo + '-mapa-' + chave }, [c, ' ' + rotulo]);
+        }
+        var selMapas = UI.el('div', { classe: 'rel-mapas-caixas', role: 'group', 'aria-label': 'Mapas do relatório' }, [
+          caixaMapa('geral', 'Mapa do dia, com tudo junto (setores, trilhas e pontos)', true),
+          caixaMapa('setores', 'Um mapa de cada setor', false),
+          caixaMapa('trilhas', 'Um mapa de cada trilha (uma por pessoa)', false),
         ]);
+        function mapasEscolhidos() { return { geral: caixas.geral.checked, setores: caixas.setores.checked, trilhas: caixas.trilhas.checked }; }
         var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
         function ajustarModo() {
           campoDe.hidden = modo.value === 'tudo';
@@ -1408,16 +1416,16 @@
           if (!ini || !fim || ini < minDia || fim > fimOp || ini > fim) { UI.aviso('Escolha dias entre o acionamento e ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) + ' (o início antes do fim).', 'erro', 6000); return; }
           progresso.hidden = false;
           ocupar(botao, 'Gerando…', async function () {
-            await gerar(ini, fim, modo.value, function (t) { progresso.textContent = t; }, selMapas.value);
+            await gerar(ini, fim, modo.value, function (t) { progresso.textContent = t; }, mapasEscolhidos());
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), UI.grade([campoDe, campoAte]), UI.campo('Mapas', selMapas, { para: 'rel-' + tipo + '-mapas' }), progresso]), [botao]);
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), UI.grade([campoDe, campoAte]), UI.campo('Mapas', selMapas, {}), progresso]), [botao]);
       }
       out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
       out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {
-        // um dia já terminado e ainda não guardado fica guardado com os relatórios (só o padrão: um mapa com tudo)
-        var guardar = ini === fim && fim < hoje && !dados.porDia[ini] && (!mapas || mapas === 'um');
+        // um dia já terminado e ainda não guardado fica guardado com os relatórios (só com a escolha padrão: só o mapa do dia)
+        var guardar = ini === fim && fim < hoje && !dados.porDia[ini] && Boolean(mapas && mapas.geral && !mapas.setores && !mapas.trilhas);
         await gerarDiarioPeriodo(op, ini, fim, modo, { guardar: guardar, mapas: mapas }, passo);
         if (guardar) await atualizar();
       }));

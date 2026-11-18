@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.4.0';
+  var NUMERO = '1.4.1';
   var DATA = '2026-11-18';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.4.1', data: '2026-11-18', itens: [
+      'Relatórios IPO e Diário: os mapas agora são caixas para marcar — mapa do dia (tudo junto), mapa de cada setor e mapa de cada trilha, em qualquer combinação (um, dois, os três ou nenhum).',
+    ] },
     { versao: '1.4.0', data: '2026-11-18', itens: [
       'Relatórios IPO e Diário: na hora de gerar você escolhe os mapas — um mapa com tudo do dia, setor por setor, trilha por trilha (uma por pessoa) ou todos eles.',
     ] },

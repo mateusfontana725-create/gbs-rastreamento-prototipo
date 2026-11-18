@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.3.1';
+  var NUMERO = '1.3.2';
   var DATA = '2026-11-18';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.3.2', data: '2026-11-18', itens: [
+      'Relatório Diário: todos os setores trabalhados no dia ganham o bloco com mapa, sem limite por dia (antes só os 8 primeiros). Para o arquivo não ficar pesado, o teto é de 80 mapas de setor por relatório, com aviso no PDF se algum ficar de fora.',
+    ] },
     { versao: '1.3.1', data: '2026-11-18', itens: [
       'Relatório Diário mais detalhado: trilhas do dia pessoa a pessoa (início, fim, tempo em campo, quilômetros e setores percorridos) e um bloco para cada setor trabalhado (situação, horários, equipes, responsável, observações, cronologia e mapa em satélite com as trilhas do dia).',
     ] },

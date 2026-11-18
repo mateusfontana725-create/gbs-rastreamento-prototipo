@@ -186,7 +186,7 @@ legível, elas não aparecem.
 - **Diário (detalhado):** cada dia com o IPO do dia, o mapa do dia, as **trilhas pessoa a pessoa** (início, fim, tempo em
   campo, quilômetros e setores percorridos), os **setores trabalhados** (tabela e, para cada um, um bloco com situação,
   horários de início e conclusão, equipes, responsável, observações, cronologia e um **mapa em satélite com o setor e as
-  trilhas daquele dia**), encontros, o diário completo e os pontos. O de um dia já terminado fica guardado.
+  trilhas daquele dia**) — todos os setores do dia, sem limite por dia (teto de 80 mapas de setor por relatório; passando disso, o PDF avisa e traz o resto sem mapa), encontros, o diário completo e os pontos. O de um dia já terminado fica guardado.
 - Os dois têm **um dia, período (de… até…) ou tudo até o momento**, separado dia a dia (cada dia numa página). O IPO (Diário)
   da tela do painel continua sendo onde o IPO de cada dia é preenchido.
 - Sem migração nova.

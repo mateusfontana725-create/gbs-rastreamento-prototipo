@@ -1004,6 +1004,8 @@
     var tr = await trilhasDosDias(op, ini, fim);
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
     var recursos = { logo: await carregarLogo(), mapasDia: {} };
+    var orcamentoSetores = 80;   // teto de mapas de setor por relatório (o PDF não fica gigante); o que passar disso sai sem mapa, com aviso
+    recursos.mapasSetorOmitidos = 0;
     if (dias.length <= (opcoes.maxMapas || 31)) {
       for (var k = 0; k < dias.length; k++) {
         var x = dias[k];
@@ -1014,13 +1016,15 @@
         var g = elementosMapa(copia, { fundo: true });
         recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { destaques: x.setores.map(function (z) { return z.setor.id; }) }, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
         // um mapa por setor trabalhado (só no Diário detalhado; períodos curtos): o setor e as trilhas do dia sobre o satélite
-        if (opcoes.mapasSetor && dias.length <= 7) {
+        if (opcoes.mapasSetor) {
           recursos.mapasSetorDia = recursos.mapasSetorDia || {};
-          var lista = x.setores.slice(0, 8);
+          var lista = x.setores;   // todos os setores trabalhados no dia, sem limite por dia
           for (var m = 0; m < lista.length; m++) {
+            if (orcamentoSetores <= 0) { recursos.mapasSetorOmitidos++; continue; }
+            orcamentoSetores--;
             passo('Desenhando o mapa do setor ' + lista[m].setor.nome + ' em ' + x.dia.split('-').reverse().slice(0, 2).join('/') + '…');
             var gs = elementosMapa(copia, { fundo: true });
-            recursos.mapasSetorDia[x.dia + '|' + lista[m].setor.id] = await desenharMapa(Object.assign({}, gs.base, { largura: 1000, altura: 560, enquadrar: pontosSetor(lista[m].setor), destaque: lista[m].setor.id }));
+            recursos.mapasSetorDia[x.dia + '|' + lista[m].setor.id] = await desenharMapa(Object.assign({}, gs.base, { largura: 900, altura: 520, enquadrar: pontosSetor(lista[m].setor), destaque: lista[m].setor.id }));
           }
         }
       }

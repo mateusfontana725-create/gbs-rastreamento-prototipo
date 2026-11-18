@@ -3247,3 +3247,10 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 
 /* Mapas do relatório: caixas para marcar o que entra */
 .rel-mapas-caixas { display: grid; gap: 6px; }
+
+/* Girar o mapa (leaflet-rotate): a rosa dos ventos acompanha o giro e, tocada, volta o norte para cima */
+.bussola-mapa svg { transition: transform .15s linear; }
+.bussola-mapa.bussola-clicavel { pointer-events: auto; cursor: pointer; }
+.bussola-mapa.bussola-girada { border-color: var(--alerta, #f59e0b); }
+.bussola-mapa.bussola-clicavel:focus-visible { outline: 2px solid var(--primario, #fff); outline-offset: 2px; }
+.controle-girar a { font-size: 1.1rem; }

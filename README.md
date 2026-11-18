@@ -177,6 +177,16 @@ legível, elas não aparecem.
 - **Banco:** migração `084_tirar_do_mapa.sql` (colunas `fora_do_mapa_em`/`fora_do_mapa_por_nome` e a função `tirar_do_mapa`).
   Sem ela, o botão avisa que falta a migração.
 
+### Girar o mapa no painel do responsável (versão 1.5.0)
+
+- O mapa 2D do painel agora **gira** (antes só o relevo 3D girava): **dois dedos** no celular/tablet, **Shift + roda do mouse**
+  no computador, ou os botões **↺ ↻** (15° cada) abaixo do botão de enquadrar. A **bússola** do canto inferior direito gira
+  junto (o N aponta o norte de verdade, borda laranja quando girado) e, **tocada, volta o norte para cima**. No celular, o
+  menu **☰ Mapa** tem "Girar o mapa (+45°)" e "Norte para cima". Marcadores, balões e rótulos continuam em pé; os cliques
+  (marcar ponto, desenhar setor, medir) continuam acertando a coordenada.
+- Usa o plugin leaflet-rotate (CDN com SRI, em `comando.html`). Se o plugin não carregar, o painel funciona como antes (sem os
+  botões de girar). O mapa não guarda o giro: ao abrir de novo, o norte volta para cima.
+
 ### Relatórios IPO e Diário, separados (versão 1.3.0)
 
 - **IPO (curto):** o IPO no modelo do CBMPR (o mesmo informe do texto do WhatsApp: local, vítima, procedimentos, recursos,

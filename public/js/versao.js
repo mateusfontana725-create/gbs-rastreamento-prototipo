@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.4.1';
+  var NUMERO = '1.5.0';
   var DATA = '2026-11-18';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.5.0', data: '2026-11-18', itens: [
+      'Painel do responsável: girar o mapa em 2D. Dois dedos no celular, Shift + roda do mouse no computador, ou os botões ↺ ↻ (15° cada) ao lado do botão de enquadrar. A bússola do canto gira junto e, tocada, volta o norte para cima. No celular, o menu ☰ Mapa tem "Girar o mapa" e "Norte para cima".',
+    ] },
     { versao: '1.4.1', data: '2026-11-18', itens: [
       'Relatórios IPO e Diário: os mapas agora são caixas para marcar — mapa do dia (tudo junto), mapa de cada setor e mapa de cada trilha, em qualquer combinação (um, dois, os três ou nenhum).',
     ] },

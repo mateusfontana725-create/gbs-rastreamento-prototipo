@@ -2095,7 +2095,8 @@
   /* Mapa                                                                 */
   /* ------------------------------------------------------------------ */
   function criarMapa() {
-    var mapa = L.map('mapa', { zoomControl: true, preferCanvas: false, worldCopyJump: true }).setView([-15.79, -47.88], 4);
+    // rotate: o mapa gira (dois dedos no celular; Shift + roda do mouse no computador; botões e bússola). Plugin leaflet-rotate.
+    var mapa = L.map('mapa', { zoomControl: true, preferCanvas: false, worldCopyJump: true, rotate: Boolean(L.Map.prototype.setBearing), bearing: 0, touchRotate: true, shiftKeyRotate: true, rotateControl: false, compassBearing: false }).setView([-15.79, -47.88], 4);
     // Acima do zoom que o servidor tem (maxNativeZoom) os ladrilhos são ampliados, em vez de sumirem.
     var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxNativeZoom: 19,
@@ -2138,6 +2139,30 @@
     });
     new Botoes().addTo(mapa);
 
+    // Girar o mapa (leaflet-rotate): ↺ ↻ de 15 em 15 graus. Também gira com dois dedos (celular) ou Shift + roda do mouse (computador);
+    // a bússola do canto mostra o norte e, tocada, volta o mapa para o norte para cima.
+    if (typeof mapa.setBearing === 'function') {
+      var Girar = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function () {
+          var div = L.DomUtil.create('div', 'leaflet-bar controle-girar');
+          [['↺', 'Girar o mapa para a esquerda (15°)', -15], ['↻', 'Girar o mapa para a direita (15°)', 15]].forEach(function (d) {
+            var b = L.DomUtil.create('a', 'btn-mapa', div);
+            b.href = '#'; b.title = d[1]; b.textContent = d[0];
+            b.setAttribute('role', 'button'); b.setAttribute('aria-label', d[1]);
+            L.DomEvent.on(b, 'click', function (e) { L.DomEvent.preventDefault(e); girarMapa(d[2]); });
+          });
+          L.DomEvent.disableClickPropagation(div);
+          return div;
+        },
+      });
+      new Girar().addTo(mapa);
+      // o plugin desliga o zoom da roda enquanto o Shift está apertado e só religa na roda seguinte: religa ao soltar o Shift
+      var religarRoda = function () { if (mapa.scrollWheelZoom && !mapa.scrollWheelZoom.enabled()) mapa.scrollWheelZoom.enable(); };
+      document.addEventListener('keyup', function (e) { if (e.key === 'Shift') religarRoda(); });
+      window.addEventListener('blur', religarRoda);
+    }
+
     // Legenda compacta: começa SEMPRE recolhida (um toque em "Legenda" abre e fecha).
     // A identificação mostra só os tipos que estão na operação; a lista de grupos é
     // gerada dos grupos cadastrados (sem grupos fantasmas nem cores sem grupo).
@@ -2168,14 +2193,16 @@
     });
     new BotaoMeteo().addTo(mapa);   // adicionado depois: fica acima da legenda
 
-    // Bússola pequena no canto: o mapa é sempre norte para cima, então a rosa mostra onde fica o norte e o sul.
+    // Bússola pequena no canto: a rosa mostra onde fica o norte e gira junto com o mapa; tocada, volta o norte para cima.
     var Bussola = L.Control.extend({
       options: { position: 'bottomright' },
       onAdd: function () {
         var div = L.DomUtil.create('div', 'bussola-mapa');
-        div.title = 'Norte: o mapa sempre fica com o norte para cima';
-        div.setAttribute('role', 'img');
-        div.setAttribute('aria-label', 'Bússola: norte para cima');
+        var gira = typeof mapa.setBearing === 'function';
+        div.title = gira ? 'Bússola: toque para voltar o norte para cima. Para girar o mapa: dois dedos, Shift + roda do mouse ou os botões ↺ ↻' : 'Norte: o mapa sempre fica com o norte para cima';
+        div.setAttribute('role', gira ? 'button' : 'img');
+        div.setAttribute('aria-label', gira ? 'Bússola: voltar o norte para cima' : 'Bússola: norte para cima');
+        if (gira) { div.tabIndex = 0; div.classList.add('bussola-clicavel'); }
         div.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true">' +
           '<circle cx="24" cy="24" r="22.5" fill="none" stroke="currentColor" stroke-opacity=".3"/>' +
           '<path d="M24 13 L28.5 25 L24 23 L19.5 25 Z" fill="#ef4444"/>' +
@@ -2186,6 +2213,11 @@
           '<text x="5.5" y="26.5" text-anchor="middle" font-size="6.5" font-weight="600" fill="currentColor" fill-opacity=".7">O</text>' +
           '</svg>';
         L.DomEvent.disableClickPropagation(div);
+        if (gira) {
+          L.DomEvent.on(div, 'click', function () { norteParaCima(); });
+          L.DomEvent.on(div, 'keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { L.DomEvent.preventDefault(e); norteParaCima(); } });
+          mapa.on('rotate', function () { atualizarBussola(div); });
+        }
         return div;
       },
     });
@@ -4195,6 +4227,27 @@
    * Um botão só no canto do mapa abre a lista do que antes ficava espalhado pela tela: Participantes, Camadas,
    * Dia/pessoa, Grupos, Legenda e Meteorologia. Os controles de sempre continuam existindo (o menu só os aciona);
    * em tela larga nada muda. */
+  /* ---------- Girar o mapa (plugin leaflet-rotate) ---------- */
+  function mapaGira() { return Boolean(est.mapa && typeof est.mapa.setBearing === 'function'); }
+  function anguloMapa() { return mapaGira() ? Math.round(est.mapa.getBearing()) % 360 : 0; }
+  function girarMapa(graus) {
+    if (!mapaGira()) return;
+    est.mapa.setBearing(((est.mapa.getBearing() + graus) % 360 + 360) % 360);
+  }
+  function norteParaCima() {
+    if (!mapaGira() || !anguloMapa()) return;
+    est.mapa.setBearing(0);
+  }
+  // a rosa gira ao contrário do mapa: o N aponta sempre para o norte de verdade
+  function atualizarBussola(div) {
+    var svg = div && div.querySelector('svg');
+    if (!svg) return;
+    var ang = anguloMapa();
+    svg.style.transform = 'rotate(' + (-est.mapa.getBearing()) + 'deg)';
+    div.classList.toggle('bussola-girada', ang !== 0);
+    div.title = ang ? 'Mapa girado ' + ang + '°. Toque para voltar o norte para cima.' : 'Bússola: toque para voltar o norte para cima. Para girar o mapa: dois dedos, Shift + roda do mouse ou os botões ↺ ↻';
+  }
+
   function criarMenuMapa() {
     if ($('menu-mapa') || !$('painel-corpo')) return;
     var lista = UI.el('div', { classe: 'menu-mapa-lista', id: 'menu-mapa-lista', role: 'menu', hidden: true });
@@ -4226,6 +4279,8 @@
         item('📅', 'Dia ou pessoa', filtro ? 'filtro ligado' : 'todos', function () { $('btn-filtro-mapa').click(); }, Boolean(filtro)),
         est.grupos && est.grupos.size ? item('⚑', 'Grupos', est.grupos.size + (est.filtroGrupos && est.filtroGrupos.size ? ' · filtrado' : ''), function () { mostrarControle('ver-grupos-mapa', '.controle-grupos'); }, document.body.classList.contains('ver-grupos-mapa')) : null,
         item('▤', 'Legenda', '', function () { mostrarControle('ver-legenda-mapa', '.legenda'); }, document.body.classList.contains('ver-legenda-mapa')),
+        mapaGira() ? item('↻', 'Girar o mapa (+45°)', anguloMapa() ? anguloMapa() + '°' : 'norte em cima', function () { girarMapa(45); }, Boolean(anguloMapa())) : null,
+        mapaGira() && anguloMapa() ? item('⬆', 'Norte para cima', '', norteParaCima) : null,
         $('opt-meteo') ? item('☂', 'Meteorologia', meteo ? 'ligada' : '', function () { $('opt-meteo').click(); }, meteo) : null,
       ].forEach(function (x) { if (x) lista.appendChild(x); });
     }

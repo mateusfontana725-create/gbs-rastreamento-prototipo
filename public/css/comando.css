@@ -3254,3 +3254,7 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .bussola-mapa.bussola-girada { border-color: var(--alerta, #f59e0b); }
 .bussola-mapa.bussola-clicavel:focus-visible { outline: 2px solid var(--primario, #fff); outline-offset: 2px; }
 .controle-girar a { font-size: 1.1rem; }
+
+/* Falhas de GPS: só um aviso na lista e na ficha (o mapa não mostra as falhas) */
+.li-aviso-gps { color: var(--alerta-texto, #f59e0b); }
+.ficha-falhas-gps { margin: 0; font-size: .82rem; color: var(--alerta-texto, #f59e0b); }

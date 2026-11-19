@@ -2016,11 +2016,12 @@
       // Estilo AlpineQuest: contorno escuro por baixo, linha grossa e contínua, setas de sentido e a hora do início
       estado.haloMinha = L.polyline(segs, { color: '#0b1220', weight: pesoTrilhaP(6) + 3, opacity: 0.8, interactive: false, lineJoin: 'round', lineCap: 'round', className: 'trilha-halo' }).addTo(estado.mapa);
       estado.linhaMinha = L.polyline(segs, { color: corMinha(), weight: pesoTrilhaP(6), opacity: 1, interactive: false, lineJoin: 'round', lineCap: 'round' }).addTo(estado.mapa);
-      estado.linhaFalhaMinha = L.polyline(falhas, { color: corMinha(), weight: 2, opacity: 0.55, dashArray: '4 8', interactive: false }).addTo(estado.mapa);
+      // a falha de GPS não é desenhada (só atrapalhava o mapa): a linha fica vazia
+      estado.linhaFalhaMinha = L.polyline([], { color: corMinha(), weight: 2, opacity: 0.55, dashArray: '4 8', interactive: false }).addTo(estado.mapa);
     } else {
       estado.haloMinha.setLatLngs(segs);
       estado.linhaMinha.setLatLngs(segs);
-      estado.linhaFalhaMinha.setLatLngs(falhas);
+      estado.linhaFalhaMinha.setLatLngs([]);
     }
     agendarDecoracoesTrilhas();
   }

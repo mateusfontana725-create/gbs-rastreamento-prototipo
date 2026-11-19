@@ -370,7 +370,32 @@
     return tam >= 1 ? tam : 0;
   }
 
+  // Ponto SOLTO: a trilha vai longe e volta logo para perto de onde estava (A → B longe → C perto de A). É salto do GPS ou a
+  // última posição ruim antes de uma falha; desenhado, risca o mapa até lá e estica os relatórios. Sai do desenho (a posição
+  // continua guardada). pontos: [lat, lng] ou { lat, lng, … }. limiarM: distância mínima do salto (padrão 800 m).
+  function semPontosSoltos(pontos, limiarM) {
+    var lim = limiarM || 800;
+    var lista = (pontos || []).slice();
+    function ll(p) { return Array.isArray(p) ? p : [p.lat, p.lng]; }
+    function dist(a, b) {
+      a = ll(a); b = ll(b);
+      var k = Math.PI / 180, dLat = (b[0] - a[0]) * k, dLng = (b[1] - a[1]) * k;
+      var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a[0] * k) * Math.cos(b[0] * k) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      return 12742000 * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+    var mudou = true;
+    while (mudou && lista.length >= 3) {
+      mudou = false;
+      for (var i = 1; i < lista.length - 1; i++) {
+        var ida = dist(lista[i - 1], lista[i]), volta = dist(lista[i], lista[i + 1]);
+        if (Math.min(ida, volta) > lim && dist(lista[i - 1], lista[i + 1]) < 0.25 * Math.min(ida, volta)) { lista.splice(i, 1); mudou = true; break; }
+      }
+    }
+    return lista;
+  }
+
   global.TrilhaGeo = {
+    semPontosSoltos: semPontosSoltos,
     setasAoLongo: setasAoLongo, verticesSeta: verticesSeta, tamanhoSeta: tamanhoSeta,
     dividirPorIntervalos: dividirPorIntervalos, intervalosApagados: intervalosApagados, unirIntervalos: unirIntervalos,
     recortarForaDosCirculos: recortarForaDosCirculos, apagarComPincel: apagarComPincel,

@@ -3840,6 +3840,7 @@
   // intervalos: trechos apagados com a borracha (trilhas_ocultas, migração 071): os pontos deles não entram e a linha se divide ali.
   function trilhaDePontos(pontos, objetos, intervalos) {
     var op = { precisaoTrilhaM: LIM.precisaoTrilhaM, lacunaMs: lacunaMsOp() };
+    pontos = window.TrilhaGeo.semPontosSoltos(pontos);   // ponto que vai longe e volta (salto do GPS) não entra no desenho
     if (objetos) op.objetos = true;
     var partes = [];
     var bases = basesDaTrilha();
@@ -4049,35 +4050,13 @@
   // Falha: intervalo maior que o limite da operação entre dois pontos seguidos
   // (ou salto incoerente). É desenhada TRACEJADA em cinza (não é percurso
   // registrado), com o início (○) e o fim (●) da falha marcados.
+  // Falhas de GPS (intervalos sem posição) NÃO são desenhadas no mapa: só atrapalhavam (marcas e tracejados riscando o mapa).
+  // Ficam guardadas na pessoa (p.falhasGps) e aparecem como aviso na lista e na ficha.
   function desenharLacunas(p, lacunas) {
-    if (!lacunas.length) { if (p.lacunas) { p.lacunas.remove(); p.lacunas = null; } return; }
-    if (!p.lacunas) p.lacunas = L.layerGroup().addTo(est.mapa);
-    var assinatura = lacunas.map(function (l) { return l.t0 + '-' + l.t1; }).join('|');
-    if (p.lacunas._assinatura === assinatura) return;
-    p.lacunas._assinatura = assinatura;
-    p.lacunas.clearLayers();
-    lacunas.forEach(function (l) {
-      var dur = Math.round((l.t1 - l.t0) / 1000);
-      var txtDur = dur < 120 ? dur + ' s' : Math.round(dur / 60) + ' min';
-      var texto = 'Sem posições de ' + C.hora(l.t0) + ' a ' + C.hora(l.t1) + ' (' + txtDur + '): o celular não enviou a localização nesse intervalo' +
-        (l.impossivel ? ' — salto incoerente' : '') + '. O percurso real nesse trecho é desconhecido.';
-      // Intervalo longo (mais de 15 min) ou salto grande (mais de 2 km): a pessoa parou de enviar e voltou depois, talvez em
-      // outro lugar. Ligar os dois pontos com um tracejado riscava o mapa de ponta a ponta e sugeria um caminho que não
-      // existiu; ficam só as marcas de onde parou (○) e de onde voltou (●), com a explicação ao tocar.
-      var de = Array.isArray(l.de) ? l.de : [l.de.lat, l.de.lng], ate = Array.isArray(l.ate) ? l.ate : [l.ate.lat, l.ate.lng];
-      var longa = (l.t1 - l.t0) > 15 * 60000 || C.distancia(de[0], de[1], ate[0], ate[1]) > 2000;
-      if (!longa) {
-        L.polyline([l.de, l.ate], { color: '#9ca3af', weight: pesoLacuna(), opacity: 0.9, dashArray: '8 6', interactive: true, className: 'trilha-lacuna' })
-          .bindTooltip(texto, { sticky: true })
-          .addTo(p.lacunas);
-      }
-      L.circleMarker(l.de, { radius: raioFalha(), color: '#e5e7eb', weight: 2, fillColor: '#111827', fillOpacity: 1, className: 'falha-inicio' })
-        .bindTooltip('Sem posições a partir daqui · ' + nomeExibido(p) + ' · ' + C.hora(l.t0) + ' (último ponto recebido; voltou a enviar às ' + C.hora(l.t1) + ', ' + txtDur + ' depois)')
-        .addTo(p.lacunas);
-      L.circleMarker(l.ate, { radius: raioFalha(), color: '#111827', weight: 2, fillColor: '#e5e7eb', fillOpacity: 1, className: 'falha-fim' })
-        .bindTooltip('Voltou a enviar posição aqui · ' + nomeExibido(p) + ' · ' + C.hora(l.t1) + ' (' + txtDur + ' sem posições)')
-        .addTo(p.lacunas);
-    });
+    var antes = (p.falhasGps || []).length;
+    p.falhasGps = lacunas;
+    if (p.lacunas) { p.lacunas.remove(); p.lacunas = null; }
+    if (antes !== lacunas.length) est.listaSuja = true;
   }
 
   function pesoLacuna() { return Math.max(1.5, Math.round(2.5 * Math.max(0.6, fatorZoomTrilha()) * 10) / 10); }
@@ -4404,6 +4383,7 @@
       (fad && fad.descansando ? '<span class="li-descanso" title="Descansando na base há ' + window.Fadiga.textoMinutos(fad.descansando.min) + (fad.descansando.longo ? ' (descanso longo: a contagem de fadiga foi zerada)' : '') + '">☕ ' + window.Fadiga.textoMinutos(fad.descansando.min) + '</span>' : '') +
       (ajuda ? '<span class="li-aviso li-aviso-ajuda" title="Pediu ajuda">SOS</span>' : '') +
       (saida ? '<span class="li-aviso li-aviso-saida" title="Pediu para sair">Saída</span>' : '') +
+      (resumoFalhasGps(p) ? '<span class="li-aviso li-aviso-gps" title="' + C.esc(resumoFalhasGps(p)) + '">⚠ GPS</span>' : '') +
       (foraDoMapa(p) ? '<span class="li-aviso li-aviso-fora" title="Fora do mapa: a localização foi escondida pelo responsável (abra a ficha para mostrar de novo)">⊘ mapa</span>' : '') +
       (novas ? '<span class="li-aviso li-aviso-msg" title="' + (novas === 1 ? 'Mensagem nova' : novas + ' mensagens novas') + '">✉' + (novas > 1 ? novas : '') + '</span>' : '');
 
@@ -4802,6 +4782,8 @@
     $('ficha-hist').innerHTML = linhasHist || '<tr><td colspan="5" class="muted">Sem posições registradas.</td></tr>';
 
     $('ficha-remover').hidden = d.removido || est.op.status !== 'ativa' || ehResp;
+    var infoGps = $('ficha-falhas-gps');
+    if (infoGps) { var rg = resumoFalhasGps(p); infoGps.hidden = !rg; infoGps.textContent = rg ? '⚠ ' + rg + ' O mapa não mostra essas falhas.' : ''; }
     var botFora = $('ficha-fora-mapa'), infoFora = $('ficha-fora-mapa-info');
     $('ficha-fora-mapa-caixa').hidden = !podeAlterar() || (!foraDoMapa(p) && !posicaoAtual(p));
     botFora.textContent = foraDoMapa(p) ? '◉ Mostrar no mapa' : '⊘ Tirar do mapa';
@@ -12309,6 +12291,15 @@
   function filtroAtivo() { return est.filtroGrupos.size > 0; }
 
   // Foco de uma pessoa (botão de olho da lista): no mapa só ela e o que é dela.
+  // Falhas de GPS da pessoa no que está desenhado (intervalos sem posição): texto curto para o aviso da lista e da ficha.
+  function resumoFalhasGps(p) {
+    var f = (p.falhasGps || []).filter(function (l) { return l.t1 - l.t0 >= 5 * 60000; });   // só as de 5 min ou mais
+    if (!f.length) return '';
+    var maior = f.reduce(function (a, l) { return l.t1 - l.t0 > a.t1 - a.t0 ? l : a; });
+    var min = Math.round((maior.t1 - maior.t0) / 60000);
+    return f.length + (f.length === 1 ? ' falha' : ' falhas') + ' de GPS (sem posição por 5 min ou mais); a maior: ' + C.hora(maior.t0, false) + ' a ' + C.hora(maior.t1, false) + ' (' + (min >= 60 ? Math.floor(min / 60) + ' h ' + (min % 60) + ' min' : min + ' min') + ').';
+  }
+
   // Localização tirada do mapa pelo responsável (migração 084): some o marcador, a trilha e a contagem; nada é apagado.
   function foraDoMapa(p) { return Boolean(p && p.dados && p.dados.fora_do_mapa_em); }
 

@@ -1070,7 +1070,8 @@
       var pessoas = trilhas.map(function (t) {
         var p = porId[t.participante_id] || {};
         return { id: t.participante_id, nome: t.nome || p.nome || '—', tipo: t.tipo || p.tipo, grupos: (p.grupos || []).map(function (g) { return g.grupo; }),
-          primeiro: t.primeiro, ultimo: t.ultimo, km: Number(t.km) || 0, n: t.n, pontos: t.pontos || [] };
+          primeiro: t.primeiro, ultimo: t.ultimo, km: Number(t.km) || 0, n: t.n,
+          pontos: raiz.TrilhaGeo ? raiz.TrilhaGeo.semPontosSoltos(t.pontos || []) : (t.pontos || []) };   // ponto solto (salto do GPS) não estica o mapa
       });
       // quem entrou na operação no dia e não mandou posição também esteve no dia
       (d.participantes || []).forEach(function (p) {

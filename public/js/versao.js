@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.7.2';
+  var NUMERO = '1.7.3';
   var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.7.3', data: '2026-11-19', itens: [
+      'Falhas de GPS não aparecem mais no mapa (nem as marcas "Sem posições a partir daqui" nem o tracejado), no painel e na tela do participante. No painel, a pessoa ganha só um aviso "⚠ GPS" na lista e um texto na ficha com quantas falhas teve e a maior.',
+      'Ponto solto (a trilha vai longe e volta: salto do GPS ou última posição ruim antes de uma falha) sai do desenho da trilha no mapa e nos relatórios: não risca mais o mapa nem estica o zoom. As posições continuam guardadas.',
+    ] },
     { versao: '1.7.2', data: '2026-11-19', itens: [
       'Formulário do IPO (Dados da ocorrência) com TODOS os campos do modelo para preencher: natureza, início das operações, tipo de meio líquido, nome, sexo, idade, origem e documento da vítima (quando não há ficha de vítima), nº de pessoas perdidas e contexto do desaparecimento, além dos que já tinha. Antes esses campos só existiam em outras telas (ou nem existiam), por isso faltavam no relatório.',
     ] },

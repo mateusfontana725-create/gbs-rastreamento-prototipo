@@ -206,6 +206,16 @@ legível, elas não aparecem.
 - Usa o plugin leaflet-rotate (CDN com SRI, em `comando.html`). Se o plugin não carregar, o painel funciona como antes (sem os
   botões de girar). O mapa não guarda o giro: ao abrir de novo, o norte volta para cima.
 
+### Falhas de GPS fora do mapa e ponto solto fora da trilha (versão 1.7.3)
+
+- **Falhas de GPS** (intervalos sem posição) **não aparecem no mapa**: saíram as marcas ○/● "Sem posições a partir daqui" e o
+  tracejado, no painel e na tela do participante. No painel, quem teve falha de 5 min ou mais ganha um aviso **⚠ GPS** na
+  lista (o texto completo ao passar o mouse) e uma linha na ficha com quantas falhas e a maior. A linha da trilha continua
+  dividida na falha (não liga os dois lados).
+- **Ponto solto:** quando a trilha vai longe (mais de 800 m) e volta logo para perto de onde estava, o ponto do meio é salto do
+  GPS ou a última posição ruim antes de uma falha: sai do desenho no mapa e nos relatórios (não risca o mapa nem estica o
+  zoom). As posições continuam guardadas no banco. Quem foi de verdade para longe (sem voltar) continua desenhado.
+
 ### Relatórios IPO e Diário, separados (versão 1.3.0)
 
 - **IPO (curto):** o IPO no modelo do CBMPR (o mesmo informe do texto do WhatsApp: local, vítima, procedimentos, recursos,

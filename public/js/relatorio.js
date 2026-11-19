@@ -699,7 +699,8 @@
 
   function elementosMapa(dados, opcoes) {
     var op = dados.operacao;
-    var trilhas = dados.trilhas || [];
+    // ponto solto (vai longe e volta: salto do GPS) não entra no desenho nem no enquadramento
+    var trilhas = (dados.trilhas || []).map(function (t) { return Object.assign({}, t, { pontos: window.TrilhaGeo ? window.TrilhaGeo.semPontosSoltos(t.pontos || []) : t.pontos }); });
     var achados = dados.diario.filter(function (e) { return e.categoria === 'encontro' && e.lat != null && /^relato_|^vitima_localizada$/.test(e.tipo); })
       .map(function (e) { return e.tipo === 'vitima_localizada' ? { lat: e.lat, lng: e.lng, letra: '+', cor: '#a21caf', raio: 13 } : { lat: e.lat, lng: e.lng, letra: '!', cor: '#ea580c' }; });
     var enquadrarTudo = [];

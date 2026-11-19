@@ -142,5 +142,22 @@ const iv2 = G.intervalosApagados(base, new Set([4, 6]), (p) => !p.na_base);
 chk(iv2.length === 1 && iv2[0].de === 3000 && iv2[0].ate === 5000, 'ponto da base (que não aparece) no meio não separa uma sequência apagada', iv2);
 chk(G.unirIntervalos([{ de: 5, ate: 8 }, { de: 1, ate: 3 }, { de: 3, ate: 6 }, { de: 20, ate: 30 }]).map((i) => i.de + '-' + i.ate).join() === '1-8,20-30', 'intervalos que se tocam ou se sobrepõem são unidos');
 
+// Ponto solto: a trilha vai longe e volta (salto do GPS ou última posição ruim antes de uma falha) — sai do desenho
+{
+  const perto = [[-22.900, -51.660], [-22.901, -51.661], [-22.902, -51.662]];
+  const longe = [-22.990, -51.600];   // ~11 km
+  const r = G.semPontosSoltos([perto[0], perto[1], longe, perto[2]]);
+  chk(r.length === 3 && !r.some((p) => p === longe), 'o ponto que vai longe e volta sai', r);
+  const obj = G.semPontosSoltos([{ lat: -22.900, lng: -51.660, t: 1 }, { lat: -22.990, lng: -51.600, t: 2 }, { lat: -22.9005, lng: -51.6605, t: 3 }]);
+  chk(obj.length === 2 && obj.every((p) => p.lat > -22.95), 'funciona com objetos { lat, lng, t }', obj);
+  const ida = [[-22.900, -51.660], [-22.930, -51.640], [-22.960, -51.620], [-22.990, -51.600]];
+  chk(G.semPontosSoltos(ida).length === 4, 'quem foi de verdade para longe (sem voltar) continua inteiro');
+  const passos = [[-22.900, -51.660], [-22.9003, -51.6602], [-22.9001, -51.6604]];
+  chk(G.semPontosSoltos(passos).length === 3, 'andar perto (menos de 800 m) não muda nada');
+  const dois = G.semPontosSoltos([perto[0], longe, perto[1], [-23.0, -51.5], perto[2]]);
+  chk(dois.length === 3, 'dois saltos seguidos saem', dois);
+  chk(G.semPontosSoltos([]).length === 0 && G.semPontosSoltos([perto[0], longe]).length === 2, 'listas curtas ficam como estão (o último ponto não tem como ser conferido)');
+}
+
 console.log('\nGeometria das trilhas: ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

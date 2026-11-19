@@ -9,10 +9,16 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.7.0';
+  var NUMERO = '1.7.1';
   var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.7.1', data: '2026-11-19', itens: [
+      'IPO completo: o relatório e o texto do WhatsApp trazem TODOS os campos do modelo do CBMPR (unidade, RGO, natureza, localidade, início, meio líquido, coordenada, nº de pessoas perdidas, sexo/idade, nome e origem da vítima, desaparecimento, acionamento, buscas preliminares, possibilidade de vida, procedimentos, contexto, recursos, efetivo, desdobramentos, órgãos de apoio, imagens e responsável). O que não foi preenchido sai como "Não apurado" (antes o campo vazio simplesmente sumia).',
+      'IPO de um dia = IPO acumulado até aquele dia, como no modelo: o efetivo e os desdobramentos trazem todos os dias até ali, e procedimentos, recursos e órgãos somam o que foi usado até ali. "Copiar IPO do dia" também.',
+      'Natureza: sem a natureza do IPO, vale o tipo da operação.',
+      'Mapa do dia centrado no local da operação: trilha ou ponto longe do local (quem estava longe da busca) não estica mais o zoom.',
+    ] },
     { versao: '1.7.0', data: '2026-11-19', itens: [
       'Corrigido: os setores sumiam do mapa do painel (problema da rotação do mapa da versão 1.5.0). Setores, trilhas desenhadas, pontos e rótulos voltaram e giram junto com o mapa.',
       'IPO: o "Responsável pelas informações" agora é quem gerou o relatório; sem quem gerou, a linha não sai (nunca mais um nome guardado qualquer).',

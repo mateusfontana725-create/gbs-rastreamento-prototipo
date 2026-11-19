@@ -224,7 +224,7 @@
         UI.el('span', { classe: 'selo ipo-dia-selo', texto: 'IPO do dia' }),
         d.vazio ? UI.el('span', { classe: 'muted', texto: 'Ainda não preenchido.' }) : d.por ? UI.el('small', { classe: 'muted', texto: 'por ' + d.por }) : null,
         UI.el('span', { classe: 'ipo-dia-acoes' }, [
-          d.vazio ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📋 Copiar', title: 'Texto do IPO deste dia para o WhatsApp', onclick: function () { IF.copiarDia(op, k); } }),
+          d.vazio ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📋 Copiar', title: 'O IPO acumulado até este dia, para o WhatsApp', onclick: function () { IF.copiarDia(op, k); } }),
           ativa ? UI.el('button', { classe: 'btn btn-pequeno' + (d.vazio ? ' btn-primario' : ''), type: 'button', texto: d.vazio ? 'Preencher' : 'Editar', onclick: function () { IF.abrirDia(op, k, { aoSalvar: depois }); } })
             : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver', onclick: function () { IF.abrirDia(op, k, { editavel: false }); } }),
         ]),
@@ -664,8 +664,9 @@
     var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a[0] * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
     return 12742000 * Math.asin(Math.sqrt(h));
   }
-  function areaDoMapa(dados, outros) {
+  function areaDoMapa(dados, outros, longeM) {
     var op = dados.operacao;
+    var LONGE = longeM || LONGE_MAPA_M;
     var ptsSetores = [];
     dados.setores.forEach(function (s) { pontosSetor(s).forEach(function (p) { ptsSetores.push(p); }); });
     var centro = null, origem = '';
@@ -681,7 +682,7 @@
     if (!centro) return null;
     var raio = RAIO_MINIMO_MAPA_M;
     ptsSetores.forEach(function (p) { raio = Math.max(raio, distanciaM(centro, p)); });
-    if (!ptsSetores.length) (outros || []).forEach(function (p) { var dm = distanciaM(centro, p); if (dm <= LONGE_MAPA_M) raio = Math.max(raio, dm); });
+    if (!ptsSetores.length) (outros || []).forEach(function (p) { var dm = distanciaM(centro, p); if (dm <= LONGE) raio = Math.max(raio, dm); });
     // enquadra o que está dentro do raio (setores, o centro e o que foi registrado ali): o mapa fica justo na área da busca
     var dentro = [centro].concat(ptsSetores).concat((outros || []).filter(function (p) { return distanciaM(centro, p) <= raio * 1.05; }));
     var fora = (outros || []).length - (dentro.length - 1 - ptsSetores.length);
@@ -712,7 +713,7 @@
     fotosMapa.forEach(function (f) { enquadrarTudo.push([f.lat, f.lng]); });
     if (op.local_lat != null) enquadrarTudo.push([op.local_lat, op.local_lng]);
     var base = { setores: dados.setores, trilhas: trilhas, manuais: manuais, pontos: dados.pontos, achados: achados, local: op.local_lat != null ? [op.local_lat, op.local_lng] : null, fundo: opcoes.fundo !== false };
-    var area = areaDoMapa(dados, enquadrarTudo);
+    var area = areaDoMapa(dados, enquadrarTudo, opcoes.longeM);
 
     return { base: base, nota: area ? area.nota : null, geral: Object.assign({ largura: 1200, altura: 760, enquadrar: area ? area.enquadrar : enquadrarTudo, fotos: fotosMapa }, base) };
   }
@@ -1021,19 +1022,9 @@
           pontos: x.pontos, fotos: [], diario: x.diario, trilhasManuais: [] });
         if (trilhasDia.length || x.setores.length || x.pontos.length) {
           passo('Desenhando o mapa do dia ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
-          var g = elementosMapa(copia, { fundo: true });
-          // zoom: os setores do dia, as trilhas do dia e os pontos do dia, juntos (menos o que estiver a mais de 15 km do conjunto)
-          var alvo = [];
-          copia.setores.forEach(function (st) { pontosSetor(st).forEach(function (pt) { alvo.push(pt); }); });
-          var soltos = [];
-          trilhasDia.forEach(function (t) { (t.pontos || []).forEach(function (pt) { soltos.push(pt); }); });
-          copia.pontos.forEach(function (pt) { soltos.push([pt.lat, pt.lng]); });
-          var centro = (alvo.length ? alvo : soltos.length ? soltos : [])[0];
-          if (centro) {
-            if (alvo.length) { var cLat = 0, cLng = 0; alvo.forEach(function (pt) { cLat += pt[0]; cLng += pt[1]; }); centro = [cLat / alvo.length, cLng / alvo.length]; }
-            var enq = alvo.concat(soltos.filter(function (pt) { return distanciaM(centro, pt) <= LONGE_MAPA_M; }));
-            if (enq.length) g.geral.enquadrar = enq;
-          }
+          // Enquadramento: centrado no LOCAL DA OPERAÇÃO (o ponto de referência), com raio que cobre os setores do dia. Trilha ou
+          // ponto longe do local (quem estava longe da busca) não estica o mapa. Sem setores no dia: só o que está a até 3 km do local.
+          var g = elementosMapa(copia, { fundo: true, longeM: 3000 });
           // ajuste 0,66: o conjunto ocupa dois terços do mapa (zoom um pouco mais aberto que o enquadramento justo)
           recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { ajuste: 0.66 }, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
         }
@@ -1083,7 +1074,7 @@
     var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
-      dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias),
+      dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (modo === 'dia' ? ' · acumulado até o dia' : ''), acumulado: modo === 'dia',
       titulo: 'IPO ' + (ini === fim ? brDia(ini) : brDia(ini) + ' a ' + brDia(fim)) + ' — ' + op.codigo,
       marca: 'IPO ' + (ini === fim ? brDia(ini).slice(0, 5) : brDia(ini).slice(0, 5) + ' A ' + brDia(fim).slice(0, 5)),
     });

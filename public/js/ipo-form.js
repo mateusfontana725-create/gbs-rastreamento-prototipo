@@ -266,7 +266,7 @@
     return op.ipo || {};
   }
   async function copiarDia(op, dia) {
-    try { await mostrarTexto(I.textoWhatsApp(op, Object.assign(await dadosExtras(op), { dia: dia }))); }
+    try { await mostrarTexto(I.textoWhatsApp(op, Object.assign(await dadosExtras(op), { ate: dia }))); }
     catch (e) { UI.aviso('Não foi possível montar o IPO do dia: ' + (e.message || e), 'erro', 7000); }
   }
   // opcoes: { aoSalvar(op), editavel }
@@ -349,7 +349,7 @@
     } });
     var titulo = el('span', { texto: 'IPO do dia' });
     var form = el('form', { classe: 'form-padrao form-ipo form-ipo-dia', novalidate: true }, [
-      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [titulo, UI.dica('Um IPO por dia, junto com o diário: quem chega no dia seguinte vê o que foi feito e como a busca ficou. Os dados gerais (vítima, local, natureza) ficam no cartão "Dados da ocorrência", no topo do IPO (Diário). "Copiar IPO do dia" monta o texto para o WhatsApp só com este dia.')]),
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica' }, [titulo, UI.dica('Um IPO por dia, junto com o diário: quem chega no dia seguinte vê o que foi feito e como a busca ficou. Os dados gerais (vítima, local, natureza) ficam no cartão "Dados da ocorrência", no topo do IPO (Diário). "Copiar IPO do dia" monta o IPO completo, acumulado até este dia (todos os campos do modelo; o que falta sai como "Não apurado"), para colar no grupo.')]),
       UI.grade([UI.campo('Dia', campoDia, { para: 'ipod-dia' })]),
       UI.secao('O que foi feito no dia', [feito, antigos]),
       UI.secao('Efetivo do dia', [UI.grade([
@@ -369,7 +369,7 @@
         el('button', { classe: 'btn', type: 'button', texto: editavel ? 'Cancelar' : 'Fechar', onclick: function () { fechar(); } }),
         el('button', { classe: 'btn', type: 'button', id: 'ipod-copiar', texto: '📋 Copiar IPO do dia', onclick: function () {
           var prev = I.gravarDia(op.ipo, ler());
-          mostrarTexto(I.textoWhatsApp(Object.assign({}, op, { ipo: prev }), Object.assign({}, extra, { dia: campoDia.value })));
+          mostrarTexto(I.textoWhatsApp(Object.assign({}, op, { ipo: prev }), Object.assign({}, extra, { ate: campoDia.value })));
         } }),
         editavel ? el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'ipod-salvar', texto: 'Salvar IPO do dia' }) : null,
       ]),

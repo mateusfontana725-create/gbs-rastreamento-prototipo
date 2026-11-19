@@ -94,7 +94,7 @@ teste('recursos, efetivo por dia, desdobramentos (IPO + diário) e órgãos de a
   assert.ok(iD > 0 && texto.indexOf('02/11/2026: 02 BBMM para primeira resposta.') > iD && texto.indexOf('04/11/2026: Continuidade com K9') > texto.indexOf('03/11/2026: Sgt. Berzotti'));
   assert.ok(texto.includes('*Órgãos de Apoio:*') && texto.includes('Helicóptero BPMOA.'));
   // o responsável é quem gerou o IPO (extra.responsavel), nunca um nome guardado no cadastro
-  assert.ok(!texto.includes('Responsável pelas informações') && !texto.includes('Cb. Alves/GBS'), 'sem quem gerou: a linha não sai e o nome guardado não aparece');
+  assert.ok(texto.trim().endsWith('*Responsável pelas informações:* Não apurado') && !texto.includes('Cb. Alves/GBS'), 'sem quem gerou: Não apurado, e o nome guardado não aparece');
   const comQuem = I.textoWhatsApp(op, { vitimas: [], diario: [], responsavel: 'Sgt. Quem Gerou' });
   assert.ok(comQuem.trim().endsWith('*Responsável pelas informações:* Sgt. Quem Gerou'), 'quem gerou');
   assert.ok(!comQuem.includes('Cb. Alves/GBS'));
@@ -264,6 +264,61 @@ teste('IPO e Diário: sem trilha, sem setor e sem ponto no dia, essas seções (
   assert.ok(!/Trilhas feitas|Setores varridos|Mapa do dia|Pontos de interesse/.test(ipoTx), 'IPO sem nada do dia: sem essas seções');
   const diaTx = textos(RP.montarDiarioDias(d, {}, { dias, subtitulo: 'x', titulo: 'D', marca: 'D' }).content).join(' | ');
   assert.ok(!/Trilhas do dia, por pessoa|Setores marcados no dia|Nenhum setor|Ninguém com posição/.test(diaTx), 'Diário sem nada do dia: sem seções vazias nem avisos de "nenhum"');
+});
+
+teste('o IPO traz TODOS os campos do modelo; o que não foi preenchido sai como "Não apurado"', () => {
+  const vazio = { codigo: 'OP', status: 'ativa', ipo: {} };
+  const t = I.textoWhatsApp(vazio, { vitimas: [], diario: [] });
+  const campos = ['Localidade/Município/Região', 'Data/hora do início das operações', 'Coord. Geo. de Referência (último avistamento)', 'Nº de pessoas perdidas',
+    'Sexo/Idade da(s) vítima(s)', 'Nome da vítima', 'Origem da(s) vítima(s)', 'Data/Horário provável do desaparecimento', 'Data/Horário do acionamento do CB',
+    'Buscas preliminares realizadas em casas de parentes, hospitais, etc.?', 'Possibilidade real de vida?', 'Procedimentos de Busca sendo realizados',
+    'Contexto/histórico/cenário do desaparecimento', 'Recursos CB deslocados e sendo utilizados', 'Quantidade de BMs diretamente envolvidos na resposta',
+    'Desdobramentos/situação atual', 'Órgãos de Apoio', 'Imagens anexas junto a esta mensagem?', 'Responsável pelas informações'];
+  campos.forEach((c) => assert.ok(t.includes('*' + c), 'falta o campo: ' + c));
+  ['Unidade: Não apurado', 'RGO: Não apurado', 'Natureza: Não apurado'].forEach((c) => assert.ok(t.includes(c), 'falta ' + c));
+  // campos de texto vazios: "Não apurado"
+  ['*Localidade/Município/Região:* Não apurado', '*Nome da vítima:* Não apurado', '*Procedimentos de Busca sendo realizados:* Não apurado', '*Recursos CB deslocados e sendo utilizados:* Não apurado',
+    '*Quantidade de BMs diretamente envolvidos na resposta:* Não apurado', '*Desdobramentos/situação atual:* Não apurado', '*Órgãos de Apoio:* Não apurado'].forEach((c) => assert.ok(t.includes(c), 'sem "Não apurado" em: ' + c));
+  // natureza aquática: o meio líquido também aparece (Não apurado se faltar); terrestre pura: não se aplica
+  assert.ok(I.textoWhatsApp({ ipo: { natureza: 'BUSCA AQUÁTICA – PESSOA' } }, {}).includes('*Tipo de meio líquido:* Não apurado'));
+  assert.ok(!I.textoWhatsApp({ ipo: { natureza: 'BUSCA TERRESTRE – PESSOA' } }, {}).includes('Tipo de meio líquido'));
+  // IPO de um dia (relatório): mesmos campos
+  const dia = I.textoWhatsApp(vazio, { dia: '2026-11-04', responsavel: 'Sgt. X' });
+  campos.forEach((c) => assert.ok(dia.includes('*' + c), 'IPO do dia sem o campo: ' + c));
+  assert.ok(dia.includes('*Responsável pelas informações:* Sgt. X'));
+  // dados gerais do Diário continuam sem o vazio
+  assert.ok(!I.itens(vazio, { geral: true }).some((x) => x.valor === 'Não apurado'));
+});
+teste('relatório IPO (PDF): todos os campos do modelo, com "Não apurado"', () => {
+  const d = { gerado_em: new Date().toISOString(), gerado_por_nome: '', operacao: { codigo: 'OP', status: 'ativa', ipo: {} }, setores: [], participantes: [], pontos: [], fotos: [], vitimas: [], grupos: [], diario: [] };
+  const dias = RP.separarDias(d, [], RP.diasEntre('2026-11-04', '2026-11-04'));
+  const tx = textos(RP.montarIpo(d, {}, { dias, subtitulo: 'x', titulo: 'IPO', marca: 'IPO' }).content).join(' | ');
+  ['Localidade/Município/Região', 'Nome da vítima', 'Procedimentos de Busca sendo realizados', 'Recursos CB deslocados e sendo utilizados', 'Quantidade de BMs diretamente envolvidos na resposta',
+    'Desdobramentos/situação atual', 'Órgãos de Apoio', 'Imagens anexas junto a esta mensagem?', 'Responsável pelas informações'].forEach((c) => assert.ok(tx.includes(c), 'PDF sem o campo: ' + c));
+  assert.ok((tx.match(/Não apurado/g) || []).length >= 10, 'vários "Não apurado"');
+});
+
+teste('IPO acumulado até o dia (modelo do CBMPR): efetivo e desdobramentos trazem todos os dias até ali', () => {
+  const op2 = Object.assign({}, op, { ipo: Object.assign({}, op.ipo, { dias: [{ dia: '2026-11-03', procedimentos: ['aeronave'], recursos: 'Drone M30', orgaos: 'Defesa Civil de Guaraci', situacao: 'Seguir pela margem direita' }, { dia: '2026-11-05', procedimentos: ['scuba'], recursos: 'Moto-bomba', orgaos: 'Guarda Municipal', situacao: 'Suspender' }] }) });
+  const ate3 = I.textoWhatsApp(op2, { vitimas, diario: [], ate: '2026-11-03' });
+  assert.ok(ate3.includes('*IPO do dia 03/11/2026 (acumulado)*'));
+  assert.ok(ate3.includes('02/11/2026: 02 BBMM - CB. Rolândia.') && ate3.includes('03/11/2026: 03 BBMM'), 'efetivo dos dias 2 e 3');
+  assert.ok(ate3.includes('02/11/2026: 02 BBMM para primeira resposta.') && ate3.includes('03/11/2026: Sgt. Berzotti'), 'desdobramentos dos dias 2 e 3');
+  assert.ok(ate3.includes('Busca com aeronave') && ate3.includes('Defesa Civil de Guaraci') && ate3.includes('Drone M30'), 'o que foi usado até o dia 3');
+  assert.ok(!ate3.includes('Mergulho com equipamento SCUBA') && !ate3.includes('Guarda Municipal') && !ate3.includes('Moto-bomba'), 'nada do dia 5 antes do dia 5');
+  assert.ok(ate3.includes('Seguir pela margem direita') && !ate3.includes('Suspender'), 'a situação é a do próprio dia');
+  const ate2 = I.textoWhatsApp(op2, { vitimas, diario: [], ate: '2026-11-02' });
+  assert.ok(ate2.includes('02/11/2026: 02 BBMM - CB. Rolândia.') && !ate2.includes('03/11/2026: 03 BBMM') && !ate2.includes('03/11/2026: Sgt. Berzotti'), 'até o dia 2: só o dia 2');
+  const ate5 = I.textoWhatsApp(op2, { vitimas, diario: [], ate: '2026-11-05' });
+  assert.ok(ate5.includes('Mergulho com equipamento SCUBA') && ate5.includes('Guarda Municipal') && ate5.includes('Suspender') && ate5.includes('03/11/2026: 03 BBMM'));
+});
+
+teste('natureza: sem a do IPO, vem do tipo da operação', () => {
+  assert.ok(I.textoWhatsApp({ tipo: 'terrestre', ipo: {} }, {}).includes('*Natureza: BUSCA TERRESTRE – PESSOA*'));
+  assert.ok(I.textoWhatsApp({ tipo: 'aquatica', ipo: {} }, {}).includes('*Natureza: BUSCA AQUÁTICA – PESSOA*') && I.textoWhatsApp({ tipo: 'aquatica', ipo: {} }, {}).includes('Tipo de meio líquido'));
+  assert.ok(I.textoWhatsApp({ tipo: 'outras', tipo_outro: 'Resgate em altura', ipo: {} }, {}).includes('*Natureza: Resgate em altura*'));
+  assert.ok(I.textoWhatsApp({ tipo: 'terrestre', ipo: { natureza: 'SARP – AERONAVE REMOTAMENTE PILOTADA' } }, {}).includes('*Natureza: SARP'), 'a do IPO vence');
+  assert.ok(I.textoWhatsApp({ ipo: {} }, {}).includes('Natureza: Não apurado'));
 });
 
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }

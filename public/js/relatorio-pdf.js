@@ -519,10 +519,11 @@
 
   // Dados da ocorrência, no formato do IPO do CBMPR (Ipo.itens: a mesma montagem do texto que vai para o WhatsApp).
   // As fichas das vítimas (com foto) vêm logo depois do informe.
-  function blocoIpo(d, dia) {
+  // dia: 'AAAA-MM-DD' ou nulo; acumulado: o IPO acumulado até o dia (como o modelo do CBMPR) em vez de só o dia
+  function blocoIpo(d, dia, acumulado) {
     var op = d.operacao;
     var I = window.Ipo;
-    var lista = I.itens(op, { vitimas: d.vitimas || [], diario: d.diario || [], dia: dia || null, responsavel: d.gerado_por_nome || '', coordenada: function (lat, lng) { return coord(lat, lng); } });
+    var lista = I.itens(op, { vitimas: d.vitimas || [], diario: d.diario || [], dia: acumulado ? null : (dia || null), ate: acumulado ? dia : null, responsavel: d.gerado_por_nome || '', coordenada: function (lat, lng) { return coord(lat, lng); } });
     var out = [], fichaAtual = [];
     function fecharFicha() { if (fichaAtual.length) { out.push(ficha(fichaAtual)); fichaAtual = []; } }
     lista.forEach(function (x) {
@@ -1287,7 +1288,7 @@
       if (k) topo.pageBreak = 'before';
       conteudo.push(topo);
       // o informe do dia, no modelo (cabeçalho, local, vítima, procedimentos, recursos, efetivo, desdobramentos, órgãos)
-      conteudo = conteudo.concat(I ? blocoIpo(d, x.dia) : []);
+      conteudo = conteudo.concat(I ? blocoIpo(d, x.dia, p.acumulado) : []);
       // mapa do dia (padrão em todo relatório): tudo o que foi feito naquele dia (trilhas, pontos e setores marcados); sem nada, sem mapa
       var mapaDia = recursos.mapasDia && recursos.mapasDia[x.dia];
       if (mapaDia) {

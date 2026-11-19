@@ -225,6 +225,16 @@ legível, elas não aparecem.
 - **Só aparece o que existe:** "trilha" é quem tem linha desenhada no dia (pontos só dentro da base, ou apagados com a
   borracha, não contam); sem trilha, setor ou ponto no dia, a seção correspondente não aparece. O IPO não tem mais "Setores
   varridos".
+- **O IPO sai COMPLETO, com "Não apurado":** o relatório IPO e o texto do WhatsApp trazem todos os campos do modelo do CBMPR
+  (unidade, RGO, natureza, localidade, início, meio líquido, coordenada, nº de pessoas perdidas, sexo/idade, nome e origem da
+  vítima, desaparecimento, acionamento, buscas preliminares, possibilidade de vida, procedimentos, contexto, recursos, efetivo,
+  desdobramentos, órgãos de apoio, imagens e responsável). O que não foi preenchido sai como **Não apurado**. De onde vem cada
+  um: natureza/local/início/contexto em **Dados da operação** (a natureza, se faltar, vem do tipo da operação); nome, sexo,
+  idade e origem da vítima, e o nº de pessoas perdidas, das **fichas de vítima**; o resto, do **IPO (Diário)**.
+- **IPO de um dia = acumulado até o dia** (como o modelo): o efetivo e os desdobramentos trazem todos os dias até ali e os
+  procedimentos, recursos e órgãos somam o que foi usado até ali; vale também para "Copiar IPO do dia". Nos relatórios de
+  período ou de tudo, cada dia sai só com o seu.
+- **Mapa do dia centrado no local da operação:** o raio cobre os setores do dia; trilha ou ponto longe do local não estica o zoom.
 - **Responsável pelas informações (IPO):** é sempre **quem gerou** o relatório (ou copiou o texto do IPO); sem quem gerou, a
   linha não sai. O campo de texto "responsável pelas informações" saiu do cadastro e da tela do IPO.
 - Os dois têm **um dia, período (de… até…) ou tudo até o momento**, separado dia a dia (cada dia numa página). O IPO (Diário)

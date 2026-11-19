@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.8.1';
+  var NUMERO = '1.8.2';
   var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.8.2', data: '2026-11-19', itens: [
+      'IPO: os pontos de interesse do dia ganham um mapa só com eles, numerados, e a tabela traz o número e a coordenada de cada ponto (além do tipo, nome e descrição).',
+    ] },
     { versao: '1.8.1', data: '2026-11-19', itens: [
       'Quilômetros percorridos mais reais: o dashboard e os relatórios contam o TERRENO percorrido, em que cada pedaço de chão conta uma vez. Quem fica andando em volta do mesmo lugar, o grupo que anda junto e a ida e volta pelo mesmo caminho não multiplicam mais os quilômetros. A soma do que cada pessoa andou continua no dashboard, em letra menor.',
       'O km de cada pessoa no painel e no dashboard (ficha, lista de trilhas) também não soma de novo as voltas no mesmo lugar.',

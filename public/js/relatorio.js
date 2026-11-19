@@ -1072,6 +1072,23 @@
         }
       }
     }
+    // mapa SÓ dos pontos de interesse do dia (o IPO pede): os mesmos números da tabela, para saber onde está cada um
+    if (opcoes.mapaPontos) {
+      recursos.mapasPontosDia = {};
+      for (var mp = 0; mp < dias.length; mp++) {
+        var pts = dias[mp].pontos.filter(function (p) { return p.lat != null && p.lng != null; }).slice(0, 15);
+        if (!pts.length) continue;
+        passo('Desenhando os pontos do dia ' + dias[mp].dia.split('-').reverse().slice(0, 2).join('/') + '…');
+        var marc = dias[mp].pontos.slice(0, 15).map(function (p, i) { return p.lat != null && p.lng != null ? Object.assign({}, p, { icone: String(i + 1) }) : null; }).filter(Boolean);
+        var enqP = pts.map(function (p) { return [p.lat, p.lng]; });
+        // um ponto só (ou todos juntos): uma margem de ~250 m em volta, para o zoom não ir ao máximo
+        var la = enqP.map(function (q) { return q[0]; }), ln = enqP.map(function (q) { return q[1]; });
+        if (Math.max.apply(null, la) - Math.min.apply(null, la) < 0.004 && Math.max.apply(null, ln) - Math.min.apply(null, ln) < 0.004) {
+          enqP.push([la[0] + 0.00225, ln[0] + 0.00225], [la[0] - 0.00225, ln[0] - 0.00225]);
+        }
+        recursos.mapasPontosDia[dias[mp].dia] = await desenharMapa({ largura: 900, altura: 460, enquadrar: enqP, ajuste: 0.75, pontos: marc, setores: [], trilhas: [], manuais: [], fundo: true });
+      }
+    }
     // fotos do dia (só o IPO pede): até 6 por dia, pequenas
     if (opcoes.fotos) {
       recursos.fotosDia = {};
@@ -1119,7 +1136,7 @@
   // pontos do dia. Só baixa (o IPO se preenche e se corrige ao longo do dia; o texto do WhatsApp sai do IPO (Diário)).
   async function gerarIpoRelatorio(op, ini, fim, modo, passo, mapas) {
     passo = passo || function () {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: true });
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: true, mapaPontos: true });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (modo === 'dia' ? ' · acumulado até o dia' : ''), acumulado: modo === 'dia',

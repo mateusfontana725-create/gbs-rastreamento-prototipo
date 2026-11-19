@@ -1331,14 +1331,18 @@
       }
       // pontos de interesse do dia (perigo, vestígio, o que foi achado ou descartado): nome e a descrição, resumida
       if (x.pontos.length) {
-        conteudo.push(subtitulo('Pontos de interesse do dia'));
-        var linhas = x.pontos.slice(0, 15).map(function (q) {
+        // mapa só com os pontos (numerados como na tabela) e a tabela com a coordenada; o título não fica sozinho no fim da página
+        var mapaP = recursos.mapasPontosDia && recursos.mapasPontosDia[x.dia];
+        if (mapaP) conteudo.push({ stack: [subtitulo('Pontos de interesse do dia'), { image: mapaP, width: 515, margin: [0, 0, 0, 2] }, nota('Os números no mapa são os da tabela.')], unbreakable: true });
+        else conteudo.push(subtitulo('Pontos de interesse do dia'));
+        var linhas = x.pontos.slice(0, 15).map(function (q, i) {
           var desc = String(q.descricao || '').replace(/\s+/g, ' ').trim();
           if (desc.length > 160) desc = desc.slice(0, 157) + '…';
-          return [hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria,
-            { stack: [{ text: q.titulo || '—', style: 'td', bold: true }, desc ? { text: desc, style: 'tdSuave' } : null].filter(Boolean) }];
+          return [{ text: String(i + 1), style: 'td', bold: true }, hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria,
+            { stack: [{ text: q.titulo || '—', style: 'td', bold: true }, desc ? { text: desc, style: 'tdSuave' } : null].filter(Boolean) },
+            { text: q.lat != null && q.lng != null ? Number(q.lat).toFixed(6) + '\n' + Number(q.lng).toFixed(6) : '—', style: 'tdMono' }];
         });
-        conteudo.push(tabela(['Hora', 'Tipo', 'Ponto e descrição'], linhas, [36, 96, '*']));
+        conteudo.push(tabela(['Nº', 'Hora', 'Tipo', 'Ponto e descrição', 'Coordenada'], linhas, [18, 32, 80, '*', 70]));
         if (x.pontos.length > 15) conteudo.push(nota('+ ' + (x.pontos.length - 15) + ' outro(s) ponto(s) neste dia (no relatório Diário).'));
       }
       // fotos do dia: miniaturas (até 6), com quem tirou e a hora

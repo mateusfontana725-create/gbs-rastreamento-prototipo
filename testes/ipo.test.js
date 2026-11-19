@@ -246,7 +246,7 @@ teste('relatório IPO (curto): informe do dia + militares (graduação e QRA), s
   assert.ok(!/Beto Voluntário/.test(tx) && /Voluntários e civis em campo: 1/.test(tx), 'civis só em número, sem nome');
   assert.ok(!/Setores varridos/.test(tx), 'não existe mais "Setores varridos" (o que foi varrido é visto pelas trilhas)');
   assert.ok(/Mapa do dia/.test(tx) && !/Setores marcados no mapa/.test(tx), 'mapa do dia sem a lista de setores (o que foi feito está nas trilhas)');
-  assert.ok(/Ponto e descrição/.test(tx), 'pontos com a descrição');
+  assert.ok(/Ponto e descrição/.test(tx) && /Coordenada/.test(tx), 'pontos com a descrição e a coordenada');
   assert.ok(/Responsável pelas informações/.test(tx) && /Sgt\. Quem Gerou/.test(tx) && !/Cb\. Alves\/GBS/.test(tx), 'responsável = quem gerou o relatório');
   assert.ok(/Trilhas feitas/.test(tx) && /Terreno percorrido/.test(tx) && !/4,1 km/.test(tx) && /Pessoas com trilha/.test(tx), 'trilhas feitas: terreno (não a soma 3,1 + 1 das pessoas)');
   assert.ok(/Pontos de interesse do dia/.test(tx) && /Boné encontrado/.test(tx), 'pontos do dia');

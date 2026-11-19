@@ -1006,11 +1006,39 @@
     var tr = await trilhasDosDias(op, ini, fim);
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
     var recursos = { logo: await carregarLogo(), mapasDia: {} };
-    // Mapas (satélite). O MAPA DO DIA é padrão em todo relatório: tudo o que foi feito naquele dia (as trilhas, os pontos e os
-    // setores marcados), num zoom que pega tudo; sem nada no dia, sem mapa. Opcional (opcoes.mapas.trilhas): um mapa para
-    // cada trilha do dia (uma por pessoa). Não há mapa por setor: o setor mostra onde foi marcado; o que foi varrido está nas trilhas.
+    // Mapas (satélite). O MAPA DO DIA é padrão em todo relatório: o que foi FEITO naquele dia — as trilhas (em trechos: a
+    // linha não liga os lados de uma falha de GPS) e os pontos do dia —, com o zoom nelas, como o filtro do dia no painel.
+    // Setores não entram (podem ter sido criados em outro dia; o que foi feito está nas trilhas). Só o que está a até 5 km do
+    // local da operação entra no desenho e no zoom (quem estava longe da busca não estica o mapa nem risca até lá).
+    // Opcional (opcoes.mapas.trilhas): um mapa para cada trilha do dia (uma por pessoa).
     var querTrilhas = Boolean(opcoes.mapas && opcoes.mapas.trilhas);
     recursos.mapasTrilhaDia = {};
+    var RAIO_DIA_M = 5000;
+    var op0 = dados.operacao || {};
+    var baseOp = (dados.pontos || []).filter(function (p) { return p.categoria === 'BASE' && p.lat != null; })[0];
+    var referencia = op0.local_lat != null ? [op0.local_lat, op0.local_lng] : baseOp ? [baseOp.lat, baseOp.lng] : null;
+    // trechos só com o que está perto da referência (cortando onde sai do raio)
+    function trechosPerto(segs, ref) {
+      if (!ref) return segs;
+      var out = [];
+      segs.forEach(function (sg) {
+        var atual = [];
+        sg.forEach(function (pt) {
+          if (distanciaM(ref, pt) <= RAIO_DIA_M) atual.push(pt);
+          else { if (atual.length > 1) out.push(atual); atual = []; }
+        });
+        if (atual.length > 1) out.push(atual);
+      });
+      return out;
+    }
+    function referenciaDoDia(x) {
+      if (referencia) return referencia;
+      var todos = [].concat.apply([], x.trilhas.map(function (q) { return q.pontos; }));
+      if (!todos.length) return null;
+      var lat = todos.map(function (p) { return p[0]; }).sort(function (a, b) { return a - b; })[Math.floor(todos.length / 2)];
+      var lng = todos.map(function (p) { return p[1]; }).sort(function (a, b) { return a - b; })[Math.floor(todos.length / 2)];
+      return [lat, lng];   // sem local da operação nem base: a mediana das trilhas do dia
+    }
     var totalMapas = dias.reduce(function (a, x) { return a + 1 + (querTrilhas ? x.trilhas.length : 0); }, 0);
     var tam = totalMapas > 60 ? [600, 340] : totalMapas > 25 ? [760, 430] : [900, 520];   // muitos mapas: cada um sai menor, o PDF não fica gigante
     var feitos = 0;
@@ -1018,25 +1046,44 @@
       for (var k = 0; k < dias.length; k++) {
         var x = dias[k];
         var rotuloDia = x.dia.split('-').reverse().slice(0, 2).join('/');
-        var trilhasDia = x.trilhas.map(function (q) { return { participante_id: q.id, tipo: q.tipo, pontos: q.pontos }; });
-        var copia = Object.assign({}, dados, { setores: x.setores.map(function (z) { return z.setor; }), trilhas: trilhasDia,
-          pontos: x.pontos, fotos: [], diario: x.diario, trilhasManuais: [] });
-        if (trilhasDia.length || x.setores.length || x.pontos.length) {
+        var ref = referenciaDoDia(x);
+        var trilhasDia = [];
+        x.trilhas.forEach(function (q) { trechosPerto(q.segmentos || [q.pontos], ref).forEach(function (sg) { trilhasDia.push({ participante_id: q.id, tipo: q.tipo, pontos: sg }); }); });
+        var pontosDia = x.pontos.filter(function (p) { return !ref || distanciaM(ref, [p.lat, p.lng]) <= RAIO_DIA_M; });
+        var copia = Object.assign({}, dados, { setores: [], trilhas: trilhasDia, pontos: pontosDia, fotos: [], diario: x.diario, trilhasManuais: [] });
+        if (trilhasDia.length || pontosDia.length) {
           passo('Desenhando o mapa do dia ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
-          // Enquadramento: centrado no LOCAL DA OPERAÇÃO (o ponto de referência), com raio que cobre os setores do dia. Trilha ou
-          // ponto longe do local (quem estava longe da busca) não estica o mapa. Sem setores no dia: só o que está a até 3 km do local.
-          var g = elementosMapa(copia, { fundo: true, longeM: 3000 });
-          // ajuste 0,66: o conjunto ocupa dois terços do mapa (zoom um pouco mais aberto que o enquadramento justo)
-          recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { ajuste: 0.66 }, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
+          var g = elementosMapa(copia, { fundo: true, longeM: RAIO_DIA_M });
+          var enq = [];
+          trilhasDia.forEach(function (t) { t.pontos.forEach(function (pt) { enq.push(pt); }); });
+          pontosDia.forEach(function (p) { enq.push([p.lat, p.lng]); });
+          if (enq.length) g.geral.enquadrar = enq;   // zoom no que foi feito no dia (já sem o que está longe)
+          recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { ajuste: 0.85 }, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
         }
         if (querTrilhas) {
           for (var n = 0; n < x.trilhas.length; n++) {
             var q = x.trilhas[n];
+            var segsQ = trechosPerto(q.segmentos || [q.pontos], ref);
+            if (!segsQ.length) continue;
             passo('Desenhando a trilha de ' + q.nome + ' em ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
-            var gt = elementosMapa(Object.assign({}, copia, { trilhas: [{ participante_id: q.id, tipo: q.tipo, pontos: q.pontos }], pontos: [], setores: [] }), { fundo: true });
-            recursos.mapasTrilhaDia[x.dia + '|' + q.id] = await desenharMapa(Object.assign({}, gt.base, { largura: tam[0], altura: tam[1], enquadrar: q.pontos, ajuste: 0.7 }));
+            var gt = elementosMapa(Object.assign({}, copia, { trilhas: segsQ.map(function (sg) { return { participante_id: q.id, tipo: q.tipo, pontos: sg }; }), pontos: [], setores: [] }), { fundo: true });
+            recursos.mapasTrilhaDia[x.dia + '|' + q.id] = await desenharMapa(Object.assign({}, gt.base, { largura: tam[0], altura: tam[1], enquadrar: [].concat.apply([], segsQ), ajuste: 0.85 }));
           }
         }
+      }
+    }
+    // fotos do dia (só o IPO pede): até 6 por dia, pequenas
+    if (opcoes.fotos) {
+      recursos.fotosDia = {};
+      for (var f = 0; f < dias.length; f++) {
+        var lista = dias[f].fotos.filter(function (ft) { return ft.caminho; }).slice(0, 6);
+        var imgs = [];
+        for (var h = 0; h < lista.length; h++) {
+          passo('Baixando as fotos do dia ' + dias[f].dia.split('-').reverse().slice(0, 2).join('/') + ' (' + (h + 1) + '/' + lista.length + ')…');
+          var url = await fotoReduzida('fotos', lista[h].caminho, 500);
+          if (url) imgs.push({ imagem: url, legenda: lista[h].legenda || '', autor: lista[h].autor_nome || '', em: lista[h].capturada_em });
+        }
+        if (imgs.length) recursos.fotosDia[dias[f].dia] = { imagens: imgs, total: dias[f].fotos.length };
       }
     }
     return { dados: dados, dias: dias, recursos: recursos, aviso: tr.aviso };
@@ -1072,7 +1119,7 @@
   // pontos do dia. Só baixa (o IPO se preenche e se corrige ao longo do dia; o texto do WhatsApp sai do IPO (Diário)).
   async function gerarIpoRelatorio(op, ini, fim, modo, passo, mapas) {
     passo = passo || function () {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas });
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: true });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (modo === 'dia' ? ' · acumulado até o dia' : ''), acumulado: modo === 'dia',

@@ -1069,14 +1069,21 @@
       var trilhas = (trilhasDias || []).filter(function (t) { return t.dia === k; });
       var pessoas = trilhas.map(function (t) {
         var p = porId[t.participante_id] || {};
-        return { id: t.participante_id, nome: t.nome || p.nome || '—', tipo: t.tipo || p.tipo, grupos: (p.grupos || []).map(function (g) { return g.grupo; }),
-          primeiro: t.primeiro, ultimo: t.ultimo, km: Number(t.km) || 0, n: t.n,
-          pontos: raiz.TrilhaGeo ? raiz.TrilhaGeo.semPontosSoltos(t.pontos || []) : (t.pontos || []) };   // ponto solto (salto do GPS) não estica o mapa
+        var pessoa = { id: t.participante_id, nome: t.nome || p.nome || '—', tipo: t.tipo || p.tipo, grupos: (p.grupos || []).map(function (g) { return g.grupo; }),
+          primeiro: t.primeiro, ultimo: t.ultimo, km: Number(t.km) || 0, n: t.n };
+        // trechos (migração 085): a linha NÃO liga os dois lados de uma falha de GPS; sem eles (banco antigo), um trecho só.
+        // Ponto solto (vai longe e volta: salto do GPS) sai de cada trecho.
+        var G = raiz.TrilhaGeo;
+        var segs = (Array.isArray(t.segmentos) && t.segmentos.length ? t.segmentos : [t.pontos || []])
+          .map(function (sg) { return G ? G.semPontosSoltos(sg) : sg; }).filter(function (sg) { return sg.length > 1; });
+        pessoa.segmentos = segs;
+        pessoa.pontos = [].concat.apply([], segs);
+        return pessoa;
       });
       // quem entrou na operação no dia e não mandou posição também esteve no dia
       (d.participantes || []).forEach(function (p) {
         if (noDia(p.entrou_em) && !pessoas.some(function (x) { return x.id === p.id; })) {
-          pessoas.push({ id: p.id, nome: p.nome, tipo: p.tipo, grupos: (p.grupos || []).map(function (g) { return g.grupo; }), primeiro: p.entrou_em, ultimo: null, km: 0, n: 0, pontos: [], semPosicao: true });
+          pessoas.push({ id: p.id, nome: p.nome, tipo: p.tipo, grupos: (p.grupos || []).map(function (g) { return g.grupo; }), primeiro: p.entrou_em, ultimo: null, km: 0, n: 0, pontos: [], segmentos: [], semPosicao: true });
         }
       });
       pessoas.sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
@@ -1290,13 +1297,12 @@
       conteudo.push(topo);
       // o informe do dia, no modelo (cabeçalho, local, vítima, procedimentos, recursos, efetivo, desdobramentos, órgãos)
       conteudo = conteudo.concat(I ? blocoIpo(d, x.dia, p.acumulado) : []);
-      // mapa do dia (padrão em todo relatório): tudo o que foi feito naquele dia (trilhas, pontos e setores marcados); sem nada, sem mapa
+      // mapa do dia (padrão em todo relatório): o que foi feito naquele dia (trilhas e pontos), com o zoom nelas; sem nada, sem mapa
       var mapaDia = recursos.mapasDia && recursos.mapasDia[x.dia];
       if (mapaDia) {
         conteudo.push(subtitulo('Mapa do dia'));
         conteudo.push({ image: mapaDia, fit: [515, 330], margin: [0, 2, 0, 2] });
         conteudo.push(legendaMapa());
-        if (x.setores.length) conteudo.push(nota('Setores marcados no mapa: ' + x.setores.map(function (z) { return z.setor.nome; }).join(', ') + '.'));
       }
       // militares: só graduação e QRA
       conteudo.push(subtitulo('Militares do dia'));
@@ -1314,13 +1320,31 @@
           if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + kmTexto(q.km), style: 'dia', headlineLevel: 2 }, { image: mt, width: 380, margin: [0, 2, 0, 8] }], unbreakable: true });
         });
       }
-      // pontos de interesse do dia
+      // pontos de interesse do dia (perigo, vestígio, o que foi achado ou descartado): nome e a descrição, resumida
       if (x.pontos.length) {
         conteudo.push(subtitulo('Pontos de interesse do dia'));
-        var linhas = x.pontos.slice(0, 12).map(function (q) { return [hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria, { text: q.titulo, style: 'td', bold: true }]; });
-        conteudo.push(tabela(['Hora', 'Tipo', 'Ponto'], linhas, [36, 110, '*']));
-        if (x.pontos.length > 12) conteudo.push(nota('+ ' + (x.pontos.length - 12) + ' outro(s) ponto(s) neste dia.'));
+        var linhas = x.pontos.slice(0, 15).map(function (q) {
+          var desc = String(q.descricao || '').replace(/\s+/g, ' ').trim();
+          if (desc.length > 160) desc = desc.slice(0, 157) + '…';
+          return [hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria,
+            { stack: [{ text: q.titulo || '—', style: 'td', bold: true }, desc ? { text: desc, style: 'tdSuave' } : null].filter(Boolean) }];
+        });
+        conteudo.push(tabela(['Hora', 'Tipo', 'Ponto e descrição'], linhas, [36, 96, '*']));
+        if (x.pontos.length > 15) conteudo.push(nota('+ ' + (x.pontos.length - 15) + ' outro(s) ponto(s) neste dia (no relatório Diário).'));
       }
+      // fotos do dia: miniaturas (até 6), com quem tirou e a hora
+      var fotosDia = recursos.fotosDia && recursos.fotosDia[x.dia];
+      if (fotosDia && fotosDia.imagens.length) {
+        conteudo.push(subtitulo('Fotos do dia'));
+        var celulas = fotosDia.imagens.map(function (f) {
+          return { stack: [{ image: f.imagem, fit: [160, 120], alignment: 'center' }, { text: [hora(f.em), f.autor, f.legenda].filter(Boolean).join(' · '), style: 'legendaFoto', margin: [0, 2, 0, 0] }], margin: [0, 0, 0, 6] };
+        });
+        while (celulas.length % 3) celulas.push({ text: '' });
+        var corpo = [];
+        for (var c = 0; c < celulas.length; c += 3) corpo.push(celulas.slice(c, c + 3));
+        conteudo.push({ table: { widths: ['*', '*', '*'], body: corpo }, layout: 'noBorders', margin: [0, 0, 0, 6] });
+        if (fotosDia.total > fotosDia.imagens.length) conteudo.push(nota('+ ' + (fotosDia.total - fotosDia.imagens.length) + ' outra(s) foto(s) neste dia (no relatório Final detalhado).'));
+      } else if (x.fotos.length) conteudo.push(nota(x.fotos.length + ' foto(s) neste dia (no relatório Final detalhado).'));
     });
     return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'Informe Padrão de Ocorrência (IPO)', marca: p.marca });
   }

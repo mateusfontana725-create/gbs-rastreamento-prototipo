@@ -9,10 +9,16 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.7.3';
+  var NUMERO = '1.8.0';
   var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.8.0', data: '2026-11-19', itens: [
+      'Mapa do dia nos relatórios (IPO e Diário) mais perto: enquadra o local da operação e o que foi feito no dia num raio de 5 km, como o filtro do dia no painel.',
+      'Trilha do relatório não liga mais os dois lados de uma falha de GPS: a linha sai em trechos (o risco reto atravessando o mapa sumiu).',
+      'O mapa do dia não mostra mais os setores (podem ter sido criados em outros dias); o que foi feito no dia são as trilhas e os pontos.',
+      'IPO mostra os pontos de interesse do dia (ex.: ponto de perigo) com nome e descrição curta, e as fotos tiradas no dia (até 6, pequenas).',
+    ] },
     { versao: '1.7.3', data: '2026-11-19', itens: [
       'Falhas de GPS não aparecem mais no mapa (nem as marcas "Sem posições a partir daqui" nem o tracejado), no painel e na tela do participante. No painel, a pessoa ganha só um aviso "⚠ GPS" na lista e um texto na ficha com quantas falhas teve e a maior.',
       'Ponto solto (a trilha vai longe e volta: salto do GPS ou última posição ruim antes de uma falha) sai do desenho da trilha no mapa e nos relatórios: não risca mais o mapa nem estica o zoom. As posições continuam guardadas.',

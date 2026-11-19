@@ -216,6 +216,14 @@ legível, elas não aparecem.
   GPS ou a última posição ruim antes de uma falha: sai do desenho no mapa e nos relatórios (não risca o mapa nem estica o
   zoom). As posições continuam guardadas no banco. Quem foi de verdade para longe (sem voltar) continua desenhado.
 
+### Mapa do dia e IPO com pontos e fotos (migração 085, versão 1.8.0)
+
+- **Mapa do dia** (IPO e Diário): enquadra o local da operação e o que foi feito no dia num raio de 5 km (trilha ou ponto mais
+  longe fica de fora do mapa) e **não mostra setores** (podem ser de outros dias); o que conta no dia são trilhas e pontos.
+- **Trilha em trechos:** a migração `085_trilhas_dias_trechos.sql` faz `relatorio_trilhas_dias` devolver a trilha cortada nas
+  falhas de GPS e nos saltos impossíveis; o relatório não liga mais os dois lados da falha. Operação arquivada: o mesmo corte.
+- **IPO:** pontos de interesse do dia com hora, tipo, nome e descrição curta, e as fotos do dia (até 6, pequenas).
+
 ### Relatórios IPO e Diário, separados (versão 1.3.0)
 
 - **IPO (curto):** o IPO no modelo do CBMPR (o mesmo informe do texto do WhatsApp: local, vítima, procedimentos, recursos,

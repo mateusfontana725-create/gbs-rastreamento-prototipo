@@ -245,7 +245,8 @@ teste('relatório IPO (curto): informe do dia + militares (graduação e QRA), s
   assert.ok(/Militares do dia/.test(tx) && /Cb\./.test(tx) && /Alves/.test(tx), 'militares em graduação e QRA');
   assert.ok(!/Beto Voluntário/.test(tx) && /Voluntários e civis em campo: 1/.test(tx), 'civis só em número, sem nome');
   assert.ok(!/Setores varridos/.test(tx), 'não existe mais "Setores varridos" (o que foi varrido é visto pelas trilhas)');
-  assert.ok(/Mapa do dia/.test(tx) && /Setores marcados no mapa: Setor Margem/.test(tx), 'mapa do dia com os setores marcados');
+  assert.ok(/Mapa do dia/.test(tx) && !/Setores marcados no mapa/.test(tx), 'mapa do dia sem a lista de setores (o que foi feito está nas trilhas)');
+  assert.ok(/Ponto e descrição/.test(tx), 'pontos com a descrição');
   assert.ok(/Responsável pelas informações/.test(tx) && /Sgt\. Quem Gerou/.test(tx) && !/Cb\. Alves\/GBS/.test(tx), 'responsável = quem gerou o relatório');
   assert.ok(/Trilhas feitas/.test(tx) && /4,1 km/.test(tx) && /Pessoas com trilha/.test(tx), 'trilhas feitas');
   assert.ok(/Pontos de interesse do dia/.test(tx) && /Boné encontrado/.test(tx), 'pontos do dia');
@@ -336,6 +337,18 @@ teste('IPO preenchido direto (sem ficha de vítima): nome, sexo, idade, origem, 
   // limites
   const n = I.normalizarIpo({ vitima_sexo: 'X', vitima_idade: 500, vitima_nome: 'a'.repeat(900) });
   assert.strictEqual(n.vitima_sexo, ''); assert.strictEqual(n.vitima_idade, 120); assert.strictEqual(n.vitima_nome.length, 300);
+});
+
+teste('relatórios: a trilha vem em trechos (não liga os lados de uma falha) e sem ponto solto', () => {
+  const d = { gerado_em: new Date().toISOString(), operacao: { codigo: 'OP', ipo: {} }, setores: [], participantes: [], pontos: [], fotos: [], vitimas: [], grupos: [], diario: [] };
+  const t = [{ participante_id: 'P1', nome: 'A', tipo: 'militar', dia: '2026-11-15', n: 9, km: 1,
+    pontos: [[-25.5, -49.3], [-25.501, -49.3], [-25.6, -49.3], [-25.601, -49.3]],
+    segmentos: [[[-25.5, -49.3], [-25.501, -49.3], [-25.502, -49.3]], [[-25.6, -49.3], [-25.601, -49.3]], [[-25.7, -49.3]]] }];
+  const x = RP.separarDias(d, t, ['2026-11-15'])[0];
+  assert.strictEqual(x.trilhas[0].segmentos.length, 2, 'dois trechos (o de um ponto só não é linha)');
+  assert.ok(!x.trilhas[0].segmentos.some((sg) => sg.some((p, i) => i && Math.abs(p[0] - sg[i - 1][0]) > 0.05)), 'nenhum trecho liga lugares distantes');
+  const semTrechos = RP.separarDias(d, [Object.assign({}, t[0], { segmentos: undefined })], ['2026-11-15'])[0];
+  assert.strictEqual(semTrechos.trilhas[0].segmentos.length, 1, 'banco antigo (sem trechos): um trecho só, como antes');
 });
 
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }

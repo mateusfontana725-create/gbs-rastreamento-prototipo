@@ -167,6 +167,7 @@
       var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * k) * Math.cos(b.lat * k) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
       return 2 * 6371.0088 * Math.asin(Math.min(1, Math.sqrt(h)));
     }
+    var lacunaS = Number(((t.operacoes || [])[0] || doc.operacao || {}).gps_lacuna_s) || 60;
     var ocultas = {};
     (t.trilhas_ocultas || []).forEach(function (h) { ocultas[h.participante_id] = (h.intervalos || []).map(function (x) { return [Date.parse(x.de), Date.parse(x.ate)]; }); });
     var pessoas = {};
@@ -185,14 +186,24 @@
       var g = grupos[k];
       g.pts.sort(function (a, b) { return a.ms - b.ms; });
       var linha = g.pts.filter(function (p) { return !p.base; });
-      var soma = 0;
-      for (var i = 1; i < linha.length; i++) { var d = km(linha[i - 1], linha[i]); if (d < 1.5) soma += d; }
+      // trechos (como a migração 085): novo trecho quando passa mais que a falha da operação ou o salto é impossível (> 70 m/s)
+      var segs = [], atual = [], soma = 0;
+      for (var i = 0; i < linha.length; i++) {
+        if (i) {
+          var d = km(linha[i - 1], linha[i]), dt = (linha[i].ms - linha[i - 1].ms) / 1000;
+          if (dt > lacunaS || (d * 1000 > 50 && d * 1000 / Math.max(dt, 0.5) > 70)) { if (atual.length > 1) segs.push(atual); atual = []; }
+          else if (d < 1.5) soma += d;
+        }
+        atual.push(linha[i]);
+      }
+      if (atual.length > 1) segs.push(atual);
       var passo = Math.max(1, Math.ceil(linha.length / 150));
       var p = pessoas[g.participante_id] || {};
       return { participante_id: g.participante_id, nome: p.nome || '', tipo: p.tipo || '', dia: g.dia,
         primeiro: new Date(g.pts[0].ms).toISOString(), ultimo: new Date(g.pts[g.pts.length - 1].ms).toISOString(), n: g.pts.length,
         km: Math.round(soma * 100) / 100,
-        pontos: linha.filter(function (x, i) { return i === 0 || i === linha.length - 1 || (i + 1) % passo === 0; }).map(function (x) { return [x.lat, x.lng]; }) };
+        pontos: linha.filter(function (x, i) { return i === 0 || i === linha.length - 1 || (i + 1) % passo === 0; }).map(function (x) { return [x.lat, x.lng]; }),
+        segmentos: segs.map(function (sg) { var ps = Math.max(1, Math.ceil(sg.length / 60)); return sg.filter(function (x, i) { return i === 0 || i === sg.length - 1 || (i + 1) % ps === 0; }).map(function (x) { return [x.lat, x.lng]; }); }) };
     }).sort(function (a, b) { return a.dia < b.dia ? -1 : a.dia > b.dia ? 1 : String(a.nome).localeCompare(String(b.nome)); });
   }
 

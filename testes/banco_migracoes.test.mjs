@@ -3624,5 +3624,28 @@ console.log('Tirar a localização de uma pessoa do mapa (migração 084)');
   chk(/operacao_encerrada/.test(await erroDe(rpc(resp1, 'tirar_do_mapa', { p_participante: p84[1].participante_id, p_fora: true }))), 'operação encerrada: não tira ninguém do mapa');
 }
 
-console.log('\nMigrações 007–084 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Trilhas de cada dia em trechos (migração 085)');
+{
+  const m85 = ler('supabase/migracoes/085_trilhas_dias_trechos.sql').replace(/^notify .*$/m, '');
+  await db.exec(m85); await db.exec(m85);
+  chk(true, 'migração 085 executa duas vezes (idempotente)');
+  const op85 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 085', p_retencao_horas: 0 });
+  const an85 = await usuario(null, true);
+  const p85 = await rpc(an85, 'ingressar', { p_token: op85.token_civil, p_nome: 'Trecho', p_tipo: 'civil', p_cpf: cpf, p_telefone: tel });
+  const ins = (lat, quando) => db.query(`insert into public.posicoes (operacao_id, participante_id, client_id, lat, lng, precisao, registrado_em, recebido_em)
+    values ($1, $2, gen_random_uuid(), $3, -49.3, 8, ($4::timestamp at time zone 'America/Sao_Paulo'), now())`, [op85.id, p85.participante_id, lat, quando]);
+  // andando (a cada 30 s), falha de 70 min, volta em outro lugar e anda de novo; depois um salto impossível (10 km em 30 s)
+  for (let k = 0; k < 5; k++) await ins(-25.5000 + k * 0.0003, '2026-11-15 08:0' + k + ':00');
+  for (let k = 0; k < 4; k++) await ins(-25.6000 + k * 0.0003, '2026-11-15 09:1' + k + ':00');
+  await ins(-25.6000 + 4 * 0.0003, '2026-11-15 09:14:00');
+  await ins(-25.7000, '2026-11-15 09:14:30');
+  await ins(-25.7003, '2026-11-15 09:15:00');
+  const r = (await rpc(resp1, 'relatorio_trilhas_dias', { p_operacao: op85.id, p_ini: '2026-11-15', p_fim: '2026-11-15', p_fuso: 'America/Sao_Paulo' }))[0];
+  chk(Array.isArray(r.segmentos) && r.segmentos.length === 3, 'a trilha vem em 3 trechos: antes da falha, depois dela e depois do salto impossível', r.segmentos && r.segmentos.length);
+  chk(r.segmentos[0].length === 5 && r.segmentos[0].every((p) => p[0] > -25.55), 'o 1º trecho fica antes da falha (não liga ao lugar onde voltou)');
+  chk(r.km < 3, 'os quilômetros não somam o salto da falha nem o impossível', r.km);
+  chk(r.pontos.length === 12, '"pontos" continua vindo (compatível)', r.pontos.length);
+}
+
+console.log('\nMigrações 007–085 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

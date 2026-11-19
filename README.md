@@ -195,13 +195,14 @@ legível, elas não aparecem.
   `main` (ou na `testes`).
 - No painel, a rosa da bússola do mapa girava para o lado errado ao girar o mapa; corrigido.
 
-### Girar o mapa no painel do responsável (versão 1.5.0)
+### Girar o mapa no painel do responsável (versão 1.5.0; setores corrigidos na 1.7.0)
 
 - O mapa 2D do painel agora **gira** (antes só o relevo 3D girava): **dois dedos** no celular/tablet, **Shift + roda do mouse**
   no computador, ou os botões **↺ ↻** (15° cada) abaixo do botão de enquadrar. A **bússola** do canto inferior direito gira
   junto (o N aponta o norte de verdade, borda laranja quando girado) e, **tocada, volta o norte para cima**. No celular, o
   menu **☰ Mapa** tem "Girar o mapa (+45°)" e "Norte para cima". Marcadores, balões e rótulos continuam em pé; os cliques
-  (marcar ponto, desenhar setor, medir) continuam acertando a coordenada.
+  (marcar ponto, desenhar setor, medir) continuam acertando a coordenada. (Na 1.5.0 os setores, as trilhas desenhadas e os
+  rótulos sumiram do mapa por causa das camadas do plugin; corrigido na 1.7.0.)
 - Usa o plugin leaflet-rotate (CDN com SRI, em `comando.html`). Se o plugin não carregar, o painel funciona como antes (sem os
   botões de girar). O mapa não guarda o giro: ao abrir de novo, o norte volta para cima.
 
@@ -216,10 +217,16 @@ legível, elas não aparecem.
   campo, quilômetros e setores percorridos), os **setores trabalhados** (tabela e, para cada um, um bloco em texto com
   situação, horários de início e conclusão, equipes, responsável, observações e cronologia), encontros, o diário completo e
   os pontos. O de um dia já terminado fica guardado.
-- **Mapas à escolha, na hora de gerar** (IPO e Diário): caixas para marcar o que entra, em qualquer combinação: **mapa do dia
-  com tudo junto** (padrão: setores, trilhas e pontos do dia num zoom só), **um mapa de cada setor** e **um mapa de cada
-  trilha** (uma por pessoa). Com muitos mapas, cada um sai menor para o PDF não ficar gigante. O Diário de um dia já terminado
-  só é guardado com a escolha padrão.
+- **Mapa do dia (padrão, sempre):** em todo relatório por dia (IPO e Diário) sai **um mapa do dia em satélite** com tudo o
+  que foi feito naquele dia: as **trilhas**, os **pontos** e os **setores marcados**, com o zoom um pouco mais aberto. Sem
+  nenhuma trilha, setor ou ponto no dia, não sai mapa. Não existe mapa de cada setor (o setor só mostra onde foi marcado; o
+  que foi varrido está nas trilhas). **Opcional** (uma caixa): **também um mapa de cada trilha** (uma por pessoa). O Diário de
+  um dia já terminado só é guardado sem essa opção.
+- **Só aparece o que existe:** "trilha" é quem tem linha desenhada no dia (pontos só dentro da base, ou apagados com a
+  borracha, não contam); sem trilha, setor ou ponto no dia, a seção correspondente não aparece. O IPO não tem mais "Setores
+  varridos".
+- **Responsável pelas informações (IPO):** é sempre **quem gerou** o relatório (ou copiou o texto do IPO); sem quem gerou, a
+  linha não sai. O campo de texto "responsável pelas informações" saiu do cadastro e da tela do IPO.
 - Os dois têm **um dia, período (de… até…) ou tudo até o momento**, separado dia a dia (cada dia numa página). O IPO (Diário)
   da tela do painel continua sendo onde o IPO de cada dia é preenchido.
 - Sem migração nova.

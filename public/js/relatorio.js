@@ -418,7 +418,7 @@
     var z = 18;
     for (; z > 3; z--) {
       var w = mundoX(maxLng, z) - mundoX(minLng, z), h = mundoY(minLat, z) - mundoY(maxLat, z);
-      if (w <= W * 0.82 && h <= H * 0.82) break;
+      if (w <= W * (o.ajuste || 0.82) && h <= H * (o.ajuste || 0.82)) break;
     }
     if (enq.length === 1 || (maxLat - minLat < 1e-6 && maxLng - minLng < 1e-6)) z = Math.min(z, 16);
     var cx = (mundoX(minLng, z) + mundoX(maxLng, z)) / 2, cy = (mundoY(minLat, z) + mundoY(maxLat, z)) / 2;
@@ -1004,26 +1004,22 @@
     var tr = await trilhasDosDias(op, ini, fim);
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
     var recursos = { logo: await carregarLogo(), mapasDia: {} };
-    // Mapas (satélite), conforme as caixas marcadas por quem gera (opcoes.mapas = { geral, setores, trilhas }; qualquer combinação):
-    //   geral    um mapa por dia com tudo: os setores trabalhados no dia, as trilhas e os pontos do dia, num zoom só (padrão)
-    //   setores  um mapa para cada setor trabalhado no dia (o setor e as trilhas do dia)
-    //   trilhas  um mapa para cada trilha do dia (uma por pessoa)
-    var esc = opcoes.mapas && typeof opcoes.mapas === 'object' ? opcoes.mapas : { geral: true };   // { geral, setores, trilhas }: o que marcar; padrão: o mapa do dia
-    var querGeral = Boolean(esc.geral), querSetores = Boolean(esc.setores), querTrilhas = Boolean(esc.trilhas);
-    recursos.mapasSetorDia = {}; recursos.mapasTrilhaDia = {};
-    var totalMapas = dias.reduce(function (a, x) {
-      return a + (querGeral ? 1 : 0) + (querSetores ? x.setores.length : 0) + (querTrilhas ? x.pessoas.filter(function (q) { return q.pontos.length > 1; }).length : 0);
-    }, 0);
+    // Mapas (satélite). O MAPA DO DIA é padrão em todo relatório: tudo o que foi feito naquele dia (as trilhas, os pontos e os
+    // setores marcados), num zoom que pega tudo; sem nada no dia, sem mapa. Opcional (opcoes.mapas.trilhas): um mapa para
+    // cada trilha do dia (uma por pessoa). Não há mapa por setor: o setor mostra onde foi marcado; o que foi varrido está nas trilhas.
+    var querTrilhas = Boolean(opcoes.mapas && opcoes.mapas.trilhas);
+    recursos.mapasTrilhaDia = {};
+    var totalMapas = dias.reduce(function (a, x) { return a + 1 + (querTrilhas ? x.trilhas.length : 0); }, 0);
     var tam = totalMapas > 60 ? [600, 340] : totalMapas > 25 ? [760, 430] : [900, 520];   // muitos mapas: cada um sai menor, o PDF não fica gigante
     var feitos = 0;
     if (dias.length <= (opcoes.maxMapas || 31)) {
       for (var k = 0; k < dias.length; k++) {
         var x = dias[k];
         var rotuloDia = x.dia.split('-').reverse().slice(0, 2).join('/');
-        var trilhasDia = x.pessoas.map(function (q) { return { participante_id: q.id, tipo: q.tipo, pontos: q.pontos }; });
+        var trilhasDia = x.trilhas.map(function (q) { return { participante_id: q.id, tipo: q.tipo, pontos: q.pontos }; });
         var copia = Object.assign({}, dados, { setores: x.setores.map(function (z) { return z.setor; }), trilhas: trilhasDia,
           pontos: x.pontos, fotos: [], diario: x.diario, trilhasManuais: [] });
-        if (querGeral && (x.pessoas.some(function (q) { return q.pontos.length > 1; }) || x.setores.length || x.pontos.length)) {
+        if (trilhasDia.length || x.setores.length || x.pontos.length) {
           passo('Desenhando o mapa do dia ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
           var g = elementosMapa(copia, { fundo: true });
           // zoom: os setores do dia, as trilhas do dia e os pontos do dia, juntos (menos o que estiver a mais de 15 km do conjunto)
@@ -1038,23 +1034,15 @@
             var enq = alvo.concat(soltos.filter(function (pt) { return distanciaM(centro, pt) <= LONGE_MAPA_M; }));
             if (enq.length) g.geral.enquadrar = enq;
           }
-          recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
-        }
-        if (querSetores) {
-          for (var m = 0; m < x.setores.length; m++) {
-            var st = x.setores[m].setor;
-            passo('Desenhando o mapa do setor ' + st.nome + ' em ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
-            var gs = elementosMapa(Object.assign({}, copia, { setores: [st] }), { fundo: true });
-            recursos.mapasSetorDia[x.dia + '|' + st.id] = await desenharMapa(Object.assign({}, gs.base, { largura: tam[0], altura: tam[1], enquadrar: pontosSetor(st), destaque: st.id }));
-          }
+          // ajuste 0,66: o conjunto ocupa dois terços do mapa (zoom um pouco mais aberto que o enquadramento justo)
+          recursos.mapasDia[x.dia] = await desenharMapa(Object.assign({}, g.geral, { ajuste: 0.66 }, opcoes.mapaAltura ? { altura: opcoes.mapaAltura } : {}));
         }
         if (querTrilhas) {
-          for (var n = 0; n < x.pessoas.length; n++) {
-            var q = x.pessoas[n];
-            if (q.pontos.length < 2) continue;
+          for (var n = 0; n < x.trilhas.length; n++) {
+            var q = x.trilhas[n];
             passo('Desenhando a trilha de ' + q.nome + ' em ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
-            var gt = elementosMapa(Object.assign({}, copia, { trilhas: [{ participante_id: q.id, tipo: q.tipo, pontos: q.pontos }], pontos: [] }), { fundo: true });
-            recursos.mapasTrilhaDia[x.dia + '|' + q.id] = await desenharMapa(Object.assign({}, gt.base, { largura: tam[0], altura: tam[1], enquadrar: q.pontos }));
+            var gt = elementosMapa(Object.assign({}, copia, { trilhas: [{ participante_id: q.id, tipo: q.tipo, pontos: q.pontos }], pontos: [], setores: [] }), { fundo: true });
+            recursos.mapasTrilhaDia[x.dia + '|' + q.id] = await desenharMapa(Object.assign({}, gt.base, { largura: tam[0], altura: tam[1], enquadrar: q.pontos, ajuste: 0.7 }));
           }
         }
       }
@@ -1363,7 +1351,7 @@
       var n = totalDoTipo(tipo);
       var ver = tipo === 'ipo' ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + n + ')', disabled: n ? null : true,
         title: n ? null : 'Ainda não há relatórios deste tipo', onclick: function () { abrirLista(tipo); } });
-      return UI.el('section', { classe: 'rel-card', 'data-tipo': tipo }, [
+      return UI.el('section', { classe: 'rel-card' + (tipo === 'ipo' || tipo === 'diario' ? ' rel-card-gera' : ''), 'data-tipo': tipo }, [
         UI.el('div', { classe: 'rel-card-topo' }, [
           UI.el('h3', { classe: 'rel-card-titulo', texto: TIPO_ROTULO[tipo] }),
           UI.dica(DICA_TIPO[tipo]),
@@ -1389,19 +1377,10 @@
         var dataAte = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-' + tipo + '-ate', value: fimOp, min: minDia, max: fimOp });
         var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-' + tipo + '-data' });
         var campoAte = UI.campo('Até', dataAte, { para: 'rel-' + tipo + '-ate' });
-        // Mapas: caixas para marcar o que entra no relatório (pode ser um, vários ou nenhum)
-        var caixas = {};
-        function caixaMapa(chave, rotulo, marcada) {
-          var c = UI.el('input', { type: 'checkbox', id: 'rel-' + tipo + '-mapa-' + chave, checked: marcada ? true : null });
-          caixas[chave] = c;
-          return UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-' + tipo + '-mapa-' + chave }, [c, ' ' + rotulo]);
-        }
-        var selMapas = UI.el('div', { classe: 'rel-mapas-caixas', role: 'group', 'aria-label': 'Mapas do relatório' }, [
-          caixaMapa('geral', 'Mapa do dia, com tudo junto (setores, trilhas e pontos)', true),
-          caixaMapa('setores', 'Um mapa de cada setor', false),
-          caixaMapa('trilhas', 'Um mapa de cada trilha (uma por pessoa)', false),
-        ]);
-        function mapasEscolhidos() { return { geral: caixas.geral.checked, setores: caixas.setores.checked, trilhas: caixas.trilhas.checked }; }
+        // Mapa do dia é padrão (sempre entra). Opcional: um mapa para cada trilha (uma por pessoa).
+        var caixaTrilhas = UI.el('input', { type: 'checkbox', id: 'rel-' + tipo + '-mapa-trilhas' });
+        var rotuloTrilhas = UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-' + tipo + '-mapa-trilhas', title: 'Além do mapa do dia (que sempre sai), um mapa para cada trilha do dia' }, [caixaTrilhas, ' Também um mapa de cada trilha']);
+        function mapasEscolhidos() { return { trilhas: caixaTrilhas.checked }; }
         var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
         function ajustarModo() {
           campoDe.hidden = modo.value === 'tudo';
@@ -1420,12 +1399,12 @@
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), UI.grade([campoDe, campoAte]), UI.campo('Mapas', selMapas, {}), progresso]), [botao]);
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), rotuloTrilhas, progresso]), [botao]);
       }
       out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
       out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {
-        // um dia já terminado e ainda não guardado fica guardado com os relatórios (só com a escolha padrão: só o mapa do dia)
-        var guardar = ini === fim && fim < hoje && !dados.porDia[ini] && Boolean(mapas && mapas.geral && !mapas.setores && !mapas.trilhas);
+        // um dia já terminado e ainda não guardado fica guardado com os relatórios (só com a escolha padrão: sem o mapa de cada trilha)
+        var guardar = ini === fim && fim < hoje && !dados.porDia[ini] && !(mapas && mapas.trilhas);
         await gerarDiarioPeriodo(op, ini, fim, modo, { guardar: guardar, mapas: mapas }, passo);
         if (guardar) await atualizar();
       }));

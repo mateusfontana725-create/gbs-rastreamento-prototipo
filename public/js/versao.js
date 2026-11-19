@@ -9,10 +9,17 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.6.0';
-  var DATA = '2026-11-18';
+  var NUMERO = '1.7.0';
+  var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.7.0', data: '2026-11-19', itens: [
+      'Corrigido: os setores sumiam do mapa do painel (problema da rotação do mapa da versão 1.5.0). Setores, trilhas desenhadas, pontos e rótulos voltaram e giram junto com o mapa.',
+      'IPO: o "Responsável pelas informações" agora é quem gerou o relatório; sem quem gerou, a linha não sai (nunca mais um nome guardado qualquer).',
+      'Relatórios IPO e Diário: o MAPA DO DIA é padrão — trilhas, pontos e setores marcados daquele dia, com o zoom um pouco mais aberto. Saiu o mapa de cada setor (o setor mostra onde foi marcado; o que foi varrido está nas trilhas). Opcional: um mapa de cada trilha.',
+      'Relatórios: trilha só conta quem tem linha desenhada no dia; sem trilha, sem setor ou sem ponto no dia, a seção (e o mapa) não aparecem. Saiu a seção "Setores varridos".',
+      'Tela de Relatórios mais compacta: IPO e Diário lado a lado, com a data na mesma linha e uma única caixa para o mapa de cada trilha.',
+    ] },
     { versao: '1.6.0', data: '2026-11-18', itens: [
       'Participante: botão 💾 Arquivos para exportar a própria trilha (GPX, KML, GeoJSON ou CSV) e mandar por WhatsApp/e-mail quando a conexão com os bombeiros falhar, e para importar um arquivo recebido (GPX, KML, KMZ, GeoJSON, CSV, AlpineQuest) que aparece no mapa e fica guardado para abrir sem internet. No aplicativo, o arquivo sai pela folha de compartilhar do Android ou vai para Downloads (precisa do APK novo).',
       'Participante: o mapa pode girar conforme o celular (Camadas › Girar o mapa conforme o celular, ou toque na bússola): a frente do aparelho fica para cima, para saber para onde está apontando.',

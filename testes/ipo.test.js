@@ -93,7 +93,11 @@ teste('recursos, efetivo por dia, desdobramentos (IPO + diário) e órgãos de a
   const iD = texto.indexOf('*Desdobramentos/situação atual:*');
   assert.ok(iD > 0 && texto.indexOf('02/11/2026: 02 BBMM para primeira resposta.') > iD && texto.indexOf('04/11/2026: Continuidade com K9') > texto.indexOf('03/11/2026: Sgt. Berzotti'));
   assert.ok(texto.includes('*Órgãos de Apoio:*') && texto.includes('Helicóptero BPMOA.'));
-  assert.ok(texto.trim().endsWith('*Responsável pelas informações:* Cb. Alves/GBS'));
+  // o responsável é quem gerou o IPO (extra.responsavel), nunca um nome guardado no cadastro
+  assert.ok(!texto.includes('Responsável pelas informações') && !texto.includes('Cb. Alves/GBS'), 'sem quem gerou: a linha não sai e o nome guardado não aparece');
+  const comQuem = I.textoWhatsApp(op, { vitimas: [], diario: [], responsavel: 'Sgt. Quem Gerou' });
+  assert.ok(comQuem.trim().endsWith('*Responsável pelas informações:* Sgt. Quem Gerou'), 'quem gerou');
+  assert.ok(!comQuem.includes('Cb. Alves/GBS'));
 });
 teste('sem coordenada escrita: usa o último local visto da ficha, depois o local da operação', () => {
   const o2 = Object.assign({}, op, { ipo: Object.assign({}, op.ipo, { coord_referencia: '' }) });
@@ -211,7 +215,7 @@ teste('relatório diário (detalhado) separa cada dia: IPO, pessoas, km, setores
   assert.ok(/Varredura na margem com K9/.test(tx) && /Equipe Alfa/.test(tx) && /Chuva forte à tarde/.test(tx));
   assert.ok(/7,3 km|7,2 km/.test(tx) && /IPO do dia não preenchido/.test(tx));
   // mais detalhe: trilhas pessoa a pessoa (tempo e setores percorridos) e um bloco por setor
-  assert.ok(/Trilhas do dia, por pessoa/.test(tx) && /Setores percorridos/.test(tx) && /8 h/.test(tx), 'trilhas por pessoa com o tempo em campo');
+  assert.ok(/Trilhas do dia, por pessoa/.test(tx) && /Setores com a trilha/.test(tx) && /8 h/.test(tx), 'trilhas por pessoa com o tempo em campo');
   assert.ok(/Setor Margem/.test(tx) && /Equipes|Trilhas dentro do setor/.test(tx), 'bloco do setor');
   assert.ok(/Dados da ocorrência/.test(tx) && /RGO 20263BBM12221/.test(tx));
 });
@@ -231,17 +235,35 @@ teste('relatório IPO (curto): informe do dia + militares (graduação e QRA), s
     pontos: [{ criado_em: local(2026, 11, 4, 11, 0), categoria: 'VESTIGIO', titulo: 'Boné encontrado', lat: -22.895, lng: -51.66 }],
     diario: [{ id: 1, ocorrido_em: local(2026, 11, 4, 10, 0), categoria: 'setor', tipo: 'setor_concluido', titulo: 'Setor concluído', ref_id: 'S1', autor_nome: 'Sistema', origem: 'auto' }],
   });
-  const trilhas = [{ participante_id: 'P1', nome: 'Cb. Alves', tipo: 'militar', dia: '2026-11-04', primeiro: local(2026, 11, 4, 8, 0), ultimo: local(2026, 11, 4, 12, 0), n: 20, km: 3.1, pontos: [[-22.895, -51.66], [-22.896, -51.661]] }];
+  const trilhas = [{ participante_id: 'P1', nome: 'Cb. Alves', tipo: 'militar', dia: '2026-11-04', primeiro: local(2026, 11, 4, 8, 0), ultimo: local(2026, 11, 4, 12, 0), n: 20, km: 3.1, pontos: [[-22.895, -51.66], [-22.896, -51.661]] },
+    { participante_id: 'P2', nome: 'Beto Voluntário', tipo: 'civil', dia: '2026-11-04', primeiro: local(2026, 11, 4, 9, 0), ultimo: local(2026, 11, 4, 11, 0), n: 10, km: 1, pontos: [[-22.894, -51.66], [-22.895, -51.662]] }];
   const dias = RP.separarDias(d, trilhas, RP.diasEntre('2026-11-04', '2026-11-04'));
-  const tx = textos(RP.montarIpo(d, {}, { dias, subtitulo: '2º dia · 04/11/2026', titulo: 'IPO', marca: 'IPO' }).content).join(' | ');
+  d.gerado_por_nome = 'Sgt. Quem Gerou';
+  const tx = textos(RP.montarIpo(d, { mapasDia: { '2026-11-04': 'data:image/png;base64,AA' } }, { dias, subtitulo: '2º dia · 04/11/2026', titulo: 'IPO', marca: 'IPO' }).content).join(' | ');
   assert.ok(/Informe Padrão de Ocorrência/.test(tx) && /IPO do dia 04\/11\/2026/.test(tx) && /RGO 20263BBM12221/.test(tx), 'o informe no modelo');
   assert.ok(/Varredura na margem com K9/.test(tx) && /Amanhã: setor 4/.test(tx), 'o IPO do dia');
   assert.ok(/Militares do dia/.test(tx) && /Cb\./.test(tx) && /Alves/.test(tx), 'militares em graduação e QRA');
   assert.ok(!/Beto Voluntário/.test(tx) && /Voluntários e civis em campo: 1/.test(tx), 'civis só em número, sem nome');
-  assert.ok(/Setores varridos/.test(tx) && /Setor Margem/.test(tx) && /Concluído neste dia/.test(tx), 'setores varridos');
-  assert.ok(/Trilhas feitas/.test(tx) && /3,1 km/.test(tx), 'trilhas feitas');
+  assert.ok(!/Setores varridos/.test(tx), 'não existe mais "Setores varridos" (o que foi varrido é visto pelas trilhas)');
+  assert.ok(/Mapa do dia/.test(tx) && /Setores marcados no mapa: Setor Margem/.test(tx), 'mapa do dia com os setores marcados');
+  assert.ok(/Responsável pelas informações/.test(tx) && /Sgt\. Quem Gerou/.test(tx) && !/Cb\. Alves\/GBS/.test(tx), 'responsável = quem gerou o relatório');
+  assert.ok(/Trilhas feitas/.test(tx) && /4,1 km/.test(tx) && /Pessoas com trilha/.test(tx), 'trilhas feitas');
   assert.ok(/Pontos de interesse do dia/.test(tx) && /Boné encontrado/.test(tx), 'pontos do dia');
   assert.ok(!/Diário do dia|Encontros e relatos/.test(tx), 'curto: sem o diário completo');
+});
+
+teste('IPO e Diário: sem trilha, sem setor e sem ponto no dia, essas seções (e o mapa) não aparecem', () => {
+  const d = { gerado_em: new Date().toISOString(), gerado_por_nome: 'Sgt. Quem Gerou', operacao: Object.assign({}, op, { ipo: Object.assign({}, op.ipo, { desdobramentos: [], efetivo: [] }) }),
+    setores: [{ id: 'S1', nome: 'Setor Parado', forma: 'poligono', pontos: [[-22.90, -51.67], [-22.90, -51.65], [-22.89, -51.65]], status: 'pendente', missoes: [] }],
+    participantes: [{ id: 'P1', nome: 'Cb. Alves', tipo: 'militar', entrou_em: local(2026, 11, 9, 8, 0), grupos: [] }], pontos: [], fotos: [], vitimas: [], grupos: [], diario: [] };
+  // só pontos dentro da base ou apagados com a borracha: a pessoa tem registro no dia, mas nenhuma linha desenhada
+  const semLinha = [{ participante_id: 'P1', nome: 'Cb. Alves', tipo: 'militar', dia: '2026-11-09', primeiro: local(2026, 11, 9, 8, 0), ultimo: local(2026, 11, 9, 9, 0), n: 5, km: 0, pontos: [] }];
+  const dias = RP.separarDias(d, semLinha, RP.diasEntre('2026-11-09', '2026-11-09'));
+  assert.strictEqual(dias[0].trilhas.length, 0);
+  const ipoTx = textos(RP.montarIpo(d, {}, { dias, subtitulo: 'x', titulo: 'IPO', marca: 'IPO' }).content).join(' | ');
+  assert.ok(!/Trilhas feitas|Setores varridos|Mapa do dia|Pontos de interesse/.test(ipoTx), 'IPO sem nada do dia: sem essas seções');
+  const diaTx = textos(RP.montarDiarioDias(d, {}, { dias, subtitulo: 'x', titulo: 'D', marca: 'D' }).content).join(' | ');
+  assert.ok(!/Trilhas do dia, por pessoa|Setores marcados no dia|Nenhum setor|Ninguém com posição/.test(diaTx), 'Diário sem nada do dia: sem seções vazias nem avisos de "nenhum"');
 });
 
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }

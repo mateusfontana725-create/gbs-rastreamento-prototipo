@@ -2097,6 +2097,15 @@
   function criarMapa() {
     // rotate: o mapa gira (dois dedos no celular; Shift + roda do mouse no computador; botões e bússola). Plugin leaflet-rotate.
     var mapa = L.map('mapa', { zoomControl: true, preferCanvas: false, worldCopyJump: true, rotate: Boolean(L.Map.prototype.setBearing), bearing: 0, touchRotate: true, shiftKeyRotate: true, rotateControl: false, compassBearing: false }).setView([-15.79, -47.88], 4);
+    // Com o leaflet-rotate há dois grupos de camadas: o que GIRA com o mapa (desenhos: setores, trilhas) e o que fica EM PÉ
+    // (marcadores e rótulos). Camada nova criada fora dos dois ficava deslocada e sumia (os setores sumiram na 1.5.0).
+    if (typeof mapa.setBearing === 'function' && mapa._rotatePane && mapa._norotatePane) {
+      var criarPaneBase = L.Map.prototype.createPane;
+      var PANES_EM_PE = { pontos: true, rotulosSetor: true, resumo: true };
+      mapa.createPane = function (nome, container) {
+        return criarPaneBase.call(this, nome, container || (PANES_EM_PE[nome] ? this._norotatePane : this._rotatePane));
+      };
+    }
     // Acima do zoom que o servidor tem (maxNativeZoom) os ladrilhos são ampliados, em vez de sumirem.
     var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxNativeZoom: 19,

@@ -328,7 +328,9 @@
     if (orgaos.length) out.push({ rotulo: 'Órgãos de Apoio', linhas: orgaos, espacado: true });
     if (umDia && umDia.situacao) out.push({ rotulo: 'Situação ao fim do dia / próximos passos', linhas: umDia.situacao.split('\n').filter(function (l) { return l.trim(); }) });
     if (i.imagens_anexas != null) out.push({ rotulo: 'Imagens anexas junto a esta mensagem?', marcas: [['Sim', i.imagens_anexas === true], ['Não', i.imagens_anexas === false]] });
-    if (i.responsavel_informacoes) out.push({ rotulo: 'Responsável pelas informações', valor: i.responsavel_informacoes, semPonto: true });
+    // Responsável pelas informações: quem está gerando o IPO (extra.responsavel). Nunca um nome guardado/escolhido: sem quem gerou, a linha não sai.
+    var quemGerou = String(extra.responsavel || '').replace(/\s+/g, ' ').trim();
+    if (quemGerou) out.push({ rotulo: 'Responsável pelas informações', valor: quemGerou, semPonto: true });
     return out;
   }
 

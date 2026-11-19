@@ -279,7 +279,6 @@
     var desap = UI.el('input', { classe: 'campo', id: id('desap'), type: 'datetime-local', value: ipo.desaparecimento ? paraCampoData(ipo.desaparecimento) : '' });
     var pessoas = UI.el('input', { classe: 'campo', id: id('pessoas'), type: 'number', min: '0', max: '999', value: ipo.pessoas_perdidas != null ? ipo.pessoas_perdidas : '' });
     var bms = UI.el('input', { classe: 'campo', id: id('bms'), type: 'number', min: '0', max: '999', value: ipo.bms_envolvidos != null ? ipo.bms_envolvidos : '' });
-    var responsavel = UI.el('input', { classe: 'campo', id: id('resp'), maxlength: '1000', autocomplete: 'off', placeholder: 'Ex.: Sgt. Fulano — equipe GBS', value: ipo.responsavel_informacoes });
     var nomeMeio = id('meio'), nomeBuscas = id('buscas'), nomeVida = id('vida'), nomeImagens = id('imagens');
     function marcadoEm(nome) {
       var r = raiz.querySelector('input[name="' + nome + '"]:checked');
@@ -299,7 +298,6 @@
       UI.el('p', { classe: 'ajuda', texto: 'Em branco: não informado. Ninguém sabe? Escolha "Desconhecido".' })]);
     var grupoDestino = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('destino'), texto: 'IPO para (destinatários)' }), destino]);
     var grupoSolicDoc = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-doc'), texto: 'Documento do solicitante (RG/CPF)' }), solicDoc]);
-    var grupoResp = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('resp'), texto: 'Responsável pelas informações' }), responsavel]);
     var grupoPessoas = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('pessoas'), texto: 'Nº de pessoas perdidas' }), pessoas]);
     var grupoBms = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('bms'), texto: 'BMs diretamente envolvidos' }), bms]);
     var grupoBuscas = radiosCampo(nomeBuscas, 'Buscas preliminares (casas de parentes, hospitais etc.)?', window.Ipo.BUSCAS, ipo.buscas_preliminares);
@@ -315,7 +313,7 @@
       ? [secaoLocal, secao('Ocorrência', 'meia', [inicioAuto, grupoSolic, grupoNatureza, grupoDesc])]
       : [secaoLocal,
         secao('Ocorrência', 'meia', [grupoAcion, grupoNatureza, grupoDesap, grupoMeio]),
-        secao('Solicitante e destinatários', 'meia', [grupoSolic, grupoSolicDoc, grupoDestino, grupoResp]),
+        secao('Solicitante e destinatários', 'meia', [grupoSolic, grupoSolicDoc, grupoDestino]),
         secao('Busca', 'meia', [grupoPessoas, grupoBms, grupoBuscas, grupoVida, grupoImagens]),
         secao('Observação', 'meia', [grupoDesc])];
     raiz = UI.el('div', { classe: 'campos-cadastro' }, secoes);
@@ -357,7 +355,6 @@
         destinatarios: destino.value, desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value, meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
         pessoas_perdidas: pessoas.value, buscas_preliminares: marcadoEm(nomeBuscas), possibilidade_vida: marcadoEm(nomeVida),
         bms_envolvidos: bms.value, imagens_anexas: marcadoEm(nomeImagens) === 'sim' ? true : marcadoEm(nomeImagens) === 'nao' ? false : null,
-        responsavel_informacoes: responsavel.value,
       }));
       return dados;
     }
@@ -382,7 +379,6 @@
       desapQual.value = '';
       pessoas.value = '';
       bms.value = '';
-      responsavel.value = '';
       [nomeMeio, nomeBuscas, nomeVida, nomeImagens].forEach(function (nome) {
         raiz.querySelectorAll('input[name="' + nome + '"]').forEach(function (r) { r.checked = false; });
       });
@@ -423,7 +419,7 @@
     opcoes = opcoes || {};
     var ipo = window.Ipo.normalizarIpo(op.ipo || {});
     var editavel = opcoes.editavel !== false;
-    var temIpo = Boolean(ipo.solicitante_nome || ipo.solicitante_documento || ipo.destinatarios || ipo.responsavel_informacoes);
+    var temIpo = Boolean(ipo.solicitante_nome || ipo.solicitante_documento || ipo.destinatarios);
     var temBusca = ipo.pessoas_perdidas != null || ipo.bms_envolvidos != null || ipo.buscas_preliminares || ipo.possibilidade_vida || ipo.meio_liquido || ipo.imagens_anexas != null;
     var verNoMapa = op.local_lat != null && opcoes.verNoMapa
       ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null;
@@ -451,7 +447,7 @@
         ]), verNoMapa]),
         temIpo ? UI.secao('Solicitante', [blocos([
           ['Nome', ipo.solicitante_nome], ['Documento', ipo.solicitante_documento],
-          ['IPO para', ipo.destinatarios], ['Informações por', ipo.responsavel_informacoes],
+          ['IPO para', ipo.destinatarios],
         ])]) : null,
         temBusca ? UI.secao('Busca', [blocos([
           ipo.pessoas_perdidas != null ? ['Pessoas perdidas', String(ipo.pessoas_perdidas)] : null,

@@ -2910,3 +2910,20 @@ body.militar-em-rastreio #tela-rastreio .acao-menu { width: auto; min-width: 104
 .bussola-civil { cursor: pointer; }
 .bussola-civil.girando .bussola-disco { outline: 2px solid var(--alerta, #f59e0b); outline-offset: 2px; border-radius: 50%; }
 .bussola-civil:focus-visible { outline: 2px solid var(--primario, #fff); outline-offset: 2px; }
+
+/* Relatórios (compacto): IPO e Diário em cima (cada um ocupa metade), os outros quatro numa fileira embaixo */
+.rel-tipos { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.rel-card { padding: 12px; gap: 8px; }
+.rel-card-gera { grid-column: span 2; }
+.rel-opcoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
+.rel-opcoes .campo-bloco:first-child { grid-column: span 1; }
+.rel-opcoes .campo { min-height: 38px; padding: 0 8px; font-size: .84rem; }
+.rel-card-extra .rel-check { font-size: .82rem; }
+@media (max-width: 900px) {
+  .rel-tipos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .rel-card-gera { grid-column: 1 / -1; }
+  .rel-opcoes { grid-template-columns: 1fr 1fr; }
+  .rel-opcoes .campo-bloco:first-child { grid-column: 1 / -1; }
+}

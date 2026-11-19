@@ -39,7 +39,9 @@
       C.consultar(C.cliente.from('diario').select('id,tipo,ref_id,detalhe,ocorrido_em').eq('operacao_id', op.id)
         .in('tipo', ['procedimento', 'recurso', 'desdobramento']).order('ocorrido_em', { ascending: true })).catch(function () { return []; }),
     ]);
-    return { vitimas: r[0] || [], diario: r[1] || [], coordenada: coordTexto };
+    // quem gera o IPO (o responsável logado) é o "responsável pelas informações"
+    var P = window.Painel;
+    return { vitimas: r[0] || [], diario: r[1] || [], coordenada: coordTexto, responsavel: P && P.meuNome ? P.meuNome() : '' };
   }
 
   function copiarTexto(texto) {
@@ -149,7 +151,6 @@
     var desdobDiario = extra.diario.filter(function (e) { return e.tipo === 'desdobramento'; }).length;
     var orgaos = el('textarea', { classe: 'campo', id: 'ipo-orgaos', rows: '3', maxlength: '4000', placeholder: 'Um por linha. Ex.:\nPMPR: 02 PMs - Patrulha Rural\nDefesa Civil de Guaraci' });
     orgaos.value = ipo.orgaos_apoio;
-    var responsavel = el('input', { classe: 'campo', id: 'ipo-resp', maxlength: '1000', value: ipo.responsavel_informacoes, placeholder: 'Ex.: Cb. Alves/GBS' });
     var impComo = el('textarea', { classe: 'campo', id: 'ipo-imp-como', rows: '4', maxlength: '3000', placeholder: 'Como aconteceu, em poucas linhas e sem nomes. Ex.: Um homem de 34 anos saiu para uma trilha na manhã de sábado e não retornou; a família acionou os Bombeiros à noite.' });
     impComo.value = ipo.imprensa_como;
     var impEstrategia = el('textarea', { classe: 'campo', id: 'ipo-imp-estrategia', rows: '4', maxlength: '3000', placeholder: 'Como as buscas estão sendo conduzidas e os próximos passos. Ex.: As equipes varrem a trilha e as encostas em setores, com apoio de cães e drone; amanhã o foco será a margem do rio.' });
@@ -207,7 +208,6 @@
       UI.secao('Fechamento', [UI.grade([
         UI.campo('Órgãos de apoio', orgaos, { para: 'ipo-orgaos', largo: true }),
         UI.campo('Imagens anexas junto a esta mensagem?', radios('ipo-imagens', [['sim', 'Sim'], ['nao', 'Não']], ipo.imagens_anexas === true ? 'sim' : ipo.imagens_anexas === false ? 'nao' : ''), {}),
-        UI.campo('Responsável pelas informações', responsavel, { para: 'ipo-resp' }),
       ])]),
       erro,
       UI.rodape([
@@ -228,7 +228,7 @@
         meio_liquido: aquatica ? marcadoEm(form, 'ipo-meio') : ipo.meio_liquido, pessoas_perdidas: pessoas.value, vitimas_docs: docsIpo,
         buscas_preliminares: marcadoEm(form, 'ipo-buscas'), possibilidade_vida: marcadoEm(form, 'ipo-vida'), procedimentos: proc, procedimentos_outros: procOutros.value,
         recursos_cb: recursos.value, orgaos_apoio: orgaos.value, imprensa_como: impComo.value, imprensa_estrategia: impEstrategia.value,
-        imagens_anexas: img === 'sim' ? true : img === 'nao' ? false : null, responsavel_informacoes: responsavel.value,
+        imagens_anexas: img === 'sim' ? true : img === 'nao' ? false : null,
       }));
     }
     form.addEventListener('submit', async function (ev) {

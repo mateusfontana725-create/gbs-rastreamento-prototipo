@@ -665,10 +665,17 @@
     return { agora: Date.now(), participantes: participantes, setores: setores, ocorrencias: dd.ocorrencias || {}, relatos: dd.relatos || [], publico: Boolean(dd.publico) };
   }
 
+  function terreno(trechos) {
+    if (raiz.TrilhaGeo && raiz.TrilhaGeo.terrenoPercorridoM) return raiz.TrilhaGeo.terrenoPercorridoM(trechos);
+    var m = 0;
+    trechos.forEach(function (seg) { for (var i = 1; i < seg.length; i++) m += metros(seg[i - 1], seg[i]); });
+    return m;
+  }
   function resumoPessoa(p, agora) {
-    var m = 0, ms = 0, pontos = 0, ultimo = null, primeiro = null;
+    var ms = 0, pontos = 0, ultimo = null, primeiro = null;
+    // terreno da pessoa: andar em volta do mesmo lugar ou voltar pelo mesmo caminho não soma de novo
+    var m = terreno(p.segmentos);
     p.segmentos.forEach(function (seg) {
-      for (var i = 1; i < seg.length; i++) m += metros(seg[i - 1], seg[i]);
       if (seg.length > 1) ms += seg[seg.length - 1].t - seg[0].t;
       seg.forEach(function (pt) {
         pontos++;
@@ -676,7 +683,7 @@
         if (primeiro == null || pt.t < primeiro) primeiro = pt.t;
       });
     });
-    return { id: p.id, nome: p.nome || 'Participante', tipo: p.tipo, grupo: p.grupo, km: m / 1000, horas: ms / 3600000, pontos: pontos,
+    return { id: p.id, nome: p.nome || 'Participante', tipo: p.tipo, grupo: p.grupo, km: m / 1000, segmentos: p.segmentos, horas: ms / 3600000, pontos: pontos,
       primeiro: primeiro, ultimo: ultimo, emCampo: ultimo != null && agora - ultimo <= EM_CAMPO_MS };
   }
 
@@ -764,10 +771,12 @@
     pessoas.forEach(function (p) {
       if (p.tipo === 'responsavel' && !p.pontos) return;   // responsável sem trilha não é efetivo de campo
       var g = p.grupo || { id: '', nome: 'Sem grupo', cor: null };
-      var x = porGrupo.get(g.id) || { id: g.id, nome: g.nome, cor: g.cor, pessoas: 0, km: 0, horas: 0 };
-      x.pessoas++; x.km += p.km; x.horas += p.horas;
+      var x = porGrupo.get(g.id) || { id: g.id, nome: g.nome, cor: g.cor, pessoas: 0, km: 0, horas: 0, trechos: [] };
+      x.pessoas++; x.horas += p.horas; x.trechos = x.trechos.concat(p.segmentos);
       porGrupo.set(g.id, x);
     });
+    // grupo: o terreno que o grupo cobriu (quem anda junto conta uma vez)
+    porGrupo.forEach(function (x) { x.km = terreno(x.trechos) / 1000; delete x.trechos; });
     var campo = pessoas.filter(function (p) { return p.tipo !== 'responsavel' || p.pontos; });
     var porTipo = { militar: 0, civil: 0, responsavel: 0 };
     campo.forEach(function (p) { porTipo[p.tipo] = (porTipo[p.tipo] || 0) + 1; });
@@ -778,7 +787,9 @@
       efetivo: campo.length,
       porTipo: porTipo,
       emCampo: campo.filter(function (p) { return p.emCampo; }).length,
-      km: campo.reduce(function (t, p) { return t + p.km; }, 0),
+      // terreno coberto pela equipe inteira (cada pedaço de chão conta uma vez) e a soma do que cada um andou
+      km: terreno([].concat.apply([], campo.map(function (p) { return p.segmentos; }))) / 1000,
+      kmSoma: campo.reduce(function (t, p) { return t + p.km; }, 0),
       horas: campo.reduce(function (t, p) { return t + p.horas; }, 0),
       grupos: Array.from(porGrupo.values()).sort(function (a, b) { return b.km - a.km || a.nome.localeCompare(b.nome); }),
       atividade: atividade(r, campo, inicio, fim != null ? fim : agora),
@@ -1054,8 +1065,8 @@
           detalhePessoas('Efetivo', e.porTipo.militar + ' militares · ' + e.porTipo.civil + ' civis · ' + e.porTipo.responsavel + ' responsáveis com trilha',
             e.pessoas.slice().sort(function (a, b) { return (b.emCampo - a.emCampo) || porNome(a, b); }));
         } : null),
-      kpi('↝', 'Percorrido', e ? num(e.km, 1) + ' km' : '—', 'soma das trilhas GPS', 'azul',
-        e ? function () { detalhePessoas('Percorrido por pessoa', num(e.km, 1) + ' km no total', e.pessoas.slice().sort(function (a, b) { return b.km - a.km; }), function (p) { return num(p.km, 1) + ' km'; }); } : null),
+      kpi('↝', 'Terreno percorrido', e ? num(e.km, 1) + ' km' : '—', e ? 'soma por pessoa ' + num(e.kmSoma, 1) + ' km' : null, 'azul',
+        e ? function () { detalhePessoas('Percorrido por pessoa', num(e.km, 1) + ' km de terreno diferente (cada trecho de chão conta uma vez, mesmo com várias pessoas ou várias passagens). Somando o de cada pessoa: ' + num(e.kmSoma, 1) + ' km.', e.pessoas.slice().sort(function (a, b) { return b.km - a.km; }), function (p) { return num(p.km, 1) + ' km'; }); } : null),
       kpi('⧗', 'Esforço', e ? num(e.horas, 1) + ' h' : '—', 'pessoa·hora com GPS', 'azul',
         e ? function () { detalhePessoas('Horas com GPS por pessoa', num(e.horas, 1) + ' pessoa·hora no total', e.pessoas.slice().sort(function (a, b) { return b.horas - a.horas; }), function (p) { return num(p.horas, 1) + ' h'; }); } : null),
       fadiga ? kpi('☕', 'Fadiga (vermelho)', String(fadiga.contagem.vermelho), fadiga.contagem.amarelo + ' amarelo · ' + fadiga.contagem.verde + ' verde',

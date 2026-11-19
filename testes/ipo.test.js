@@ -248,7 +248,7 @@ teste('relatório IPO (curto): informe do dia + militares (graduação e QRA), s
   assert.ok(/Mapa do dia/.test(tx) && !/Setores marcados no mapa/.test(tx), 'mapa do dia sem a lista de setores (o que foi feito está nas trilhas)');
   assert.ok(/Ponto e descrição/.test(tx), 'pontos com a descrição');
   assert.ok(/Responsável pelas informações/.test(tx) && /Sgt\. Quem Gerou/.test(tx) && !/Cb\. Alves\/GBS/.test(tx), 'responsável = quem gerou o relatório');
-  assert.ok(/Trilhas feitas/.test(tx) && /4,1 km/.test(tx) && /Pessoas com trilha/.test(tx), 'trilhas feitas');
+  assert.ok(/Trilhas feitas/.test(tx) && /Terreno percorrido/.test(tx) && !/4,1 km/.test(tx) && /Pessoas com trilha/.test(tx), 'trilhas feitas: terreno (não a soma 3,1 + 1 das pessoas)');
   assert.ok(/Pontos de interesse do dia/.test(tx) && /Boné encontrado/.test(tx), 'pontos do dia');
   assert.ok(!/Diário do dia|Encontros e relatos/.test(tx), 'curto: sem o diário completo');
 });

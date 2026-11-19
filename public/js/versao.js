@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.8.0';
+  var NUMERO = '1.8.1';
   var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.8.1', data: '2026-11-19', itens: [
+      'Quilômetros percorridos mais reais: o dashboard e os relatórios contam o TERRENO percorrido, em que cada pedaço de chão conta uma vez. Quem fica andando em volta do mesmo lugar, o grupo que anda junto e a ida e volta pelo mesmo caminho não multiplicam mais os quilômetros. A soma do que cada pessoa andou continua no dashboard, em letra menor.',
+      'O km de cada pessoa no painel e no dashboard (ficha, lista de trilhas) também não soma de novo as voltas no mesmo lugar.',
+    ] },
     { versao: '1.8.0', data: '2026-11-19', itens: [
       'Mapa do dia nos relatórios (IPO e Diário) mais perto: enquadra o local da operação e o que foi feito no dia num raio de 5 km, como o filtro do dia no painel.',
       'Trilha do relatório não liga mais os dois lados de uma falha de GPS: a linha sai em trechos (o risco reto atravessando o mapa sumiu).',

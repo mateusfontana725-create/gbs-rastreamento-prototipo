@@ -394,8 +394,36 @@
     return lista;
   }
 
+  // TERRENO percorrido pela equipe: o chão é dividido em quadrados de celM (padrão 25 m) e só conta o trecho que entra num
+  // quadrado ainda não pisado por NINGUÉM. Quem anda em círculo no mesmo lugar, quem volta pelo mesmo caminho e o grupo que anda
+  // junto contam uma vez só. trechos: lista de linhas (cada uma [lat, lng] ou { lat, lng }), de todas as pessoas.
+  function terrenoPercorridoM(trechos, celM) {
+    var cel = celM || 25, vistos = new Set(), m = 0, lat0 = null, kx = 0;
+    (trechos || []).forEach(function (linha) {
+      var ant = null, atual = null, fresco = false;
+      (linha || []).forEach(function (p) {
+        var q = Array.isArray(p) ? p : [p.lat, p.lng];
+        if (lat0 == null) { lat0 = q[0]; kx = 111320 * Math.cos(lat0 * Math.PI / 180); }
+        var x = q[1] * kx, y = q[0] * 111320;
+        var kq = Math.floor(x / cel) + ':' + Math.floor(y / cel);
+        if (!ant) { fresco = !vistos.has(kq); vistos.add(kq); atual = kq; ant = [x, y]; return; }
+        var dx = x - ant[0], dy = y - ant[1], d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 1500) { ant = [x, y]; fresco = !vistos.has(kq); vistos.add(kq); atual = kq; return; }   // salto: não conta
+        var n = Math.max(1, Math.ceil(d / (cel / 4))), passo = d / n;
+        for (var i = 1; i <= n; i++) {
+          var k = Math.floor((ant[0] + dx * i / n) / cel) + ':' + Math.floor((ant[1] + dy * i / n) / cel);
+          // conta o passo dentro de um quadrado que estava livre quando a pessoa entrou nele
+          if (k !== atual) { fresco = !vistos.has(k); vistos.add(k); atual = k; }
+          if (fresco) m += passo;
+        }
+        ant = [x, y];
+      });
+    });
+    return m;
+  }
+
   global.TrilhaGeo = {
-    semPontosSoltos: semPontosSoltos,
+    semPontosSoltos: semPontosSoltos, terrenoPercorridoM: terrenoPercorridoM,
     setasAoLongo: setasAoLongo, verticesSeta: verticesSeta, tamanhoSeta: tamanhoSeta,
     dividirPorIntervalos: dividirPorIntervalos, intervalosApagados: intervalosApagados, unirIntervalos: unirIntervalos,
     recortarForaDosCirculos: recortarForaDosCirculos, apagarComPincel: apagarComPincel,

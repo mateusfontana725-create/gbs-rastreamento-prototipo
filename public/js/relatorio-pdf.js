@@ -589,6 +589,13 @@
   /* ---------- relatório resumido ------------------------------------------ */
   // O essencial em poucas páginas: situação, números, o mapa geral (setores, trilhas das pessoas e fotos, enquadrado na
   // área da operação), os setores, as pessoas com o quanto andaram, algumas fotos e o IPO.
+  // Terreno percorrido em km (TrilhaGeo.terrenoPercorridoM): cada pedaço de chão conta uma vez, mesmo com várias pessoas,
+  // várias passagens ou alguém andando em volta do mesmo lugar. trechos: lista de linhas [lat, lng].
+  function kmTerreno(trechos) {
+    var G = raiz.TrilhaGeo;
+    if (G && G.terrenoPercorridoM) return G.terrenoPercorridoM(trechos) / 1000;
+    return (trechos || []).reduce(function (a, t) { return a + kmTrilha(t); }, 0);
+  }
   function kmTrilha(pontos) {
     var m = 0;
     for (var k = 1; k < (pontos || []).length; k++) {
@@ -607,16 +614,17 @@
     var ref = data(op.acionado_em || op.criada_em);
     ANO_REF = ref ? ref.getFullYear() : null;
     var ipo = window.Ipo.normalizarIpo(op.ipo || {});
-    var kmPorPessoa = {};
-    (d.trilhas || []).forEach(function (t) { kmPorPessoa[t.participante_id] = (kmPorPessoa[t.participante_id] || 0) + kmTrilha(t.pontos); });
-    var kmTotal = Object.keys(kmPorPessoa).reduce(function (a, k) { return a + kmPorPessoa[k]; }, 0);
+    var linhasPorPessoa = {}, kmPorPessoa = {};
+    (d.trilhas || []).forEach(function (t) { (linhasPorPessoa[t.participante_id] = linhasPorPessoa[t.participante_id] || []).push(t.pontos || []); });
+    Object.keys(linhasPorPessoa).forEach(function (k) { kmPorPessoa[k] = kmTerreno(linhasPorPessoa[k]); });
+    var kmTotal = kmTerreno((d.trilhas || []).map(function (t) { return t.pontos || []; }));
     var concluidos = d.setores.filter(function (s) { return s.status === 'concluido'; });
     var areaConcluida = concluidos.reduce(function (a, s) { return a + (areaSetor(s) || 0); }, 0);
     var numeros = [
       [String(d.participantes.length), 'pessoas de campo'],
       [concluidos.length + ' / ' + d.setores.length, 'setores concluídos'],
       [areaConcluida ? textoArea(areaConcluida) : '—', 'área varrida (concluídos)'],
-      [kmTotal ? kmTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' km' : '—', 'percorridos (trilhas)'],
+      [kmTotal ? kmTotal.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' km' : '—', 'de terreno percorrido'],
       [String((d.fotos || []).length), 'fotos'],
     ];
     var conteudo = [];
@@ -678,7 +686,7 @@
     var voluntarios = ativos.filter(function (p) { return p.tipo === 'civil'; }).length;
     var concluidos = d.setores.filter(function (s) { return s.status === 'concluido'; });
     var areaVarrida = concluidos.reduce(function (a, s) { return a + (areaSetor(s) || 0); }, 0);
-    var km = (d.trilhas || []).reduce(function (a, t) { return a + kmTrilha(t.pontos); }, 0);
+    var km = kmTerreno((d.trilhas || []).map(function (t) { return t.pontos || []; }));
     var inicio = op.acionado_em || op.criada_em;
     var fim = op.encerrada_em || d.gerado_em || new Date().toISOString();
     var dias = inicio ? Math.max(1, Math.round((new Date(chaveDia(fim) + 'T12:00:00') - new Date(chaveDia(inicio) + 'T12:00:00')) / 86400000) + 1) : null;
@@ -1109,7 +1117,8 @@
         pessoas: pessoas,
         // trilhas de verdade: quem tem linha desenhada no dia (os pontos só dentro da base ou apagados com a borracha não contam)
         trilhas: pessoas.filter(function (p) { return p.pontos.length > 1; }),
-        km: pessoas.filter(function (p) { return p.pontos.length > 1; }).reduce(function (a, p) { return a + p.km; }, 0),
+        // terreno do dia: cada pedaço de chão conta uma vez (equipe andando junta, ida e volta, voltas no mesmo lugar)
+        km: kmTerreno([].concat.apply([], pessoas.map(function (p) { return p.segmentos || []; }))),
         setores: setoresDia,
         diario: diario,
         encontros: diario.filter(function (e) { return e.categoria === 'encontro'; }),
@@ -1149,7 +1158,7 @@
     conteudo.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 48, h: 3, color: COR.acento }], margin: [0, 0, 0, 10] });
     conteudo.push({ text: op.codigo, style: 'tituloCapa', fontSize: 20 });
     conteudo.push({ text: p.subtitulo, style: 'subtituloCapa', margin: [0, 4, 0, 12] });
-    var kmTotal = dias.reduce(function (a, x) { return a + x.km; }, 0);
+    var kmTotal = kmTerreno([].concat.apply([], dias.map(function (x) { return [].concat.apply([], x.pessoas.map(function (p) { return p.segmentos || []; })); })));
     var nomes = {};
     dias.forEach(function (x) { x.trilhas.forEach(function (q) { nomes[q.id] = true; }); });
     conteudo.push(ficha([
@@ -1166,7 +1175,7 @@
       return [{ text: x.numero ? x.numero + 'º' : '—', style: 'td', bold: true }, { text: x.dia.split('-').reverse().join('/'), style: 'tdMono' }, String(x.trilhas.length), kmTexto(x.km),
         String(x.setores.length), { text: feito ? (feito.length > 160 ? feito.slice(0, 157) + '…' : feito) : 'IPO do dia não preenchido', style: feito ? 'td' : 'tdNota' }];
     }), [30, 58, 42, 44, 42, '*']));
-    conteudo.push(nota('No período: ' + Object.keys(nomes).length + ' pessoa(s) diferentes com posição, ' + kmTexto(kmTotal) + ' percorridos (sem os trechos dentro da base e os apagados do mapa).'));
+    conteudo.push(nota('No período: ' + Object.keys(nomes).length + ' pessoa(s) diferentes com posição, ' + kmTexto(kmTotal) + ' de terreno percorrido (cada trecho de chão conta uma vez, mesmo com várias pessoas ou passagens; sem os trechos dentro da base e os apagados do mapa).'));
     // dados gerais da ocorrência (o que vale para a operação inteira)
     if (I) {
       conteudo.push({ text: 'Dados da ocorrência', style: 'h1', pageBreak: 'before', margin: [0, 0, 0, 4] });
@@ -1186,7 +1195,7 @@
       conteudo.push({ text: (x.numero ? x.numero + 'º dia da operação' : 'Dia') + '  ·  ' + diaExtenso(x.dia + 'T12:00:00'), style: 'h1', pageBreak: 'before', margin: [0, 0, 0, 8] });
       conteudo.push({
         table: { widths: ['*', '*', '*', '*', '*'], body: [[
-          [String(x.trilhas.length), 'pessoas com trilha'], [kmTexto(x.km), 'percorridos'], [String(x.setores.length), 'setores marcados'],
+          [String(x.trilhas.length), 'pessoas com trilha'], [kmTexto(x.km), 'de terreno percorrido'], [String(x.setores.length), 'setores marcados'],
           [String(x.setores.filter(function (s) { return s.concluido; }).length), 'setores concluídos'], [String(x.encontros.length), 'encontros e relatos'],
         ].map(function (n) { return { stack: [{ text: n[0], style: 'numero' }, { text: n[1], style: 'numeroRotulo' }], fillColor: COR.fundo, margin: [8, 7, 4, 7] }; })] },
         layout: { hLineWidth: function () { return 0; }, vLineWidth: function (i) { return i > 0 && i < 5 ? 3 : 0; }, vLineColor: function () { return '#ffffff'; },
@@ -1314,7 +1323,7 @@
       // trilhas feitas: só aparece se alguém fez trilha no dia (linha desenhada); os mapas por trilha só se foram pedidos
       if (x.trilhas.length) {
         conteudo.push(subtitulo('Trilhas feitas'));
-        conteudo.push(ficha([['Pessoas com trilha', String(x.trilhas.length)], ['Percorrido', kmTexto(x.km)]]));
+        conteudo.push(ficha([['Pessoas com trilha', String(x.trilhas.length)], ['Terreno percorrido', kmTexto(x.km)]]));
         x.trilhas.forEach(function (q) {
           var mt = recursos.mapasTrilhaDia && recursos.mapasTrilhaDia[x.dia + '|' + q.id];
           if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + kmTexto(q.km), style: 'dia', headlineLevel: 2 }, { image: mt, width: 380, margin: [0, 2, 0, 8] }], unbreakable: true });

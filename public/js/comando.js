@@ -3827,8 +3827,10 @@
   // guardados não mudam: o histórico completo continua na ficha.
   // Distância percorrida pelo participante (rastros GPS válidos; as falhas sem registro não contam)
   function distanciaPercorridaM(p) {
+    var segs = trilhaDe(p).segmentos;
+    if (window.TrilhaGeo.terrenoPercorridoM) return window.TrilhaGeo.terrenoPercorridoM(segs);   // voltas no mesmo lugar não somam de novo
     var m = 0;
-    trilhaDe(p).segmentos.forEach(function (seg) { m += comprimentoLinhaM(seg); });
+    segs.forEach(function (seg) { m += comprimentoLinhaM(seg); });
     return m;
   }
   function formatarKm(m) {
@@ -4671,7 +4673,7 @@
         '<button type="button" class="btn btn-pequeno btn-link" data-cpf="' + p.id + '">' + (est.cpfVisivel.has(p.id) ? 'ocultar' : 'mostrar') + '</button>' : '—'],
       ['Coordenadas', pos ? '<span class="mono">' + C.esc(window.Coords.formatar(pos.lat, pos.lng, est.prefsMapa.coord || 'dec')) + '</span> <span class="muted">' + C.esc(C.precisao(pos.prec)) + '</span>' : '—'],
       ['Última posição', pos ? C.hora(pos.t) + ' <span class="muted">(' + C.idade(pos.t) + ')</span>' : '—'],
-      ['Distância percorrida', (p.pontos && p.pontos.length) ? formatarKm(distanciaPercorridaM(p)) + ' <span class="muted">(rastros GPS, sem as falhas)</span>' : '—'],
+      ['Distância percorrida', (p.pontos && p.pontos.length) ? formatarKm(distanciaPercorridaM(p)) + ' <span class="muted">(rastros GPS, sem as falhas; o mesmo chão conta uma vez)</span>' : '—'],
       ['Último contato', d.ultimo_contato_em ? C.hora(d.ultimo_contato_em) + ' <span class="muted">(' + C.idade(d.ultimo_contato_em) + ')</span>' : '—'],
       ['Rastreamento', (ehResp ? (d.rastreando ? 'Compartilhando posição' : 'Posição não compartilhada') : (d.rastreando ? 'Ativo' : 'Interrompido')) + ' · ' + C.esc(textoGps(d.gps_estado))],
       [ehResp ? 'Entrou no painel' : 'Ingressou', C.hora(d.criado_em)],
@@ -9999,9 +10001,7 @@
   function infoTrilhaGps(p) {
     var g = grupoDoParticipante(p);
     var pts = pontosVisiveisDe(p).filter(function (x) { return !x.na_base && (!est.filtroDia || noDia(x.t)); });
-    var tr = trilhaDe(p);
-    var m = 0;
-    tr.segmentos.forEach(function (seg) { m += comprimentoLinhaM(seg); });
+    var m = distanciaPercorridaM(p);
     var sub = [TIPOS[tipoDe(p.dados)].rotulo, g ? g.nome : null, formatarComprimento(m),
       pts.length ? C.hora(new Date(pts[0].t).toISOString(), false) + ' – ' + C.hora(new Date(pts[pts.length - 1].t).toISOString(), false) : null,
       p.dados.gravar_trilha === false ? 'gravação desligada' : null].filter(Boolean).join(' · ');
@@ -10295,7 +10295,7 @@
     lista.sort(function (a, b) { return (b.id === est.selecionado) - (a.id === est.selecionado); });
     lista.forEach(function (p) {
       var iv = intervalosDe(p);
-      var km = 0; trilhaDe(p).segmentos.forEach(function (seg) { km += comprimentoLinhaM(seg); });
+      var km = distanciaPercorridaM(p);
       corpo.appendChild(UI.el('button', { classe: 'item-area', type: 'button', 'data-participante': p.id, onclick: function () { fechar(); iniciarBorrachaGps(p.id); } }, [
         UI.el('span', { classe: 'chip-cor', style: 'background:' + corDoParticipante(p) }),
         UI.el('span', { classe: 'item-area-txt' }, [
@@ -10317,7 +10317,7 @@
     ul.innerHTML = '';
     lista.forEach(function (p) {
       var iv = intervalosDe(p);
-      var km = 0; trilhaDe(p).segmentos.forEach(function (seg) { km += comprimentoLinhaM(seg); });
+      var km = distanciaPercorridaM(p);
       ul.appendChild(UI.el('li', { classe: 'item-trilha' }, [
         UI.el('button', { classe: 'item-area', type: 'button', 'data-trilha-gps': p.id, onclick: function () { selecionar(p.id); } }, [
           UI.el('span', { classe: 'chip-cor', style: 'background:' + corDoParticipante(p) }),

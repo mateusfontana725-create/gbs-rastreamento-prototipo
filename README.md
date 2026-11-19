@@ -216,6 +216,12 @@ legível, elas não aparecem.
   GPS ou a última posição ruim antes de uma falha: sai do desenho no mapa e nos relatórios (não risca o mapa nem estica o
   zoom). As posições continuam guardadas no banco. Quem foi de verdade para longe (sem voltar) continua desenhado.
 
+### Quilômetros: terreno percorrido (versão 1.8.1)
+
+- O total de km (dashboard "Terreno percorrido", relatórios Final, Diário e IPO) conta cada pedaço de chão (quadrados de
+  25 m) uma vez só: voltas no mesmo lugar, ida e volta pelo mesmo caminho e o grupo andando junto não multiplicam mais o
+  número. A soma do que cada pessoa andou aparece em letra menor no dashboard. No painel e no dashboard, o km de cada pessoa usa a mesma regra.
+
 ### Mapa do dia e IPO com pontos e fotos (migração 085, versão 1.8.0)
 
 - **Mapa do dia** (IPO e Diário): enquadra o local da operação e o que foi feito no dia num raio de 5 km (trilha ou ponto mais

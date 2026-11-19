@@ -159,5 +159,21 @@ chk(G.unirIntervalos([{ de: 5, ate: 8 }, { de: 1, ate: 3 }, { de: 3, ate: 6 }, {
   chk(G.semPontosSoltos([]).length === 0 && G.semPontosSoltos([perto[0], longe]).length === 2, 'listas curtas ficam como estão (o último ponto não tem como ser conferido)');
 }
 
+// Terreno percorrido: cada pedaço de chão conta uma vez
+{
+  const reta = Array.from({ length: 101 }, (_, i) => [-25, -49 + i * 0.0001]);   // ~1 km
+  const um = G.terrenoPercorridoM([reta]);
+  chk(um > 950 && um < 1060, 'reta de 1 km = 1 km', um);
+  chk(Math.abs(G.terrenoPercorridoM([reta, reta, reta]) - um) < 1, 'três pessoas andando juntas contam uma vez');
+  chk(G.terrenoPercorridoM([reta.concat(reta.slice().reverse())]) < um + 50, 'ida e volta pelo mesmo caminho conta uma vez');
+  const voltas = [];
+  for (let v = 0; v < 20; v++) for (let a = 0; a < 36; a++) voltas.push([-25 + 0.0003 * Math.sin(a / 36 * 2 * Math.PI), -49 + 0.0003 * Math.cos(a / 36 * 2 * Math.PI)]);
+  chk(G.terrenoPercorridoM([voltas]) < 300 && G.comprimentoM(voltas) > 3500, '20 voltas no mesmo lugar não viram 4 km', G.terrenoPercorridoM([voltas]));
+  const paralela = reta.map((p) => [p[0] - 0.001, p[1]]);   // ~110 m ao lado
+  chk(G.terrenoPercorridoM([reta, paralela]) > 1900, 'equipes em faixas lado a lado somam');
+  chk(G.terrenoPercorridoM([[[-25, -49], [-25.5, -49]]]) === 0, 'salto grande (falha) não conta');
+  chk(G.terrenoPercorridoM([]) === 0 && G.terrenoPercorridoM([[{ lat: -25, lng: -49 }, { lat: -25, lng: -49.001 }]]) > 90, 'lista vazia e pontos como objetos');
+}
+
 console.log('\nGeometria das trilhas: ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

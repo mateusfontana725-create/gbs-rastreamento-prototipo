@@ -1264,10 +1264,13 @@
         return e.nivel === 'critico' ? COR.critico : e.origem === 'manual' ? COR.observacao : null;
       } }));
       if (x.pontos.length) {
-        conteudo.push(subtitulo('Pontos marcados no dia'));
-        conteudo.push(tabela(['Hora', 'Tipo', 'Título', 'Coordenadas'], x.pontos.map(function (q) {
-          return [hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria, { text: q.titulo, style: 'td', bold: true }, { text: coord(q.lat, q.lng), style: 'tdMono' }];
-        }), [36, 100, '*', 92]));
+        // com o mapa dos pontos (opcional): os números do mapa entram na tabela
+        var mapaPd = recursos.mapasPontosDia && recursos.mapasPontosDia[x.dia];
+        if (mapaPd) conteudo.push({ stack: [subtitulo('Pontos marcados no dia'), { image: mapaPd, width: 515, margin: [0, 0, 0, 2] }, nota('Os números no mapa são os da tabela' + (x.pontos.length > 30 ? ' (até o 30º ponto).' : '.'))], unbreakable: true });
+        else conteudo.push(subtitulo('Pontos marcados no dia'));
+        conteudo.push(tabela((mapaPd ? ['Nº'] : []).concat(['Hora', 'Tipo', 'Título', 'Coordenadas']), x.pontos.map(function (q, i) {
+          return (mapaPd ? [{ text: i < 30 ? String(i + 1) : '', style: 'td', bold: true }] : []).concat([hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria, { text: q.titulo, style: 'td', bold: true }, { text: coord(q.lat, q.lng), style: 'tdMono' }]);
+        }), (mapaPd ? [18] : []).concat([36, 100, '*', 92])));
       }
       if (x.fotos.length) conteudo.push(nota(x.fotos.length + ' foto(s) registrada(s) neste dia (estão no relatório final detalhado).'));
     });
@@ -1338,11 +1341,11 @@
         var linhas = x.pontos.slice(0, 15).map(function (q, i) {
           var desc = String(q.descricao || '').replace(/\s+/g, ' ').trim();
           if (desc.length > 160) desc = desc.slice(0, 157) + '…';
-          return [{ text: String(i + 1), style: 'td', bold: true }, hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria,
+          return (mapaP ? [{ text: String(i + 1), style: 'td', bold: true }] : []).concat([hora(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria,
             { stack: [{ text: q.titulo || '—', style: 'td', bold: true }, desc ? { text: desc, style: 'tdSuave' } : null].filter(Boolean) },
-            { text: q.lat != null && q.lng != null ? Number(q.lat).toFixed(6) + '\n' + Number(q.lng).toFixed(6) : '—', style: 'tdMono' }];
+            { text: q.lat != null && q.lng != null ? Number(q.lat).toFixed(6) + '\n' + Number(q.lng).toFixed(6) : '—', style: 'tdMono' }]);
         });
-        conteudo.push(tabela(['Nº', 'Hora', 'Tipo', 'Ponto e descrição', 'Coordenada'], linhas, [18, 32, 80, '*', 70]));
+        conteudo.push(tabela((mapaP ? ['Nº'] : []).concat(['Hora', 'Tipo', 'Ponto e descrição', 'Coordenada']), linhas, (mapaP ? [18] : []).concat([32, 80, '*', 70])));
         if (x.pontos.length > 15) conteudo.push(nota('+ ' + (x.pontos.length - 15) + ' outro(s) ponto(s) neste dia (no relatório Diário).'));
       }
       // fotos do dia: miniaturas (até 6), com quem tirou e a hora

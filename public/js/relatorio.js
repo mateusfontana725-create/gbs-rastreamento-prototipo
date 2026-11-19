@@ -1072,14 +1072,15 @@
         }
       }
     }
-    // mapa SÓ dos pontos de interesse do dia (o IPO pede): os mesmos números da tabela, para saber onde está cada um
-    if (opcoes.mapaPontos) {
+    // Opcional (opcoes.mapas.pontos, caixa no cartão do IPO e do Diário): mapa SÓ dos pontos de interesse do dia, com os
+    // mesmos números da tabela, para saber onde está cada um (até 30 pontos por dia)
+    if (opcoes.mapas && opcoes.mapas.pontos) {
       recursos.mapasPontosDia = {};
       for (var mp = 0; mp < dias.length; mp++) {
-        var pts = dias[mp].pontos.filter(function (p) { return p.lat != null && p.lng != null; }).slice(0, 15);
+        var pts = dias[mp].pontos.slice(0, 30).filter(function (p) { return p.lat != null && p.lng != null; });
         if (!pts.length) continue;
         passo('Desenhando os pontos do dia ' + dias[mp].dia.split('-').reverse().slice(0, 2).join('/') + '…');
-        var marc = dias[mp].pontos.slice(0, 15).map(function (p, i) { return p.lat != null && p.lng != null ? Object.assign({}, p, { icone: String(i + 1) }) : null; }).filter(Boolean);
+        var marc = dias[mp].pontos.slice(0, 30).map(function (p, i) { return p.lat != null && p.lng != null ? Object.assign({}, p, { icone: String(i + 1) }) : null; }).filter(Boolean);
         var enqP = pts.map(function (p) { return [p.lat, p.lng]; });
         // um ponto só (ou todos juntos): uma margem de ~250 m em volta, para o zoom não ir ao máximo
         var la = enqP.map(function (q) { return q[0]; }), ln = enqP.map(function (q) { return q[1]; });
@@ -1136,7 +1137,7 @@
   // pontos do dia. Só baixa (o IPO se preenche e se corrige ao longo do dia; o texto do WhatsApp sai do IPO (Diário)).
   async function gerarIpoRelatorio(op, ini, fim, modo, passo, mapas) {
     passo = passo || function () {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: true, mapaPontos: true });
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: true });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (modo === 'dia' ? ' · acumulado até o dia' : ''), acumulado: modo === 'dia',
@@ -1436,7 +1437,9 @@
         // Mapa do dia é padrão (sempre entra). Opcional: um mapa para cada trilha (uma por pessoa).
         var caixaTrilhas = UI.el('input', { type: 'checkbox', id: 'rel-' + tipo + '-mapa-trilhas' });
         var rotuloTrilhas = UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-' + tipo + '-mapa-trilhas', title: 'Além do mapa do dia (que sempre sai), um mapa para cada trilha do dia' }, [caixaTrilhas, ' Também um mapa de cada trilha']);
-        function mapasEscolhidos() { return { trilhas: caixaTrilhas.checked }; }
+        var caixaPontos = UI.el('input', { type: 'checkbox', id: 'rel-' + tipo + '-mapa-pontos' });
+        var rotuloPontos = UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-' + tipo + '-mapa-pontos', title: 'Um mapa só com os pontos de interesse do dia, numerados como na tabela' }, [caixaPontos, ' Também um mapa dos pontos de interesse']);
+        function mapasEscolhidos() { return { trilhas: caixaTrilhas.checked, pontos: caixaPontos.checked }; }
         var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
         function ajustarModo() {
           campoDe.hidden = modo.value === 'tudo';
@@ -1455,7 +1458,7 @@
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), rotuloTrilhas, progresso]), [botao]);
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), rotuloTrilhas, rotuloPontos, progresso]), [botao]);
       }
       out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
       out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {

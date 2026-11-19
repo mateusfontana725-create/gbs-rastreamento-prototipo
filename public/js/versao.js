@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.8.2';
+  var NUMERO = '1.8.3';
   var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.8.3', data: '2026-11-19', itens: [
+      'O mapa dos pontos de interesse agora é opcional, como o mapa de cada trilha: marque "Também um mapa dos pontos de interesse" no IPO ou no Diário. A coordenada de cada ponto continua sempre na tabela.',
+    ] },
     { versao: '1.8.2', data: '2026-11-19', itens: [
       'IPO: os pontos de interesse do dia ganham um mapa só com eles, numerados, e a tabela traz o número e a coordenada de cada ponto (além do tipo, nome e descrição).',
     ] },

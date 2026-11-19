@@ -228,8 +228,8 @@ legível, elas não aparecem.
   longe fica de fora do mapa) e **não mostra setores** (podem ser de outros dias); o que conta no dia são trilhas e pontos.
 - **Trilha em trechos:** a migração `085_trilhas_dias_trechos.sql` faz `relatorio_trilhas_dias` devolver a trilha cortada nas
   falhas de GPS e nos saltos impossíveis; o relatório não liga mais os dois lados da falha. Operação arquivada: o mesmo corte.
-- **IPO:** pontos de interesse do dia num mapa só com eles (numerados) e numa tabela com número, hora, tipo, nome, descrição
-  curta e coordenada; e as fotos do dia (até 6, pequenas).
+- **IPO:** pontos de interesse do dia numa tabela com hora, tipo, nome, descrição curta e coordenada e, se marcar "Também um
+  mapa dos pontos de interesse" (IPO ou Diário, como o mapa de cada trilha), num mapa só com eles, numerados como na tabela; e as fotos do dia (até 6, pequenas).
 
 ### Relatórios IPO e Diário, separados (versão 1.3.0)
 

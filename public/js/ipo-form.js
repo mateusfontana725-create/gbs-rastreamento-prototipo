@@ -126,7 +126,12 @@
     var desap = el('input', { classe: 'campo', id: 'ipo-desap', type: 'datetime-local', value: ipo.desaparecimento ? paraCampoData(ipo.desaparecimento) : '' });
     var desapQual = el('select', { classe: 'campo', id: 'ipo-desap-qual', 'aria-label': 'Origem da hora do desaparecimento' }, [el('option', { value: '', texto: 'Origem da hora…' })].concat(
       I.QUALIDADE_HORA.map(function (x) { return el('option', { value: x[0], selected: ipo.desaparecimento_qualidade === x[0] ? true : null, texto: x[1] }); })));
-    var aquatica = I.ehAquatica(ipo.natureza);
+    // natureza (com sugestões da lista do CBMPR; pode escrever outra) e início das operações: aqui mesmo, sem ir em Dados da operação
+    var natureza = el('input', { classe: 'campo', id: 'ipo-natureza', maxlength: '300', list: 'ipo-naturezas', value: ipo.natureza || I.naturezaPadrao(op), placeholder: 'Ex.: BUSCA TERRESTRE – PESSOA', autocomplete: 'off' });
+    var listaNaturezas = el('datalist', { id: 'ipo-naturezas' }, I.NATUREZAS.map(function (n) { return el('option', { value: n }); }));
+    var inicio = el('input', { classe: 'campo', id: 'ipo-inicio', type: 'datetime-local', value: paraCampoData(ipo.inicio_operacoes || op.acionado_em) });
+    var contexto = el('textarea', { classe: 'campo', id: 'ipo-contexto', rows: '5', maxlength: '3000', placeholder: 'Como e quando a pessoa desapareceu, o que se sabe do cenário, hipóteses, se há testemunhas…' });
+    contexto.value = ipo.contexto || op.descricao || '';
     // vítimas: dados das fichas + documento (vai no IPO, não na ficha)
     var pessoas = el('input', { classe: 'campo ipo-qtd', id: 'ipo-pessoas', type: 'number', min: '0', max: '999', inputmode: 'numeric', value: ipo.pessoas_perdidas != null ? ipo.pessoas_perdidas : '', placeholder: vit.length ? String(vit.length) : '' });
     var docs = {};
@@ -135,7 +140,17 @@
       docs[String(v.id).toLowerCase()] = doc;
       return el('li', null, [el('div', null, [el('strong', { texto: v.nome }),
         el('small', { classe: 'muted', texto: [v.sexo === 'M' ? 'Masculino' : v.sexo === 'F' ? 'Feminino' : 'sexo não informado', v.idade != null ? v.idade + ' anos' : 'idade não informada', v.origem || 'origem não informada'].join(' · ') })]), doc]);
-    })) : el('p', { classe: 'muted', texto: 'Nenhuma ficha de vítima. Os dados da vítima (nome, sexo, idade, origem) vêm das fichas: cadastre em Vítima.' });
+    })) : null;
+    // sem ficha de vítima: preenche aqui mesmo (com ficha, vale a ficha)
+    var vNome = el('input', { classe: 'campo', id: 'ipo-vitima-nome', maxlength: '300', value: ipo.vitima_nome, placeholder: 'Nome completo' });
+    var vSexo = el('select', { classe: 'campo', id: 'ipo-vitima-sexo' }, [['', 'Não apurado'], ['M', 'Masculino'], ['F', 'Feminino']].map(function (o) { return el('option', { value: o[0], selected: ipo.vitima_sexo === o[0] ? true : null, texto: o[1] }); }));
+    var vIdade = el('input', { classe: 'campo ipo-qtd', id: 'ipo-vitima-idade', type: 'number', min: '0', max: '120', inputmode: 'numeric', value: ipo.vitima_idade != null ? ipo.vitima_idade : '', placeholder: 'Anos' });
+    var vOrigem = el('input', { classe: 'campo', id: 'ipo-vitima-origem', maxlength: '300', value: ipo.vitima_origem, placeholder: 'Naturalidade, onde mora/trabalha…' });
+    var vDoc = el('input', { classe: 'campo mono', id: 'ipo-vitima-doc', maxlength: '40', value: ipo.vitima_doc, placeholder: 'CPF ou RG (opcional)' });
+    var blocoVitimaDigitada = vit.length ? null : UI.grade([
+      UI.campo('Nome da vítima', vNome, { para: 'ipo-vitima-nome', largo: true }), UI.campo('Sexo', vSexo, { para: 'ipo-vitima-sexo' }), UI.campo('Idade', vIdade, { para: 'ipo-vitima-idade' }),
+      UI.campo('Origem', vOrigem, { para: 'ipo-vitima-origem', largo: true }), UI.campo('Documento', vDoc, { para: 'ipo-vitima-doc', opcional: true }),
+    ]);
     // busca
     var procs = {};
     var gradeProc = el('div', { classe: 'ipo-procs' }, I.PROCEDIMENTOS.map(function (p) {
@@ -173,17 +188,18 @@
         UI.campo('IPO para (destinatários)', destino, { para: 'ipo-destino' }),
         UI.campo('Unidade', unidade, { para: 'ipo-unidade', opcional: true }),
         UI.campo('RGO', rgo, { para: 'ipo-rgo', opcional: true }),
-        UI.campo('Natureza', el('p', { classe: 'ipo-fixo', texto: ipo.natureza || 'não informada (escolha em Dados da operação → Editar)' }), {}),
+        UI.campo('Natureza', el('div', null, [natureza, listaNaturezas]), { para: 'ipo-natureza', largo: true }),
       ])]),
       UI.secao('Local e horários', [UI.grade([
         UI.campo('Localidade/Município/Região', localidade, { para: 'ipo-localidade', largo: true }),
         UI.campo('Coord. de referência (último avistamento)', coordRef, { para: 'ipo-coord', ajuda: coordPadrao ? 'Em branco: ' + coordPadrao + (ulv ? ' (último local visto da ficha)' : ' (local da operação)') : null }),
-        UI.campo('Início das operações', el('p', { classe: 'ipo-fixo', texto: op.acionado_em ? I.dataExtensa(op.acionado_em) : 'não informado (Dados da operação)' }), {}),
+        UI.campo('Início das operações', inicio, { para: 'ipo-inicio' }),
         UI.campo('Acionamento do CB', acionCb, { para: 'ipo-acion-cb', ajuda: 'Em branco: o início das operações.' }),
         UI.campo('Desaparecimento provável', el('div', { classe: 'ipo-par' }, [desap, desapQual]), { para: 'ipo-desap' }),
-        aquatica ? UI.campo('Tipo de meio líquido', radios('ipo-meio', I.MEIOS, ipo.meio_liquido), {}) : null,
+        UI.campo('Tipo de meio líquido (busca aquática)', radios('ipo-meio', I.MEIOS, ipo.meio_liquido), {}),
       ])]),
-      UI.secao('Vítima(s)', [UI.grade([UI.campo('Nº de pessoas perdidas', pessoas, { para: 'ipo-pessoas', ajuda: vit.length ? 'Em branco: ' + vit.length + ' (fichas).' : null })]), listaVit]),
+      UI.secao('Vítima(s)', [UI.grade([UI.campo('Nº de pessoas perdidas', pessoas, { para: 'ipo-pessoas', ajuda: vit.length ? 'Em branco: ' + vit.length + ' (fichas).' : 'Em branco: Não apurado.' })]), listaVit || el('p', { classe: 'muted', texto: 'Sem ficha de vítima: preencha os dados abaixo (se houver ficha em Vítima, ela vale no lugar disto).' }), blocoVitimaDigitada]),
+      UI.secao('Contexto do desaparecimento', [contexto]),
       UI.secao('Busca', [
         UI.campo('Buscas preliminares (casas de parentes, hospitais etc.)?', radios('ipo-buscas', I.BUSCAS, ipo.buscas_preliminares), { largo: true }),
         UI.campo('Possibilidade real de vida?', radios('ipo-vida', I.VIDA, ipo.possibilidade_vida), { largo: true }),
@@ -225,7 +241,9 @@
       return I.normalizarIpo(Object.assign({}, op.ipo || {}, {
         destinatarios: destino.value, unidade: unidade.value, rgo: rgo.value, localidade: localidade.value, coord_referencia: coordRef.value,
         acionamento_cb: isoLocal(acionCb.value), desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value,
-        meio_liquido: aquatica ? marcadoEm(form, 'ipo-meio') : ipo.meio_liquido, pessoas_perdidas: pessoas.value, vitimas_docs: docsIpo,
+        natureza: (natureza.value.trim() === I.naturezaPadrao(op) && !ipo.natureza) ? '' : natureza.value, inicio_operacoes: (isoLocal(inicio.value) === isoLocal(paraCampoData(op.acionado_em))) ? '' : isoLocal(inicio.value),
+        contexto: contexto.value.trim() === String(op.descricao || '').trim() ? '' : contexto.value, vitima_nome: vNome.value, vitima_sexo: vSexo.value, vitima_idade: vIdade.value, vitima_origem: vOrigem.value, vitima_doc: vDoc.value,
+        meio_liquido: marcadoEm(form, 'ipo-meio'), pessoas_perdidas: pessoas.value, vitimas_docs: docsIpo,
         buscas_preliminares: marcadoEm(form, 'ipo-buscas'), possibilidade_vida: marcadoEm(form, 'ipo-vida'), procedimentos: proc, procedimentos_outros: procOutros.value,
         recursos_cb: recursos.value, orgaos_apoio: orgaos.value, imprensa_como: impComo.value, imprensa_estrategia: impEstrategia.value,
         imagens_anexas: img === 'sim' ? true : img === 'nao' ? false : null,

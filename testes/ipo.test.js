@@ -321,5 +321,22 @@ teste('natureza: sem a do IPO, vem do tipo da operação', () => {
   assert.ok(I.textoWhatsApp({ ipo: {} }, {}).includes('Natureza: Não apurado'));
 });
 
+teste('IPO preenchido direto (sem ficha de vítima): nome, sexo, idade, origem, documento, contexto e início', () => {
+  const o = { codigo: 'OP', acionado_em: local(2026, 11, 2, 17, 20), descricao: 'Contexto do cadastro', ipo: I.normalizarIpo({ natureza: 'BUSCA TERRESTRE – PESSOA', vitima_nome: 'Gustavo Teixeira', vitima_sexo: 'M', vitima_idade: '19', vitima_origem: 'Cornélio Procópio', vitima_doc: '129.590.679-16', contexto: 'Contexto do IPO', inicio_operacoes: local(2026, 11, 2, 18, 0) }) };
+  const t = I.textoWhatsApp(o, { vitimas: [], diario: [] });
+  assert.ok(t.includes('*Nº de pessoas perdidas:* 01') && t.includes('*Sexo/Idade da(s) vítima(s):* 01 Masculino / 19 anos') && t.includes('*Nome da vítima:* Gustavo Teixeira/129.590.679-16') && t.includes('*Origem da(s) vítima(s):* Cornélio Procópio'));
+  assert.ok(t.includes('*Contexto/histórico/cenário do desaparecimento:* Contexto do IPO') && !t.includes('Contexto do cadastro'), 'o contexto do IPO vence o do cadastro');
+  assert.ok(t.includes('18h00min'), 'o início digitado no IPO vence o do cadastro');
+  // com ficha de vítima, vale a ficha
+  const comFicha = I.textoWhatsApp(o, { vitimas: [{ id: 'v1', nome: 'Da Ficha', sexo: 'F', idade: 30 }], diario: [] });
+  assert.ok(comFicha.includes('Da Ficha') && !comFicha.includes('Gustavo Teixeira'));
+  // sem nada digitado: o contexto e o início vêm do cadastro
+  const so = I.textoWhatsApp({ codigo: 'OP', acionado_em: local(2026, 11, 2, 17, 20), descricao: 'Contexto do cadastro', ipo: {} }, {});
+  assert.ok(so.includes('Contexto do cadastro') && so.includes('17h20min'));
+  // limites
+  const n = I.normalizarIpo({ vitima_sexo: 'X', vitima_idade: 500, vitima_nome: 'a'.repeat(900) });
+  assert.strictEqual(n.vitima_sexo, ''); assert.strictEqual(n.vitima_idade, 120); assert.strictEqual(n.vitima_nome.length, 300);
+});
+
 if (falhas) { console.log('\n' + falhas + ' falha(s)'); process.exit(1); }
 console.log('\nTodos os testes do IPO e do relatório resumido passaram.');

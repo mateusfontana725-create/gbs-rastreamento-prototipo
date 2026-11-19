@@ -231,6 +231,12 @@ legível, elas não aparecem.
   desdobramentos, órgãos de apoio, imagens e responsável). O que não foi preenchido sai como **Não apurado**. De onde vem cada
   um: natureza/local/início/contexto em **Dados da operação** (a natureza, se faltar, vem do tipo da operação); nome, sexo,
   idade e origem da vítima, e o nº de pessoas perdidas, das **fichas de vítima**; o resto, do **IPO (Diário)**.
+- **O formulário do IPO tem todos os campos** (IPO (Diário) › Dados da ocorrência › Editar): unidade, RGO, **natureza**
+  (lista do CBMPR, pode escrever outra), localidade, **início das operações**, coordenada, acionamento, desaparecimento, tipo
+  de meio líquido, **nº de pessoas perdidas**, **nome, sexo, idade, origem e documento da vítima** (quando não há ficha de
+  vítima; com ficha, vale a ficha), buscas preliminares, possibilidade de vida, procedimentos, **contexto do desaparecimento**,
+  recursos, órgãos de apoio e imagens. Natureza, início e contexto vêm preenchidos do cadastro e só ficam guardados no IPO se
+  você mudar.
 - **IPO de um dia = acumulado até o dia** (como o modelo): o efetivo e os desdobramentos trazem todos os dias até ali e os
   procedimentos, recursos e órgãos somam o que foi usado até ali; vale também para "Copiar IPO do dia". Nos relatórios de
   período ou de tudo, cada dia sai só com o seu.

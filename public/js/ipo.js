@@ -206,6 +206,14 @@
       efetivo: listaPorDia(raw.efetivo, { qtd: 'qtd', nomes: 1000 }, 200),
       desdobramentos: listaPorDia(raw.desdobramentos, { texto: 4000 }, 200),
       dias: diasValidos(raw.dias),
+      // preenchidos direto no IPO (valem quando não há ficha de vítima / sobre o cadastro)
+      inicio_operacoes: dataIso(raw.inicio_operacoes),
+      contexto: textoLongo(raw.contexto, 3000),
+      vitima_nome: texto(raw.vitima_nome, MAX_TEXTO),
+      vitima_sexo: raw.vitima_sexo === 'M' || raw.vitima_sexo === 'F' ? raw.vitima_sexo : '',
+      vitima_idade: inteiro(raw.vitima_idade, 0, 120),
+      vitima_origem: texto(raw.vitima_origem, MAX_TEXTO),
+      vitima_doc: texto(raw.vitima_doc, 40),
       imprensa_como: textoLongo(raw.imprensa_como, 3000),
       imprensa_estrategia: textoLongo(raw.imprensa_estrategia, 3000),
       orgaos_apoio: textoLongo(raw.orgaos_apoio, 4000),
@@ -250,11 +258,23 @@
 
   // extra.dia ('AAAA-MM-DD'): o IPO daquele dia (efetivo, procedimentos, recursos, órgãos e desdobramento só do dia).
   // extra.geral: só os dados gerais da ocorrência (sem nada que é de cada dia).
+  // Natureza vinda do tipo da operação (quando o IPO ainda não tem a sua)
+  function naturezaPadrao(op) {
+    op = op || {};
+    var DO_TIPO = { terrestre: 'BUSCA TERRESTRE – PESSOA', aquatica: 'BUSCA AQUÁTICA – PESSOA', sarp: NATUREZAS[3], brec: NATUREZAS[4] };
+    return DO_TIPO[op.tipo] || (op.tipo === 'outras' ? String(op.tipo_outro || '').trim() : '') || '';
+  }
+
   function itens(op, extra) {
     op = op || {};
     extra = extra || {};
     var i = normalizarIpo(op.ipo || {});
     var vit = (extra.vitimas || []).filter(function (v) { return v && v.nome; });
+    // sem ficha de vítima: os dados digitados no próprio IPO (nome, sexo, idade, origem, documento)
+    if (!vit.length && (i.vitima_nome || i.vitima_sexo || i.vitima_idade != null || i.vitima_origem)) {
+      vit = [{ id: '__ipo__', nome: i.vitima_nome, sexo: i.vitima_sexo, idade: i.vitima_idade, origem: i.vitima_origem }];
+      i.vitimas_docs = Object.assign({}, i.vitimas_docs, { '__ipo__': i.vitima_doc });
+    }
     var diario = extra.diario || [];
     var umDia = extra.dia ? ipoDoDia(op.ipo, extra.dia, diario) : null;
     // extra.ate ('AAAA-MM-DD'): o IPO ACUMULADO até aquele dia (como o modelo do CBMPR: o efetivo e os desdobramentos trazem todos
@@ -281,10 +301,7 @@
       if (!umDia) i.bms_envolvidos = null;
     }
     // Natureza: a do IPO; sem ela, a que vem do tipo da operação (assim a natureza nunca fica de fora se o tipo foi escolhido)
-    if (!i.natureza) {
-      var DO_TIPO = { terrestre: 'BUSCA TERRESTRE – PESSOA', aquatica: 'BUSCA AQUÁTICA – PESSOA', sarp: NATUREZAS[3], brec: NATUREZAS[4] };
-      i.natureza = DO_TIPO[op.tipo] || (op.tipo === 'outras' ? String(op.tipo_outro || '').trim() : '') || '';
-    }
+    if (!i.natureza) i.natureza = naturezaPadrao(op);
     var out = [];
     // O IPO tem TODOS os campos do modelo do CBMPR; o que não foi preenchido sai como "Não apurado" (só os dados gerais do
     // Diário, extra.geral, omitem o vazio: ali os campos do dia ficam de fora de propósito).
@@ -296,7 +313,7 @@
     if (i.rgo) out.push({ cabecalho: 'RGO ' + i.rgo }); else if (completo) out.push({ cabecalho: 'RGO: ' + NA });
     if (i.natureza) out.push({ cabecalho: 'Natureza: ' + i.natureza }); else if (completo) out.push({ cabecalho: 'Natureza: ' + NA });
     add('Localidade/Município/Região', i.localidade || op.local_endereco || '');
-    add('Data/hora do início das operações', dataExtensa(op.acionado_em));
+    add('Data/hora do início das operações', dataExtensa(i.inicio_operacoes || op.acionado_em));
     if (ehAquatica(i.natureza) || i.meio_liquido) add('Tipo de meio líquido', i.meio_liquido ? '( X ) ' + rotuloDe(MEIOS, i.meio_liquido) : '');
     var refCoord = i.coord_referencia;
     if (!refCoord) {
@@ -311,7 +328,7 @@
       var porSexo = {};
       vit.forEach(function (v) { var k = SEXO[v.sexo] || 'Sexo não informado'; (porSexo[k] = porSexo[k] || []).push(v.idade != null ? v.idade + ' anos' : 'idade não informada'); });
       add('Sexo/Idade da(s) vítima(s)', Object.keys(porSexo).map(function (k) { return dois(porSexo[k].length) + ' ' + k + ' / ' + porSexo[k].join(', '); }).join('; '));
-      add('Nome da vítima', vit.map(function (v) { var doc = i.vitimas_docs[String(v.id || '').toLowerCase()]; return v.nome + (doc ? '/' + doc : ''); }).join('; '));
+      add('Nome da vítima', vit.map(function (v) { var doc = i.vitimas_docs[String(v.id || '').toLowerCase()]; return (v.nome || '') + (doc ? (v.nome ? '/' : '') + doc : ''); }).filter(Boolean).join('; '));
       add('Origem da(s) vítima(s)', vit.map(function (v) { return v.origem || ''; }).filter(Boolean).join('; '));
     } else {
       add('Sexo/Idade da(s) vítima(s)', '');
@@ -330,7 +347,7 @@
     if (i.procedimentos_outros) marcasProc.push([i.procedimentos_outros, true]);
     if (marcasProc.length) out.push({ rotulo: 'Procedimentos de Busca sendo realizados', marcas: marcasProc, soMarcados: true });
     else add('Procedimentos de Busca sendo realizados', '');
-    add('Contexto/histórico/cenário do desaparecimento', op.descricao || '');
+    add('Contexto/histórico/cenário do desaparecimento', i.contexto || op.descricao || '');
     var rec = i.recursos_cb ? i.recursos_cb.split('\n').filter(function (l) { return l.trim(); }).map(function (l) { return /^[-•]/.test(l) ? l : '- ' + l; }) : [];
     diario.forEach(function (e) { if (e.tipo === 'recurso' && e.detalhe) rec.push('- ' + e.detalhe); });
     if (!umDia) i.dias.forEach(function (x) { if (x.recursos) rec.push('- ' + diaBr(x.dia) + ': ' + x.recursos.replace(/\n+/g, '; ')); });
@@ -385,7 +402,7 @@
   }
 
   raiz.Ipo = {
-    normalizarIpo: normalizarIpo, itens: itens, ipoDoDia: ipoDoDia, gravarDia: gravarDia, diasComIpo: diasComIpo, diaDoRegistro: diaDoRegistro, textoWhatsApp: textoWhatsApp, dataExtensa: dataExtensa, dataCurta: dataCurta, diaValido: diaValido,
+    normalizarIpo: normalizarIpo, naturezaPadrao: naturezaPadrao, itens: itens, ipoDoDia: ipoDoDia, gravarDia: gravarDia, diasComIpo: diasComIpo, diaDoRegistro: diaDoRegistro, textoWhatsApp: textoWhatsApp, dataExtensa: dataExtensa, dataCurta: dataCurta, diaValido: diaValido,
     MEIOS: MEIOS, BUSCAS: BUSCAS, QUALIDADE_HORA: QUALIDADE_HORA, qualidadeHora: qualidadeHora, textoHoraVisto: textoHoraVisto, VIDA: VIDA, PROCEDIMENTOS: PROCEDIMENTOS, DESTINO_PADRAO: DESTINO_PADRAO,
     NATUREZAS: NATUREZAS, OUTRA_NATUREZA: OUTRA_NATUREZA, PERFIS_VITIMA: PERFIS_VITIMA,
     ehAquatica: ehAquatica, tipoDaNatureza: tipoDaNatureza,

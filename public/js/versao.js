@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.7.1';
+  var NUMERO = '1.7.2';
   var DATA = '2026-11-19';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.7.2', data: '2026-11-19', itens: [
+      'Formulário do IPO (Dados da ocorrência) com TODOS os campos do modelo para preencher: natureza, início das operações, tipo de meio líquido, nome, sexo, idade, origem e documento da vítima (quando não há ficha de vítima), nº de pessoas perdidas e contexto do desaparecimento, além dos que já tinha. Antes esses campos só existiam em outras telas (ou nem existiam), por isso faltavam no relatório.',
+    ] },
     { versao: '1.7.1', data: '2026-11-19', itens: [
       'IPO completo: o relatório e o texto do WhatsApp trazem TODOS os campos do modelo do CBMPR (unidade, RGO, natureza, localidade, início, meio líquido, coordenada, nº de pessoas perdidas, sexo/idade, nome e origem da vítima, desaparecimento, acionamento, buscas preliminares, possibilidade de vida, procedimentos, contexto, recursos, efetivo, desdobramentos, órgãos de apoio, imagens e responsável). O que não foi preenchido sai como "Não apurado" (antes o campo vazio simplesmente sumia).',
       'IPO de um dia = IPO acumulado até aquele dia, como no modelo: o efetivo e os desdobramentos trazem todos os dias até ali, e procedimentos, recursos e órgãos somam o que foi usado até ali. "Copiar IPO do dia" também.',

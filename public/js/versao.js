@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.10.0';
+  var NUMERO = '1.10.1';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.10.1', data: '2026-11-21', itens: [
+      'Recursos empregados (Editar operação): a lista já vem com ABS BM 13629 (Rolândia), ABRESC BM 004 e ABRESC BM 005 (Canil Setorial 3° BBM). Escolha e clique em Adicionar.',
+      'Não achou o recurso na lista? "Novo recurso na lista" cadastra um novo, que passa a aparecer nas próximas vezes (neste aparelho). Os já adicionados dá para editar ou remover.',
+    ] },
     { versao: '1.10.0', data: '2026-11-21', itens: [
       'Novo relatório IPO geral, o primeiro da lista de Relatórios: o IPO da operação inteira, no modelo do CBMPR, curto e sem separar por dia. Traz o informe completo (procedimentos, recursos empregados, efetivo, desdobramentos, órgãos), o mapa da operação, os militares, as trilhas e os pontos de interesse.',
       'No IPO geral dá para marcar, se quiser: um mapa de cada trilha, o mapa dos pontos de interesse e um mapa de cada setor.',

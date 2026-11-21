@@ -346,36 +346,60 @@
         ulRec.appendChild(li);
       });
     }
-    var OUTRO_REC = '__outro__';
-    var selRec = UI.el('select', { classe: 'campo', id: id('rec-sel'), 'aria-label': 'Recursos disponíveis' }, [UI.el('option', { value: OUTRO_REC, texto: 'Outro recurso (digitar)…' })]);
-    var txtRec = UI.el('input', { classe: 'campo', id: id('rec-txt'), maxlength: '300', autocomplete: 'off', placeholder: 'Ex.: ABS BM 13629 3ºBBM/2CIA/3PEL - Rolândia' });
-    function ajustarRec() { txtRec.hidden = selRec.value !== OUTRO_REC; }
-    selRec.addEventListener('change', function () { ajustarRec(); if (!txtRec.hidden) txtRec.focus(); });
+    // Lista de recursos para escolher: os de sempre, os que você já acrescentou (guardados neste aparelho) e os de Recursos (SCI)
+    var RECURSOS_PADRAO = ['ABS BM 13629 3ºBBM/2CIA/3PEL - Rolândia', 'ABRESC BM 004 - Canil Setorial 3° BBM', 'ABRESC BM 005 - Canil Setorial 3° BBM'];
+    function recursosGuardados() { try { var l = JSON.parse(localStorage.getItem('gbs-recursos-cb') || '[]'); return Array.isArray(l) ? l.filter(function (x) { return typeof x === 'string' && x; }) : []; } catch (e) { return []; } }
+    function guardarRecurso(t) { try { var l = recursosGuardados(); if (l.indexOf(t) === -1) { l.push(t); localStorage.setItem('gbs-recursos-cb', JSON.stringify(l.slice(-200))); } } catch (e) { /* sem armazenamento: vale só nesta tela */ } }
+    var catalogo = [];
+    var selRec = UI.el('select', { classe: 'campo', id: id('rec-sel'), 'aria-label': 'Recursos disponíveis' });
+    function desenharCatalogo(escolher) {
+      var atual = escolher || selRec.value;
+      selRec.innerHTML = '';
+      catalogo.forEach(function (t) { selRec.appendChild(UI.el('option', { value: t, texto: t })); });
+      if (atual && catalogo.indexOf(atual) !== -1) selRec.value = atual;
+    }
+    function acrescentarAoCatalogo(t) { if (t && catalogo.indexOf(t) === -1) catalogo.push(t); }
+    RECURSOS_PADRAO.concat(recursosGuardados(), recursosLista).forEach(acrescentarAoCatalogo);
+    desenharCatalogo();
     function adicionarRecurso() {
-      var v = selRec.value === OUTRO_REC ? txtRec.value.replace(/\s+/g, ' ').trim() : selRec.value;
-      if (!v) { txtRec.focus(); return; }
+      var v = selRec.value;
+      if (!v) return;
       if (recursosLista.indexOf(v) === -1) recursosLista.push(v);
-      txtRec.value = '';
       desenharRecursos();
     }
-    txtRec.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); adicionarRecurso(); } });
     var btnAddRec = UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: id('rec-add'), texto: 'Adicionar', onclick: adicionarRecurso });
-    // Recursos disponíveis: os cadastrados em Recursos (SCI) desta operação. O que não estiver na lista se digita em "Outro".
+    // Não está na lista? Cadastra o recurso novo na lista (fica para as próximas vezes) e já o escolhe.
+    var txtNovo = UI.el('input', { classe: 'campo', id: id('rec-novo'), maxlength: '300', autocomplete: 'off', placeholder: 'Ex.: ABS BM 13629 3ºBBM/2CIA/3PEL - Rolândia' });
+    function salvarNovoRecurso() {
+      var t = txtNovo.value.replace(/\s+/g, ' ').trim();
+      if (!t) { txtNovo.focus(); return; }
+      acrescentarAoCatalogo(t);
+      guardarRecurso(t);
+      desenharCatalogo(t);
+      txtNovo.value = '';
+      blocoNovo.hidden = true;
+      btnNovo.hidden = false;
+      selRec.focus();
+    }
+    txtNovo.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); salvarNovoRecurso(); } });
+    var blocoNovo = UI.el('div', { classe: 'cad-recurso-novo-lista', hidden: true }, [txtNovo,
+      UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', id: id('rec-novo-salvar'), texto: 'Salvar na lista', onclick: salvarNovoRecurso }),
+      UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Cancelar', onclick: function () { blocoNovo.hidden = true; btnNovo.hidden = false; } })]);
+    var btnNovo = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: id('rec-novo-abrir'), texto: '＋ Novo recurso na lista', onclick: function () { blocoNovo.hidden = false; btnNovo.hidden = true; txtNovo.focus(); } });
     if (!inicial && op.id && window.C && C.cliente) {
       C.consultar(C.cliente.from('sci2_recursos').select('nome,quantidade,instituicao,situacao').eq('operacao_id', op.id).order('criado_em', { ascending: true })).then(function (r) {
         (r || []).filter(function (x) { return x.situacao !== 'desmobilizado'; }).forEach(function (x) {
-          var t = x.nome + (x.quantidade > 1 ? ' ×' + x.quantidade : '') + (x.instituicao ? ' - ' + x.instituicao : '');
-          selRec.insertBefore(UI.el('option', { value: t, texto: t }), selRec.lastChild);
+          acrescentarAoCatalogo(x.nome + (x.quantidade > 1 ? ' ×' + x.quantidade : '') + (x.instituicao ? ' - ' + x.instituicao : ''));
         });
-        if (selRec.options.length > 1) { selRec.selectedIndex = 0; ajustarRec(); }
-      }, function () { /* sem a tabela: só "Outro" */ });
+        desenharCatalogo();
+      }, function () { /* sem a tabela: só a lista de sempre */ });
     }
-    ajustarRec();
     desenharRecursos();
     var grupoProc = UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Procedimentos de busca realizados' }), gradeProc, procOutros]);
     var grupoRec = UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Recursos do Corpo de Bombeiros empregados' }), ulRec, vazioRec,
-      UI.el('div', { classe: 'cad-recurso-novo' }, [selRec, txtRec, btnAddRec]),
-      UI.el('small', { classe: 'muted', texto: 'Escolha na lista e clique em Adicionar. Não está na lista? Escolha "Outro recurso" e digite. Dá para editar ou remover os já adicionados.' })]);
+      UI.el('div', { classe: 'cad-recurso-novo' }, [selRec, btnAddRec]),
+      btnNovo, blocoNovo,
+      UI.el('small', { classe: 'muted', texto: 'Escolha o recurso na lista e clique em Adicionar. Não está na lista? Use "Novo recurso na lista": ele passa a aparecer aqui nas próximas vezes (neste aparelho). Os adicionados podem ser editados ou removidos.' })]);
 
     // (cada campo é um nó do DOM: aparece em uma única seção)
     var secoes = inicial

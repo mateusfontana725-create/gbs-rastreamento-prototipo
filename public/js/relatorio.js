@@ -1090,6 +1090,23 @@
         recursos.mapasPontosDia[dias[mp].dia] = await desenharMapa({ largura: 900, altura: 460, enquadrar: enqP, ajuste: 0.75, pontos: marc, setores: [], trilhas: [], manuais: [], fundo: true });
       }
     }
+    // opcional (IPO diário): um mapa de cada setor trabalhado no dia (até 30 por dia), com o setor em destaque e as trilhas do dia
+    recursos.mapasSetorDia = {};
+    if (!opcoes.semMapas && opcoes.mapas && opcoes.mapas.setores) {
+      for (var sd = 0; sd < dias.length; sd++) {
+        var xd = dias[sd], refS = referenciaDoDia(xd);
+        if (!xd.setores.length) continue;
+        var trS = [];
+        xd.trilhas.forEach(function (q) { trechosPerto(q.segmentos || [q.pontos], refS).forEach(function (sg) { trS.push({ participante_id: q.id, tipo: q.tipo, pontos: sg }); }); });
+        var baseS = elementosMapa(Object.assign({}, dados, { trilhas: trS, pontos: [], fotos: [], trilhasManuais: [] }), { fundo: true }).base;
+        var lisS = xd.setores.slice(0, 30);
+        for (var ss = 0; ss < lisS.length; ss++) {
+          var st = lisS[ss].setor;
+          passo('Desenhando o setor ' + st.nome + ' em ' + xd.dia.split('-').reverse().slice(0, 2).join('/') + ' (' + (ss + 1) + '/' + lisS.length + ')…');
+          recursos.mapasSetorDia[xd.dia + '|' + st.id] = await desenharMapa(Object.assign({ largura: 900, altura: 520, enquadrar: pontosSetor(st), destaque: st.id }, baseS));
+        }
+      }
+    }
     // fotos do dia (só o IPO pede): todas as do dia, pequenas
     if (opcoes.fotos) {
       recursos.fotosDia = {};
@@ -1584,9 +1601,13 @@
           UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-ipo-mapa-trilhas' }, [cxTrilhas, ' Também um mapa de cada trilha (em cada dia)']),
           UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-ipo-mapa-pontos' }, [cxPontos, ' Também um mapa dos pontos de interesse (em cada dia)']),
         ]) : null;
+        // mapa de cada setor trabalhado no dia: opção em qualquer modo (um dia, período ou tudo)
+        var cxSetores = tipo === 'ipo' ? UI.el('input', { type: 'checkbox', id: 'rel-ipo-mapa-setores' }) : null;
+        var caixaSetores = cxSetores ? UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-ipo-mapa-setores' }, [cxSetores, ' Também um mapa de cada setor trabalhado (em cada dia)']) : null;
         function mapasEscolhidos() {
-          if (!cxTrilhas || modo.value === 'dia') return { trilhas: true, pontos: true };
-          return { trilhas: cxTrilhas.checked, pontos: cxPontos.checked };
+          var setores = Boolean(cxSetores && cxSetores.checked);
+          if (!cxTrilhas || modo.value === 'dia') return { trilhas: true, pontos: true, setores: setores };
+          return { trilhas: cxTrilhas.checked, pontos: cxPontos.checked, setores: setores };
         }
         var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
         function ajustarModo() {
@@ -1607,7 +1628,7 @@
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), caixasMapas, progresso]), [botao]);
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), caixasMapas, caixaSetores, progresso]), [botao]);
       }
       // IPO geral: a operação inteira (do acionamento até agora ou o encerramento), sem separar por dia. Mapas opcionais.
       var caixaGT = UI.el('input', { type: 'checkbox', id: 'rel-ipogeral-mapa-trilhas' });

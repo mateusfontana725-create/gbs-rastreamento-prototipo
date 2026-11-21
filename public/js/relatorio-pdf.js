@@ -1336,6 +1336,12 @@
           if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + kmTexto(q.km), style: 'dia', headlineLevel: 2 }, { image: mt, fit: [400, 196], margin: [0, 2, 0, 8] }], unbreakable: true });
         });
       }
+      // mapa de cada setor trabalhado no dia (opcional): 3 por página, o título junto do primeiro
+      var setoresMapaDia = x.setores.filter(function (z) { return recursos.mapasSetorDia && recursos.mapasSetorDia[x.dia + '|' + z.setor.id]; });
+      setoresMapaDia.forEach(function (z, k) {
+        conteudo.push({ stack: (k ? [] : [subtitulo('Setores do dia')]).concat([{ text: z.setor.nome, style: 'dia', headlineLevel: 2 },
+          { image: recursos.mapasSetorDia[x.dia + '|' + z.setor.id], fit: [400, 196], margin: [0, 2, 0, 8] }]), unbreakable: true });
+      });
       // pontos de interesse do dia (perigo, vestígio, o que foi achado ou descartado): nome e a descrição, resumida
       if (x.pontos.length) {
         // mapa só com os pontos (numerados como na tabela) e a tabela com a coordenada; o título não fica sozinho no fim da página

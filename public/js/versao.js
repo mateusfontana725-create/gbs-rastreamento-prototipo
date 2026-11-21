@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.14.2';
+  var NUMERO = '1.14.3';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.14.3', data: '2026-11-21', itens: [
+      'IPO diário: nova caixa "Também um mapa de cada setor trabalhado" (em Opções, em qualquer modo: um dia, período ou tudo). Cada setor trabalhado no dia sai num mapa, em destaque, com as trilhas daquele dia, 3 por página.',
+    ] },
     { versao: '1.14.2', data: '2026-11-21', itens: [
       'IPO diário de um período ou de tudo: o mapa de cada trilha e o mapa dos pontos de interesse viraram opção (caixas em "Opções"), como no IPO geral, para o PDF não ficar enorme. De um dia só, continuam saindo sempre.',
     ] },

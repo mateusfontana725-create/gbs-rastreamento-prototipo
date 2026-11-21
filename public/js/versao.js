@@ -9,10 +9,15 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.12.2';
+  var NUMERO = '1.13.0';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.13.0', data: '2026-11-21', itens: [
+      'Girar o mapa do painel com o mouse: segure Ctrl (⌘ no Mac) e arraste o mapa em volta do centro. Arrastar sem o Ctrl continua movendo o mapa.',
+      'Girar com dois dedos (celular e tablet): torça os dedos na tela. Agora só começa a girar depois de uma torção clara, então dar zoom de pinça não gira o mapa sem querer.',
+      'Soltando o mapa quase no norte, ele volta certinho para o norte para cima.',
+    ] },
     { versao: '1.12.2', data: '2026-11-21', itens: [
       'Correção: depois de salvar o Editar operação (ou os ajustes de GPS), a tela Dados da operação continuava mostrando os dados antigos, parecendo que os recursos empregados (e o resto) não tinham sido salvos. Agora ela reabre já atualizada.',
     ] },

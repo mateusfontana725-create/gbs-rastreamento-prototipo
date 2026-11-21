@@ -2097,7 +2097,7 @@
   /* Mapa                                                                 */
   /* ------------------------------------------------------------------ */
   function criarMapa() {
-    // rotate: o mapa gira (dois dedos no celular; Shift + roda do mouse no computador; botões e bússola). Plugin leaflet-rotate.
+    // rotate: o mapa gira (dois dedos no celular; Ctrl + arrastar ou Shift + roda do mouse no computador; botões e bússola). Plugin leaflet-rotate.
     var mapa = L.map('mapa', { zoomControl: true, preferCanvas: false, worldCopyJump: true, rotate: Boolean(L.Map.prototype.setBearing), bearing: 0, touchRotate: true, shiftKeyRotate: true, rotateControl: false, compassBearing: false }).setView([-15.79, -47.88], 4);
     // Com o leaflet-rotate há dois grupos de camadas: o que GIRA com o mapa (desenhos: setores, trilhas) e o que fica EM PÉ
     // (marcadores e rótulos). Camada nova criada fora dos dois ficava deslocada e sumia (os setores sumiram na 1.5.0).
@@ -2157,7 +2157,7 @@
         options: { position: 'topleft' },
         onAdd: function () {
           var div = L.DomUtil.create('div', 'leaflet-bar controle-girar');
-          [['↺', 'Girar o mapa para a esquerda (15°)', -15], ['↻', 'Girar o mapa para a direita (15°)', 15]].forEach(function (d) {
+          [['↺', 'Girar o mapa para a esquerda (15°). Também: Ctrl + arrastar o mapa, ou dois dedos na tela', -15], ['↻', 'Girar o mapa para a direita (15°). Também: Ctrl + arrastar o mapa, ou dois dedos na tela', 15]].forEach(function (d) {
             var b = L.DomUtil.create('a', 'btn-mapa', div);
             b.href = '#'; b.title = d[1]; b.textContent = d[0];
             b.setAttribute('role', 'button'); b.setAttribute('aria-label', d[1]);
@@ -2168,6 +2168,7 @@
         },
       });
       new Girar().addTo(mapa);
+      ligarGestosDeGiro(mapa);
       // o plugin desliga o zoom da roda enquanto o Shift está apertado e só religa na roda seguinte: religa ao soltar o Shift
       var religarRoda = function () { if (mapa.scrollWheelZoom && !mapa.scrollWheelZoom.enabled()) mapa.scrollWheelZoom.enable(); };
       document.addEventListener('keyup', function (e) { if (e.key === 'Shift') religarRoda(); });
@@ -4220,6 +4221,81 @@
    * Dia/pessoa, Grupos, Legenda e Meteorologia. Os controles de sempre continuam existindo (o menu só os aciona);
    * em tela larga nada muda. */
   /* ---------- Girar o mapa (plugin leaflet-rotate) ---------- */
+  // Gestos de giro (além dos botões ↺ ↻ e do Shift + roda do plugin):
+  //  - computador/tablet com mouse: Ctrl (ou ⌘) + arrastar gira o mapa em volta do centro;
+  //  - toque: dois dedos giram, mas só depois de uma torção de 12° (um zoom de pinça não gira o mapa sem querer).
+  //  Ao soltar perto do norte (até 6°), volta exatamente para o norte para cima.
+  var GIRO_LIMIAR_DEDOS = 12, GIRO_IMA_NORTE = 6;
+  function normalizarAngulo(g) { g = ((g % 360) + 360) % 360; return g > 180 ? g - 360 : g; }
+  function imaNoNorte(mapa) { if (Math.abs(normalizarAngulo(mapa.getBearing())) <= GIRO_IMA_NORTE) mapa.setBearing(0); }
+  function ligarGestosDeGiro(mapa) {
+    var cont = mapa.getContainer();
+    var giro = null;
+    function anguloDoPonteiro(ev) {
+      var r = cont.getBoundingClientRect();
+      return Math.atan2(ev.clientY - (r.top + r.height / 2), ev.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+    }
+    cont.addEventListener('pointerdown', function (ev) {
+      if (!(ev.ctrlKey || ev.metaKey) || ev.button !== 0 || ev.pointerType === 'touch') return;
+      if (ev.target.closest && ev.target.closest('.leaflet-control, .leaflet-popup, .controles-topo')) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      giro = { id: ev.pointerId, a0: anguloDoPonteiro(ev), b0: mapa.getBearing(), arrastava: mapa.dragging && mapa.dragging.enabled() };
+      if (giro.arrastava) mapa.dragging.disable();
+      cont.classList.add('mapa-girando');
+      try { cont.setPointerCapture(ev.pointerId); } catch (e) { /* sem captura: segue pelos eventos do mapa */ }
+    }, true);
+    cont.addEventListener('pointermove', function (ev) {
+      if (!giro || ev.pointerId !== giro.id) return;
+      ev.preventDefault();
+      mapa.setBearing(((giro.b0 + anguloDoPonteiro(ev) - giro.a0) % 360 + 360) % 360);
+    }, true);
+    function fim(ev) {
+      if (!giro || (ev && ev.pointerId !== giro.id)) return;
+      if (giro.arrastava) mapa.dragging.enable();
+      giro = null;
+      cont.classList.remove('mapa-girando');
+      imaNoNorte(mapa);
+    }
+    cont.addEventListener('pointerup', fim, true);
+    cont.addEventListener('pointercancel', fim, true);
+    cont.addEventListener('lostpointercapture', fim, true);
+    // Ctrl + clique no Mac abre o menu de contexto: dentro do mapa, enquanto gira, não
+    cont.addEventListener('contextmenu', function (ev) { if (giro || ev.ctrlKey) ev.preventDefault(); }, true);
+
+    // dois dedos: limiar antes de começar a girar (o plugin gira com qualquer torção, até no zoom de pinça)
+    var tg = mapa.touchGestures;
+    if (!tg || typeof tg._onTouchMove !== 'function') return;
+    var moverOriginal = tg._onTouchMove, fimOriginal = tg._onTouchEnd;
+    tg._onTouchMove = function (e) {
+      if (this._rotating && e.touches && e.touches.length === 2) {
+        var p1 = this._map.mouseEventToContainerPoint(e.touches[0]), p2 = this._map.mouseEventToContainerPoint(e.touches[1]);
+        var ang = Math.atan2(p1.y - p2.y, p1.x - p2.x) * 180 / Math.PI;
+        if (this._giroAng0 == null) this._giroAng0 = ang;
+        if (!this._giroLiberado) {
+          if (Math.abs(normalizarAngulo(ang - this._giroAng0)) < GIRO_LIMIAR_DEDOS) {
+            this._rotating = false;   // por enquanto só zoom (e o mapa não gira)
+            try { return moverOriginal.call(this, e); } finally { this._rotating = true; }
+          }
+          // passou do limiar: começa a girar a partir de agora, sem pulo
+          this._giroLiberado = true;
+          var v = p1.subtract(p2);
+          this._startTheta = Math.atan(v.x / v.y);
+          this._startBearing = this._map.getBearing() + (v.y < 0 ? 180 : 0);
+        }
+      }
+      return moverOriginal.call(this, e);
+    };
+    tg._onTouchEnd = function (e) {
+      var girou = this._giroLiberado;
+      this._giroLiberado = false;
+      this._giroAng0 = null;
+      var r = fimOriginal.call(this, e);
+      if (girou) imaNoNorte(this._map);
+      return r;
+    };
+  }
+
   function mapaGira() { return Boolean(est.mapa && typeof est.mapa.setBearing === 'function'); }
   function anguloMapa() { return mapaGira() ? Math.round(est.mapa.getBearing()) % 360 : 0; }
   function girarMapa(graus) {

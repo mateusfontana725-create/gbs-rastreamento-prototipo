@@ -3360,3 +3360,4 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .modal .form-dados .cad-formulario > .cad-secao > .cad-campos { display: block; }
 .modal.form-padrao:has(.form-dados) { width: min(780px, calc(100vw - 32px)); }
 .cad-local-endereco { margin-bottom: 14px; }
+#mapa.mapa-girando, #mapa.mapa-girando * { cursor: grabbing !important; }

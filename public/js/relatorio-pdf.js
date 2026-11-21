@@ -520,7 +520,9 @@
   // Dados da ocorrência, no formato do IPO do CBMPR (Ipo.itens: a mesma montagem do texto que vai para o WhatsApp).
   // As fichas das vítimas (com foto) vêm logo depois do informe.
   // dia: 'AAAA-MM-DD' ou nulo; acumulado: o IPO acumulado até o dia (como o modelo do CBMPR) em vez de só o dia
-  function blocoIpo(d, dia, acumulado) {
+  // opc.quebrarAntes: RegExp do rótulo que começa numa página nova (IPO geral: "Buscas preliminares…")
+  function blocoIpo(d, dia, acumulado, opc) {
+    opc = opc || {};
     var op = d.operacao;
     var I = window.Ipo;
     var lista = I.itens(op, { vitimas: d.vitimas || [], diario: d.diario || [], dia: acumulado ? null : (dia || null), ate: acumulado ? dia : null, responsavel: d.gerado_por_nome || '', coordenada: function (lat, lng) { return coord(lat, lng); } });
@@ -530,7 +532,7 @@
       if (x.cabecalho) { fecharFicha(); out.push({ text: x.cabecalho, bold: true, fontSize: 10, margin: [0, 0, 0, 2] }); return; }
       if (x.valor != null) { fichaAtual.push([x.rotulo, x.valor]); return; }
       fecharFicha();
-      out.push(subtitulo(x.rotulo));
+      out.push(subtitulo(x.rotulo, opc.quebrarAntes && opc.quebrarAntes.test(x.rotulo) ? { pageBreak: 'before' } : null));
       if (x.marcas) out.push(listaIpo(x.marcas.map(function (m) { return (m[1] ? '(X) ' : '(   ) ') + m[0]; })));
       else out.push({ stack: x.linhas.map(function (t) { return { text: t, style: 'corpo', margin: [0, 0, 0, x.espacado ? 6 : 1] }; }), margin: [0, 0, 0, 10] });
     });
@@ -1394,9 +1396,10 @@
     pontos.sort(function (a, b) { return String(a.criado_em).localeCompare(String(b.criado_em)); });
     var comTrilha = ordem.filter(function (q) { return q.segmentos.some(function (sg) { return sg.length > 1; }); });
     // o informe inteiro (sem separar por dia)
-    conteudo = conteudo.concat(I ? blocoIpo(d, null, false) : []);
+    // páginas fixas: 1ª = cabeçalho e dados; "Buscas preliminares" em diante na 2ª; o mapa da operação e as fotos, cada um na sua
+    conteudo = conteudo.concat(I ? blocoIpo(d, null, false, { quebrarAntes: /^Buscas preliminares/ }) : []);
     if (recursos.mapaGeral) {
-      conteudo.push(subtitulo('Mapa da operação'));
+      conteudo.push(subtitulo('Mapa da operação', { pageBreak: 'before' }));
       conteudo.push({ image: recursos.mapaGeral, fit: [515, 340], margin: [0, 2, 0, 2] });
       conteudo.push(legendaMapa());
     }

@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.13.1';
+  var NUMERO = '1.13.2';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.13.2', data: '2026-11-21', itens: [
+      'IPO geral: páginas organizadas. "Buscas preliminares" começa sempre na 2ª página, e o "Mapa da operação" e as "Fotos da operação" começam cada um numa página nova.',
+    ] },
     { versao: '1.13.1', data: '2026-11-21', itens: [
       'IPO geral: a tabela "Militares" virou "Participantes", com todo mundo que entrou na busca (militares, civis e responsáveis), o nome e a data e hora em que entrou, em ordem de entrada.',
     ] },

@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.14.1';
+  var NUMERO = '1.14.2';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.14.2', data: '2026-11-21', itens: [
+      'IPO diário de um período ou de tudo: o mapa de cada trilha e o mapa dos pontos de interesse viraram opção (caixas em "Opções"), como no IPO geral, para o PDF não ficar enorme. De um dia só, continuam saindo sempre.',
+    ] },
     { versao: '1.14.1', data: '2026-11-21', itens: [
       'Arquivos baixados (relatórios e exportações) vão para Downloads só com o nome deles, sem o "app busca gbs - " na frente. Fica mais fácil de achar pelo nome.',
     ] },

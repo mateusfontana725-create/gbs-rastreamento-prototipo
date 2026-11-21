@@ -1010,8 +1010,8 @@
     // linha não liga os lados de uma falha de GPS) e os pontos do dia —, com o zoom nelas, como o filtro do dia no painel.
     // Setores não entram (podem ter sido criados em outro dia; o que foi feito está nas trilhas). Só o que está a até 5 km do
     // local da operação entra no desenho e no zoom (quem estava longe da busca não estica o mapa nem risca até lá).
-    // Sempre: um mapa para cada trilha do dia (uma por pessoa).
-    var querTrilhas = true;
+    // Um mapa para cada trilha do dia (uma por pessoa): sempre, salvo opcoes.mapas.trilhas === false (IPO de período sem a caixa)
+    var querTrilhas = !(opcoes.mapas && opcoes.mapas.trilhas === false);
     recursos.mapasTrilhaDia = {};
     var RAIO_DIA_M = 5000;
     var op0 = dados.operacao || {};
@@ -1074,8 +1074,8 @@
     }
     // Sempre (IPO e Diário): mapa SÓ dos pontos de interesse do dia, com os
     // mesmos números da tabela, para saber onde está cada um (até 30 pontos por dia)
-    if (!opcoes.semMapas) {
-      recursos.mapasPontosDia = {};
+    recursos.mapasPontosDia = {};
+    if (!opcoes.semMapas && !(opcoes.mapas && opcoes.mapas.pontos === false)) {
       for (var mp = 0; mp < dias.length; mp++) {
         var pts = dias[mp].pontos.slice(0, 30).filter(function (p) { return p.lat != null && p.lng != null; });
         if (!pts.length) continue;
@@ -1576,9 +1576,21 @@
         var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-' + tipo + '-data' });
         var campoAte = UI.campo('Até', dataAte, { para: 'rel-' + tipo + '-ate' });
         // Mapa do dia, um mapa de cada trilha e o mapa dos pontos de interesse entram sempre (sem caixas para escolher).
-        function mapasEscolhidos() { return { trilhas: true, pontos: true }; }
+        // IPO diário de um período ou de tudo: os mapas extras (um por trilha, o dos pontos) viram opção, como no IPO geral,
+        // para o PDF não ficar enorme; de um dia só, saem sempre.
+        var cxTrilhas = tipo === 'ipo' ? UI.el('input', { type: 'checkbox', id: 'rel-ipo-mapa-trilhas' }) : null;
+        var cxPontos = tipo === 'ipo' ? UI.el('input', { type: 'checkbox', id: 'rel-ipo-mapa-pontos' }) : null;
+        var caixasMapas = tipo === 'ipo' ? UI.el('div', { classe: 'rel-mapas-caixas', hidden: true }, [
+          UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-ipo-mapa-trilhas' }, [cxTrilhas, ' Também um mapa de cada trilha (em cada dia)']),
+          UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-ipo-mapa-pontos' }, [cxPontos, ' Também um mapa dos pontos de interesse (em cada dia)']),
+        ]) : null;
+        function mapasEscolhidos() {
+          if (!cxTrilhas || modo.value === 'dia') return { trilhas: true, pontos: true };
+          return { trilhas: cxTrilhas.checked, pontos: cxPontos.checked };
+        }
         var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
         function ajustarModo() {
+          if (caixasMapas) caixasMapas.hidden = modo.value === 'dia';
           campoDe.hidden = modo.value === 'tudo';
           campoAte.hidden = modo.value !== 'periodo';
           var r = campoDe.querySelector('.rotulo, label'); if (r) r.textContent = modo.value === 'periodo' ? 'De' : 'Dia';
@@ -1595,7 +1607,7 @@
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), progresso]), [botao]);
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), caixasMapas, progresso]), [botao]);
       }
       // IPO geral: a operação inteira (do acionamento até agora ou o encerramento), sem separar por dia. Mapas opcionais.
       var caixaGT = UI.el('input', { type: 'checkbox', id: 'rel-ipogeral-mapa-trilhas' });

@@ -1392,8 +1392,6 @@
       x.pontos.forEach(function (q) { var k = q.id != null ? q.id : q.criado_em + q.titulo; if (!vistosP[k]) { vistosP[k] = true; pontos.push(q); } });
     });
     pontos.sort(function (a, b) { return String(a.criado_em).localeCompare(String(b.criado_em)); });
-    var mil = ordem.filter(function (q) { return q.tipo === 'militar'; });
-    var civis = ordem.filter(function (q) { return q.tipo === 'civil' && q.segmentos.length; }).length;
     var comTrilha = ordem.filter(function (q) { return q.segmentos.some(function (sg) { return sg.length > 1; }); });
     // o informe inteiro (sem separar por dia)
     conteudo = conteudo.concat(I ? blocoIpo(d, null, false) : []);
@@ -1402,12 +1400,14 @@
       conteudo.push({ image: recursos.mapaGeral, fit: [515, 340], margin: [0, 2, 0, 2] });
       conteudo.push(legendaMapa());
     }
-    conteudo.push(subtitulo('Militares'));
-    if (mil.length) {
-      var nomes = mil.map(function (q) { return graduacaoQra(q.nome); });
-      conteudo.push(tabela(['Graduação', 'QRA'], nomes.map(function (n) { return [{ text: n.grad, style: 'td' }, { text: n.qra, style: 'td', bold: true }]; }), [90, '*']));
-    } else conteudo.push(nota('Nenhum militar com posição registrada pelo app.'));
-    if (civis) conteudo.push(nota('Voluntários e civis em campo: ' + civis + '.'));
+    // participantes: todo mundo que entrou na busca (militares, civis, responsáveis), nome e quando entrou, por ordem de entrada
+    var parts = (d.participantes || []).length ? d.participantes.map(function (q) { return { nome: q.nome, em: q.entrou_em || q.criado_em }; })
+      : ordem.map(function (q) { return { nome: q.nome, em: null }; });
+    parts.sort(function (a, b) { return String(a.em || '9').localeCompare(String(b.em || '9')) || String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+    conteudo.push(subtitulo('Participantes (' + parts.length + ')'));
+    if (parts.length) {
+      conteudo.push(tabela(['Nome', 'Entrou na busca'], parts.map(function (q) { return [{ text: txt(q.nome), style: 'td' }, { text: q.em ? dataHoraCurta(q.em) : '—', style: 'td' }]; }), ['*', 110]));
+    } else conteudo.push(nota('Ninguém entrou na busca pelo app.'));
     if (comTrilha.length) {
       conteudo.push(subtitulo('Trilhas feitas'));
       var todos = [].concat.apply([], comTrilha.map(function (q) { return q.segmentos; }));

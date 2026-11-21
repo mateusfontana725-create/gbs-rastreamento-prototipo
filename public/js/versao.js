@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.13.0';
+  var NUMERO = '1.13.1';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.13.1', data: '2026-11-21', itens: [
+      'IPO geral: a tabela "Militares" virou "Participantes", com todo mundo que entrou na busca (militares, civis e responsáveis), o nome e a data e hora em que entrou, em ordem de entrada.',
+    ] },
     { versao: '1.13.0', data: '2026-11-21', itens: [
       'Girar o mapa do painel com o mouse: segure Ctrl (⌘ no Mac) e arraste o mapa em volta do centro. Arrastar sem o Ctrl continua movendo o mapa.',
       'Girar com dois dedos (celular e tablet): torça os dedos na tela. Agora só começa a girar depois de uma torção clara, então dar zoom de pinça não gira o mapa sem querer.',

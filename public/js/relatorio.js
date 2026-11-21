@@ -1241,12 +1241,12 @@
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (modo === 'dia' ? ' · acumulado até o dia' : ''), acumulado: modo === 'dia',
-      titulo: 'IPO ' + (ini === fim ? brDia(ini) : brDia(ini) + ' a ' + brDia(fim)) + ' — ' + op.codigo,
-      marca: 'IPO ' + (ini === fim ? brDia(ini).slice(0, 5) : brDia(ini).slice(0, 5) + ' A ' + brDia(fim).slice(0, 5)),
+      titulo: 'IPO diário ' + (ini === fim ? brDia(ini) : brDia(ini) + ' a ' + brDia(fim)) + ' — ' + op.codigo,
+      marca: 'IPO DIÁRIO ' + (ini === fim ? brDia(ini).slice(0, 5) : brDia(ini).slice(0, 5) + ' A ' + brDia(fim).slice(0, 5)),
     });
     passo('Gerando o PDF…');
     var r = await gerarBlob(await carregarPdfMake(), doc);
-    baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO', ini === fim ? ini.replace(/-/g, '') : ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
+    baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO-diario', ini === fim ? ini.replace(/-/g, '') : ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
     if (c.aviso) UI.aviso(c.aviso, 'erro', 9000);
     return r;
   }
@@ -1343,8 +1343,8 @@
   }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
-  var TIPO_ROTULO = { ipogeral: 'IPO geral', ipo: 'IPO', diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
-  var TITULO_TIPO = { ipogeral: 'IPO geral', ipo: 'IPO', diario: 'Relatórios diários guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
+  var TIPO_ROTULO = { ipogeral: 'IPO geral', ipo: 'IPO diário', diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
+  var TITULO_TIPO = { ipogeral: 'IPO geral', ipo: 'IPO diário', diario: 'Relatórios diários guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
   var DICA_TIPO = {
     ipogeral: 'O IPO da operação inteira, no modelo do CBMPR e curto, sem separar por dia: o informe completo (local, vítima, procedimentos, recursos empregados, efetivo, desdobramentos, órgãos), o mapa da operação, os militares, as trilhas e os pontos de interesse. Opcional: um mapa de cada trilha e o mapa dos pontos. Só baixa.',
     ipo: 'O IPO no modelo do CBMPR, curto: o informe do dia (local, vítima, procedimentos, recursos, efetivo, desdobramentos, órgãos de apoio e situação) e, embaixo, os militares (só graduação e QRA), os setores varridos, as trilhas feitas (com o mapa) e os pontos de interesse do dia. De um dia, de um período ou de tudo até o momento.',

@@ -1299,7 +1299,7 @@
     var conteudo = [];
     if (recursos.logo) conteudo.push({ image: recursos.logo, width: 120, margin: [0, 0, 0, 8] });
     conteudo.push({ text: 'IPO: ' + (i.destinatarios || ''), style: 'h2', margin: [0, 0, 0, 2] });
-    conteudo.push({ text: 'Informe Padrão de Ocorrência - IPO', style: 'h1', margin: [0, 0, 0, 2] });
+    conteudo.push({ text: 'Informe Padrão de Ocorrência - IPO · diário', style: 'h1', margin: [0, 0, 0, 2] });
     conteudo.push({ text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.  ·  ' + p.subtitulo, style: 'nota', margin: [0, 0, 0, 10] });
     dias.forEach(function (x, k) {
       var mil = x.pessoas.filter(function (q) { return q.tipo === 'militar'; });

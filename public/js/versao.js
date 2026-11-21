@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.11.0';
+  var NUMERO = '1.11.1';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.11.1', data: '2026-11-21', itens: [
+      'Relatórios: o IPO de cada dia agora se chama "IPO diário" (no cartão, no título do PDF e no nome do arquivo), para não confundir com o "IPO geral".',
+    ] },
     { versao: '1.11.0', data: '2026-11-21', itens: [
       'Dados da operação refeito: uma ficha limpa, seção por seção (Ocorrência, Local, Solicitante, Busca, Procedimentos e recursos, Vítimas), com o rótulo à esquerda e o valor à direita. Mostra também pessoas perdidas, BMs, procedimentos, recursos e as vítimas. O que falta preencher aparece num aviso no topo.',
       'Editar operação: seções numeradas, com títulos e rótulos legíveis, opções em botões e atalhos no topo para pular direto para cada parte. As vítimas viraram mais uma seção do formulário.',

@@ -226,7 +226,7 @@ teste('graduação e QRA a partir do nome digitado', () => {
   assert.deepStrictEqual(RP.graduacaoQra('Sd. QPM 1-0 Bartolomeu Cavalcanti'), { grad: 'Sd.', qra: 'Bartolomeu Cavalcanti' });
   assert.deepStrictEqual(RP.graduacaoQra('Maria Voluntária'), { grad: '—', qra: 'Maria Voluntária' });
 });
-teste('relatório IPO (curto): informe do dia + militares (graduação e QRA), setores, trilhas e pontos', () => {
+teste('relatório IPO (curto): informe do dia + participantes do dia, trilhas e pontos', () => {
   const setor = { id: 'S1', nome: 'Setor Margem', forma: 'poligono', pontos: [[-22.90, -51.67], [-22.90, -51.65], [-22.89, -51.65], [-22.89, -51.67]], status: 'concluido', missoes: [] };
   const d = Object.assign({ gerado_em: new Date().toISOString(), gerado_por_nome: 'Sgt Um', vitimas: [], fotos: [], grupos: [] }, {
     operacao: Object.assign({}, op, { ipo: I.gravarDia(Object.assign({}, op.ipo, { desdobramentos: [], efetivo: [] }), { dia: '2026-11-04', texto: 'Varredura na margem com K9', qtd: 2, nomes: 'Equipe Alfa', situacao: 'Amanhã: setor 4' }) }),
@@ -242,8 +242,10 @@ teste('relatório IPO (curto): informe do dia + militares (graduação e QRA), s
   const tx = textos(RP.montarIpo(d, { mapasDia: { '2026-11-04': 'data:image/png;base64,AA' } }, { dias, subtitulo: '2º dia · 04/11/2026', titulo: 'IPO', marca: 'IPO' }).content).join(' | ');
   assert.ok(/Informe Padrão de Ocorrência/.test(tx) && /IPO do dia 04\/11\/2026/.test(tx) && /RGO 20263BBM12221/.test(tx), 'o informe no modelo');
   assert.ok(/Varredura na margem com K9/.test(tx) && /Amanhã: setor 4/.test(tx), 'o IPO do dia');
-  assert.ok(/Militares do dia/.test(tx) && /Cb\./.test(tx) && /Alves/.test(tx), 'militares em graduação e QRA');
-  assert.ok(!/Beto Voluntário/.test(tx) && /Voluntários e civis em campo: 1/.test(tx), 'civis só em número, sem nome');
+  // participantes do dia (1.13.4): todo mundo, militar e civil, com o nome e a hora em que entrou no dia, por ordem de entrada
+  assert.ok(/Participantes do dia \(2\)/.test(tx) && !/Militares do dia/.test(tx), 'tabela de participantes no lugar da de militares');
+  assert.ok(tx.indexOf('Cb. Alves') !== -1 && tx.indexOf('Beto Voluntário') > tx.indexOf('Cb. Alves'), 'todos, em ordem de entrada (08:00 antes de 09:00)');
+  assert.ok(/08:00/.test(tx) && /09:00/.test(tx), 'a hora em que cada um entrou no dia');
   assert.ok(!/Setores varridos/.test(tx), 'não existe mais "Setores varridos" (o que foi varrido é visto pelas trilhas)');
   assert.ok(/Mapa do dia/.test(tx) && !/Setores marcados no mapa/.test(tx), 'mapa do dia sem a lista de setores (o que foi feito está nas trilhas)');
   assert.ok(/Ponto e descrição/.test(tx) && /Coordenada/.test(tx), 'pontos com a descrição e a coordenada');

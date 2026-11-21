@@ -1334,13 +1334,13 @@ body { font-size: 0.9375rem; }
   display: inline-block; flex: none; width: 22px; height: 0; vertical-align: middle; border-radius: 2px;
   border-top: 3px solid #fff; box-shadow: 0 0 0 2.5px #0b1220;
 }
-.lg-trilha-desenhada.lg-planejada { border-top: 3px dashed #facc15; }
+.lg-trilha-desenhada.lg-planejada { border-top: 3px solid #facc15; }
 .lg-trilha-desenhada.lg-percorrida { border-top-color: #fff; }
 .lg-trilha-gps { display: inline-block; width: 22px; height: 4px; vertical-align: middle; border-radius: 2px; background: #a855f7; box-shadow: 0 0 0 1.5px #0b1220; }
 .sinal-desenhada-planejada::before, .sinal-desenhada-percorrida::before {
   content: ""; width: 16px; height: 0; border-top: 3px solid #fff; box-shadow: 0 0 0 2px #0b1220; transform: rotate(-22deg);
 }
-.sinal-desenhada-planejada::before { border-top: 3px dashed #facc15; }
+.sinal-desenhada-planejada::before { border-top: 3px solid #facc15; }
 .selo.selo-trilha-planejada { color: #fde68a; background: rgba(250, 204, 21, .16); border: 1px dashed rgba(250, 204, 21, .7); }
 .selo.selo-trilha-percorrida { color: #f8fafc; background: rgba(248, 250, 252, .14); border: 1px solid rgba(248, 250, 252, .6); }
 .item-trilha { display: flex; align-items: stretch; gap: 6px; }
@@ -3398,3 +3398,12 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
   .rel-linha-extra { padding-left: 14px; }
 }
 .rel-mapas-caixas[hidden] { display: none; }
+
+/* Trilha desenhada (1.14.4): linha cheia com setas, como a de GPS; o selo ✎ no começo mostra que foi traçada no mapa */
+.marca-trilha-desenhada {
+  display: grid !important; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: #0b1220; border: 2px solid #facc15; color: #facc15; font: 700 11px/1 var(--fonte); box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+.marca-trilha-desenhada.marca-percorrida { border-color: #f8fafc; color: #f8fafc; }
+.lg-trilha-desenhada::after { content: "✎"; position: relative; top: -9px; left: -4px; font-size: 10px; color: #facc15; }
+.lg-trilha-desenhada.lg-percorrida::after { color: #f8fafc; }

@@ -3971,7 +3971,7 @@
     if (!poligonos.length) { if (p.setas) p.setas.remove(); return; }
     // apagada: setas presentes (mostram que é trilha e o sentido), mas em tom suave
     var apagada = trilhaApagada(p) && trilhasDiscretas();
-    var estilo = { stroke: false, fill: true, fillColor: apagada ? '#e5e7eb' : '#ffffff', fillOpacity: apagada ? 0.9 : opacidadeTrilha(p), interactive: false, smoothFactor: 0, className: 'trilha-setas' };
+    var estilo = { stroke: false, fill: true, fillColor: p.corSeta ? p.corSeta : apagada ? '#e5e7eb' : '#ffffff', fillOpacity: apagada ? 0.9 : opacidadeTrilha(p), interactive: false, smoothFactor: 0, className: 'trilha-setas' };
     if (!p.setas) p.setas = L.polygon(poligonos, estilo);
     else { p.setas.setLatLngs(poligonos); p.setas.setStyle(estilo); }
     if (!mapa.hasLayer(p.setas)) p.setas.addTo(mapa);
@@ -3985,7 +3985,7 @@
         try { desenharSetas(p); } catch (e) { /* enfeite: nunca impede a trilha */ }
       });
       est.trilhasManuais.forEach(function (t) {
-        if (!trilhaComoGps(t.d)) return;
+        if (!t.trilha) return;
         try { desenharSetas(t); } catch (e) { /* enfeite */ }
       });
       // as setas das apagadas não podem ficar por cima da trilha em destaque
@@ -3994,7 +3994,7 @@
         [p.halo, p.trilha, p.setas, p.toque].forEach(function (c) { if (c && est.mapa.hasLayer(c)) c.bringToFront(); });
       });
       est.trilhasManuais.forEach(function (t) {
-        if (trilhaComoGps(t.d) && trilhaDestacada(t)) { if (t.camada) t.camada.bringToFront(); if (t.setas) t.setas.bringToFront(); }
+        if (t.trilha && trilhaDestacada(t)) { if (t.camada) t.camada.bringToFront(); if (t.setas) t.setas.bringToFront(); }
       });
     }, 120);
   }
@@ -4084,8 +4084,8 @@
         if (p.toque) p.toque.bringToFront();
       }
     });
-    // trilhas importadas (desenhadas como as de GPS): espessura, realce e cor acompanham
-    est.trilhasManuais.forEach(function (t) { if (trilhaComoGps(t.d) && t.camada) desenharTrilhaManual(t); });
+    // trilhas desenhadas e importadas (desenhadas como as de GPS): espessura, realce e cor acompanham
+    est.trilhasManuais.forEach(function (t) { if (t.camada) desenharTrilhaManual(t); });
     agendarDecoracoesTrilhas();
   }
 
@@ -8990,7 +8990,10 @@
     var partes = recortarSegmentos([d.pontos]);   // fora das áreas sem trilha (migração 066)
     if (!partes.length) return;
     var e = ESTADO_TRILHA[d.estado] || ESTADO_TRILHA.planejada;
-    if (trilhaComoGps(d)) { desenharTrilhaImportadaComoGps(t, partes, e); return; }
+    // desenhada à mão (planejada ou percorrida) ou importada: o mesmo jeito da trilha de GPS (linha cheia, setas);
+    // a desenhada leva o selo ✎ no começo, para se ver que foi traçada no mapa
+    desenharTrilhaImportadaComoGps(t, partes, e, !trilhaComoGps(d));
+    return;
     var g = L.featureGroup();
     var opc = { pane: 'trilhasDesenhadas', lineJoin: 'round', lineCap: 'round' };
     var ft = fatorTelaTrilha();   // mais discreta em telas pequenas
@@ -9014,7 +9017,7 @@
   // feita pelo app — linha cheia com contorno escuro, setas de sentido, espessura pelo zoom, discreta por padrão e em
   // destaque ao tocar (ou com a ficha/foco da pessoa vinculada). As desenhadas à mão no mapa seguem como estavam.
   function trilhaComoGps(d) { return Boolean(d) && /^Importada de /.test(String(d.observacoes || '')); }
-  function desenharTrilhaImportadaComoGps(t, partes, e) {
+  function desenharTrilhaImportadaComoGps(t, partes, e, desenhada) {
     var d = t.d;
     t.chave = 'tm:' + d.id;
     t.dono = d.participante_id || null;
@@ -9022,11 +9025,16 @@
     // Vinculada a uma pessoa: é a trilha DELA, então usa a cor dela (a do grupo ou do tipo), como a gravada pelo app.
     // Sem vínculo: a cor do arquivo ou, na falta, a da situação.
     var donoP = d.participante_id ? est.participantes.get(d.participante_id) : null;
-    var cor = corApagada(donoP ? corDoParticipante(donoP) : (d.cor || e.cor), t);
+    var cor = corApagada(desenhada ? (d.cor || e.cor) : donoP ? corDoParticipante(donoP) : (d.cor || e.cor), t);
+    t.corSeta = desenhada && !d.cor && d.estado === 'percorrida' ? '#0b1220' : null;   // linha branca: seta escura
     var g = L.featureGroup();
     var opc = { lineJoin: 'round', lineCap: 'round' };
     L.polyline(partes, Object.assign({ color: '#0b1220', weight: pesoHalo(t), opacity: opacidadeHalo(t), interactive: false, className: 'trilha-halo' }, opc)).addTo(g);
-    t.trilha = L.polyline(partes, Object.assign({ color: cor, weight: pesoTrilha(t), opacity: opacidadeTrilha(t), interactive: false, className: 'trilha trilha-importada' }, opc)).addTo(g);
+    t.trilha = L.polyline(partes, Object.assign({ color: cor, weight: pesoTrilha(t), opacity: opacidadeTrilha(t), interactive: false, className: 'trilha ' + (desenhada ? 'trilha-desenhada-gps trilha-desenhada-' + d.estado : 'trilha-importada') }, opc)).addTo(g);
+    if (desenhada && !ponteiroDentroSemTrilha(partes[0][0])) {
+      L.marker(partes[0][0], { icon: L.divIcon({ className: 'marca-trilha-desenhada marca-' + (d.estado || 'planejada'), html: '✎', iconSize: [20, 20], iconAnchor: [10, 10] }),
+        interactive: false, keyboard: false, zIndexOffset: -50 }).addTo(g);
+    }
     var toque = L.polyline(partes, Object.assign({ color: '#000', weight: 16, opacity: 0, smoothFactor: 3, className: 'trilha-toque' }, opc)).addTo(g);
     ligarCliquesMapa(toque, {
       noDesenho: function (ev) { aoClicarNoMapa(ev); },
@@ -9037,12 +9045,12 @@
           var gp = grupoDoParticipante(pessoa);
           return { titulo: 'Trilha de ' + nomeExibido(pessoa), deslocY: -2, botao: 'Detalhes da trilha ›',
             sub: [TIPOS[tipoDe(pessoa.dados)].rotulo, gp ? gp.nome : null, d.comprimento_m ? window.Rotas.formatarDistancia(d.comprimento_m) : null,
-              d.percorrida_em ? C.hora(d.percorrida_em, false) : null, 'importada (' + d.nome + ')'].filter(Boolean).join(' · '),
-            criado: criadoEm(d, 'Importada'),
+              d.percorrida_em ? C.hora(d.percorrida_em, false) : null, desenhada ? 'desenhada no mapa (' + d.nome + ')' : 'importada (' + d.nome + ')'].filter(Boolean).join(' · '),
+            criado: criadoEm(d, desenhada ? 'Desenhada' : 'Importada'),
             extras: [{ id: 'balao-ficha', texto: 'Ficha de ' + nomeExibido(pessoa), acao: function () { selecionar(pessoa.id); } }] };
         }
         var quem = equipeDaTrilha(d);
-        return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : ''), criado: criadoEm(d, 'Importada') };
+        return { titulo: meioDe(d).ico + ' ' + d.nome, sub: e.rotulo + (desenhada ? ' · ✎ desenhada no mapa' : '') + (d.comprimento_m ? ' · ' + window.Rotas.formatarDistancia(d.comprimento_m) : '') + (quem ? ' · ' + quem : ''), criado: criadoEm(d, desenhada ? 'Desenhada' : 'Importada') };
       },
       detalhes: function () { realcarTrilha(t.chave); abrirTrilhaManual(d.id); },
     });

@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.14.3';
+  var NUMERO = '1.14.4';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.14.4', data: '2026-11-21', itens: [
+      'Trilha desenhada no mapa (planejada ou percorrida) não é mais tracejada: aparece como a trilha de GPS, linha cheia com as setinhas de sentido. Para saber que foi desenhada, ela tem um selo ✎ no começo, e o balão diz "desenhada no mapa".',
+    ] },
     { versao: '1.14.3', data: '2026-11-21', itens: [
       'IPO diário: nova caixa "Também um mapa de cada setor trabalhado" (em Opções, em qualquer modo: um dia, período ou tudo). Cada setor trabalhado no dia sai num mapa, em destaque, com as trilhas daquele dia, 3 por página.',
     ] },

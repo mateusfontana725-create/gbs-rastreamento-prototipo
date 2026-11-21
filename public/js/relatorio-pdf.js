@@ -1414,14 +1414,14 @@
       conteudo.push(ficha([['Pessoas com trilha', String(comTrilha.length)], ['Dias com trilha', String(dias.filter(function (x) { return x.trilhas.length; }).length)], ['Terreno percorrido', kmTexto(kmTerreno(todos))]]));
       comTrilha.forEach(function (q) {
         var mt = recursos.mapasTrilhaGeral && recursos.mapasTrilhaGeral[q.id];
-        if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + kmTexto(kmTerreno(q.segmentos)), style: 'dia', headlineLevel: 2 }, { image: mt, width: 380, margin: [0, 2, 0, 8] }], unbreakable: true });
+        if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + kmTexto(kmTerreno(q.segmentos)), style: 'dia', headlineLevel: 2 }, { image: mt, fit: [400, 196], margin: [0, 2, 0, 8] }], unbreakable: true });
       });
     }
     // mapa de cada setor (opcional): só os que têm mapa
     var setoresMapa = (d.setores || []).filter(function (st) { return recursos.mapasSetorGeral && recursos.mapasSetorGeral[st.id]; });
     if (setoresMapa.length) {
       setoresMapa.forEach(function (st, k) {
-        conteudo.push({ stack: (k ? [] : [subtitulo('Setores')]).concat([{ text: st.nome, style: 'dia', headlineLevel: 2 }, { image: recursos.mapasSetorGeral[st.id], width: 400, margin: [0, 2, 0, 8] }]), unbreakable: true });
+        conteudo.push({ stack: (k ? [] : [subtitulo('Setores')]).concat([{ text: st.nome, style: 'dia', headlineLevel: 2 }, { image: recursos.mapasSetorGeral[st.id], fit: [400, 196], margin: [0, 2, 0, 8] }]), unbreakable: true });
       });
     }
     if (pontos.length) {
@@ -1437,6 +1437,14 @@
       });
       conteudo.push(tabela((mapaP ? ['Nº'] : []).concat(['Data e hora', 'Tipo', 'Ponto e descrição', 'Coordenada']), linhas, (mapaP ? [18] : []).concat([58, 70, '*', 70])));
       if (pontos.length > 30) conteudo.push(nota('+ ' + (pontos.length - 30) + ' outro(s) ponto(s) (no relatório Final detalhado).'));
+    }
+    // todas as fotos da operação numa página própria, 3 por linha (como no relatório final), sem separar por dia
+    var fotosOp = (d.fotos || []).filter(function (f) { return recursos.fotos && recursos.fotos[f.id]; });
+    if (fotosOp.length) {
+      conteudo.push({ text: '', pageBreak: 'before' });
+      conteudo.push(gradeFotos(fotosOp, recursos, 'Fotos da operação (' + fotosOp.length + ')'));
+      var semImg = (d.fotos || []).length - fotosOp.length;
+      if (semImg > 0) conteudo.push(nota(semImg + ' foto(s) não puderam ser incluídas (no relatório Final detalhado).'));
     }
     return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'Informe Padrão de Ocorrência (IPO) geral', marca: p.marca });
   }

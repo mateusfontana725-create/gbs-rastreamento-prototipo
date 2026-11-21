@@ -1221,6 +1221,16 @@
         recursos.mapasSetorGeral[lisS[m].id] = await desenharMapa(Object.assign({ largura: 900, altura: 520, enquadrar: pontosSetor(lisS[m]), destaque: lisS[m].id }, baseS));
       }
     }
+    // todas as fotos da operação (pequenas: saem 3 por linha), em ordem de quando foram tiradas
+    recursos.fotos = {};
+    var listaFotos = (c.dados.fotos || []).filter(function (f) { return f.caminho; })
+      .sort(function (a, b) { return String(a.capturada_em || '').localeCompare(String(b.capturada_em || '')); });
+    c.dados.fotos = listaFotos;
+    for (var fi = 0; fi < listaFotos.length; fi++) {
+      passo('Baixando as fotos (' + (fi + 1) + '/' + listaFotos.length + ')…');
+      var urlF = await fotoReduzida('fotos', listaFotos[fi].caminho, 600);
+      if (urlF) recursos.fotos[listaFotos[fi].id] = urlF;
+    }
     passo('Montando o documento…');
     var doc = RP.montarIpoGeral(c.dados, recursos, {
       dias: c.dias, subtitulo: 'Do acionamento (' + brDia(ini) + ') até ' + brDia(fim),

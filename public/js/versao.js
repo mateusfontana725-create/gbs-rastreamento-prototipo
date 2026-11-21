@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.11.1';
+  var NUMERO = '1.12.0';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.12.0', data: '2026-11-21', itens: [
+      'IPO geral: os mapas de cada trilha e de cada setor ficaram menores, cabem 3 por página.',
+      'IPO geral: nova página com todas as fotos da operação, 3 por linha, com data e hora, quem tirou e a descrição (como no relatório final), sem separar por dia.',
+    ] },
     { versao: '1.11.1', data: '2026-11-21', itens: [
       'Relatórios: o IPO de cada dia agora se chama "IPO diário" (no cartão, no título do PDF e no nome do arquivo), para não confundir com o "IPO geral".',
     ] },

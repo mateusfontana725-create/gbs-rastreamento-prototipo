@@ -1010,8 +1010,8 @@
     // linha não liga os lados de uma falha de GPS) e os pontos do dia —, com o zoom nelas, como o filtro do dia no painel.
     // Setores não entram (podem ter sido criados em outro dia; o que foi feito está nas trilhas). Só o que está a até 5 km do
     // local da operação entra no desenho e no zoom (quem estava longe da busca não estica o mapa nem risca até lá).
-    // Opcional (opcoes.mapas.trilhas): um mapa para cada trilha do dia (uma por pessoa).
-    var querTrilhas = Boolean(opcoes.mapas && opcoes.mapas.trilhas);
+    // Sempre: um mapa para cada trilha do dia (uma por pessoa).
+    var querTrilhas = true;
     recursos.mapasTrilhaDia = {};
     var RAIO_DIA_M = 5000;
     var op0 = dados.operacao || {};
@@ -1072,9 +1072,9 @@
         }
       }
     }
-    // Opcional (opcoes.mapas.pontos, caixa no cartão do IPO e do Diário): mapa SÓ dos pontos de interesse do dia, com os
+    // Sempre (IPO e Diário): mapa SÓ dos pontos de interesse do dia, com os
     // mesmos números da tabela, para saber onde está cada um (até 30 pontos por dia)
-    if (opcoes.mapas && opcoes.mapas.pontos) {
+    {
       recursos.mapasPontosDia = {};
       for (var mp = 0; mp < dias.length; mp++) {
         var pts = dias[mp].pontos.slice(0, 30).filter(function (p) { return p.lat != null && p.lng != null; });
@@ -1434,12 +1434,8 @@
         var dataAte = UI.el('input', { classe: 'campo', type: 'date', id: 'rel-' + tipo + '-ate', value: fimOp, min: minDia, max: fimOp });
         var campoDe = UI.campo('Dia', dataCampo, { para: 'rel-' + tipo + '-data' });
         var campoAte = UI.campo('Até', dataAte, { para: 'rel-' + tipo + '-ate' });
-        // Mapa do dia é padrão (sempre entra). Opcional: um mapa para cada trilha (uma por pessoa).
-        var caixaTrilhas = UI.el('input', { type: 'checkbox', id: 'rel-' + tipo + '-mapa-trilhas' });
-        var rotuloTrilhas = UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-' + tipo + '-mapa-trilhas', title: 'Além do mapa do dia (que sempre sai), um mapa para cada trilha do dia' }, [caixaTrilhas, ' Também um mapa de cada trilha']);
-        var caixaPontos = UI.el('input', { type: 'checkbox', id: 'rel-' + tipo + '-mapa-pontos' });
-        var rotuloPontos = UI.el('label', { classe: 'linha-opcao rel-check', for: 'rel-' + tipo + '-mapa-pontos', title: 'Um mapa só com os pontos de interesse do dia, numerados como na tabela' }, [caixaPontos, ' Também um mapa dos pontos de interesse']);
-        function mapasEscolhidos() { return { trilhas: caixaTrilhas.checked, pontos: caixaPontos.checked }; }
+        // Mapa do dia, um mapa de cada trilha e o mapa dos pontos de interesse entram sempre (sem caixas para escolher).
+        function mapasEscolhidos() { return { trilhas: true, pontos: true }; }
         var progresso = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
         function ajustarModo() {
           campoDe.hidden = modo.value === 'tudo';
@@ -1458,12 +1454,12 @@
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), rotuloTrilhas, rotuloPontos, progresso]), [botao]);
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), progresso]), [botao]);
       }
       out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
       out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {
-        // um dia já terminado e ainda não guardado fica guardado com os relatórios (só com a escolha padrão: sem o mapa de cada trilha)
-        var guardar = ini === fim && fim < hoje && !dados.porDia[ini] && !(mapas && mapas.trilhas);
+        // um dia já terminado e ainda não guardado fica guardado com os relatórios
+        var guardar = ini === fim && fim < hoje && !dados.porDia[ini];
         await gerarDiarioPeriodo(op, ini, fim, modo, { guardar: guardar, mapas: mapas }, passo);
         if (guardar) await atualizar();
       }));

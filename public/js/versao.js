@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.9.0';
+  var NUMERO = '1.9.1';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.9.1', data: '2026-11-21', itens: [
+      'IPO e Diário: o mapa de cada trilha e o mapa dos pontos de interesse agora saem SEMPRE no relatório. As caixas para escolher foram retiradas.',
+    ] },
     { versao: '1.9.0', data: '2026-11-21', itens: [
       'Editar operação refeito como um formulário de verdade: uma coluna só, seções em blocos (Identificação, Local, Ocorrência, Solicitante, Busca, Procedimentos e recursos), campos um embaixo do outro, sem grade.',
       'Nº de pessoas perdidas e BMs diretamente envolvidos agora têm a opção "Não apurado".',

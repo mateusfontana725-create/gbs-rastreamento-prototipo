@@ -245,7 +245,7 @@ legível, elas não aparecem.
 - **Mapa do dia (padrão, sempre):** em todo relatório por dia (IPO e Diário) sai **um mapa do dia em satélite** com tudo o
   que foi feito naquele dia: as **trilhas**, os **pontos** e os **setores marcados**, com o zoom um pouco mais aberto. Sem
   nenhuma trilha, setor ou ponto no dia, não sai mapa. Não existe mapa de cada setor (o setor só mostra onde foi marcado; o
-  que foi varrido está nas trilhas). **Opcional** (uma caixa): **também um mapa de cada trilha** (uma por pessoa). O Diário de
+  que foi varrido está nas trilhas). **Sempre** (sem caixa, desde a 1.9.1): **também um mapa de cada trilha** (uma por pessoa) e o mapa dos pontos de interesse. O Diário de
   um dia já terminado só é guardado sem essa opção.
 - **Só aparece o que existe:** "trilha" é quem tem linha desenhada no dia (pontos só dentro da base, ou apagados com a
   borracha, não contam); sem trilha, setor ou ponto no dia, a seção correspondente não aparece. O IPO não tem mais "Setores

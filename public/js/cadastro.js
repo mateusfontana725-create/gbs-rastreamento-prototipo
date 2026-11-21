@@ -560,6 +560,13 @@
       'permanencia_limite_min' in op ? 'Permanência no setor: ' + (op.permanencia_limite_min ? 'alerta após ' + textoMinutos(op.permanencia_limite_min) : 'desligado') : null,
     ].filter(Boolean);
 
+    // depois de salvar (Editar ou Ajustar), a ficha reabre com os dados novos (antes ficava a antiga atrás, parecendo que não salvou)
+    var depois = Object.assign({}, opcoes, { aoSalvar: function (atual) {
+      if (atual) Object.assign(op, atual);
+      if (opcoes.aoSalvar) opcoes.aoSalvar(atual);
+      fechar(true);
+      abrirDados(op, opcoes);
+    } });
     var fechar = UI.abrirModal(el('div', { classe: 'detalhe-operacao dados-op dv' }, [
       el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
       topo,
@@ -595,12 +602,12 @@
       el('footer', { classe: 'dv-rodape' }, [
         el('p', { classe: 'muted', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
         config.length ? el('p', { classe: 'muted dv-config' }, [config.join(' · '),
-          editavel ? el('button', { classe: 'btn-link dv-ajustar', type: 'button', id: 'dados-rastreamento', texto: 'Ajustar', onclick: function () { ajustarRastreamento(op, opcoes); } }) : null]) : null,
+          editavel ? el('button', { classe: 'btn-link dv-ajustar', type: 'button', id: 'dados-rastreamento', texto: 'Ajustar', onclick: function () { ajustarRastreamento(op, depois); } }) : null]) : null,
       ]),
       UI.rodape([
         window.IpoForm ? el('button', { classe: 'btn', type: 'button', id: 'dados-ipo-copiar', texto: '📋 Copiar IPO', title: 'Texto do IPO pronto para o WhatsApp', onclick: function () { window.IpoForm.copiar(op); } }) : null,
         window.Relatorio ? el('button', { classe: 'btn', type: 'button', id: 'dados-ipo', texto: 'IPO (Diário)', title: 'O IPO: dados da ocorrência e o de cada dia', onclick: function () { window.Relatorio.abrirDiario(op); } }) : null,
-        editavel ? el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: '✎ Editar', onclick: function () { editarDados(op, opcoes); } }) : null,
+        editavel ? el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: '✎ Editar', onclick: function () { editarDados(op, depois); } }) : null,
       ]),
     ]), { tamanho: 'largo' });
   }
@@ -704,6 +711,8 @@
       btn.disabled = true;
       try {
         var atual = await C.rpc('atualizar_operacao', { p_operacao: op.id, p_dados: dados });
+        atual = Object.assign({ id: op.id }, dados, atual || {});
+        if (!atual.ipo) atual.ipo = dados.ipo;
         fechar(true);
         UI.aviso('Dados da operação salvos.', 'ok');
         if (opcoes.aoSalvar) opcoes.aoSalvar(atual);

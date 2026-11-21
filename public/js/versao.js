@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.12.1';
+  var NUMERO = '1.12.2';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.12.2', data: '2026-11-21', itens: [
+      'Correção: depois de salvar o Editar operação (ou os ajustes de GPS), a tela Dados da operação continuava mostrando os dados antigos, parecendo que os recursos empregados (e o resto) não tinham sido salvos. Agora ela reabre já atualizada.',
+    ] },
     { versao: '1.12.1', data: '2026-11-21', itens: [
       'Local da operação: agora dá para ter o ponto no mapa (ou a sua posição) E o endereço, os dois juntos. O endereço (cidade, município, região, referência) não apaga mais o ponto, e vai para o IPO como Localidade/Município/Região.',
       'Correção: em tela deitada (computador), alguns campos do Editar operação voltavam a ficar lado a lado; agora ficam sempre um embaixo do outro.',

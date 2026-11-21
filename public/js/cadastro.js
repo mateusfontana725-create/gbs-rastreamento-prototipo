@@ -141,10 +141,7 @@
     var ipo = window.Ipo.normalizarIpo(op.ipo || {});
     var raiz = null;
 
-    /* ---- local: ou um ponto no mapa, ou só um endereço. Os dois juntos confundiam: o endereço
-       podia ser de outro lugar que o ponto marcado. Por isso a escolha é uma só. ---- */
-    var modoNome = id('local-modo');
-    var modoInicial = !local && op.local_endereco ? 'endereco' : 'mapa';
+    /* ---- local: ponto no mapa e endereço (município, região), os dois juntos ---- */
     var coordInfo = UI.el('span', { classe: 'mono', id: id('ponto-info') });
     var coordTxt = UI.el('input', { classe: 'campo mono', id: id('ponto-txt'), placeholder: 'ou digite: -22.4508, -42.9762 · 23K 708263 7515869' });
     var coordAviso = UI.el('small', { classe: 'muted' });
@@ -205,41 +202,25 @@
         mostrarLocal();
       });
     }
-    var avisoLegado = op.local_endereco && local
-      ? UI.el('p', { classe: 'nota', texto: 'Este cadastro também tinha um endereço escrito ("' + op.local_endereco + '"). Ao salvar com o ponto no mapa, o endereço é retirado.' })
-      : null;
     var painelMapa = UI.el('div', { classe: 'cad-local-mapa' }, [
       UI.el('div', { classe: 'cad-local-controles' }, [
         UI.el('span', { classe: 'rotulo', texto: 'Ponto da operação' }),
         UI.el('div', { classe: 'linha-ponto' }, [coordInfo, btnLimpar]),
         UI.el('div', { classe: 'acoes-linha' }, [btnMapa, btnAqui]),
-        coordTxt, coordAviso, avisoLegado,
+        coordTxt, coordAviso,
       ]),
       UI.el('div', { classe: 'cad-local-visual' }, [miniMapaEl, miniVazio]),
     ]);
 
+    // Ponto no mapa E endereço, os dois juntos (um não apaga o outro): o ponto serve ao mapa e às distâncias; o endereço
+    // (município, região, referência) vai para o IPO como Localidade/Município/Região.
     var endereco = UI.el('input', { classe: 'campo', id: id('endereco'), maxlength: '300', autocomplete: 'off',
-      placeholder: 'Rua, número, bairro, cidade ou referência', value: op.local_endereco || '' });
+      placeholder: 'Ex.: Fazenda União, Guaraci - PR', value: op.local_endereco || '' });
     var painelEndereco = UI.el('div', { classe: 'cad-local-endereco' }, [
-      UI.campo('Endereço', endereco, { para: id('endereco'), dica: 'Sem ponto no mapa, a operação não aparece no mapa nem entra nos cálculos de distância.' }),
+      UI.campo('Endereço, município ou região', endereco, { para: id('endereco'), opcional: true, ajuda: 'Cidade, região, referência. Vai para o IPO (Localidade/Município/Região).' }),
     ]);
-    var radiosModo = UI.el('div', { classe: 'cad-modo', role: 'radiogroup', 'aria-label': 'Como informar o local' }, [
-      ['mapa', 'Marcar no mapa'], ['endereco', 'Só endereço (sem ponto)'],
-    ].map(function (m) {
-      return UI.el('label', { classe: 'cad-modo-opcao' }, [UI.el('input', { type: 'radio', name: modoNome, value: m[0], checked: modoInicial === m[0] ? true : null }), ' ' + m[1]]);
-    }));
-    function modoAtual() {
-      var r = radiosModo.querySelector('input:checked');
-      return r ? r.value : 'mapa';
-    }
-    function aplicarModo() {
-      var m = modoAtual();
-      painelMapa.hidden = m !== 'mapa';
-      painelEndereco.hidden = m !== 'endereco';
-      if (m === 'mapa') atualizarMiniMapa();
-    }
-    radiosModo.addEventListener('change', aplicarModo);
-    var secaoLocal = secao('Local', inicial ? 'meia' : 'larg', [radiosModo, painelMapa, painelEndereco]);
+    function aplicarModo() { atualizarMiniMapa(); }
+    var secaoLocal = secao('Local', inicial ? 'meia' : 'larg', [painelEndereco, painelMapa]);
 
     /* ---- ocorrência ---- */
     var solicNome = UI.el('input', { classe: 'campo', id: id('solic-nome'), maxlength: '120', autocomplete: 'off', value: ipo.solicitante_nome });
@@ -414,11 +395,10 @@
     aplicarModo();
 
     function ler() {
-      var noMapa = modoAtual() === 'mapa';
       var dados = {
-        local_lat: noMapa && local ? local.lat : null,
-        local_lng: noMapa && local ? local.lng : null,
-        local_endereco: noMapa ? '' : endereco.value.replace(/\s+/g, ' ').trim(),
+        local_lat: local ? local.lat : null,
+        local_lng: local ? local.lng : null,
+        local_endereco: endereco.value.replace(/\s+/g, ' ').trim(),
         descricao: desc.value.trim(),
         ipo: null,
       };
@@ -463,11 +443,10 @@
       coordTxt.value = '';
       coordAviso.textContent = '';
       mostrarLocal();
-      radiosModo.querySelector('input[value="mapa"]').checked = true;
+      endereco.value = '';
       aplicarModo();
       if (inicial) return;
       acion.value = '';
-      endereco.value = '';
       solicDoc.value = '';
       destino.value = window.Ipo.DESTINO_PADRAO;
       desap.value = '';

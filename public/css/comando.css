@@ -3356,3 +3356,7 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .form-dados .cad-procs .linha-opcao input { width: 18px; height: 18px; }
 .form-dados .dados-vitimas .acoes-linha { margin-top: 10px; }
 .form-dados .dados-vitimas .lista-vitimas { margin: 0; }
+/* Editar operação: campos sempre um embaixo do outro (vence a regra geral de duas colunas dos modais) */
+.modal .form-dados .cad-formulario > .cad-secao > .cad-campos { display: block; }
+.modal.form-padrao:has(.form-dados) { width: min(780px, calc(100vw - 32px)); }
+.cad-local-endereco { margin-bottom: 14px; }

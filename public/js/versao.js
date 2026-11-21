@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.12.0';
+  var NUMERO = '1.12.1';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.12.1', data: '2026-11-21', itens: [
+      'Local da operação: agora dá para ter o ponto no mapa (ou a sua posição) E o endereço, os dois juntos. O endereço (cidade, município, região, referência) não apaga mais o ponto, e vai para o IPO como Localidade/Município/Região.',
+      'Correção: em tela deitada (computador), alguns campos do Editar operação voltavam a ficar lado a lado; agora ficam sempre um embaixo do outro.',
+    ] },
     { versao: '1.12.0', data: '2026-11-21', itens: [
       'IPO geral: os mapas de cada trilha e de cada setor ficaram menores, cabem 3 por página.',
       'IPO geral: nova página com todas as fotos da operação, 3 por linha, com data e hora, quem tirou e a descrição (como no relatório final), sem separar por dia.',

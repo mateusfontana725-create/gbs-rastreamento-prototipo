@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.13.2';
+  var NUMERO = '1.13.3';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.13.3', data: '2026-11-21', itens: [
+      'Relatórios (IPO): nas perguntas de escolha (buscas preliminares, possibilidade de vida, imagens anexas…) sai só a resposta marcada, sem as outras opções em branco. Sem resposta, sai "Não apurado".',
+    ] },
     { versao: '1.13.2', data: '2026-11-21', itens: [
       'IPO geral: páginas organizadas. "Buscas preliminares" começa sempre na 2ª página, e o "Mapa da operação" e as "Fotos da operação" começam cada um numa página nova.',
     ] },

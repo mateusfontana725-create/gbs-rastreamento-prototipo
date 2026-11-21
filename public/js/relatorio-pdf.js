@@ -533,7 +533,11 @@
       if (x.valor != null) { fichaAtual.push([x.rotulo, x.valor]); return; }
       fecharFicha();
       out.push(subtitulo(x.rotulo, opc.quebrarAntes && opc.quebrarAntes.test(x.rotulo) ? { pageBreak: 'before' } : null));
-      if (x.marcas) out.push(listaIpo(x.marcas.map(function (m) { return (m[1] ? '(X) ' : '(   ) ') + m[0]; })));
+      // só a(s) resposta(s) marcada(s): as opções não escolhidas não vão para o relatório; sem resposta, "Não apurado"
+      if (x.marcas) {
+        var marcadas = x.marcas.filter(function (m) { return m[1]; });
+        out.push(marcadas.length ? listaIpo(marcadas.map(function (m) { return '(X) ' + m[0]; })) : { text: 'Não apurado', style: 'corpo', margin: [0, 0, 0, 10] });
+      }
       else out.push({ stack: x.linhas.map(function (t) { return { text: t, style: 'corpo', margin: [0, 0, 0, x.espacado ? 6 : 1] }; }), margin: [0, 0, 0, 10] });
     });
     fecharFicha();

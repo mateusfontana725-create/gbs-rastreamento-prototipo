@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.14.0';
+  var NUMERO = '1.14.1';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.14.1', data: '2026-11-21', itens: [
+      'Arquivos baixados (relatórios e exportações) vão para Downloads só com o nome deles, sem o "app busca gbs - " na frente. Fica mais fácil de achar pelo nome.',
+    ] },
     { versao: '1.14.0', data: '2026-11-21', itens: [
       'Relatórios em lista: no lugar da grade de cartões, uma lista agrupada (IPO, Acompanhamento, Fechamento da operação). Cada linha tem o ícone, o nome, uma frase curta e, à direita, Gerar e Guardados.',
       'Gerar já usa o padrão (o dia de hoje, por exemplo). Para escolher dia, período, mapas extras ou o comando, toque em "Opções" na própria linha.',

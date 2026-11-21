@@ -344,7 +344,7 @@
       var A = window.Arquivos;
       A.infoPasta().then(function (i) {
         linhaPasta.innerHTML = '';
-        if (!i.suportada) { linhaPasta.textContent = '📁 Os arquivos vão para Downloads, com o nome começando por "' + A.NOME_PASTA + '" (este navegador não deixa criar pastas).'; return; }
+        if (!i.suportada) { linhaPasta.textContent = '📁 Os arquivos vão para Downloads (este navegador não deixa criar pastas).'; return; }
         linhaPasta.appendChild(document.createTextNode(i.pasta ? '📁 Salva na pasta "' + i.pasta + '". ' : '📁 Na primeira vez você escolhe onde criar a pasta "' + A.NOME_PASTA + '". '));
         if (i.pasta) linhaPasta.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'exp-trocar-pasta', texto: 'Trocar o local', onclick: function () {
           A.trocarPasta().then(function (n) { UI.aviso('As exportações vão para a pasta "' + n + '".', 'ok'); mostrarPasta(); }).catch(function () { /* janela fechada */ });

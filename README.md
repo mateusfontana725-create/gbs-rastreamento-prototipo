@@ -1911,8 +1911,8 @@ Ferramentas de mapa**, no **toque longo** (ou botão direito) sobre o mapa e na 
   exportação você escolhe onde criar a pasta (por exemplo, em Documentos); a pasta **app busca gbs** é criada
   sozinha e as próximas exportações vão direto para ela (o navegador pode pedir de novo a permissão em outra
   sessão). A tela de exportar mostra a pasta e tem **Trocar o local**. No **celular, Safari e Firefox** o navegador
-  não deixa um site criar pastas: o arquivo vai para **Downloads** com o nome começando por **"app busca gbs - "**
-  e o aviso diz isso (procure por "app busca gbs" no gerenciador de arquivos).
+  não deixa um site criar pastas: o arquivo vai para **Downloads** só com o nome dele
+  (ex.: "IPO-geral-<operação>-20261121.pdf"), e o aviso diz o nome.
 - **Importar**: **GPX, KML, KMZ, GeoJSON, CSV** e os arquivos do **AlpineQuest**: **LDK** (pacote com pastas),
   **TRK** (trilha), **WPT** (ponto), **SET** (pontos), **RTE** (rota) e **ARE** (áreas) — até 8 MB. O LDK é lido
   pelas especificações publicadas pela Psyberia (formatos novo e antigo, anterior ao AlpineQuest 2.2.8); o nome da

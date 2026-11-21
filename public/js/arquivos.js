@@ -178,8 +178,8 @@
   /* ------------------------------------------------------------------ */
   // Navegadores que deixam o site gravar numa pasta (Chrome e Edge no computador): na primeira exportação a pessoa
   // escolhe onde fica a pasta "app busca gbs" (criada sozinha, ex.: em Documentos) e as próximas vão direto para ela.
-  // Nos outros (celular, Safari, Firefox) o navegador não deixa criar pastas: o arquivo vai para Downloads com o nome
-  // começando por "app busca gbs", e o aviso diz onde procurar.
+  // Nos outros (celular, Safari, Firefox) o navegador não deixa criar pastas: o arquivo vai para Downloads só com o
+  // nome dele (ex.: "IPO-geral-<operação>-20261121.pdf"), e o aviso diz o nome.
   var NOME_PASTA = 'app busca gbs';
   var BANCO = 'gbs-arquivos', LOJA = 'pastas', CHAVE_PASTA = 'exportacoes';
   var pastaMemoria = null;   // nesta sessão (o IndexedDB guarda para as próximas)
@@ -252,14 +252,15 @@
         if (e && (e.name === 'NotFoundError' || e.name === 'InvalidStateError')) await guardarPasta(null);
       }
     }
-    var nome = NOME_PASTA + ' - ' + nomeArquivo;
+    // em Downloads o arquivo sai só com o nome dele (sem o "app busca gbs - " na frente: fica mais fácil de achar)
+    var nome = nomeArquivo;
     baixarBlob(nome, blob);
     return { onde: 'downloads', nome: nome };
   }
   function textoSalvo(r) {
     return r.onde === 'pasta'
       ? 'Salvo na pasta "' + r.pasta + '": ' + r.nome + '.'
-      : 'Baixado em Downloads como "' + r.nome + '". Este navegador não deixa criar pastas: procure por "' + NOME_PASTA + '" nos arquivos do aparelho.';
+      : 'Baixado em Downloads como "' + r.nome + '".';
   }
   async function infoPasta() {
     if (!pastaSuportada()) return { suportada: false };

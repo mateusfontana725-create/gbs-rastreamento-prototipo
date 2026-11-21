@@ -776,7 +776,7 @@
     } catch (e) { return null; }
   }
 
-  // Salva na pasta "app busca gbs" (ou em Downloads, com o nome começando por ela) e avisa onde ficou.
+  // Salva na pasta "app busca gbs" (ou em Downloads, só com o nome do arquivo) e avisa onde ficou.
   function baixarBlob(blob, nome) {
     var A = window.Arquivos;
     if (A && A.salvar) {

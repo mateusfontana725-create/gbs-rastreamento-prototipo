@@ -1090,16 +1090,16 @@
         recursos.mapasPontosDia[dias[mp].dia] = await desenharMapa({ largura: 900, altura: 460, enquadrar: enqP, ajuste: 0.75, pontos: marc, setores: [], trilhas: [], manuais: [], fundo: true });
       }
     }
-    // fotos do dia (só o IPO pede): até 6 por dia, pequenas
+    // fotos do dia (só o IPO pede): todas as do dia, pequenas
     if (opcoes.fotos) {
       recursos.fotosDia = {};
       for (var f = 0; f < dias.length; f++) {
-        var lista = dias[f].fotos.filter(function (ft) { return ft.caminho; }).slice(0, 6);
+        var lista = dias[f].fotos.filter(function (ft) { return ft.caminho; });
         var imgs = [];
         for (var h = 0; h < lista.length; h++) {
           passo('Baixando as fotos do dia ' + dias[f].dia.split('-').reverse().slice(0, 2).join('/') + ' (' + (h + 1) + '/' + lista.length + ')…');
           var url = await fotoReduzida('fotos', lista[h].caminho, 500);
-          if (url) imgs.push({ imagem: url, legenda: lista[h].legenda || '', autor: lista[h].autor_nome || '', em: lista[h].capturada_em });
+          if (url) imgs.push({ imagem: url, legenda: lista[h].legenda || '', autor: lista[h].autor_nome || '', em: lista[h].capturada_em, lat: lista[h].lat, lng: lista[h].lng });
         }
         if (imgs.length) recursos.fotosDia[dias[f].dia] = { imagens: imgs, total: dias[f].fotos.length };
       }

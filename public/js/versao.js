@@ -9,10 +9,15 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.13.3';
+  var NUMERO = '1.13.4';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.13.4', data: '2026-11-21', itens: [
+      'IPO diário igual ao geral: em cada dia, "Buscas preliminares" começa na página seguinte, o "Mapa do dia" e as "Fotos do dia" começam cada um numa página nova.',
+      'IPO diário: "Militares do dia" virou "Participantes do dia", com todo mundo (militares, civis e responsáveis), o nome e a hora em que entrou no dia, em ordem.',
+      'IPO diário: mapas de trilha menores (3 por página) e todas as fotos do dia (antes eram no máximo 6), 3 por linha, com data e hora, quem tirou, descrição e coordenada.',
+    ] },
     { versao: '1.13.3', data: '2026-11-21', itens: [
       'Relatórios (IPO): nas perguntas de escolha (buscas preliminares, possibilidade de vida, imagens anexas…) sai só a resposta marcada, sem as outras opções em branco. Sem resposta, sai "Não apurado".',
     ] },

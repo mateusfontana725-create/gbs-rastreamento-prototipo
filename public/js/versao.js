@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.13.4';
+  var NUMERO = '1.14.0';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.14.0', data: '2026-11-21', itens: [
+      'Relatórios em lista: no lugar da grade de cartões, uma lista agrupada (IPO, Acompanhamento, Fechamento da operação). Cada linha tem o ícone, o nome, uma frase curta e, à direita, Gerar e Guardados.',
+      'Gerar já usa o padrão (o dia de hoje, por exemplo). Para escolher dia, período, mapas extras ou o comando, toque em "Opções" na própria linha.',
+    ] },
     { versao: '1.13.4', data: '2026-11-21', itens: [
       'IPO diário igual ao geral: em cada dia, "Buscas preliminares" começa na página seguinte, o "Mapa do dia" e as "Fotos do dia" começam cada um numa página nova.',
       'IPO diário: "Militares do dia" virou "Participantes do dia", com todo mundo (militares, civis e responsáveis), o nome e a hora em que entrou no dia, em ordem.',

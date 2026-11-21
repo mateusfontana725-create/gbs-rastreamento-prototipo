@@ -3361,3 +3361,39 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .modal.form-padrao:has(.form-dados) { width: min(780px, calc(100vw - 32px)); }
 .cad-local-endereco { margin-bottom: 14px; }
 #mapa.mapa-girando, #mapa.mapa-girando * { cursor: grabbing !important; }
+
+/* ===== Relatórios: lista agrupada (no lugar da grade de cartões) ===== */
+.rel-tipos.rel-lista { display: grid; grid-template-columns: 1fr; gap: 18px; }
+.rel-grupo-titulo { margin: 0 0 8px; font: 700 .74rem var(--fonte); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-3); }
+.rel-grupo-lista { border: 1px solid var(--borda); border-radius: 12px; overflow: hidden; background: var(--superficie-2); }
+.rel-linha { border-top: 1px solid var(--borda); transition: background .15s; }
+.rel-linha:first-child { border-top: 0; }
+.rel-linha:hover, .rel-linha.aberta { background: rgba(255, 255, 255, .025); }
+.rel-linha-topo { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; }
+.rel-icone { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--fundo); border: 1px solid var(--borda); font-size: 1.2rem; }
+.rel-linha-txt { min-width: 0; display: grid; gap: 2px; }
+.rel-linha-nome { display: flex; align-items: center; gap: 6px; }
+.rel-linha-nome h3 { margin: 0; font-family: var(--fonte); font-size: .98rem; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--texto); }
+.rel-linha-txt small { font-size: .8rem; overflow-wrap: anywhere; }
+.rel-linha-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.rel-linha-acoes .btn { min-height: 36px; padding: 0 14px; flex: none; }
+.rel-linha-acoes .rel-gerar { min-width: 96px; }
+.rel-linha-acoes .btn:disabled { opacity: .4; cursor: not-allowed; }
+/* opções: só com a linha aberta; o andamento e o erro aparecem sempre */
+.rel-linha-extra { padding: 0 14px 0 66px; }
+.rel-linha:not(.aberta) .rel-linha-extra .rel-card-extra > :not(.rel-progresso):not(.erro-form) { display: none; }
+.rel-linha.aberta .rel-linha-extra { padding-bottom: 14px; }
+.rel-linha-extra .rel-card-extra { display: grid; gap: 8px; }
+.rel-linha-extra .rel-progresso { margin: 0 0 12px; }
+.rel-linha.aberta .rel-linha-extra .rel-progresso { margin: 0; }
+.rel-linha-extra .rel-opcoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.rel-linha-extra .rel-opcoes .campo-bloco { flex: 1 1 160px; max-width: 240px; margin: 0; }
+.rel-linha-extra .rel-check { margin: 0; font-size: .88rem; }
+.rel-linha-extra .campo-bloco { margin: 0; max-width: 420px; }
+@media (max-width: 640px) {
+  .rel-linha-topo { grid-template-columns: 36px minmax(0, 1fr); }
+  .rel-icone { width: 36px; height: 36px; font-size: 1.05rem; }
+  .rel-linha-acoes { grid-column: 1 / -1; justify-content: stretch; }
+  .rel-linha-acoes .btn { flex: 1 1 auto; }
+  .rel-linha-extra { padding-left: 14px; }
+}

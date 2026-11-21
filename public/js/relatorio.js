@@ -1353,6 +1353,9 @@
   }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
+  var ICONE_TIPO = { ipogeral: '📋', ipo: '🗓️', diario: '📓', comando: '🎖️', resumido: '🏁', final: '📚', imprensa: '📰', passagem: '🤝' };
+  var FRASE_TIPO = { ipogeral: 'A operação inteira, sem separar por dia', ipo: 'Um dia, um período ou tudo, dia a dia', diario: 'Detalhado, dia a dia', comando: 'O que aconteceu sob cada comandante',
+    resumido: 'Fechamento direto ao ponto', final: 'Tudo da operação em detalhe', imprensa: 'Sem nomes, para divulgar' };
   var TIPO_ROTULO = { ipogeral: 'IPO geral', ipo: 'IPO diário', diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
   var TITULO_TIPO = { ipogeral: 'IPO geral', ipo: 'IPO diário', diario: 'Relatórios diários guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
   var DICA_TIPO = {
@@ -1515,19 +1518,46 @@
     }
 
     // ----- cartão de cada tipo: Gerar e Ver lista -----
+    // ----- cada tipo é uma linha da lista: ícone, nome, frase curta e as ações à direita (Gerar já usa o padrão);
+    // "Opções" abre, logo abaixo, o que dá para escolher (dia, período, mapas, comando). O andamento aparece mesmo fechada.
     function cartao(tipo, contagem, extra, acoes) {
       var n = totalDoTipo(tipo);
-      var ver = tipo === 'ipo' || tipo === 'ipogeral' ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + n + ')', disabled: n ? null : true,
-        title: n ? null : 'Ainda não há relatórios deste tipo', onclick: function () { abrirLista(tipo); } });
-      return UI.el('section', { classe: 'rel-card' + (tipo === 'ipo' || tipo === 'ipogeral' || tipo === 'diario' ? ' rel-card-gera' : ''), 'data-tipo': tipo }, [
-        UI.el('div', { classe: 'rel-card-topo' }, [
-          UI.el('h3', { classe: 'rel-card-titulo', texto: TIPO_ROTULO[tipo] }),
-          UI.dica(DICA_TIPO[tipo]),
-          UI.el('small', { classe: 'muted rel-card-contagem', texto: contagem }),
+      var ver = tipo === 'ipo' || tipo === 'ipogeral' ? null : UI.el('button', { classe: 'btn btn-pequeno rel-ver', type: 'button', texto: 'Guardados (' + n + ')', disabled: n ? null : true,
+        title: n ? 'Ver os relatórios guardados' : 'Ainda não há relatórios deste tipo', onclick: function () { abrirLista(tipo); } });
+      var temOpcoes = Boolean(extra && extra.querySelector && extra.querySelector('select, input'));
+      var linha = UI.el('section', { classe: 'rel-linha', 'data-tipo': tipo });
+      var btnOpcoes = temOpcoes ? UI.el('button', { classe: 'btn btn-pequeno rel-opcoes-btn', type: 'button', 'aria-expanded': 'false', texto: 'Opções ▾',
+        onclick: function () {
+          var abrir = !linha.classList.contains('aberta');
+          linha.classList.toggle('aberta', abrir);
+          btnOpcoes.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+          btnOpcoes.textContent = abrir ? 'Opções ▴' : 'Opções ▾';
+        } }) : null;
+      acoes.forEach(function (b) { b.classList.add('rel-gerar'); });
+      linha.appendChild(UI.el('div', { classe: 'rel-linha-topo' }, [
+        UI.el('span', { classe: 'rel-icone', 'aria-hidden': 'true', texto: ICONE_TIPO[tipo] || '📄' }),
+        UI.el('div', { classe: 'rel-linha-txt' }, [
+          UI.el('div', { classe: 'rel-linha-nome' }, [UI.el('h3', { texto: TIPO_ROTULO[tipo] }), UI.dica(DICA_TIPO[tipo])]),
+          UI.el('small', { classe: 'muted', texto: (FRASE_TIPO[tipo] || '') + (contagem ? ' · ' + contagem : '') }),
         ]),
-        extra || null,
-        UI.el('div', { classe: 'rel-card-acoes' }, ver ? acoes.concat([ver]) : acoes),
-      ]);
+        UI.el('div', { classe: 'rel-linha-acoes' }, [btnOpcoes, ver].concat(acoes)),
+      ]));
+      if (extra) linha.appendChild(UI.el('div', { classe: 'rel-linha-extra' }, [extra]));
+      return linha;
+    }
+    // grupos da lista, nesta ordem
+    var GRUPOS_REL = [['IPO', ['ipogeral', 'ipo']], ['Acompanhamento', ['diario', 'comando']], ['Fechamento da operação', ['resumido', 'final', 'imprensa']]];
+    function listaAgrupada(linhas) {
+      var porTipo = {};
+      linhas.forEach(function (l) { porTipo[l.getAttribute('data-tipo')] = l; });
+      var usados = {};
+      var blocos = GRUPOS_REL.map(function (g) {
+        var itens = g[1].map(function (t) { usados[t] = true; return porTipo[t]; }).filter(Boolean);
+        return itens.length ? UI.el('div', { classe: 'rel-grupo' }, [UI.el('h4', { classe: 'rel-grupo-titulo', texto: g[0] }), UI.el('div', { classe: 'rel-grupo-lista' }, itens)]) : null;
+      }).filter(Boolean);
+      var resto = linhas.filter(function (l) { return !usados[l.getAttribute('data-tipo')]; });
+      if (resto.length) blocos.push(UI.el('div', { classe: 'rel-grupo' }, [UI.el('div', { classe: 'rel-grupo-lista' }, resto)]));
+      return UI.el('div', { classe: 'rel-tipos rel-lista' }, blocos);
     }
 
     function cartoes() {
@@ -1579,12 +1609,12 @@
         }).then(function () { progressoGeral.hidden = true; });
       } });
       function opcaoGeral(caixa, texto, dicaTxt) { return UI.el('label', { classe: 'linha-opcao rel-check', for: caixa.id, title: dicaTxt }, [caixa, ' ' + texto]); }
-      out.push(cartao('ipogeral', 'a operação inteira · só baixa', UI.el('div', { classe: 'rel-card-extra' }, [
+      out.push(cartao('ipogeral', 'só baixa', UI.el('div', { classe: 'rel-card-extra' }, [
         opcaoGeral(caixaGT, 'Também um mapa de cada trilha', 'Um mapa para cada pessoa, com a trilha da operação toda'),
         opcaoGeral(caixaGP, 'Também um mapa dos pontos de interesse', 'Um mapa só com os pontos de interesse, numerados como na tabela'),
         opcaoGeral(caixaGS, 'Também um mapa de cada setor', 'Um mapa para cada setor, com ele em destaque'),
         progressoGeral]), [botaoGeral]));
-      out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
+      out.push(cartaoPorDia('ipo', 'só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
       out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {
         // um dia já terminado e ainda não guardado fica guardado com os relatórios
         var guardar = ini === fim && fim < hoje && !dados.porDia[ini];
@@ -1738,7 +1768,7 @@
       try {
         await carregar();
         corpo.innerHTML = '';
-        corpo.appendChild(UI.el('div', { classe: 'rel-tipos' }, cartoes()));
+        corpo.appendChild(listaAgrupada(cartoes()));
         preencherLista();
       } catch (e) {
         corpo.innerHTML = '';

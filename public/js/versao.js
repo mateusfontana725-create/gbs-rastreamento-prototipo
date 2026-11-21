@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.9.1';
+  var NUMERO = '1.10.0';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.10.0', data: '2026-11-21', itens: [
+      'Novo relatório IPO geral, o primeiro da lista de Relatórios: o IPO da operação inteira, no modelo do CBMPR, curto e sem separar por dia. Traz o informe completo (procedimentos, recursos empregados, efetivo, desdobramentos, órgãos), o mapa da operação, os militares, as trilhas e os pontos de interesse.',
+      'No IPO geral dá para marcar, se quiser: um mapa de cada trilha, o mapa dos pontos de interesse e um mapa de cada setor.',
+    ] },
     { versao: '1.9.1', data: '2026-11-21', itens: [
       'IPO e Diário: o mapa de cada trilha e o mapa dos pontos de interesse agora saem SEMPRE no relatório. As caixas para escolher foram retiradas.',
     ] },

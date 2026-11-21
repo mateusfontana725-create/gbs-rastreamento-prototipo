@@ -1042,7 +1042,7 @@
     var totalMapas = dias.reduce(function (a, x) { return a + 1 + (querTrilhas ? x.trilhas.length : 0); }, 0);
     var tam = totalMapas > 60 ? [600, 340] : totalMapas > 25 ? [760, 430] : [900, 520];   // muitos mapas: cada um sai menor, o PDF não fica gigante
     var feitos = 0;
-    if (dias.length <= (opcoes.maxMapas || 31)) {
+    if (!opcoes.semMapas && dias.length <= (opcoes.maxMapas || 31)) {
       for (var k = 0; k < dias.length; k++) {
         var x = dias[k];
         var rotuloDia = x.dia.split('-').reverse().slice(0, 2).join('/');
@@ -1074,7 +1074,7 @@
     }
     // Sempre (IPO e Diário): mapa SÓ dos pontos de interesse do dia, com os
     // mesmos números da tabela, para saber onde está cada um (até 30 pontos por dia)
-    {
+    if (!opcoes.semMapas) {
       recursos.mapasPontosDia = {};
       for (var mp = 0; mp < dias.length; mp++) {
         var pts = dias[mp].pontos.slice(0, 30).filter(function (p) { return p.lat != null && p.lng != null; });
@@ -1133,6 +1133,106 @@
     if (r0.aviso) UI.aviso(r0.aviso, 'erro', 9000);
     return r;
   }
+  // IPO GERAL da operação (curto): o IPO inteiro, sem separar por dia (cabeçalho, local, vítima, procedimentos, recursos, efetivo,
+  // desdobramentos, órgãos), o mapa da operação, militares, trilhas e pontos de interesse. Do acionamento até agora (ou o encerramento).
+  // mapas.trilhas: um mapa de cada trilha (a operação toda); mapas.pontos: o mapa dos pontos de interesse. Só baixa.
+  async function gerarIpoGeral(op, ini, fim, passo, mapas) {
+    passo = passo || function () {};
+    mapas = mapas || {};
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { semMapas: true });
+    var RP = window.RelatorioPDF;
+    var recursos = c.recursos;
+    var RAIO_M = 5000;
+    var op0 = c.dados.operacao || {};
+    var baseOp = (c.dados.pontos || []).filter(function (p) { return p.categoria === 'BASE' && p.lat != null; })[0];
+    var ref = op0.local_lat != null ? [op0.local_lat, op0.local_lng] : baseOp ? [baseOp.lat, baseOp.lng] : null;
+    function perto(segs) {
+      if (!ref) return segs;
+      var out = [];
+      segs.forEach(function (sg) {
+        var atual = [];
+        sg.forEach(function (pt) {
+          if (distanciaM(ref, pt) <= RAIO_M) atual.push(pt);
+          else { if (atual.length > 1) out.push(atual); atual = []; }
+        });
+        if (atual.length > 1) out.push(atual);
+      });
+      return out;
+    }
+    // trechos de cada pessoa e pontos da operação toda
+    var pessoas = {}, ordem = [], pontos = [], vistos = {};
+    c.dias.forEach(function (x) {
+      x.pessoas.forEach(function (q) {
+        var a = pessoas[q.id] || (pessoas[q.id] = { id: q.id, nome: q.nome, tipo: q.tipo, segs: [] });
+        if (ordem.indexOf(a) === -1) ordem.push(a);
+        (q.segmentos || []).forEach(function (sg) { a.segs.push(sg); });
+      });
+      x.pontos.forEach(function (q) { var k = q.id != null ? q.id : q.criado_em + q.titulo; if (!vistos[k]) { vistos[k] = true; pontos.push(q); } });
+    });
+    pontos.sort(function (a, b) { return String(a.criado_em).localeCompare(String(b.criado_em)); });
+    var pontosPerto = pontos.filter(function (p) { return p.lat != null && p.lng != null && (!ref || distanciaM(ref, [p.lat, p.lng]) <= RAIO_M); });
+    var trilhasTodas = [];
+    ordem.forEach(function (q) { perto(q.segs).forEach(function (sg) { trilhasTodas.push({ participante_id: q.id, tipo: q.tipo, pontos: sg }); }); });
+    // mapa da operação (sempre): as trilhas e os pontos, com o zoom no que foi feito
+    if (trilhasTodas.length || pontosPerto.length) {
+      passo('Desenhando o mapa da operação…');
+      var copia = Object.assign({}, c.dados, { setores: [], trilhas: trilhasTodas, pontos: pontosPerto, fotos: [], trilhasManuais: [] });
+      var g = elementosMapa(copia, { fundo: true, longeM: RAIO_M });
+      var enq = [];
+      trilhasTodas.forEach(function (t) { t.pontos.forEach(function (pt) { enq.push(pt); }); });
+      pontosPerto.forEach(function (p) { enq.push([p.lat, p.lng]); });
+      if (enq.length) g.geral.enquadrar = enq;
+      recursos.mapaGeral = await desenharMapa(Object.assign({}, g.geral, { ajuste: 0.85, altura: 620 }));
+    }
+    // opcional: um mapa de cada trilha (a operação toda)
+    if (mapas.trilhas) {
+      recursos.mapasTrilhaGeral = {};
+      var comTrilha = ordem.filter(function (q) { return perto(q.segs).length; });
+      var tam = comTrilha.length > 25 ? [600, 340] : [900, 520];
+      for (var n = 0; n < comTrilha.length; n++) {
+        var q = comTrilha[n], segsQ = perto(q.segs);
+        passo('Desenhando a trilha de ' + q.nome + ' (' + (n + 1) + '/' + comTrilha.length + ')…');
+        var gt = elementosMapa(Object.assign({}, copia0(), { trilhas: segsQ.map(function (sg) { return { participante_id: q.id, tipo: q.tipo, pontos: sg }; }), pontos: [], setores: [] }), { fundo: true });
+        recursos.mapasTrilhaGeral[q.id] = await desenharMapa(Object.assign({}, gt.base, { largura: tam[0], altura: tam[1], enquadrar: [].concat.apply([], segsQ), ajuste: 0.85 }));
+      }
+    }
+    function copia0() { return Object.assign({}, c.dados, { fotos: [], trilhasManuais: [] }); }
+    // opcional: mapa dos pontos de interesse, numerados como na tabela (até 30)
+    if (mapas.pontos) {
+      var pts = pontos.slice(0, 30).filter(function (p) { return p.lat != null && p.lng != null; });
+      if (pts.length) {
+        passo('Desenhando os pontos de interesse…');
+        var marc = pontos.slice(0, 30).map(function (p, i) { return p.lat != null && p.lng != null ? Object.assign({}, p, { icone: String(i + 1) }) : null; }).filter(Boolean);
+        var enqP = pts.map(function (p) { return [p.lat, p.lng]; });
+        var la = enqP.map(function (q) { return q[0]; }), ln = enqP.map(function (q) { return q[1]; });
+        if (Math.max.apply(null, la) - Math.min.apply(null, la) < 0.004 && Math.max.apply(null, ln) - Math.min.apply(null, ln) < 0.004) {
+          enqP.push([la[0] + 0.00225, ln[0] + 0.00225], [la[0] - 0.00225, ln[0] - 0.00225]);
+        }
+        recursos.mapaPontosGeral = await desenharMapa({ largura: 900, altura: 460, enquadrar: enqP, ajuste: 0.75, pontos: marc, setores: [], trilhas: [], manuais: [], fundo: true });
+      }
+    }
+    // opcional: um mapa de cada setor (até 30), com o setor em destaque
+    if (mapas.setores && c.dados.setores && c.dados.setores.length) {
+      recursos.mapasSetorGeral = {};
+      var baseS = elementosMapa(c.dados, { fundo: true }).base;
+      var lisS = c.dados.setores.slice(0, 30);
+      for (var m = 0; m < lisS.length; m++) {
+        passo('Desenhando o mapa do setor ' + lisS[m].nome + ' (' + (m + 1) + '/' + lisS.length + ')…');
+        recursos.mapasSetorGeral[lisS[m].id] = await desenharMapa(Object.assign({ largura: 900, altura: 520, enquadrar: pontosSetor(lisS[m]), destaque: lisS[m].id }, baseS));
+      }
+    }
+    passo('Montando o documento…');
+    var doc = RP.montarIpoGeral(c.dados, recursos, {
+      dias: c.dias, subtitulo: 'Do acionamento (' + brDia(ini) + ') até ' + brDia(fim),
+      titulo: 'IPO geral — ' + op.codigo, marca: 'IPO GERAL',
+    });
+    passo('Gerando o PDF…');
+    var r = await gerarBlob(await carregarPdfMake(), doc);
+    baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO-geral', fim.replace(/-/g, '')));
+    if (c.aviso) UI.aviso(c.aviso, 'erro', 9000);
+    return r;
+  }
+
   // Relatório IPO (curto): o IPO de cada dia no modelo do CBMPR + militares (graduação e QRA), setores varridos, trilhas e
   // pontos do dia. Só baixa (o IPO se preenche e se corrige ao longo do dia; o texto do WhatsApp sai do IPO (Diário)).
   async function gerarIpoRelatorio(op, ini, fim, modo, passo, mapas) {
@@ -1243,9 +1343,10 @@
   }
 
   // Rótulos e selos dos tipos de relatório (cada item mostra o tipo, para identificar de relance)
-  var TIPO_ROTULO = { ipo: 'IPO', diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
-  var TITULO_TIPO = { ipo: 'IPO', diario: 'Relatórios diários guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
+  var TIPO_ROTULO = { ipogeral: 'IPO geral', ipo: 'IPO', diario: 'Diário', passagem: 'Passagem', comando: 'Comando', resumido: 'Final', final: 'Final detalhado', imprensa: 'Imprensa' };
+  var TITULO_TIPO = { ipogeral: 'IPO geral', ipo: 'IPO', diario: 'Relatórios diários guardados', passagem: 'Relatórios de passagem de comando', comando: 'Relatórios de comando', resumido: 'Relatórios finais', final: 'Relatórios finais detalhados', imprensa: 'Relatórios para imprensa' };
   var DICA_TIPO = {
+    ipogeral: 'O IPO da operação inteira, no modelo do CBMPR e curto, sem separar por dia: o informe completo (local, vítima, procedimentos, recursos empregados, efetivo, desdobramentos, órgãos), o mapa da operação, os militares, as trilhas e os pontos de interesse. Opcional: um mapa de cada trilha e o mapa dos pontos. Só baixa.',
     ipo: 'O IPO no modelo do CBMPR, curto: o informe do dia (local, vítima, procedimentos, recursos, efetivo, desdobramentos, órgãos de apoio e situação) e, embaixo, os militares (só graduação e QRA), os setores varridos, as trilhas feitas (com o mapa) e os pontos de interesse do dia. De um dia, de um período ou de tudo até o momento.',
     diario: 'O relatório diário, detalhado: de um dia, de um período (de… até…) ou de tudo até o momento, separado dia a dia. Cada dia traz o IPO do dia, as pessoas em campo com horários e quilômetros, o mapa com as trilhas do dia, os setores trabalhados, os encontros, o diário completo e os pontos daquele dia. O de um dia já terminado fica guardado.',
     passagem: 'O documento do briefing entregue em cada passagem: quem passou, quem recebeu e a situação naquele momento.',
@@ -1390,7 +1491,7 @@
 
     // Quantos itens a lista do tipo tem (Ver lista só fica habilitado com pelo menos um)
     function totalDoTipo(tipo) {
-      if (tipo === 'ipo') return 0;
+      if (tipo === 'ipo' || tipo === 'ipogeral') return 0;
       if (tipo === 'diario') return dados.diarios.length;
       if (tipo === 'passagem') return dados.passagens.length;
       if (tipo === 'comando') return dados.comandos.length;
@@ -1406,9 +1507,9 @@
     // ----- cartão de cada tipo: Gerar e Ver lista -----
     function cartao(tipo, contagem, extra, acoes) {
       var n = totalDoTipo(tipo);
-      var ver = tipo === 'ipo' ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + n + ')', disabled: n ? null : true,
+      var ver = tipo === 'ipo' || tipo === 'ipogeral' ? null : UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver lista (' + n + ')', disabled: n ? null : true,
         title: n ? null : 'Ainda não há relatórios deste tipo', onclick: function () { abrirLista(tipo); } });
-      return UI.el('section', { classe: 'rel-card' + (tipo === 'ipo' || tipo === 'diario' ? ' rel-card-gera' : ''), 'data-tipo': tipo }, [
+      return UI.el('section', { classe: 'rel-card' + (tipo === 'ipo' || tipo === 'ipogeral' || tipo === 'diario' ? ' rel-card-gera' : ''), 'data-tipo': tipo }, [
         UI.el('div', { classe: 'rel-card-topo' }, [
           UI.el('h3', { classe: 'rel-card-titulo', texto: TIPO_ROTULO[tipo] }),
           UI.dica(DICA_TIPO[tipo]),
@@ -1456,6 +1557,23 @@
         ajustarModo();
         return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), progresso]), [botao]);
       }
+      // IPO geral: a operação inteira (do acionamento até agora ou o encerramento), sem separar por dia. Mapas opcionais.
+      var caixaGT = UI.el('input', { type: 'checkbox', id: 'rel-ipogeral-mapa-trilhas' });
+      var caixaGP = UI.el('input', { type: 'checkbox', id: 'rel-ipogeral-mapa-pontos' });
+      var caixaGS = UI.el('input', { type: 'checkbox', id: 'rel-ipogeral-mapa-setores' });
+      var progressoGeral = UI.el('p', { classe: 'rel-progresso', role: 'status', hidden: true });
+      var botaoGeral = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'rel-ipogeral-gerar', texto: 'Gerar', onclick: function () {
+        progressoGeral.hidden = false;
+        ocupar(botaoGeral, 'Gerando…', async function () {
+          await gerarIpoGeral(op, minDia, fimOp, function (t) { progressoGeral.textContent = t; }, { trilhas: caixaGT.checked, pontos: caixaGP.checked, setores: caixaGS.checked });
+        }).then(function () { progressoGeral.hidden = true; });
+      } });
+      function opcaoGeral(caixa, texto, dicaTxt) { return UI.el('label', { classe: 'linha-opcao rel-check', for: caixa.id, title: dicaTxt }, [caixa, ' ' + texto]); }
+      out.push(cartao('ipogeral', 'a operação inteira · só baixa', UI.el('div', { classe: 'rel-card-extra' }, [
+        opcaoGeral(caixaGT, 'Também um mapa de cada trilha', 'Um mapa para cada pessoa, com a trilha da operação toda'),
+        opcaoGeral(caixaGP, 'Também um mapa dos pontos de interesse', 'Um mapa só com os pontos de interesse, numerados como na tabela'),
+        opcaoGeral(caixaGS, 'Também um mapa de cada setor', 'Um mapa para cada setor, com ele em destaque'),
+        progressoGeral]), [botaoGeral]));
       out.push(cartaoPorDia('ipo', 'curto · só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
       out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {
         // um dia já terminado e ainda não guardado fica guardado com os relatórios

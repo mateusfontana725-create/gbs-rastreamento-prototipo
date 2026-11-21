@@ -1365,6 +1365,82 @@
     return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'Informe Padrão de Ocorrência (IPO)', marca: p.marca });
   }
 
+  // IPO GERAL da operação (curto): o IPO inteiro no modelo do CBMPR (todos os dias juntos, sem separar por dia), o mapa
+  // geral, os militares (graduação e QRA), as trilhas feitas (total, por pessoa) e os pontos de interesse. Opcional: um
+  // mapa de cada trilha (recursos.mapasTrilhaGeral[id]) e o mapa dos pontos (recursos.mapaPontosGeral).
+  function montarIpoGeral(d, recursos, p) {
+    recursos = recursos || {};
+    var op = d.operacao;
+    var I = moduloIpo();
+    var dias = p.dias || [];
+    ANO_REF = dias.length ? new Date(dias[0].dia + 'T12:00:00').getFullYear() : null;
+    var i = I ? I.normalizarIpo(op.ipo || {}) : { destinatarios: '' };
+    var conteudo = [];
+    if (recursos.logo) conteudo.push({ image: recursos.logo, width: 120, margin: [0, 0, 0, 8] });
+    conteudo.push({ text: 'IPO: ' + (i.destinatarios || ''), style: 'h2', margin: [0, 0, 0, 2] });
+    conteudo.push({ text: 'Informe Padrão de Ocorrência - IPO · geral da operação', style: 'h1', margin: [0, 0, 0, 2] });
+    conteudo.push({ text: 'ATENÇÃO: uso exclusivo nos grupos do CBMPR.  ·  ' + (p.subtitulo || ''), style: 'nota', margin: [0, 0, 0, 10] });
+    // junta os dias: cada pessoa uma vez, com todos os trechos
+    var porId = {}, ordem = [], pontos = [], vistosP = {};
+    dias.forEach(function (x) {
+      x.pessoas.forEach(function (q) {
+        var a = porId[q.id];
+        if (!a) { a = porId[q.id] = { id: q.id, nome: q.nome, tipo: q.tipo, segmentos: [], km: 0 }; ordem.push(a); }
+        (q.segmentos || []).forEach(function (sg) { a.segmentos.push(sg); });
+        a.km += q.km || 0;
+      });
+      x.pontos.forEach(function (q) { var k = q.id != null ? q.id : q.criado_em + q.titulo; if (!vistosP[k]) { vistosP[k] = true; pontos.push(q); } });
+    });
+    pontos.sort(function (a, b) { return String(a.criado_em).localeCompare(String(b.criado_em)); });
+    var mil = ordem.filter(function (q) { return q.tipo === 'militar'; });
+    var civis = ordem.filter(function (q) { return q.tipo === 'civil' && q.segmentos.length; }).length;
+    var comTrilha = ordem.filter(function (q) { return q.segmentos.some(function (sg) { return sg.length > 1; }); });
+    // o informe inteiro (sem separar por dia)
+    conteudo = conteudo.concat(I ? blocoIpo(d, null, false) : []);
+    if (recursos.mapaGeral) {
+      conteudo.push(subtitulo('Mapa da operação'));
+      conteudo.push({ image: recursos.mapaGeral, fit: [515, 340], margin: [0, 2, 0, 2] });
+      conteudo.push(legendaMapa());
+    }
+    conteudo.push(subtitulo('Militares'));
+    if (mil.length) {
+      var nomes = mil.map(function (q) { return graduacaoQra(q.nome); });
+      conteudo.push(tabela(['Graduação', 'QRA'], nomes.map(function (n) { return [{ text: n.grad, style: 'td' }, { text: n.qra, style: 'td', bold: true }]; }), [90, '*']));
+    } else conteudo.push(nota('Nenhum militar com posição registrada pelo app.'));
+    if (civis) conteudo.push(nota('Voluntários e civis em campo: ' + civis + '.'));
+    if (comTrilha.length) {
+      conteudo.push(subtitulo('Trilhas feitas'));
+      var todos = [].concat.apply([], comTrilha.map(function (q) { return q.segmentos; }));
+      conteudo.push(ficha([['Pessoas com trilha', String(comTrilha.length)], ['Dias com trilha', String(dias.filter(function (x) { return x.trilhas.length; }).length)], ['Terreno percorrido', kmTexto(kmTerreno(todos))]]));
+      comTrilha.forEach(function (q) {
+        var mt = recursos.mapasTrilhaGeral && recursos.mapasTrilhaGeral[q.id];
+        if (mt) conteudo.push({ stack: [{ text: 'Trilha de ' + q.nome + '  ·  ' + kmTexto(kmTerreno(q.segmentos)), style: 'dia', headlineLevel: 2 }, { image: mt, width: 380, margin: [0, 2, 0, 8] }], unbreakable: true });
+      });
+    }
+    // mapa de cada setor (opcional): só os que têm mapa
+    var setoresMapa = (d.setores || []).filter(function (st) { return recursos.mapasSetorGeral && recursos.mapasSetorGeral[st.id]; });
+    if (setoresMapa.length) {
+      setoresMapa.forEach(function (st, k) {
+        conteudo.push({ stack: (k ? [] : [subtitulo('Setores')]).concat([{ text: st.nome, style: 'dia', headlineLevel: 2 }, { image: recursos.mapasSetorGeral[st.id], width: 400, margin: [0, 2, 0, 8] }]), unbreakable: true });
+      });
+    }
+    if (pontos.length) {
+      var mapaP = recursos.mapaPontosGeral;
+      if (mapaP) conteudo.push({ stack: [subtitulo('Pontos de interesse'), { image: mapaP, width: 515, margin: [0, 0, 0, 2] }, nota('Os números no mapa são os da tabela.')], unbreakable: true });
+      else conteudo.push(subtitulo('Pontos de interesse'));
+      var linhas = pontos.slice(0, 30).map(function (q, k) {
+        var desc = String(q.descricao || '').replace(/\s+/g, ' ').trim();
+        if (desc.length > 160) desc = desc.slice(0, 157) + '…';
+        return (mapaP ? [{ text: String(k + 1), style: 'td', bold: true }] : []).concat([dataHoraCurta(q.criado_em), q.tipo_nome || PONTO[q.categoria] || q.categoria,
+          { stack: [{ text: q.titulo || '—', style: 'td', bold: true }, desc ? { text: desc, style: 'tdSuave' } : null].filter(Boolean) },
+          { text: q.lat != null && q.lng != null ? Number(q.lat).toFixed(6) + '\n' + Number(q.lng).toFixed(6) : '—', style: 'tdMono' }]);
+      });
+      conteudo.push(tabela((mapaP ? ['Nº'] : []).concat(['Data e hora', 'Tipo', 'Ponto e descrição', 'Coordenada']), linhas, (mapaP ? [18] : []).concat([58, 70, '*', 70])));
+      if (pontos.length > 30) conteudo.push(nota('+ ' + (pontos.length - 30) + ' outro(s) ponto(s) (no relatório Final detalhado).'));
+    }
+    return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'Informe Padrão de Ocorrência (IPO) geral', marca: p.marca });
+  }
+
   /* ---------- relatório da passagem de comando --------------------------- */
   // pas: a passagem (passagens_comando); linhas: o briefing do momento em linhas "RÓTULO: texto" (Briefing.textoPuro).
   var ESTADO_PASSAGEM = { pendente: 'Aguardando aceite', aceita: 'Aceita', recusada: 'Recusada', cancelada: 'Cancelada', assumida: 'Comando assumido' };
@@ -1429,7 +1505,7 @@
     return dentro;
   }
 
-  var api = { montarDiarioDias: montarDiarioDias, montarIpo: montarIpo, graduacaoQra: graduacaoQra, separarDias: separarDias, diasEntre: diasEntre, montarComandoGeral: montarComandoGeral, montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
+  var api = { montarDiarioDias: montarDiarioDias, montarIpo: montarIpo, montarIpoGeral: montarIpoGeral, graduacaoQra: graduacaoQra, separarDias: separarDias, diasEntre: diasEntre, montarComandoGeral: montarComandoGeral, montarResumido: montarResumido, montarDocumento: montarDocumento, montarDiario: montarDiario, montarComando: montarComando, montarPassagem: montarPassagem, montarImprensa: montarImprensa, distribuirFotos: distribuirFotos, dentroSetor: dentroSetor, areaSetor: areaSetor, RESULTADO: RESULTADO };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.RelatorioPDF = api;
 })(typeof window !== 'undefined' ? window : this);

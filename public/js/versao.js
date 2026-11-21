@@ -9,10 +9,17 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.8.3';
-  var DATA = '2026-11-19';
+  var NUMERO = '1.9.0';
+  var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.9.0', data: '2026-11-21', itens: [
+      'Editar operação refeito como um formulário de verdade: uma coluna só, seções em blocos (Identificação, Local, Ocorrência, Solicitante, Busca, Procedimentos e recursos), campos um embaixo do outro, sem grade.',
+      'Nº de pessoas perdidas e BMs diretamente envolvidos agora têm a opção "Não apurado".',
+      'Documento da vítima (CPF, RG ou outro) na ficha: escolha o tipo e digite o número. Vai para o IPO.',
+      'Novo no formulário: procedimentos de busca realizados e recursos do Corpo de Bombeiros empregados. Escolha o recurso na lista (os cadastrados em Recursos), ou digite um que não esteja nela; dá para editar e remover os adicionados.',
+      'O GPS e o alerta de permanência em setor saíram do formulário: ficam em Dados da operação › Ajustar GPS e alertas.',
+    ] },
     { versao: '1.8.3', data: '2026-11-19', itens: [
       'O mapa dos pontos de interesse agora é opcional, como o mapa de cada trilha: marque "Também um mapa dos pontos de interesse" no IPO ou no Diário. A coordenada de cada ponto continua sempre na tabela.',
     ] },

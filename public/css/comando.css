@@ -875,7 +875,7 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
 /* ---- cadastro da operação (criação e Dados da operação → Editar) ----
    Celular: tudo em uma coluna. Tablet e PC (a partir de 760 px): as seções lado a lado,
    para o formulário ficar mais na horizontal. */
-.modal:has(.form-dados) { width: min(1040px, 100%); }
+.modal:has(.form-dados) { width: min(760px, 100%); }
 .campos-cadastro { min-width: 0; }
 .cad-secao { min-width: 0; margin: 0 0 14px; }
 .cad-secao-titulo {
@@ -915,9 +915,6 @@ img.marca-brasao { width: 44px; height: 44px; background: none; box-shadow: none
   .cad-local-mapa { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); align-items: start; }
   .cad-local-visual, .mini-mapa, .mini-mapa-vazio { min-height: 260px; height: 260px; }
 
-  .form-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; align-items: start; }
-  .form-dados > * { grid-column: 1 / -1; }
-  .form-dados > .grupo-gps { grid-column: auto; }
 }
 @media (max-width: 759px) {
   .cad-local-visual, .mini-mapa, .mini-mapa-vazio { min-height: 220px; height: 220px; }
@@ -3258,3 +3255,28 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 /* Falhas de GPS: só um aviso na lista e na ficha (o mapa não mostra as falhas) */
 .li-aviso-gps { color: var(--alerta-texto, #f59e0b); }
 .ficha-falhas-gps { margin: 0; font-size: .82rem; color: var(--alerta-texto, #f59e0b); }
+
+/* Editar operação: formulário em uma coluna só, cada seção um bloco de largura total, campos um embaixo do outro */
+.campos-cadastro.cad-formulario { display: block; }
+.cad-formulario > .cad-secao { margin: 0 0 14px; }
+.cad-formulario .cad-campos { display: block; }
+.cad-formulario .cad-campos > .grupo { margin: 0 0 14px; }
+.cad-formulario .cad-campos > .grupo:last-child { margin-bottom: 0; }
+.cad-formulario .cad-local-mapa { grid-template-columns: minmax(0, 1fr); }
+.cad-formulario .campo { width: 100%; }
+.cad-formulario .cad-secao-titulo { color: var(--texto-2); }
+.numero-na { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.cad-formulario .numero-na .campo, .numero-na .campo { width: 7rem; }
+.numero-na .campo:disabled { opacity: .5; }
+.documento-linha { display: grid; grid-template-columns: 10rem minmax(0, 1fr); gap: 8px; }
+.form-dados .dados-vitimas { margin: 0 0 14px; padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
+.cad-procs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; margin-bottom: 8px; }
+@media (max-width: 600px) { .cad-procs { grid-template-columns: 1fr; } }
+.cad-recursos { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.cad-recurso { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--fundo); }
+.cad-recurso-txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cad-recurso .campo { flex: 1; min-width: 0; }
+.cad-recurso-novo { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 8px 0 6px; }
+.cad-recurso-novo select { grid-column: 1; }
+.cad-recurso-novo input[type="text"], .cad-recurso-novo .campo:nth-child(2) { grid-column: 1; }
+.cad-recurso-novo .btn { grid-column: 2; grid-row: 1; }

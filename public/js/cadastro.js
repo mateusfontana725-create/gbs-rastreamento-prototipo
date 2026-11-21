@@ -298,8 +298,10 @@
       UI.el('p', { classe: 'ajuda', texto: 'Em branco: não informado. Ninguém sabe? Escolha "Desconhecido".' })]);
     var grupoDestino = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('destino'), texto: 'IPO para (destinatários)' }), destino]);
     var grupoSolicDoc = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('solic-doc'), texto: 'Documento do solicitante (RG/CPF)' }), solicDoc]);
-    var grupoPessoas = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('pessoas'), texto: 'Nº de pessoas perdidas' }), pessoas]);
-    var grupoBms = UI.el('div', { classe: 'grupo' }, [UI.el('label', { classe: 'rotulo', for: id('bms'), texto: 'BMs diretamente envolvidos' }), bms]);
+    var naPessoas = numeroNaoApurado(pessoas, id('pessoas-na'));
+    var naBms = numeroNaoApurado(bms, id('bms-na'));
+    var grupoPessoas = UI.campo('Nº de pessoas perdidas', naPessoas.elemento, { para: id('pessoas') });
+    var grupoBms = UI.campo('BMs diretamente envolvidos', naBms.elemento, { para: id('bms') });
     var grupoBuscas = radiosCampo(nomeBuscas, 'Buscas preliminares (casas de parentes, hospitais etc.)?', window.Ipo.BUSCAS, ipo.buscas_preliminares);
     var grupoVida = radiosCampo(nomeVida, 'Possibilidade real de vida?', window.Ipo.VIDA, ipo.possibilidade_vida);
     var grupoImagens = radiosCampo(nomeImagens, 'Imagens anexas junto a esta mensagem?', [['sim', 'Sim'], ['nao', 'Não']],
@@ -308,15 +310,82 @@
     // Na criação, o início é automático (a hora em que a operação for criada)
     var inicioAuto = UI.el('p', { classe: 'ajuda', id: id('inicio-auto'), texto: 'Automático: data e hora da criação.' });
 
+    /* ---- procedimentos realizados e recursos empregados (cadastro completo) ---- */
+    var procMarcas = {};
+    var gradeProc = UI.el('div', { classe: 'opcoes-ipo cad-procs' }, window.Ipo.PROCEDIMENTOS.map(function (pr) {
+      var cb = UI.el('input', { type: 'checkbox', value: pr[0], checked: ipo.procedimentos.indexOf(pr[0]) !== -1 ? true : null });
+      procMarcas[pr[0]] = cb;
+      return UI.el('label', { classe: 'linha-opcao' }, [cb, ' ' + pr[1]]);
+    }));
+    var procOutros = UI.el('input', { classe: 'campo', id: id('proc-outros'), maxlength: '300', autocomplete: 'off', placeholder: 'Outro procedimento (opcional)', value: ipo.procedimentos_outros });
+    var recursosLista = String(ipo.recursos_cb || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    var ulRec = UI.el('ul', { classe: 'cad-recursos' });
+    var vazioRec = UI.el('p', { classe: 'muted', texto: 'Nenhum recurso adicionado.' });
+    function desenharRecursos() {
+      ulRec.innerHTML = '';
+      vazioRec.hidden = recursosLista.length > 0;
+      recursosLista.forEach(function (txt, i) {
+        var li = UI.el('li', { classe: 'cad-recurso' });
+        function ver() {
+          li.innerHTML = '';
+          li.appendChild(UI.el('span', { classe: 'cad-recurso-txt', texto: txt }));
+          li.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Editar', onclick: editar }));
+          li.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Remover', 'aria-label': 'Remover ' + txt, onclick: function () { recursosLista.splice(i, 1); desenharRecursos(); } }));
+        }
+        function editar() {
+          li.innerHTML = '';
+          var inp = UI.el('input', { classe: 'campo', maxlength: '300', value: txt, 'aria-label': 'Editar recurso' });
+          function ok() { var v = inp.value.replace(/\s+/g, ' ').trim(); if (v) recursosLista[i] = v; else recursosLista.splice(i, 1); desenharRecursos(); }
+          inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); ver(); } });
+          li.appendChild(inp);
+          li.appendChild(UI.el('button', { classe: 'btn btn-pequeno btn-escuro', type: 'button', texto: 'OK', onclick: ok }));
+          li.appendChild(UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Cancelar', onclick: ver }));
+          inp.focus();
+        }
+        ver();
+        ulRec.appendChild(li);
+      });
+    }
+    var OUTRO_REC = '__outro__';
+    var selRec = UI.el('select', { classe: 'campo', id: id('rec-sel'), 'aria-label': 'Recursos disponíveis' }, [UI.el('option', { value: OUTRO_REC, texto: 'Outro recurso (digitar)…' })]);
+    var txtRec = UI.el('input', { classe: 'campo', id: id('rec-txt'), maxlength: '300', autocomplete: 'off', placeholder: 'Ex.: ABS BM 13629 3ºBBM/2CIA/3PEL - Rolândia' });
+    function ajustarRec() { txtRec.hidden = selRec.value !== OUTRO_REC; }
+    selRec.addEventListener('change', function () { ajustarRec(); if (!txtRec.hidden) txtRec.focus(); });
+    function adicionarRecurso() {
+      var v = selRec.value === OUTRO_REC ? txtRec.value.replace(/\s+/g, ' ').trim() : selRec.value;
+      if (!v) { txtRec.focus(); return; }
+      if (recursosLista.indexOf(v) === -1) recursosLista.push(v);
+      txtRec.value = '';
+      desenharRecursos();
+    }
+    txtRec.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); adicionarRecurso(); } });
+    var btnAddRec = UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: id('rec-add'), texto: 'Adicionar', onclick: adicionarRecurso });
+    // Recursos disponíveis: os cadastrados em Recursos (SCI) desta operação. O que não estiver na lista se digita em "Outro".
+    if (!inicial && op.id && window.C && C.cliente) {
+      C.consultar(C.cliente.from('sci2_recursos').select('nome,quantidade,instituicao,situacao').eq('operacao_id', op.id).order('criado_em', { ascending: true })).then(function (r) {
+        (r || []).filter(function (x) { return x.situacao !== 'desmobilizado'; }).forEach(function (x) {
+          var t = x.nome + (x.quantidade > 1 ? ' ×' + x.quantidade : '') + (x.instituicao ? ' - ' + x.instituicao : '');
+          selRec.insertBefore(UI.el('option', { value: t, texto: t }), selRec.lastChild);
+        });
+        if (selRec.options.length > 1) { selRec.selectedIndex = 0; ajustarRec(); }
+      }, function () { /* sem a tabela: só "Outro" */ });
+    }
+    ajustarRec();
+    desenharRecursos();
+    var grupoProc = UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Procedimentos de busca realizados' }), gradeProc, procOutros]);
+    var grupoRec = UI.el('div', { classe: 'grupo' }, [UI.el('span', { classe: 'rotulo', texto: 'Recursos do Corpo de Bombeiros empregados' }), ulRec, vazioRec,
+      UI.el('div', { classe: 'cad-recurso-novo' }, [selRec, txtRec, btnAddRec]),
+      UI.el('small', { classe: 'muted', texto: 'Escolha na lista e clique em Adicionar. Não está na lista? Escolha "Outro recurso" e digite. Dá para editar ou remover os já adicionados.' })]);
+
     // (cada campo é um nó do DOM: aparece em uma única seção)
     var secoes = inicial
       ? [secaoLocal, secao('Ocorrência', 'meia', [inicioAuto, grupoSolic, grupoNatureza, grupoDesc])]
       : [secaoLocal,
-        secao('Ocorrência', 'meia', [grupoAcion, grupoNatureza, grupoDesap, grupoMeio]),
-        secao('Solicitante e destinatários', 'meia', [grupoSolic, grupoSolicDoc, grupoDestino]),
-        secao('Busca', 'meia', [grupoPessoas, grupoBms, grupoBuscas, grupoVida, grupoImagens]),
-        secao('Observação', 'meia', [grupoDesc])];
-    raiz = UI.el('div', { classe: 'campos-cadastro' }, secoes);
+        secao('Ocorrência', 'larg', [grupoAcion, grupoNatureza, grupoMeio, grupoDesap, grupoDesc]),
+        secao('Solicitante e destinatários', 'larg', [grupoSolic, grupoSolicDoc, grupoDestino]),
+        secao('Busca', 'larg', [grupoPessoas, grupoBms, grupoBuscas, grupoVida, grupoImagens]),
+        secao('Procedimentos e recursos', 'larg', [grupoProc, grupoRec])];
+    raiz = UI.el('div', { classe: 'campos-cadastro' + (inicial ? '' : ' cad-formulario') }, secoes);
     mostrarLocal();
     aplicarModo();
 
@@ -354,6 +423,8 @@
         natureza: naturezaValor(), solicitante_nome: solicNome.value, solicitante_documento: solicDoc.value,
         destinatarios: destino.value, desaparecimento: isoLocal(desap.value), desaparecimento_qualidade: desapQual.value, meio_liquido: window.Ipo.ehAquatica(naturezaValor()) ? marcadoEm(nomeMeio) : '',
         pessoas_perdidas: pessoas.value, buscas_preliminares: marcadoEm(nomeBuscas), possibilidade_vida: marcadoEm(nomeVida),
+        procedimentos: Object.keys(procMarcas).filter(function (k) { return procMarcas[k].checked; }), procedimentos_outros: procOutros.value,
+        recursos_cb: recursosLista.join('\n'),
         bms_envolvidos: bms.value, imagens_anexas: marcadoEm(nomeImagens) === 'sim' ? true : marcadoEm(nomeImagens) === 'nao' ? false : null,
       }));
       return dados;
@@ -377,14 +448,34 @@
       destino.value = window.Ipo.DESTINO_PADRAO;
       desap.value = '';
       desapQual.value = '';
-      pessoas.value = '';
-      bms.value = '';
+      naPessoas.limpar();
+      naBms.limpar();
+      Object.keys(procMarcas).forEach(function (k) { procMarcas[k].checked = false; });
+      procOutros.value = '';
+      recursosLista = [];
+      desenharRecursos();
       [nomeMeio, nomeBuscas, nomeVida, nomeImagens].forEach(function (nome) {
         raiz.querySelectorAll('input[name="' + nome + '"]').forEach(function (r) { r.checked = false; });
       });
     }
 
     return { elemento: raiz, ler: ler, limpar: limpar };
+  }
+
+  // Campo numérico com a opção "Não apurado": marcada, o número fica desligado e vazio (o IPO sai "Não apurado").
+  // Sem valor guardado, começa marcada.
+  function numeroNaoApurado(entrada, idCaixa) {
+    var caixa = UI.el('input', { type: 'checkbox', id: idCaixa, checked: entrada.value === '' ? true : null });
+    function aplicar() {
+      entrada.disabled = caixa.checked;
+      if (caixa.checked) entrada.value = '';
+    }
+    caixa.addEventListener('change', function () { aplicar(); if (!caixa.checked) entrada.focus(); });
+    aplicar();
+    return {
+      elemento: UI.el('div', { classe: 'numero-na' }, [entrada, UI.el('label', { classe: 'check-curto', for: idCaixa }, [caixa, ' Não apurado'])]),
+      limpar: function () { caixa.checked = true; aplicar(); },
+    };
   }
 
   // Seção do formulário: "larg" ocupa a largura toda; "meia" fica lado a lado em tela maior.
@@ -460,7 +551,8 @@
         UI.secao('Configuração', [blocos([
           op.gps_intervalo_s ? ['GPS', 'ponto a cada ' + op.gps_intervalo_s + ' s · falha após ' + op.gps_lacuna_s + ' s'] : null,
           'permanencia_limite_min' in op ? ['Permanência no setor', op.permanencia_limite_min ? 'alerta após ' + textoMinutos(op.permanencia_limite_min) : 'desligado'] : null,
-        ])]),
+        ]), editavel && (op.gps_intervalo_s != null || 'permanencia_limite_min' in op)
+          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dados-rastreamento', texto: 'Ajustar GPS e alertas', onclick: function () { ajustarRastreamento(op, opcoes); } }) : null]),
       ]),
       UI.el('p', { classe: 'meta-area dados-op-meta', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
       UI.rodape([
@@ -473,9 +565,8 @@
 
   function textoMinutos(m) { return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); }
 
-  function editarDados(op, opcoes) {
-    var nome = UI.el('input', { classe: 'campo', id: 'dados-nome', maxlength: '80', value: op.codigo });
-    // Alerta de tempo de permanência em setor (migração 013): 0 = desligado
+  // GPS e alerta de permanência em setor: ajustes de rastreamento, fora do formulário dos dados da operação.
+  function ajustarRastreamento(op, opcoes) {
     var temPerm = 'permanencia_limite_min' in op;
     var opcoesPerm = [0, 30, 45, 60, 90, 120, 180, 240];
     if (temPerm && opcoesPerm.indexOf(op.permanencia_limite_min) === -1) opcoesPerm.push(op.permanencia_limite_min);
@@ -483,28 +574,61 @@
       return UI.el('option', { value: String(m), selected: m === op.permanencia_limite_min ? true : null,
         texto: m ? 'Depois de ' + textoMinutos(m) + (m === 60 ? ' (padrão)' : '') : 'Desligado' });
     }));
-    var campos = camposOperacao(op, { prefixo: 'dados' });
     var temGps = op.gps_intervalo_s != null;
     var intervalo = UI.el('input', { classe: 'campo', id: 'dados-gps-intervalo', type: 'number', min: '5', max: '300', step: '1', inputmode: 'numeric', value: String(op.gps_intervalo_s || 15) });
     var lacuna = UI.el('input', { classe: 'campo', id: 'dados-gps-lacuna', type: 'number', min: '30', max: '3600', step: '5', inputmode: 'numeric', value: String(op.gps_lacuna_s || 60) });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'rastreamento-salvar', texto: 'Salvar' });
+    var form = UI.el('form', { classe: 'form-padrao', novalidate: true }, [
+      UI.el('h2', { id: 'modal-titulo', texto: 'GPS e alertas' }),
+      temGps ? UI.secao('Trilha GPS', [UI.dica('Andando ou de carro os pontos continuam mais frequentes. Intervalos maiores que o limite aparecem como falha no relatório.'), UI.grade([
+        UI.campo('Ponto a cada (s)', intervalo, { para: 'dados-gps-intervalo' }),
+        UI.campo('Falha após (s)', lacuna, { para: 'dados-gps-lacuna' }),
+      ])]) : null,
+      temPerm ? UI.secao('Permanência em setor', [UI.dica('Conta da entrada à saída do setor pela trilha GPS. Um alerta por limite atingido (1×, 2×…), para avaliar a troca da equipe.'),
+        UI.campo('Alertar depois de', perm, { para: 'dados-permanencia' })]) : null,
+      erro,
+      UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var gi = Number(intervalo.value), gl = Number(lacuna.value);
+      var mudouGps = temGps && (gi !== op.gps_intervalo_s || gl !== op.gps_lacuna_s);
+      if (mudouGps && !(gi >= 5 && gi <= 300 && gl >= 30 && gl <= 3600 && gl > gi)) {
+        erro.textContent = C.traduzirErro({ message: 'gps_config_invalida' });
+        erro.hidden = false;
+        return;
+      }
+      btn.disabled = true;
+      try {
+        var atual = op;
+        if (mudouGps) atual = await C.rpc('configurar_gps_operacao', { p_operacao: op.id, p_intervalo_s: gi, p_lacuna_s: gl });
+        if (temPerm && Number(perm.value) !== op.permanencia_limite_min) {
+          atual = await C.rpc('configurar_permanencia', { p_operacao: op.id, p_limite_min: Number(perm.value) });
+        }
+        fechar(true);
+        UI.aviso('Ajustes salvos.', 'ok');
+        if (opcoes.aoSalvar) opcoes.aoSalvar(atual);
+      } catch (e) {
+        erro.textContent = 'Não foi possível salvar: ' + e.message;
+        erro.hidden = false;
+        btn.disabled = false;
+      }
+    });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, empilhar: true });
+  }
+
+  function editarDados(op, opcoes) {
+    var nome = UI.el('input', { classe: 'campo', id: 'dados-nome', maxlength: '80', value: op.codigo });
+    var campos = camposOperacao(op, { prefixo: 'dados' });
+    campos.elemento.insertBefore(secao('Identificação', 'larg', [UI.campo('Nome ou código', nome, { para: 'dados-nome' })]), campos.elemento.firstChild);
+    var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'dados-salvar', texto: 'Salvar' });
     var form = UI.el('form', { classe: 'form-dados form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Editar operação' }),
-      UI.campo('Nome ou código', nome, { para: 'dados-nome' }),
       campos.elemento,
       secaoFichas(op, opcoes),
-      temGps ? UI.el('fieldset', { classe: 'grupo-gps' }, [
-        UI.el('legend', null, ['Trilha GPS', UI.dica('Andando ou de carro os pontos continuam mais frequentes. Intervalos maiores que o limite aparecem tracejados no mapa.')]),
-        UI.grade([
-          UI.campo('Ponto a cada (s)', intervalo, { para: 'dados-gps-intervalo' }),
-          UI.campo('Falha após (s)', lacuna, { para: 'dados-gps-lacuna' }),
-        ]),
-      ]) : null,
-      temPerm ? UI.el('fieldset', { classe: 'grupo-gps' }, [
-        UI.el('legend', null, ['Permanência em setor', UI.dica('Conta da entrada à saída do setor pela trilha GPS. Um alerta por limite atingido (1×, 2×…), para avaliar a troca da equipe.')]),
-        UI.campo('Alertar depois de', perm, { para: 'dados-permanencia' }),
-      ]) : null,
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);
@@ -521,20 +645,9 @@
       }
       dados.codigo = nome.value.replace(/\s+/g, ' ').trim();
       if (dados.codigo.length < 2) { erro.textContent = 'Informe o nome ou código da operação (2 a 80 caracteres).'; erro.hidden = false; return; }
-      var gi = Number(intervalo.value), gl = Number(lacuna.value);
-      var mudouGps = temGps && (gi !== op.gps_intervalo_s || gl !== op.gps_lacuna_s);
-      if (mudouGps && !(gi >= 5 && gi <= 300 && gl >= 30 && gl <= 3600 && gl > gi)) {
-        erro.textContent = C.traduzirErro({ message: 'gps_config_invalida' });
-        erro.hidden = false;
-        return;
-      }
       btn.disabled = true;
       try {
         var atual = await C.rpc('atualizar_operacao', { p_operacao: op.id, p_dados: dados });
-        if (mudouGps) atual = await C.rpc('configurar_gps_operacao', { p_operacao: op.id, p_intervalo_s: gi, p_lacuna_s: gl });
-        if (temPerm && Number(perm.value) !== op.permanencia_limite_min) {
-          atual = await C.rpc('configurar_permanencia', { p_operacao: op.id, p_limite_min: Number(perm.value) });
-        }
         fechar(true);
         UI.aviso('Dados da operação salvos.', 'ok');
         if (opcoes.aoSalvar) opcoes.aoSalvar(atual);
@@ -633,6 +746,10 @@
     var dl = UI.el('dl', { classe: 'dados' });
     function linha(rot, valor) { dl.appendChild(UI.el('dt', { texto: rot })); dl.appendChild(UI.el('dd', { classe: 'texto-longo' }, [valor])); }
     linha('Idade', v.idade == null ? 'não informada' : textoIdade(v));
+    var linhaDoc = UI.el('span', { texto: 'carregando…' });
+    linha('Documento', linhaDoc);
+    var docFicha = '';
+    documentoDaVitima(op, v.id).then(function (d) { docFicha = d; linhaDoc.textContent = d || 'não informado'; }, function () { linhaDoc.textContent = 'não informado'; });
     if (v.nascimento) linha('Nascimento', v.nascimento);
     if (v.sexo) linha('Sexo', v.sexo === 'M' ? 'Masculino' : 'Feminino');
     if (v.origem) linha('Origem', v.origem);
@@ -659,7 +776,7 @@
       caixaFoto,
       dl,
       UI.rodape([
-        editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { editarFicha(op, v, opcoes); } }) : null,
+        editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { editarFicha(op, v, Object.assign({}, opcoes, { documento: docFicha })); } }) : null,
         editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitima-ulv', texto: v.ulv_lat != null ? 'Alterar último local visto' : 'Cadastrar último local visto', onclick: function () { fechar(); abrirUlvVitima(op, v, { aoSalvar: function () { abrirFichaPorId(op, v.id, opcoes); } }); } }) : null,
         editavel ? rotFoto : null,
         editavel ? inFoto : null,
@@ -679,6 +796,40 @@
         caixaFoto.appendChild(UI.el('span', { classe: 'erro-form', texto: 'Não foi possível abrir a foto: ' + e.message }));
       }
     }
+  }
+
+  // "CPF 123.456.789-00" → { tipo: 'CPF', numero: '123.456.789-00' }; texto antigo sem tipo vira "Outro"
+  function documentoPartes(t) {
+    t = String(t || '').trim();
+    if (!t) return { tipo: '', numero: '' };
+    var m = /^(CPF|RG|Outro)\s+(.+)$/i.exec(t);
+    if (!m) return { tipo: 'Outro', numero: t };
+    var tp = m[1].toUpperCase();
+    return { tipo: tp === 'OUTRO' ? 'Outro' : tp, numero: m[2] };
+  }
+  async function documentoDaVitima(op, id) {
+    var ipo = op.ipo || {};
+    try {
+      var r = await C.consultar(C.cliente.from('operacoes').select('ipo').eq('id', op.id));
+      if (r && r[0]) ipo = r[0].ipo || {};
+    } catch (e) { /* usa o que o painel tem */ }
+    return (ipo.vitimas_docs || {})[String(id).toLowerCase()] || '';
+  }
+  // Grava o documento da vítima no IPO (relê o IPO do servidor antes: outro responsável pode ter salvo algo).
+  async function gravarDocumentoVitima(op, id, texto) {
+    var ipo = op.ipo || {};
+    try {
+      var r = await C.consultar(C.cliente.from('operacoes').select('ipo').eq('id', op.id));
+      if (r && r[0]) ipo = r[0].ipo || {};
+    } catch (e) { /* usa o que o painel tem */ }
+    var docs = Object.assign({}, ipo.vitimas_docs || {});
+    var chave = String(id).toLowerCase();
+    texto = String(texto || '').trim();
+    if ((docs[chave] || '') === texto) return;
+    if (texto) docs[chave] = texto; else delete docs[chave];
+    var novo = window.Ipo.normalizarIpo(Object.assign({}, ipo, { vitimas_docs: docs }));
+    var res = await C.rpc('salvar_ipo_operacao', { p_operacao: op.id, p_ipo: novo });
+    op.ipo = (res && res.ipo) || novo;
   }
 
   // Campos da ficha de vítima, com a validação. Usados na ficha (prefixo "vitima")
@@ -702,6 +853,16 @@
       UI.el('option', { value: 'M', selected: v.sexo === 'M' ? true : null, texto: 'Masculino' }),
       UI.el('option', { value: 'F', selected: v.sexo === 'F' ? true : null, texto: 'Feminino' }),
     ]);
+    // Documento (CPF, RG ou outro): guardado no IPO da operação, junto do nome da vítima (ipo.vitimas_docs)
+    var docAtual = documentoPartes((opcoes && opcoes.documento) || '');
+    var docTipo = UI.el('select', { classe: 'campo', id: prefixo + '-doc-tipo', 'aria-label': 'Tipo de documento' }, [['', 'Sem documento'], ['CPF', 'CPF'], ['RG', 'RG'], ['Outro', 'Outro']].map(function (o) {
+      return UI.el('option', { value: o[0], selected: docAtual.tipo === o[0] ? true : null, texto: o[1] });
+    }));
+    var docNum = UI.el('input', { classe: 'campo mono', id: prefixo + '-doc-num', maxlength: '30', autocomplete: 'off', placeholder: 'Número', value: docAtual.numero });
+    function ajustarDoc() { docNum.disabled = !docTipo.value; if (!docTipo.value) docNum.value = ''; }
+    docTipo.addEventListener('change', function () { ajustarDoc(); if (docTipo.value) docNum.focus(); });
+    ajustarDoc();
+    var blocoDoc = UI.el('div', { classe: 'documento-linha' }, [docTipo, docNum]);
     var origem = UI.el('input', { classe: 'campo', id: prefixo + '-origem', maxlength: '120', autocomplete: 'off', placeholder: 'Cidade ou bairro', value: v.origem || '' });
     // Perfil para os estudos: uma só lista de seleção, com valores fixos
     var perfilSel = UI.el('select', { classe: 'campo', id: prefixo + '-perfil' }, [UI.el('option', { value: '', texto: '— nenhum —' })].concat(
@@ -718,6 +879,7 @@
         UI.campo('Idade', blocoIdade, { para: prefixo + '-idade', dica: 'Em branco: não informada. Marque "estimada" quando a idade vem da aparência ou de um palpite.' }),
         UI.campo('Nascimento', nasc, { para: prefixo + '-nascimento', dica: 'Formato dd/mm/aaaa. Vai para o IPO.' }),
         UI.campo('Sexo', sexo, { para: prefixo + '-sexo' }),
+        UI.campo('Documento', blocoDoc, { para: prefixo + '-doc-tipo', dica: 'Escolha CPF ou RG e digite o número. Vai para o IPO.' }),
         UI.campo('Origem', origem, { para: prefixo + '-origem', dica: 'Cidade ou bairro de onde a pessoa é.' }),
         perfil,
         grupoFoto,
@@ -738,6 +900,7 @@
         sexo: sexo.value,
         origem: origem.value.replace(/\s+/g, ' ').trim(),
         perfil: perfilSel.value ? [perfilSel.value] : [],
+        documento: docTipo.value && docNum.value.trim() ? docTipo.value + ' ' + docNum.value.replace(/\s+/g, ' ').trim() : '',
       };
     }
     // null = tudo certo; senão { texto, campo } para mostrar o erro e pôr o foco no campo
@@ -746,12 +909,14 @@
       if (dados.idade != null && !(Number.isInteger(dados.idade) && dados.idade >= 0 && dados.idade <= 130)) {
         return { texto: 'Idade: um número inteiro de 0 a 130.', campo: idade };
       }
+      if (docTipo.value && !docNum.value.trim()) return { texto: 'Documento: digite o número ou escolha "Sem documento".', campo: docNum };
       return null;
     }
     function bloquear(sim) {
-      [nome, idade, estimada, nasc, sexo, origem, carac, roupas, obs].forEach(function (c) { c.disabled = Boolean(sim); });
+      [nome, idade, estimada, nasc, sexo, origem, carac, roupas, obs, docTipo].forEach(function (c) { c.disabled = Boolean(sim); });
       perfil.querySelectorAll('select').forEach(function (c) { c.disabled = Boolean(sim); });
       foto.disabled = Boolean(sim);
+      docNum.disabled = Boolean(sim) || !docTipo.value;
     }
     return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome,
       arquivo: function () { return foto.files && foto.files[0] ? foto.files[0] : null; } };
@@ -761,7 +926,7 @@
     opcoes = opcoes || {};
     var nova = !v;
     v = v || { nome: '', idade: null, caracteristicas: '', roupas: '', observacoes: '' };
-    var campos = camposVitima(v, 'vitima');
+    var campos = camposVitima(v, 'vitima', { documento: nova ? '' : opcoes.documento });
     // ficha de cadastro rápido: salvar tira a marca "completar", a menos que ainda falte algo
     var faltaCompletar = UI.el('input', { type: 'checkbox', id: 'vitima-ainda-rapida' });
     var blocoFalta = v.cadastro_rapido ? UI.el('label', { classe: 'linha-opcao' }, [faltaCompletar, ' Ainda falta completar (manter a marca de cadastro rápido)']) : null;
@@ -785,6 +950,7 @@
       try {
         var res = await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: v.id || null, p_dados: dados });
         var aviso = nova ? 'Ficha de "' + res.nome + '" criada.' : 'Ficha salva.';
+        try { await gravarDocumentoVitima(op, res.id, dados.documento); } catch (e) { UI.aviso('A ficha foi salva, mas o documento não: ' + e.message, 'erro', 8000); }
         var arq = campos.arquivo();
         if (arq) {
           try {
@@ -1040,6 +1206,7 @@
     incompleto: incompleto,
     dataHora: dataHora,
     camposOperacao: camposOperacao,
+    gravarDocumentoVitima: gravarDocumentoVitima,
     camposVitima: camposVitima,
     escolherPontoNoMapa: escolherPontoNoMapa,
     abrirDados: abrirDados,

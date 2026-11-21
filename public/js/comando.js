@@ -1266,6 +1266,7 @@
       it.tentou = true;
       try {
         var salva = await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: null, p_dados: dados });
+        if (dados.documento) { try { await window.Cadastro.gravarDocumentoVitima(op, salva.id, dados.documento); } catch (e) { /* a ficha vale; o documento se completa na ficha */ } }
         var arq = it.campos.arquivo();
         if (arq) {
           try {

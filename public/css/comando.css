@@ -3400,10 +3400,16 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .rel-mapas-caixas[hidden] { display: none; }
 
 /* Trilha desenhada (1.14.4): linha cheia com setas, como a de GPS; o selo ✎ no começo mostra que foi traçada no mapa */
+.marca-trilha-desenhada-pino { background: none; border: 0; display: grid; place-items: center; }
 .marca-trilha-desenhada {
-  display: grid !important; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; transition: transform .15s;
   background: #0b1220; border: 2px solid #facc15; color: #facc15; font: 700 11px/1 var(--fonte); box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
 }
 .marca-trilha-desenhada.marca-percorrida { border-color: #f8fafc; color: #f8fafc; }
 .lg-trilha-desenhada::after { content: "✎"; position: relative; top: -9px; left: -4px; font-size: 10px; color: #facc15; }
 .lg-trilha-desenhada.lg-percorrida::after { color: #f8fafc; }
+/* o selo ✎ acompanha o zoom: menor ao afastar e some de longe (zoom 15 ou menos) */
+#mapa[data-zoom="16"] .marca-trilha-desenhada { transform: scale(.75); }
+#mapa[data-zoom="15"] .marca-trilha-desenhada { transform: scale(.55); }
+#mapa:is([data-zoom="0"], [data-zoom="1"], [data-zoom="2"], [data-zoom="3"], [data-zoom="4"], [data-zoom="5"], [data-zoom="6"], [data-zoom="7"], [data-zoom="8"],
+  [data-zoom="9"], [data-zoom="10"], [data-zoom="11"], [data-zoom="12"], [data-zoom="13"], [data-zoom="14"]) .marca-trilha-desenhada-pino { display: none; }

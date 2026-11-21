@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.14.4';
+  var NUMERO = '1.14.5';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.14.5', data: '2026-11-21', itens: [
+      'O selo ✎ das trilhas desenhadas acompanha o zoom: diminui ao afastar o mapa e some de longe, para não poluir. De perto, aparece no tamanho normal.',
+    ] },
     { versao: '1.14.4', data: '2026-11-21', itens: [
       'Trilha desenhada no mapa (planejada ou percorrida) não é mais tracejada: aparece como a trilha de GPS, linha cheia com as setinhas de sentido. Para saber que foi desenhada, ela tem um selo ✎ no começo, e o balão diz "desenhada no mapa".',
     ] },

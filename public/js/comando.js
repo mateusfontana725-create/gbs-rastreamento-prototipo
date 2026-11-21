@@ -2149,6 +2149,10 @@
       },
     });
     new Botoes().addTo(mapa);
+    // nível de zoom no próprio mapa (data-zoom), para o CSS ajustar enfeites que só servem de perto (ex.: o selo ✎ das trilhas desenhadas)
+    var marcarZoom = function () { mapa.getContainer().setAttribute('data-zoom', String(Math.round(mapa.getZoom()))); };
+    mapa.on('zoomend', marcarZoom);
+    marcarZoom();
 
     // Girar o mapa (leaflet-rotate): ↺ ↻ de 15 em 15 graus. Também gira com dois dedos (celular) ou Shift + roda do mouse (computador);
     // a bússola do canto mostra o norte e, tocada, volta o mapa para o norte para cima.
@@ -9032,7 +9036,8 @@
     L.polyline(partes, Object.assign({ color: '#0b1220', weight: pesoHalo(t), opacity: opacidadeHalo(t), interactive: false, className: 'trilha-halo' }, opc)).addTo(g);
     t.trilha = L.polyline(partes, Object.assign({ color: cor, weight: pesoTrilha(t), opacity: opacidadeTrilha(t), interactive: false, className: 'trilha ' + (desenhada ? 'trilha-desenhada-gps trilha-desenhada-' + d.estado : 'trilha-importada') }, opc)).addTo(g);
     if (desenhada && !ponteiroDentroSemTrilha(partes[0][0])) {
-      L.marker(partes[0][0], { icon: L.divIcon({ className: 'marca-trilha-desenhada marca-' + (d.estado || 'planejada'), html: '✎', iconSize: [20, 20], iconAnchor: [10, 10] }),
+      // o selo diminui ao afastar e some de longe (CSS por [data-zoom] no mapa): só faz sentido de perto
+      L.marker(partes[0][0], { icon: L.divIcon({ className: 'marca-trilha-desenhada-pino', html: '<span class="marca-trilha-desenhada marca-' + (d.estado || 'planejada') + '">✎</span>', iconSize: [20, 20], iconAnchor: [10, 10] }),
         interactive: false, keyboard: false, zIndexOffset: -50 }).addTo(g);
     }
     var toque = L.polyline(partes, Object.assign({ color: '#000', weight: 16, opacity: 0, smoothFactor: 3, className: 'trilha-toque' }, opc)).addTo(g);

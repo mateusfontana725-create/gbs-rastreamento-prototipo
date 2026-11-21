@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.10.2';
+  var NUMERO = '1.10.3';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.10.3', data: '2026-11-21', itens: [
+      'Ficha da vítima: a foto também ficou dentro do formulário. A foto atual aparece ali, escolher outra a substitui e "Tirar a foto atual" a retira ao salvar. Saíram os botões separados de adicionar, trocar e tirar foto.',
+    ] },
     { versao: '1.10.2', data: '2026-11-21', itens: [
       'Ficha da vítima: o último local visto agora faz parte do próprio formulário (ponto no mapa, coordenada digitada ou a sua posição, e a descrição). Acabou o botão separado "Cadastrar último local visto". Vale também ao cadastrar vítimas na criação da operação.',
     ] },

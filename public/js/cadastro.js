@@ -785,15 +785,6 @@
     linha('Registrada', dataHora(v.criado_em) + ' por ' + v.criado_por_nome);
     if (v.atualizado_por_nome && v.atualizado_em !== v.criado_em) linha('Alterada', dataHora(v.atualizado_em) + ' por ' + v.atualizado_por_nome);
     var caixaFoto = UI.el('div', { classe: 'vitima-foto' }, [UI.el('span', { classe: 'muted', texto: v.foto_caminho ? 'Carregando a foto…' : 'Sem foto.' })]);
-    var inFoto = UI.el('input', { classe: 'sr-only', type: 'file', accept: 'image/*', id: 'vitima-foto-arquivo' });
-    var rotFoto = UI.el('label', { classe: 'btn', for: 'vitima-foto-arquivo', texto: v.foto_caminho ? 'Trocar foto' : 'Adicionar foto' });
-    inFoto.addEventListener('change', async function () {
-      var arq = inFoto.files && inFoto.files[0];
-      inFoto.value = '';
-      if (!arq) return;
-      fechar();
-      await enviarFoto(op, v, arq, opcoes);
-    });
     var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-vitima' }, [
       UI.el('h2', { id: 'modal-titulo', texto: v.nome }),
       v.cadastro_rapido ? UI.el('p', { classe: 'nota nota-rapido', texto: 'Cadastro rápido: só os dados essenciais. Complete a ficha (características, roupas, foto, perfil…) assim que puder.' }) : null,
@@ -801,9 +792,6 @@
       dl,
       UI.rodape([
         editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { editarFicha(op, v, Object.assign({}, opcoes, { documento: docFicha })); } }) : null,
-        editavel ? rotFoto : null,
-        editavel ? inFoto : null,
-        editavel && v.foto_caminho ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Tirar foto', onclick: function () { fechar(); removerFoto(op, v, opcoes); } }) : null,
         editavel ? UI.el('button', { classe: 'btn btn-perigo', type: 'button', id: 'vitima-excluir', texto: 'Excluir', onclick: function () { fechar(); excluirFicha(op, v, opcoes); } }) : null,
         UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
       ]),
@@ -908,7 +896,16 @@
     var perfil = UI.campo('Perfil', perfilSel, { para: prefixo + '-perfil', dica: 'Idoso: 60 anos ou mais · Criança: até 12 anos · Adolescente: 13 a 17 anos. Usado nos estudos da operação.' });
     // Foto da vítima (opcional): tirada agora ou escolhida; é enviada quando a ficha é salva
     var foto = UI.el('input', { classe: 'campo', type: 'file', accept: 'image/*', id: prefixo + '-foto' });
-    var grupoFoto = UI.campo('Foto', foto, { para: prefixo + '-foto', ajuda: v.foto_caminho ? 'Já tem foto: escolher outra substitui a atual.' : null });
+    // Foto atual aparece aqui mesmo: escolher outra a substitui; "Tirar a foto" a retira ao salvar
+    var fotoAtual = UI.el('div', { classe: 'vitima-foto vitima-foto-form', hidden: !v.foto_caminho });
+    var tirarFoto = UI.el('input', { type: 'checkbox', id: prefixo + '-foto-tirar' });
+    var rotTirar = UI.el('label', { classe: 'check-curto', for: prefixo + '-foto-tirar', hidden: !v.foto_caminho }, [tirarFoto, ' Tirar a foto atual da ficha']);
+    if (v.foto_caminho) {
+      urlsFotos([v.foto_caminho]).then(function (u) { if (u[v.foto_caminho]) fotoAtual.appendChild(UI.el('img', { src: u[v.foto_caminho], alt: 'Foto de ' + (v.nome || 'vítima') })); else fotoAtual.hidden = true; }, function () { fotoAtual.hidden = true; });
+      foto.addEventListener('change', function () { if (foto.files && foto.files[0]) tirarFoto.checked = false; });
+      tirarFoto.addEventListener('change', function () { if (tirarFoto.checked) foto.value = ''; });
+    }
+    var grupoFoto = UI.campo('Foto', UI.el('div', null, [fotoAtual, foto, rotTirar]), { para: prefixo + '-foto', ajuda: v.foto_caminho ? 'Escolher outra foto substitui a atual.' : null });
     // Último local visto: junto da ficha (ponto no mapa, digitado ou a posição de quem cadastra, e a descrição)
     var ulvLocal = v.ulv_lat != null && v.ulv_lng != null ? { lat: v.ulv_lat, lng: v.ulv_lng } : null;
     var ulvInfo = UI.el('p', { classe: 'mono', id: prefixo + '-ulv-info' });
@@ -990,11 +987,13 @@
       [nome, idade, estimada, nasc, sexo, origem, carac, roupas, obs, docTipo].forEach(function (c) { c.disabled = Boolean(sim); });
       perfil.querySelectorAll('select').forEach(function (c) { c.disabled = Boolean(sim); });
       foto.disabled = Boolean(sim);
+      tirarFoto.disabled = Boolean(sim);
       docNum.disabled = Boolean(sim) || !docTipo.value;
       [btnUlvMapa, btnUlvEu, btnUlvTirar, ulvTxt, ulvDesc].forEach(function (c) { c.disabled = Boolean(sim); });
     }
     return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome,
-      arquivo: function () { return foto.files && foto.files[0] ? foto.files[0] : null; } };
+      arquivo: function () { return foto.files && foto.files[0] ? foto.files[0] : null; },
+      tirarFoto: function () { return Boolean(tirarFoto.checked); } };
   }
 
   function editarFicha(op, v, opcoes) {
@@ -1034,6 +1033,14 @@
             aviso += ' Foto salva.';
           } catch (e) {
             UI.aviso('A ficha foi salva, mas a foto não: ' + e.message, 'erro', 8000);
+          }
+        } else if (!nova && v.foto_caminho && campos.tirarFoto()) {
+          try {
+            res = await C.rpc('definir_foto_vitima', { p_vitima: v.id, p_caminho: null });
+            if (opcoes.limparArquivos) opcoes.limparArquivos();
+            aviso += ' Foto retirada.';
+          } catch (e) {
+            UI.aviso('A ficha foi salva, mas a foto não foi retirada: ' + e.message, 'erro', 8000);
           }
         }
         fechar(true);
@@ -1146,32 +1153,6 @@
     var res = await C.rpc('definir_foto_vitima', { p_vitima: v.id, p_caminho: caminho }, 20000);
     if (opcoes.limparArquivos) opcoes.limparArquivos();   // apaga a foto anterior (se havia)
     return res;
-  }
-
-  async function enviarFoto(op, v, arquivo, opcoes) {
-    UI.aviso('Preparando a foto…');
-    try {
-      var res = await subirFoto(op, v, arquivo, opcoes);
-      UI.aviso('Foto salva na ficha.', 'ok');
-      abrirFicha(op, res, opcoes);
-    } catch (e) {
-      UI.aviso('A foto não foi salva: ' + e.message, 'erro', 8000);
-      abrirFicha(op, v, opcoes);
-    }
-  }
-
-  async function removerFoto(op, v, opcoes) {
-    var r = await UI.confirmar({ titulo: 'Tirar a foto da ficha?', texto: 'O arquivo da foto é apagado do servidor.', ok: 'Tirar a foto', perigo: true });
-    if (!r) { abrirFicha(op, v, opcoes); return; }
-    try {
-      var res = await C.rpc('definir_foto_vitima', { p_vitima: v.id, p_caminho: null });
-      if (opcoes.limparArquivos) opcoes.limparArquivos();
-      UI.aviso('Foto retirada.', 'ok');
-      abrirFicha(op, res, opcoes);
-    } catch (e) {
-      UI.aviso(e.message, 'erro');
-      abrirFicha(op, v, opcoes);
-    }
   }
 
   async function excluirFicha(op, v, opcoes) {

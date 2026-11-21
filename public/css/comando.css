@@ -3268,7 +3268,8 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .numero-na { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .cad-formulario .numero-na .campo, .numero-na .campo { width: 7rem; }
 .numero-na .campo:disabled { opacity: .5; }
-.documento-linha { display: grid; grid-template-columns: 10rem minmax(0, 1fr); gap: 8px; }
+.documento-linha { display: grid; grid-template-columns: minmax(8.5rem, 11rem) minmax(0, 1fr); gap: 8px; }
+.vitima-ulv { margin: 6px 0 12px; padding: 12px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
 .form-dados .dados-vitimas { margin: 0 0 14px; padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--superficie-2); }
 .cad-procs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; margin-bottom: 8px; }
 @media (max-width: 600px) { .cad-procs { grid-template-columns: 1fr; } }

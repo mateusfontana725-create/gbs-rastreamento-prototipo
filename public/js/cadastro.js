@@ -801,7 +801,6 @@
       dl,
       UI.rodape([
         editavel ? UI.el('button', { classe: 'btn' + (v.cadastro_rapido ? ' btn-primario' : ''), type: 'button', id: 'vitima-editar', texto: v.cadastro_rapido ? 'Completar a ficha' : 'Editar', onclick: function () { editarFicha(op, v, Object.assign({}, opcoes, { documento: docFicha })); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn', type: 'button', id: 'vitima-ulv', texto: v.ulv_lat != null ? 'Alterar último local visto' : 'Cadastrar último local visto', onclick: function () { fechar(); abrirUlvVitima(op, v, { aoSalvar: function () { abrirFichaPorId(op, v.id, opcoes); } }); } }) : null,
         editavel ? rotFoto : null,
         editavel ? inFoto : null,
         editavel && v.foto_caminho ? UI.el('button', { classe: 'btn', type: 'button', texto: 'Tirar foto', onclick: function () { fechar(); removerFoto(op, v, opcoes); } }) : null,
@@ -820,6 +819,19 @@
         caixaFoto.appendChild(UI.el('span', { classe: 'erro-form', texto: 'Não foi possível abrir a foto: ' + e.message }));
       }
     }
+  }
+
+  // Grava o último local visto da ficha (só se mudou) e, se há local novo, cria o setor de 200 m do ULV.
+  // Devolve a ficha atualizada (ou a mesma). Erro: lança.
+  async function gravarUlvDaFicha(vitima, dados, antes) {
+    antes = antes || {};
+    var lat = dados.ulv_lat != null ? dados.ulv_lat : null, lng = dados.ulv_lng != null ? dados.ulv_lng : null, desc = dados.ulv_descricao || '';
+    var mudou = lat !== (antes.ulv_lat != null ? antes.ulv_lat : null) || lng !== (antes.ulv_lng != null ? antes.ulv_lng : null) || (lat != null && desc !== (antes.ulv_descricao || ''));
+    if (!mudou) return vitima;
+    var r = await C.rpc('definir_ulv_vitima', { p_vitima: vitima.id, p_lat: lat, p_lng: lng, p_descricao: desc });
+    var nova = Object.assign({}, vitima, { ulv_lat: lat, ulv_lng: lng, ulv_descricao: desc }, r && typeof r === 'object' && r.id ? r : {});
+    if (lat != null && (lat !== (antes.ulv_lat != null ? antes.ulv_lat : null) || lng !== antes.ulv_lng) && window.Painel && window.Painel.criarSetorUlv) window.Painel.criarSetorUlv(nova, { lat: lat, lng: lng });
+    return nova;
   }
 
   // "CPF 123.456.789-00" → { tipo: 'CPF', numero: '123.456.789-00' }; texto antigo sem tipo vira "Outro"
@@ -897,6 +909,42 @@
     // Foto da vítima (opcional): tirada agora ou escolhida; é enviada quando a ficha é salva
     var foto = UI.el('input', { classe: 'campo', type: 'file', accept: 'image/*', id: prefixo + '-foto' });
     var grupoFoto = UI.campo('Foto', foto, { para: prefixo + '-foto', ajuda: v.foto_caminho ? 'Já tem foto: escolher outra substitui a atual.' : null });
+    // Último local visto: junto da ficha (ponto no mapa, digitado ou a posição de quem cadastra, e a descrição)
+    var ulvLocal = v.ulv_lat != null && v.ulv_lng != null ? { lat: v.ulv_lat, lng: v.ulv_lng } : null;
+    var ulvInfo = UI.el('p', { classe: 'mono', id: prefixo + '-ulv-info' });
+    var ulvAviso = UI.el('small', { classe: 'muted' });
+    var ulvTxt = UI.el('input', { classe: 'campo mono', id: prefixo + '-ulv-txt', placeholder: 'ou digite: -25.4281, -49.3205' });
+    var ulvDesc = UI.el('input', { classe: 'campo', id: prefixo + '-ulv-descricao', maxlength: '300', autocomplete: 'off', placeholder: 'Onde e como foi visto (ex.: saindo de casa, portão do sítio)', value: v.ulv_descricao || '' });
+    function ulvMostrar() {
+      ulvInfo.textContent = ulvLocal ? window.Coords.formatar(ulvLocal.lat, ulvLocal.lng, 'dec') : 'Nenhum último local visto cadastrado.';
+      btnUlvTirar.hidden = !ulvLocal;
+    }
+    var btnUlvMapa = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: prefixo + '-ulv-mapa', texto: '📍 Escolher no mapa', onclick: async function () {
+      var pt = await escolherPontoNoMapa(ulvLocal, 'Último local visto' + (nome.value.trim() ? ' de ' + nome.value.trim() : ''));
+      if (pt) { ulvLocal = pt; ulvTxt.value = ''; ulvAviso.textContent = ''; ulvMostrar(); }
+    } });
+    var btnUlvEu = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: prefixo + '-ulv-eu', texto: 'Usar minha posição', onclick: async function () {
+      var pt = await minhaPosicao();
+      if (!pt) { ulvAviso.textContent = 'Sem a sua localização agora. Escolha no mapa ou digite as coordenadas.'; return; }
+      ulvLocal = { lat: pt.lat, lng: pt.lng };
+      ulvTxt.value = '';
+      ulvAviso.textContent = pt.prec ? 'Sua posição (± ' + Math.round(pt.prec) + ' m)' : '';
+      ulvMostrar();
+    } });
+    var btnUlvTirar = UI.el('button', { classe: 'btn btn-pequeno btn-link', type: 'button', texto: 'Tirar o local', onclick: function () { ulvLocal = null; ulvTxt.value = ''; ulvAviso.textContent = ''; ulvMostrar(); } });
+    ulvTxt.addEventListener('input', function () {
+      var c = window.Coords.interpretar(ulvTxt.value);
+      if (c) { ulvLocal = { lat: Math.round(c.lat * 1e7) / 1e7, lng: Math.round(c.lng * 1e7) / 1e7 }; ulvAviso.textContent = '✓ coordenada reconhecida'; ulvMostrar(); }
+      else ulvAviso.textContent = ulvTxt.value.trim() ? 'Formato não reconhecido' : '';
+    });
+    ulvMostrar();
+    var blocoUlv = UI.el('div', { classe: 'vitima-ulv' }, [
+      UI.el('span', { classe: 'rotulo', texto: 'Último local visto' }),
+      ulvInfo,
+      UI.el('div', { classe: 'acoes-linha' }, [btnUlvMapa, btnUlvEu, btnUlvTirar]),
+      ulvTxt, ulvAviso,
+      UI.campo('Descrição do local', ulvDesc, { para: prefixo + '-ulv-descricao', opcional: true, ajuda: 'A distância até onde a pessoa for localizada é medida a partir deste ponto.' }),
+    ]);
     var elementos = [
       UI.grade([
         UI.campo('Nome *', nome, { para: prefixo + '-nome', largo: true }),
@@ -911,6 +959,7 @@
         UI.campo('Roupas', roupas, { para: prefixo + '-roupas', largo: true, dica: 'Cores e tipo de roupa, calçado, acessórios, mochila.' }),
         UI.campo('Observações', obs, { para: prefixo + '-observacoes', largo: true, dica: 'Saúde, medicamentos, último contato, hábitos, para onde iria.' }),
       ]),
+      blocoUlv,
     ];
     function ler() {
       return {
@@ -924,6 +973,7 @@
         sexo: sexo.value,
         origem: origem.value.replace(/\s+/g, ' ').trim(),
         perfil: perfilSel.value ? [perfilSel.value] : [],
+        ulv_lat: ulvLocal ? ulvLocal.lat : null, ulv_lng: ulvLocal ? ulvLocal.lng : null, ulv_descricao: ulvLocal ? ulvDesc.value.trim() : '',
         documento: docTipo.value && docNum.value.trim() ? docTipo.value + ' ' + docNum.value.replace(/\s+/g, ' ').trim() : '',
       };
     }
@@ -941,6 +991,7 @@
       perfil.querySelectorAll('select').forEach(function (c) { c.disabled = Boolean(sim); });
       foto.disabled = Boolean(sim);
       docNum.disabled = Boolean(sim) || !docTipo.value;
+      [btnUlvMapa, btnUlvEu, btnUlvTirar, ulvTxt, ulvDesc].forEach(function (c) { c.disabled = Boolean(sim); });
     }
     return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome,
       arquivo: function () { return foto.files && foto.files[0] ? foto.files[0] : null; } };
@@ -974,6 +1025,7 @@
       try {
         var res = await C.rpc('salvar_vitima', { p_operacao: op.id, p_id: v.id || null, p_dados: dados });
         var aviso = nova ? 'Ficha de "' + res.nome + '" criada.' : 'Ficha salva.';
+        try { res = await gravarUlvDaFicha(res, dados, v); } catch (e) { UI.aviso('A ficha foi salva, mas o último local visto não: ' + (e.message || e), 'erro', 8000); }
         try { await gravarDocumentoVitima(op, res.id, dados.documento); } catch (e) { UI.aviso('A ficha foi salva, mas o documento não: ' + e.message, 'erro', 8000); }
         var arq = campos.arquivo();
         if (arq) {
@@ -1231,6 +1283,7 @@
     dataHora: dataHora,
     camposOperacao: camposOperacao,
     gravarDocumentoVitima: gravarDocumentoVitima,
+    gravarUlvDaFicha: gravarUlvDaFicha,
     camposVitima: camposVitima,
     escolherPontoNoMapa: escolherPontoNoMapa,
     abrirDados: abrirDados,

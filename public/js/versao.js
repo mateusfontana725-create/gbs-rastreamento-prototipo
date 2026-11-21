@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.10.1';
+  var NUMERO = '1.10.2';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.10.2', data: '2026-11-21', itens: [
+      'Ficha da vítima: o último local visto agora faz parte do próprio formulário (ponto no mapa, coordenada digitada ou a sua posição, e a descrição). Acabou o botão separado "Cadastrar último local visto". Vale também ao cadastrar vítimas na criação da operação.',
+    ] },
     { versao: '1.10.1', data: '2026-11-21', itens: [
       'Recursos empregados (Editar operação): a lista já vem com ABS BM 13629 (Rolândia), ABRESC BM 004 e ABRESC BM 005 (Canil Setorial 3° BBM). Escolha e clique em Adicionar.',
       'Não achou o recurso na lista? "Novo recurso na lista" cadastra um novo, que passa a aparecer nas próximas vezes (neste aparelho). Os já adicionados dá para editar ou remover.',

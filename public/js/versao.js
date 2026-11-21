@@ -9,10 +9,15 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.10.3';
+  var NUMERO = '1.11.0';
   var DATA = '2026-11-21';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.11.0', data: '2026-11-21', itens: [
+      'Dados da operação refeito: uma ficha limpa, seção por seção (Ocorrência, Local, Solicitante, Busca, Procedimentos e recursos, Vítimas), com o rótulo à esquerda e o valor à direita. Mostra também pessoas perdidas, BMs, procedimentos, recursos e as vítimas. O que falta preencher aparece num aviso no topo.',
+      'Editar operação: seções numeradas, com títulos e rótulos legíveis, opções em botões e atalhos no topo para pular direto para cada parte. As vítimas viraram mais uma seção do formulário.',
+      'Correção: operação com o ponto no mapa (sem endereço escrito) não aparece mais como "Cadastro incompleto".',
+    ] },
     { versao: '1.10.3', data: '2026-11-21', itens: [
       'Ficha da vítima: a foto também ficou dentro do formulário. A foto atual aparece ali, escolher outra a substitui e "Tirar a foto atual" a retira ao salvar. Saíram os botões separados de adicionar, trocar e tirar foto.',
     ] },

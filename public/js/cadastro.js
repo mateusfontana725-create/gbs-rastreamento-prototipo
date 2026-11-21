@@ -37,7 +37,7 @@
 
   // Operações antigas (só com o nome) continuam válidas; o painel só sugere completar.
   function incompleto(op) {
-    return Boolean(op && (!op.tipo || !op.acionado_em || !op.local_endereco));
+    return Boolean(op && (!op.tipo || !op.acionado_em || (!op.local_endereco && op.local_lat == null)));
   }
 
   function doisDigitos(n) { return (n < 10 ? '0' : '') + n; }
@@ -521,68 +521,107 @@
   /* ------------------------------------------------------------------ */
   /* Dados da operação: ver e editar                                      */
   /* ------------------------------------------------------------------ */
-  // Quadros "rótulo em cima, valor embaixo" (UI.blocos). pares: [rótulo, valor, largo?]; valor vazio vira "—".
-  function blocos(pares) {
-    return UI.el('dl', { classe: 'kv-grade' }, pares.filter(Boolean).map(function (x) {
-      var vazio = x[1] == null || x[1] === '';
-      return UI.el('div', { classe: 'kv' + (x[2] ? ' kv-largo' : '') }, [UI.el('dt', { texto: x[0] }), UI.el('dd', { classe: vazio ? 'kv-vazio' : null }, [vazio ? '—' : x[1]])]);
-    }));
-  }
-
   // opcoes.aoSalvar(op) — chamado com a operação atualizada; opcoes.verNoMapa(op)
+  // Ficha de leitura: seções uma embaixo da outra, cada linha "rótulo | valor". O que é opcional e está vazio não aparece;
+  // o que o IPO pede e falta sai como "Não informado" (para saber o que completar).
   function abrirDados(op, opcoes) {
     opcoes = opcoes || {};
     var ipo = window.Ipo.normalizarIpo(op.ipo || {});
     var editavel = opcoes.editavel !== false;
-    var temIpo = Boolean(ipo.solicitante_nome || ipo.solicitante_documento || ipo.destinatarios);
-    var temBusca = ipo.pessoas_perdidas != null || ipo.bms_envolvidos != null || ipo.buscas_preliminares || ipo.possibilidade_vida || ipo.meio_liquido || ipo.imagens_anexas != null;
+    var el = UI.el;
+    function vazio(v) { return v == null || v === '' || (Array.isArray(v) && !v.length); }
+    // linha: [rótulo, valor, obrigatório?]; valor pode ser texto ou nó
+    function linhas(lista) {
+      var itens = lista.filter(function (x) { return x && (x[2] || !vazio(x[1])); });
+      return el('dl', { classe: 'dv-lista' }, itens.map(function (x) {
+        var semValor = vazio(x[1]);
+        return el('div', { classe: 'dv-linha' }, [el('dt', { texto: x[0] }), el('dd', { classe: semValor ? 'dv-vazio' : null }, [semValor ? 'Não informado' : x[1]])]);
+      }));
+    }
+    function secao(titulo, corpo, acao) {
+      return el('section', { classe: 'dv-secao' }, [el('div', { classe: 'dv-secao-topo' }, [el('h3', { texto: titulo }), acao || null]), corpo]);
+    }
+    function numeroOuNa(n) { return n != null ? String(n) : el('span', { classe: 'dv-na', texto: 'Não apurado' }); }
+    var natureza = ipo.natureza || window.Ipo.naturezaPadrao(op) || (TIPOS[op.tipo] || op.tipo === 'outras' ? textoTipo(op) : '');
     var verNoMapa = op.local_lat != null && opcoes.verNoMapa
-      ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null;
-    var tipo = textoTipo(op) || ipo.natureza;
-    var resumo = UI.el('div', { classe: 'resumo-op' }, [
-      UI.el('div', { classe: 'resumo-op-nome' }, [UI.el('strong', { texto: op.codigo }), tipo ? UI.el('span', { texto: tipo }) : null]),
-      UI.el('div', { classe: 'resumo-op-selos' }, [
-        UI.el('span', { classe: 'selo ' + (op.status === 'ativa' ? 'selo-ok' : 'selo-neutro'), texto: op.status === 'ativa' ? 'Ativa' : 'Encerrada' }),
-        incompleto(op) ? UI.el('span', { classe: 'selo selo-alerta', title: 'Complete em Editar', texto: 'Cadastro incompleto' }) : null,
+      ? el('button', { classe: 'btn btn-pequeno', type: 'button', texto: '📍 Ver no mapa', onclick: function () { fechar(); opcoes.verNoMapa(op); } }) : null;
+    var falta = [];
+    if (!op.acionado_em) falta.push('início das operações');
+    if (!ipo.natureza && !op.tipo) falta.push('natureza');
+    if (op.local_lat == null && !op.local_endereco) falta.push('local');
+    var topo = el('header', { classe: 'dv-topo' }, [
+      el('div', { classe: 'dv-topo-nome' }, [
+        el('strong', { texto: op.codigo }),
+        natureza ? el('span', { texto: natureza }) : null,
+      ]),
+      el('div', { classe: 'dv-selos' }, [
+        el('span', { classe: 'selo ' + (op.status === 'ativa' ? 'selo-ok' : 'selo-neutro'), texto: op.status === 'ativa' ? 'Ativa' : 'Encerrada' }),
+        falta.length ? el('span', { classe: 'selo selo-alerta', title: 'Falta: ' + falta.join(', '), texto: 'Cadastro incompleto' }) : null,
       ]),
     ]);
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'detalhe-operacao dados-op' }, [
-      UI.el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
-      resumo,
-      UI.el('div', { classe: 'form-colunas' }, [
-        UI.secao('Ocorrência', [blocos([
-          ['Início das operações', op.acionado_em ? dataHora(op.acionado_em) : ''],
-          ['Último momento visto', window.Ipo.textoHoraVisto(ipo, dataHora)],
-          ipo.natureza && ipo.natureza !== tipo ? ['Natureza', ipo.natureza, true] : null,
-          ['Descrição', op.descricao, true],
-        ])]),
-        UI.secao('Local', [blocos([
-          ['Endereço', op.local_endereco, true],
-          ['Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '', true],
-        ]), verNoMapa]),
-        temIpo ? UI.secao('Solicitante', [blocos([
-          ['Nome', ipo.solicitante_nome], ['Documento', ipo.solicitante_documento],
-          ['IPO para', ipo.destinatarios],
-        ])]) : null,
-        temBusca ? UI.secao('Busca', [blocos([
-          ipo.pessoas_perdidas != null ? ['Pessoas perdidas', String(ipo.pessoas_perdidas)] : null,
-          ipo.bms_envolvidos != null ? ['BMs envolvidos', String(ipo.bms_envolvidos)] : null,
-          ipo.possibilidade_vida ? ['Possibilidade de vida', textoIpo(window.Ipo.VIDA, ipo.possibilidade_vida)] : null,
-          ipo.buscas_preliminares ? ['Buscas preliminares', textoIpo(window.Ipo.BUSCAS, ipo.buscas_preliminares)] : null,
-          ipo.meio_liquido ? ['Meio líquido', textoIpo(window.Ipo.MEIOS, ipo.meio_liquido)] : null,
-          ipo.imagens_anexas != null ? ['Imagens anexas', ipo.imagens_anexas ? 'Sim' : 'Não'] : null,
-        ])]) : null,
-        UI.secao('Configuração', [blocos([
-          op.gps_intervalo_s ? ['GPS', 'ponto a cada ' + op.gps_intervalo_s + ' s · falha após ' + op.gps_lacuna_s + ' s'] : null,
-          'permanencia_limite_min' in op ? ['Permanência no setor', op.permanencia_limite_min ? 'alerta após ' + textoMinutos(op.permanencia_limite_min) : 'desligado'] : null,
-        ]), editavel && (op.gps_intervalo_s != null || 'permanencia_limite_min' in op)
-          ? UI.el('button', { classe: 'btn btn-pequeno', type: 'button', id: 'dados-rastreamento', texto: 'Ajustar GPS e alertas', onclick: function () { ajustarRastreamento(op, opcoes); } }) : null]),
+    var avisoFalta = falta.length ? el('p', { classe: 'dv-falta', texto: 'Falta informar: ' + falta.join(', ') + '. Toque em Editar para completar.' }) : null;
+
+    var procs = ipo.procedimentos.map(function (k) { return textoIpo(window.Ipo.PROCEDIMENTOS, k); });
+    if (ipo.procedimentos_outros) procs.push(ipo.procedimentos_outros);
+    var recursos = String(ipo.recursos_cb || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    function lista(itens) { return el('ul', { classe: 'dv-itens' }, itens.map(function (t) { return el('li', { texto: t }); })); }
+
+    var listaVit = el('div', { classe: 'dv-vitimas' }, [el('p', { classe: 'muted', texto: 'Carregando…' })]);
+    carregarVitimas(op).then(function (vs) {
+      listaVit.innerHTML = '';
+      if (!vs.length) { listaVit.appendChild(el('p', { classe: 'dv-vazio', texto: 'Nenhuma ficha de vítima.' })); return; }
+      listaVit.appendChild(el('ul', { classe: 'dv-itens' }, vs.map(function (v) {
+        var doc = ipo.vitimas_docs[String(v.id).toLowerCase()];
+        return el('li', null, [el('strong', { texto: v.nome }), el('span', { classe: 'muted', texto: ' · ' + textoIdade(v) + (v.sexo ? ' · ' + (v.sexo === 'M' ? 'masculino' : 'feminino') : '') + (doc ? ' · ' + doc : '') + (v.ulv_lat != null ? ' · com último local visto' : '') })]);
+      })));
+    }, function () { listaVit.innerHTML = ''; listaVit.appendChild(el('p', { classe: 'dv-vazio', texto: 'Fichas de vítima indisponíveis.' })); });
+
+    var config = [
+      op.gps_intervalo_s ? 'GPS: ponto a cada ' + op.gps_intervalo_s + ' s, falha após ' + op.gps_lacuna_s + ' s' : null,
+      'permanencia_limite_min' in op ? 'Permanência no setor: ' + (op.permanencia_limite_min ? 'alerta após ' + textoMinutos(op.permanencia_limite_min) : 'desligado') : null,
+    ].filter(Boolean);
+
+    var fechar = UI.abrirModal(el('div', { classe: 'detalhe-operacao dados-op dv' }, [
+      el('h2', { id: 'modal-titulo', texto: 'Dados da operação' }),
+      topo,
+      avisoFalta,
+      secao('Ocorrência', linhas([
+        ['Natureza', natureza, true],
+        ['Início das operações', op.acionado_em ? dataHora(op.acionado_em) : '', true],
+        ['Último momento visto', window.Ipo.textoHoraVisto(ipo, dataHora)],
+        ['Meio líquido', ipo.meio_liquido ? textoIpo(window.Ipo.MEIOS, ipo.meio_liquido) : ''],
+        ['Descrição', op.descricao],
+      ])),
+      secao('Local', linhas([
+        ['Ponto no mapa', op.local_lat != null ? window.Coords.formatar(op.local_lat, op.local_lng, 'dec') : '', op.local_lat != null || !op.local_endereco],
+        ['Endereço', op.local_endereco],
+      ]), verNoMapa),
+      secao('Solicitante e destinatários', linhas([
+        ['Solicitante', ipo.solicitante_nome, true],
+        ['Documento', ipo.solicitante_documento],
+        ['IPO para', ipo.destinatarios, true],
+      ])),
+      secao('Busca', linhas([
+        ['Pessoas perdidas', numeroOuNa(ipo.pessoas_perdidas)],
+        ['BMs diretamente envolvidos', numeroOuNa(ipo.bms_envolvidos)],
+        ['Possibilidade real de vida', ipo.possibilidade_vida ? textoIpo(window.Ipo.VIDA, ipo.possibilidade_vida) : '', true],
+        ['Buscas preliminares', ipo.buscas_preliminares ? textoIpo(window.Ipo.BUSCAS, ipo.buscas_preliminares) : ''],
+        ['Imagens anexas', ipo.imagens_anexas == null ? '' : ipo.imagens_anexas ? 'Sim' : 'Não'],
+      ])),
+      secao('Procedimentos e recursos', linhas([
+        ['Procedimentos realizados', procs.length ? lista(procs) : '', true],
+        ['Recursos do CB empregados', recursos.length ? lista(recursos) : '', true],
+      ])),
+      secao('Vítimas', listaVit),
+      el('footer', { classe: 'dv-rodape' }, [
+        el('p', { classe: 'muted', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
+        config.length ? el('p', { classe: 'muted dv-config' }, [config.join(' · '),
+          editavel ? el('button', { classe: 'btn-link dv-ajustar', type: 'button', id: 'dados-rastreamento', texto: 'Ajustar', onclick: function () { ajustarRastreamento(op, opcoes); } }) : null]) : null,
       ]),
-      UI.el('p', { classe: 'meta-area dados-op-meta', texto: 'Criada em ' + dataHora(op.criada_em) + (op.atualizado_por_nome ? ' · alterada em ' + dataHora(op.atualizado_em) + ' por ' + op.atualizado_por_nome : '') }),
       UI.rodape([
-        window.IpoForm ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-ipo-copiar', texto: '📋 Copiar IPO', title: 'Texto do IPO pronto para o WhatsApp', onclick: function () { window.IpoForm.copiar(op); } }) : null,
-        window.Relatorio ? UI.el('button', { classe: 'btn', type: 'button', id: 'dados-ipo', texto: 'IPO (Diário)', title: 'O IPO: dados da ocorrência e o de cada dia', onclick: function () { window.Relatorio.abrirDiario(op); } }) : null,
-        editavel ? UI.el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: 'Editar', onclick: function () { editarDados(op, opcoes); } }) : null,
+        window.IpoForm ? el('button', { classe: 'btn', type: 'button', id: 'dados-ipo-copiar', texto: '📋 Copiar IPO', title: 'Texto do IPO pronto para o WhatsApp', onclick: function () { window.IpoForm.copiar(op); } }) : null,
+        window.Relatorio ? el('button', { classe: 'btn', type: 'button', id: 'dados-ipo', texto: 'IPO (Diário)', title: 'O IPO: dados da ocorrência e o de cada dia', onclick: function () { window.Relatorio.abrirDiario(op); } }) : null,
+        editavel ? el('button', { classe: 'btn btn-escuro', type: 'button', id: 'dados-editar', texto: '✎ Editar', onclick: function () { editarDados(op, opcoes); } }) : null,
       ]),
     ]), { tamanho: 'largo' });
   }
@@ -647,12 +686,26 @@
     var nome = UI.el('input', { classe: 'campo', id: 'dados-nome', maxlength: '80', value: op.codigo });
     var campos = camposOperacao(op, { prefixo: 'dados' });
     campos.elemento.insertBefore(secao('Identificação', 'larg', [UI.campo('Nome ou código', nome, { para: 'dados-nome' })]), campos.elemento.firstChild);
+    // as fichas das vítimas entram como mais uma seção do formulário
+    var fichas = secaoFichas(op, opcoes);
+    fichas.classList.add('cad-secao');
+    var tituloFichas = fichas.querySelector('h3');
+    if (tituloFichas) tituloFichas.classList.add('cad-secao-titulo');
+    campos.elemento.appendChild(fichas);
+    // atalhos para as seções (o formulário é longo): ficam presos no topo enquanto rola
+    var nav = UI.el('nav', { classe: 'cad-nav', 'aria-label': 'Seções do formulário' });
+    Array.prototype.forEach.call(campos.elemento.querySelectorAll(':scope > .cad-secao'), function (sc, k) {
+      var t = sc.querySelector('.cad-secao-titulo');
+      var rot = t ? t.childNodes[0].textContent.trim() : 'Seção ' + (k + 1);
+      sc.id = 'dados-sec-' + k;
+      nav.appendChild(UI.el('button', { classe: 'cad-nav-item', type: 'button', texto: rot, onclick: function () { sc.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }));
+    });
     var erro = UI.el('p', { classe: 'erro-form', role: 'alert', hidden: true });
     var btn = UI.el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'dados-salvar', texto: 'Salvar' });
     var form = UI.el('form', { classe: 'form-dados form-padrao', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Editar operação' }),
+      nav,
       campos.elemento,
-      secaoFichas(op, opcoes),
       erro,
       UI.rodape([UI.el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
     ]);

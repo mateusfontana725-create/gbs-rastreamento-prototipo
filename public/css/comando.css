@@ -3286,3 +3286,73 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .cad-recurso-novo-lista[hidden] { display: none; }
 .cad-recurso-novo > .btn-pequeno + .btn-pequeno { margin-left: 0; }
 .vitima-foto-form img { max-width: 100%; max-height: 220px; border-radius: var(--raio); display: block; margin-bottom: 8px; }
+
+/* ===== Dados da operação (ver): ficha em seções, linhas "rótulo | valor", sem caixa dentro de caixa ===== */
+.modal:has(.dv) { width: min(780px, 100%); }
+.dv-topo { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 16px; padding: 4px 0 16px; border-bottom: 1px solid var(--borda); }
+.dv-topo-nome { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 320px; }
+.dv-topo-nome strong { font-size: 1.25rem; line-height: 1.25; overflow-wrap: anywhere; }
+.dv-topo-nome span { font-size: .9rem; color: var(--texto-2); }
+.dv-selos { display: flex; flex-wrap: wrap; gap: 6px; }
+.dv-falta { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--alerta, #f59e0b); background: rgba(245, 158, 11, .1); border-radius: 0 var(--raio) var(--raio) 0; font-size: .88rem; }
+.dv-secao { padding: 16px 0; border-bottom: 1px solid var(--borda); }
+.dv-secao-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; }
+.dv-secao-topo h3 { margin: 0; font-family: var(--fonte); font-size: 1rem; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--texto); }
+.dv-lista { margin: 0; display: grid; gap: 0; }
+.dv-linha { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 4px 16px; padding: 7px 0; border-top: 1px dashed var(--borda); }
+.dv-linha:first-child { border-top: 0; }
+.dv-linha dt { margin: 0; font-size: .86rem; color: var(--texto-2); }
+.dv-linha dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; line-height: 1.4; }
+.dv-vazio, .dv-na { color: var(--texto-3); font-weight: 400; font-style: italic; }
+.dv-itens { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.dv-itens li { line-height: 1.35; }
+.dv-vitimas .dv-itens { padding-left: 18px; }
+.dv-rodape { padding: 12px 0 0; display: grid; gap: 4px; font-size: .82rem; }
+.dv-rodape p { margin: 0; }
+.dv-ajustar { margin-left: 8px; font-size: .82rem; background: none; border: 0; padding: 0; color: var(--acento); cursor: pointer; text-decoration: underline; }
+@media (max-width: 560px) {
+  .dv-linha { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* ===== Editar operação: seções numeradas, rótulos legíveis, opções em botões, atalhos no topo ===== */
+.form-dados .cad-nav {
+  position: sticky; top: -18px; z-index: 5; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  margin: -4px -22px 14px; padding: 10px 22px; background: var(--superficie); border-bottom: 1px solid var(--borda);
+}
+.form-dados .cad-nav::-webkit-scrollbar { display: none; }
+.cad-nav-item {
+  flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--borda-forte); background: var(--superficie-2);
+  color: var(--texto-2); font: 600 .8rem var(--fonte); cursor: pointer; white-space: nowrap;
+}
+.cad-nav-item:hover, .cad-nav-item:focus-visible { color: var(--texto); border-color: var(--acento); }
+.cad-formulario { counter-reset: cadsec; }
+.form-dados .cad-formulario > .cad-secao { padding: 18px; margin: 0 0 16px; scroll-margin-top: 56px; background: var(--superficie-2); border: 1px solid var(--borda); border-radius: 12px; }
+.form-dados .cad-formulario .cad-secao-titulo {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 0 0 12px; border-bottom: 1px solid var(--borda);
+  font-family: var(--fonte); font-size: 1.02rem; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--texto);
+}
+.form-dados .cad-formulario .cad-secao-titulo::before {
+  counter-increment: cadsec; content: counter(cadsec);
+  display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--acento); color: #111; font-size: .8rem; font-weight: 800;
+}
+.form-dados .cad-formulario .rotulo {
+  font-family: var(--fonte); text-transform: none; letter-spacing: 0; font-size: .88rem; font-weight: 600; color: var(--texto);
+}
+.form-dados .cad-formulario .ajuda, .form-dados .cad-formulario small.muted { font-size: .8rem; }
+.form-dados .cad-formulario .campo { background: var(--fundo); }
+.form-dados .cad-formulario .cad-campos > .grupo, .form-dados .cad-formulario .cad-campos > .campo-bloco { margin: 0 0 16px; }
+.form-dados .cad-formulario .cad-campos > :last-child { margin-bottom: 0; }
+/* opções de escolha única (buscas, vida, imagens, meio líquido) como botões */
+.form-dados .cad-formulario .opcoes-ipo:not(.cad-procs) { gap: 8px; }
+.form-dados .cad-formulario .opcoes-ipo:not(.cad-procs) .linha-opcao {
+  padding: 8px 14px; min-height: 0; border: 1px solid var(--borda-forte); border-radius: 999px; background: var(--fundo);
+  font-size: .88rem; font-weight: 600; cursor: pointer;
+}
+.form-dados .cad-formulario .opcoes-ipo:not(.cad-procs) .linha-opcao input { width: 16px; height: 16px; }
+.form-dados .cad-formulario .opcoes-ipo:not(.cad-procs) .linha-opcao:has(input:checked) { border-color: var(--acento); background: rgba(245, 158, 11, .14); }
+/* procedimentos: caixas compactas em duas colunas */
+.form-dados .cad-procs .linha-opcao { padding: 6px 0; font-weight: 500; font-size: .9rem; }
+.form-dados .cad-procs .linha-opcao input { width: 18px; height: 18px; }
+.form-dados .dados-vitimas .acoes-linha { margin-top: 10px; }
+.form-dados .dados-vitimas .lista-vitimas { margin: 0; }

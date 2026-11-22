@@ -3647,5 +3647,21 @@ console.log('Trilhas de cada dia em trechos (migração 085)');
   chk(r.pontos.length === 12, '"pontos" continua vindo (compatível)', r.pontos.length);
 }
 
-console.log('\nMigrações 007–085 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
+console.log('Designação sem destino no mapa (migração 086)');
+{
+  const m86 = ler('supabase/migracoes/086_designacao_sem_destino.sql').replace(/^notify .*$/m, '');
+  await db.exec(m86); await db.exec(m86);
+  chk(true, 'migração 086 executa duas vezes (idempotente)');
+  const op86 = await rpc(resp1, 'criar_operacao', { p_codigo: 'OP 086 vendaval', p_retencao_horas: 0 });
+  const g86 = await rpc(resp1, 'salvar_grupo', { p_operacao: op86.id, p_id: null, p_dados: JSON.stringify({ nome: 'Corte de árvores', cor: '#22c55e' }) });
+  const r86 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: g86.id, p_dados: JSON.stringify({ disponibilidade: 'designado', disponibilidade_obs: 'Corte de árvores na Rua das Flores' }) });
+  chk(r86.grupo.disponibilidade === 'designado' && r86.grupo.disponibilidade_obs === 'Corte de árvores na Rua das Flores', 'equipe designada para uma tarefa, sem destino no mapa');
+  const dia86 = (await db.query(`select titulo from public.diario where operacao_id = $1 and tipo = 'equipe_recursos' order by ocorrido_em desc limit 1`, [op86.id])).rows[0];
+  chk(dia86 && /DESIGNADA/.test(dia86.titulo), 'o diário registra a designação', dia86 && dia86.titulo);
+  chk(/dados_invalidos/.test(await erroDe(rpc(resp1, 'salvar_recursos_grupo', { p_grupo: g86.id, p_dados: JSON.stringify({ disponibilidade: 'dormindo' }) }))), 'valor desconhecido continua recusado');
+  const v86 = await rpc(resp1, 'salvar_recursos_grupo', { p_grupo: g86.id, p_dados: JSON.stringify({ disponibilidade: 'disponivel', disponibilidade_obs: '' }) });
+  chk(v86.grupo.disponibilidade === 'disponivel', 'volta a ficar disponível');
+}
+
+console.log('\nMigrações 007–086 (PostgreSQL real): ' + ok + ' OK, ' + falha + ' falha(s)');
 process.exit(falha ? 1 : 0);

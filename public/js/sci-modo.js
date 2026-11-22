@@ -600,7 +600,7 @@
     })) : null;
     var designacoes = c.equipes.missao.map(function (x) {
       var m = x.missao;
-      return el('tr', null, [x.grupo.nome, m.setor_nome || '—', m.nome, ({ enviada: 'enviada', em_deslocamento: 'em deslocamento', no_setor: 'no setor', busca_finalizada: 'retornando', retorno_atrasado: 'RETORNO ATRASADO' })[m.status] || m.status,
+      return el('tr', null, [x.grupo.nome, m.setor_nome || '—', m.nome, ({ tarefa: 'na tarefa', enviada: 'enviada', em_deslocamento: 'em deslocamento', no_setor: 'no setor', busca_finalizada: 'retornando', retorno_atrasado: 'RETORNO ATRASADO' })[m.status] || m.status,
         D.horaCurta(m.enviada_em) + ' (' + D.duracao(c.agora - Date.parse(m.enviada_em)) + ')'].map(function (t) { return el('td', { texto: t }); }));
     });
     var naoConf = est.dados.informacoes.filter(function (i) { return !i.confirmada_em && !i.descartada_em; });
@@ -772,7 +772,7 @@
     { id: 'designado', titulo: 'Designados', sub: 'empregados em setor, equipe ou local', cor: 'azul' },
     { id: 'indisponivel', titulo: 'Fora de serviço', sub: 'descanso, manutenção, avaria', cor: 'ambar' },
   ];
-  var ROTULO_MISSAO = { enviada: 'destino enviado', em_deslocamento: 'em deslocamento', no_setor: 'no setor', busca_finalizada: 'retornando', retorno_atrasado: 'RETORNO ATRASADO' };
+  var ROTULO_MISSAO = { tarefa: 'na tarefa', enviada: 'destino enviado', em_deslocamento: 'em deslocamento', no_setor: 'no setor', busca_finalizada: 'retornando', retorno_atrasado: 'RETORNO ATRASADO' };
   function tituloColuna(id) { return (COLUNAS_RECURSOS.filter(function (k) { return k.id === id; })[0] || {}).titulo || id; }
   function colunaDaEquipe(c, g) {
     if (c.equipes.missao.some(function (x) { return x.grupo.id === g.id; })) return 'designado';
@@ -793,10 +793,10 @@
     if (destino === 'designado') { designarEquipe(c, g); return; }
     if (origem === 'designado') {
       var m = (c.equipes.missao.filter(function (x) { return x.grupo.id === g.id; })[0] || {}).missao;
-      var sim = await UI.confirmar({ titulo: 'Encerrar o deslocamento da equipe ' + g.nome + '?', ok: 'Encerrar e mover',
-        texto: 'A equipe está designada (' + (m ? m.setor_nome || m.nome : 'deslocamento ativo') + '). Para passar a "' + tituloColuna(destino) + '", o deslocamento é encerrado.' });
+      var sim = await UI.confirmar({ titulo: (m && m.tarefa ? 'Encerrar a tarefa da equipe ' : 'Encerrar o deslocamento da equipe ') + g.nome + '?', ok: 'Encerrar e mover',
+        texto: 'A equipe está designada (' + (m ? m.setor_nome || m.nome : 'deslocamento ativo') + '). Para passar a "' + tituloColuna(destino) + '", ' + (m && m.tarefa ? 'a tarefa é encerrada.' : 'o deslocamento é encerrado.') });
       if (!sim || !m) return;
-      try { await C.rpc('encerrar_missao', { p_missao: m.id }); } catch (e) { UI.aviso(e.message, 'erro', 8000); return; }
+      if (!m.tarefa) { try { await C.rpc('encerrar_missao', { p_missao: m.id }); } catch (e) { UI.aviso(e.message, 'erro', 8000); return; } }
     }
     var disp = destino === 'disponivel' ? 'disponivel' : (sub || 'em_descanso');   // fora de serviço: em descanso (padrão) ou indisponível
     try {
@@ -829,6 +829,7 @@
       contagem.textContent = n === pessoas.length ? 'A equipe inteira (' + n + ').' : n + ' de ' + pessoas.length + ': vão como uma subequipe; ' + (pessoas.length - n) + ' ficam na ' + g.nome + '.';
       campoNome.hidden = n === pessoas.length || !n;
       btn.disabled = !n;
+      btnSemDestino.disabled = !n;
     }
     var lista = el('div', { classe: 'sci2-desig-lista' }, pessoas.map(function (q) {
       var cb = el('input', { type: 'checkbox', checked: true, id: 'desig-' + q.id });
@@ -836,20 +837,49 @@
       cb.addEventListener('change', atualizar);
       return el('label', { classe: 'linha-opcao sci2-desig-pessoa', for: 'desig-' + q.id }, [cb, ' ' + q.nome + (q.papel === 'responsavel' ? ' (responsável)' : '')]);
     }));
-    var tarefa = el('input', { classe: 'campo', id: 'desig-tarefa', maxlength: '40', autocomplete: 'off', placeholder: 'Ex.: Margem do rio, Apoio ao canil, Varredura setor 3' });
+    var tarefa = el('input', { classe: 'campo', id: 'desig-tarefa', maxlength: '80', autocomplete: 'off', placeholder: 'Ex.: Corte de árvores, Triagem na área amarela, Varredura setor 3' });
+    var onde = el('input', { classe: 'campo', id: 'desig-onde', maxlength: '110', autocomplete: 'off', placeholder: 'Ex.: Rua das Flores, 120 · Ginásio municipal (opcional)' });
     var campoNome = el('div', { hidden: true }, [el('p', { classe: 'muted sci2-desig-nota', texto: 'Os marcados formam a subequipe "' + g.nome + ' · <tarefa>" (mesma cor). Os outros continuam na ' + g.nome + ', disponíveis.' })]);
     var btnTodos = botao('Todos', function () { pessoas.forEach(function (q) { marcas[q.id].checked = true; }); atualizar(); });
     var btnNenhum = botao('Nenhum', function () { pessoas.forEach(function (q) { marcas[q.id].checked = false; }); atualizar(); });
     var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
-    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'desig-enviar', texto: 'Escolher o destino e enviar' });
+    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'desig-enviar', texto: 'Escolher o destino no mapa' });
+    var btnSemDestino = el('button', { classe: 'btn', type: 'button', id: 'desig-sem-destino', texto: 'Designar só para a tarefa' });
     var form = el('form', { classe: 'form-padrao', novalidate: true }, [
-      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Designar · ' + g.nome }, [UI.dica('Marque quem vai. A equipe inteira, ou só parte dela: os marcados vão como uma subequipe com o destino deles, e o resto fica disponível para outra tarefa. Depois de escolher, você escolhe o destino (setor, ponto ou local no mapa).')]),
-      UI.campo('Para quê (tarefa)', tarefa, { para: 'desig-tarefa', ajuda: 'Aparece no cartão: "→ tarefa · destino".' }),
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Designar · ' + g.nome }, [UI.dica('Marque quem vai: a equipe inteira ou só parte dela (os marcados viram uma subequipe e o resto fica disponível). Depois, ou escolha um destino no mapa (setor, ponto, local), ou designe só para a tarefa, sem mapa: serve para qualquer operação (vendaval, múltiplas vítimas, apoio…).')]),
+      UI.campo('Para quê (tarefa)', tarefa, { para: 'desig-tarefa', ajuda: 'Aparece no cartão: "→ tarefa".' }),
+      UI.campo('Onde', onde, { para: 'desig-onde', opcional: true, ajuda: 'Para designar sem ponto no mapa: escreva o local (rua, bairro, prédio).' }),
       el('div', { classe: 'sci2-desig-topo' }, [el('strong', { texto: 'Quem vai' }), el('span', { classe: 'sci2-desig-botoes' }, [btnTodos, btnNenhum])]),
       pessoas.length ? lista : el('p', { classe: 'muted', texto: 'Esta equipe não tem pessoas. Adicione em Equipes (grupos).' }),
       contagem, campoNome, erro,
-      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btnSemDestino, btn]),
     ]);
+    // sem destino no mapa: a equipe (ou a parte dela) fica "Designada" só com a tarefa e o local escrito (migração 086)
+    async function separar(vao, t) {
+      if (vao.length >= pessoas.length) return g;
+      var novo = await Pn().dividirEquipe(g.id, vao.map(function (q) { return q.id; }), g.nome + ' · ' + (t || 'parte ' + vao.length));
+      UI.aviso('Subequipe "' + novo.nome + '" criada com ' + vao.length + (vao.length > 1 ? ' pessoas.' : ' pessoa.'), 'ok', 6000);
+      return novo;
+    }
+    btnSemDestino.addEventListener('click', async function () {
+      erro.hidden = true;
+      var vao = marcados();
+      var t = tarefa.value.replace(/\s+/g, ' ').trim(), o = onde.value.replace(/\s+/g, ' ').trim();
+      if (!vao.length) return;
+      if (!t) { erro.textContent = 'Escreva a tarefa (para quê a equipe vai).'; erro.hidden = false; tarefa.focus(); return; }
+      btnSemDestino.disabled = btn.disabled = true;
+      try {
+        var alvo = await separar(vao, t);
+        await C.rpc('salvar_recursos_grupo', { p_grupo: alvo.id, p_dados: { disponibilidade: 'designado', disponibilidade_obs: (t + (o ? ' · ' + o : '')).slice(0, 200) } });
+        fechar();
+        UI.aviso((alvo.nome || g.nome) + ' designada: ' + t + (o ? ' · ' + o : '') + '.', 'ok');
+        if (Pn().recarregarGrupos) await Pn().recarregarGrupos();
+        render(true);
+      } catch (e) {
+        erro.textContent = e.codigo === 'dados_invalidos' ? 'O servidor ainda não aceita designar sem destino: rode a migração 086_designacao_sem_destino.sql no Supabase.' : e.message;
+        erro.hidden = false; btnSemDestino.disabled = btn.disabled = false;
+      }
+    });
     form.addEventListener('submit', async function (ev) {
       ev.preventDefault();
       erro.hidden = true;
@@ -1053,7 +1083,7 @@
         x ? el('span', { texto: haQuanto(c, x.missao.enviada_em) }) : null,
         !x && col.id === 'indisponivel' ? el('span', { texto: g.disponibilidade === 'em_descanso' ? 'em descanso' : 'indisponível' }) : null,
       ]),
-      x ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + [g.disponibilidade_obs, x.missao.setor_nome || x.missao.nome || 'destino'].filter(Boolean).join(' · ') }) : null,
+      x ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + (x.missao.tarefa ? (g.disponibilidade_obs || 'tarefa') : [g.disponibilidade_obs, x.missao.setor_nome || x.missao.nome || 'destino'].filter(Boolean).join(' · ')) }) : null,
       membros ? el('div', { classe: 'sci2-kb-pessoas', title: pessoasEq.map(function (q) { return q.nome; }).join(', ') },
         [pessoasEq.slice(0, 4).map(function (q) { return q.nome.split(' ').slice(0, 2).join(' '); }).join(', ') + (membros > 4 ? ' +' + (membros - 4) : '')]) : null,
       origemSub ? el('div', { classe: 'sci2-kb-sub muted', texto: '↳ saiu da ' + nomeOrigem }) : null,

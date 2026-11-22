@@ -140,6 +140,8 @@
       var m = (missoes || []).filter(function (x) { return x.grupo_id === g.id && MISSAO_ATIVA.indexOf(x.status) !== -1; })
         .sort(function (a, b) { return ms(b.enviada_em) - ms(a.enviada_em); })[0];
       if (m) r.missao.push({ grupo: g, missao: m });
+      // designada para uma tarefa SEM destino no mapa (migração 086: vendaval, IMV, apoio…): conta como empregada
+      else if (g.disponibilidade === 'designado') r.missao.push({ grupo: g, missao: { id: null, tarefa: true, status: 'tarefa', nome: g.disponibilidade_obs || 'tarefa', setor_nome: '', enviada_em: g.recursos_atualizado_em || g.criado_em } });
       else if (g.disponibilidade === 'em_descanso') r.descanso.push({ grupo: g });
       else if (g.disponibilidade === 'indisponivel') r.indisponivel.push({ grupo: g });
       else r.disponivel.push({ grupo: g });

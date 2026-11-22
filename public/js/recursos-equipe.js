@@ -17,7 +17,7 @@
     primeiros_socorros: { rotulo: 'Primeiros socorros', icone: '⛑' }, outro: { rotulo: 'Outro recurso', icone: '▪' },
   };
   var SITUACOES = { operacional: 'Operacional', limitado: 'Limitado', indisponivel: 'Indisponível' };
-  var DISPONIBILIDADES = { disponivel: 'Disponível', em_descanso: 'Em descanso', indisponivel: 'Indisponível', em_missao: 'Em missão' };
+  var DISPONIBILIDADES = { disponivel: 'Disponível', designado: 'Designada (tarefa)', em_descanso: 'Em descanso', indisponivel: 'Indisponível', em_missao: 'Em missão' };
   var MISSAO_ATIVA = ['enviada', 'em_deslocamento', 'no_setor', 'busca_finalizada', 'retorno_atrasado'];
 
   var est = { opId: null, recursos: [], ausente: false, canal: null, timer: null, ouvintes: [] };
@@ -105,7 +105,7 @@
   async function confirmarEnvio(g) {
     var disp = efetiva(g);
     if (disp === 'disponivel') return true;
-    var motivo = disp === 'em_missao' ? 'já está em deslocamento (missão ativa)' : disp === 'em_descanso' ? 'está em descanso' + (g.disponibilidade_obs ? ' (' + g.disponibilidade_obs + ')' : '') : 'está indisponível' + (g.disponibilidade_obs ? ' (' + g.disponibilidade_obs + ')' : '');
+    var motivo = disp === 'em_missao' ? 'já está em deslocamento (missão ativa)' : disp === 'designado' ? 'está designada para uma tarefa' + (g.disponibilidade_obs ? ' (' + g.disponibilidade_obs + ')' : '') : disp === 'em_descanso' ? 'está em descanso' + (g.disponibilidade_obs ? ' (' + g.disponibilidade_obs + ')' : '') : 'está indisponível' + (g.disponibilidade_obs ? ' (' + g.disponibilidade_obs + ')' : '');
     var r = await UI.confirmar({ titulo: 'A equipe ' + g.nome + ' ' + motivo + '. Enviar mesmo assim?', texto: 'Um novo destino substitui o deslocamento anterior desta equipe. A decisão é sua; o aviso é só para não esquecer a disponibilidade.', ok: 'Enviar mesmo assim', empilhar: true });
     return Boolean(r);
   }
@@ -131,7 +131,7 @@
     if (!g) return;
     if (est.ausente) { UI.aviso('Os recursos das equipes ainda não estão no servidor: rode a migração 036_recursos_equipes.sql no Supabase.', 'erro', 8000); return; }
     var editavel = podeAlterar();
-    var disp = el('select', { classe: 'campo', id: 'rec-disp', disabled: editavel ? null : true }, ['disponivel', 'em_descanso', 'indisponivel'].map(function (k) {
+    var disp = el('select', { classe: 'campo', id: 'rec-disp', disabled: editavel ? null : true }, ['disponivel', 'designado', 'em_descanso', 'indisponivel'].map(function (k) {
       return el('option', { value: k, selected: k === g.disponibilidade ? true : null, texto: DISPONIBILIDADES[k] });
     }));
     var obs = el('input', { classe: 'campo', id: 'rec-obs', maxlength: '200', value: g.disponibilidade_obs || '', placeholder: 'Ex.: turno terminado, equipe cansada…', disabled: editavel ? null : true });

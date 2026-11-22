@@ -14,7 +14,7 @@
   if (!C || !UI || !P) return;
   var el = UI.el;
 
-  var DISP = { disponivel: 'Disponível', em_descanso: 'Em descanso', indisponivel: 'Indisponível', em_missao: 'Em missão' };
+  var DISP = { disponivel: 'Disponível', designado: 'Designada (tarefa)', em_descanso: 'Em descanso', indisponivel: 'Indisponível', em_missao: 'Em missão' };
   var TIPOS_REC = { embarcacao: '⛵ Embarcação', viatura: '🚒 Viatura', drone: '🛸 Drone', cao_busca: '🐕 Cão de busca', comunicacao: '📻 Comunicação', primeiros_socorros: '⛑ Primeiros socorros', outro: '▪ Outro' };
   var STATUS_MISSAO = { enviada: 'enviada', em_deslocamento: 'em deslocamento', no_setor: 'no setor', busca_finalizada: 'busca finalizada', retorno_atrasado: 'RETORNO ATRASADO' };
   var ESTADOS_PASSAGEM = { pendente: 'aguardando aceite', aceita: 'aceita', recusada: 'recusada', cancelada: 'cancelada', assumida: 'comando assumido sem aceite' };

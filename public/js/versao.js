@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.16.1';
+  var NUMERO = '1.17.0';
   var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.17.0', data: '2026-11-22', itens: [
+      'SCI para qualquer operação (não só busca): no "Designar…" da equipe há "Designar só para a tarefa", sem escolher destino no mapa. Escreva para quê (ex.: "Corte de árvores") e, se quiser, onde (ex.: "Rua das Flores"). A equipe vai para "Designados" com "→ tarefa · local". Precisa da migração 086 no Supabase.',
+      'Equipe designada para uma tarefa aparece como "Designada" também no briefing e nos recursos da equipe; tirar de "Designados" encerra a tarefa.',
+    ] },
     { versao: '1.16.1', data: '2026-11-22', itens: [
       'Personalizar o IPO: novo bloco "Do relatório Final detalhado", com as partes do Final detalhado para incluir se quiser: resumo em números, situação e desfecho, fichas das vítimas com foto, responsáveis/grupos/pessoas em detalhe, setores um a um com mapa, encontros e relatos de campo, diário consolidado completo e probabilidades de busca (POA, POD, POS).',
     ] },

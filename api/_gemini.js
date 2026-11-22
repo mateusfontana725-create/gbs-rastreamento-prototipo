@@ -31,7 +31,23 @@ const dormir = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 // Uma chamada ao Gemini. p = { system, user, json (bool), schema (responseSchema), maxTokens, ferramentas (functionDeclarations) }
 // Devolve { ok, status, texto, motivo, chamadasFuncao: [{ nome, argumentos }] }.
+// Simulador de falha para TESTE (preview/local), nunca em produção: IA_SIMULAR_STATUS="503" faz toda chamada voltar 503;
+// "503x2" faz só as 2 primeiras chamadas (desta instância) falharem, para ver o retry dar certo; "429" simula cota.
+let simuladas = 0;
+function falhaSimulada(env) {
+  env = env || process.env;
+  const v = String(env.IA_SIMULAR_STATUS || '').trim();
+  if (!v || env.VERCEL_ENV === 'production') return null;
+  const m = /^(\d{3})(?:x(\d+))?$/.exec(v);
+  if (!m) return null;
+  if (m[2] && simuladas >= Number(m[2])) return null;
+  simuladas++;
+  return { ok: false, status: Number(m[1]), texto: '', chamadasFuncao: [], motivo: 'falha simulada (IA_SIMULAR_STATUS)' };
+}
+
 async function chamarGemini(chave, modelo, p) {
+  const simulada = falhaSimulada();
+  if (simulada) return simulada;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TEMPO_LIMITE_MS);
   try {

@@ -76,6 +76,17 @@ function silenciar(fn) { const w = console.warn, log = []; console.warn = (m) =>
     assert.deepStrictEqual(G.modelosGemini(), ['x', 'y', 'z']);
   });
 
+  await teste('simulador de falha (IA_SIMULAR_STATUS) para ver o retry no preview; desligado em produção', async () => {
+    ambiente({ IA_SIMULAR_STATUS: '503x2' });
+    let G = carregar('_gemini.js'); let reais = 0;
+    global.fetch = async () => { reais++; return gem('{"ok":true}')(); };
+    const { v } = await silenciar(() => G.comNovasTentativas((m) => G.chamarGemini('k', m, { user: 'x' }), ['m1']));
+    assert.strictEqual(v.ok, true); assert.strictEqual(v.tentativa, 3); assert.strictEqual(reais, 1);
+    ambiente({ IA_SIMULAR_STATUS: '503', VERCEL_ENV: 'production' }); G = carregar('_gemini.js'); reais = 0;
+    const r = await G.chamarGemini('k', 'm1', { user: 'x' }); assert.strictEqual(r.ok, true); assert.strictEqual(reais, 1);
+    delete process.env.IA_SIMULAR_STATUS; delete process.env.VERCEL_ENV;
+  });
+
   console.log('Preencher nova operação por voz (/api/parse-operacao)');
   const NAT = ['BUSCA TERRESTRE – PESSOA', 'BUSCA AQUÁTICA – PESSOA'];
   await teste('sem login: 401; token recusado: 401 (a IA nem é chamada)', async () => {

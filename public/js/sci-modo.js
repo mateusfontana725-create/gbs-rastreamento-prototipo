@@ -790,12 +790,7 @@
     var origem = colunaDaEquipe(c, g);
     if (!pode() || (origem === destino && !sub)) return;
     if (destino === 'a_caminho') { UI.aviso('"A caminho" vale para recursos solicitados que ainda não chegaram. A equipe já está na operação.', 'erro', 7000); return; }
-    if (destino === 'designado') {
-      UI.aviso('Escolha o destino e marque a equipe ' + g.nome + ': ao enviar, ela passa para "Designados".', 'ok', 8000);
-      var b = $('menu-destino');
-      if (b) b.click(); else Pn().abrirMissoes();
-      return;
-    }
+    if (destino === 'designado') { designarEquipe(c, g); return; }
     if (origem === 'designado') {
       var m = (c.equipes.missao.filter(function (x) { return x.grupo.id === g.id; })[0] || {}).missao;
       var sim = await UI.confirmar({ titulo: 'Encerrar o deslocamento da equipe ' + g.nome + '?', ok: 'Encerrar e mover',
@@ -805,12 +800,91 @@
     }
     var disp = destino === 'disponivel' ? 'disponivel' : (sub || 'em_descanso');   // fora de serviço: em descanso (padrão) ou indisponível
     try {
-      await C.rpc('salvar_recursos_grupo', { p_grupo: g.id, p_dados: { disponibilidade: disp } });
+      await C.rpc('salvar_recursos_grupo', { p_grupo: g.id, p_dados: origem === 'designado' ? { disponibilidade: disp, disponibilidade_obs: '' } : { disponibilidade: disp } });   // a tarefa acaba com o deslocamento
       UI.aviso('Equipe ' + g.nome + ': ' + ({ disponivel: 'disponível', em_descanso: 'em descanso', indisponivel: 'indisponível' })[disp] + '.', 'ok');
     } catch (e) { UI.aviso(e.message, 'erro', 8000); }
     if (Pn().recarregarGrupos) await Pn().recarregarGrupos();
     if (window.RecursosEquipe && window.RecursosEquipe.recarregar) { try { await window.RecursosEquipe.recarregar(); } catch (e2) { /* segue */ } }
     render(true);
+  }
+
+  // Designar uma equipe: QUEM vai (todos, ou só parte) e PARA QUÊ. Parte da equipe vira uma subequipe ("Alfa · Margem do rio"),
+  // com o destino próprio; o resto continua na equipe de origem, disponível para outra tarefa. Depois, "Juntar" devolve.
+  function nomesDaEquipe(gid) {
+    return Pn().membros(gid).map(function (m) {
+      var pid = m.participante_id || m.id;
+      var p = Pn().participante(pid);
+      return { id: pid, nome: p ? (Pn().nome ? Pn().nome(p) : p.dados.nome) : 'Participante', papel: m.papel };
+    }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+  }
+  function designarEquipe(c, g) {
+    if (!pode()) return;
+    if (!Pn().dividirEquipe || !Pn().escolherDestino) { var b0 = $('menu-destino'); if (b0) b0.click(); return; }
+    var pessoas = nomesDaEquipe(g.id);
+    var marcas = {};
+    var contagem = el('small', { classe: 'muted', id: 'desig-contagem' });
+    function marcados() { return pessoas.filter(function (q) { return marcas[q.id].checked; }); }
+    function atualizar() {
+      var n = marcados().length;
+      contagem.textContent = n === pessoas.length ? 'A equipe inteira (' + n + ').' : n + ' de ' + pessoas.length + ': vão como uma subequipe; ' + (pessoas.length - n) + ' ficam na ' + g.nome + '.';
+      campoNome.hidden = n === pessoas.length || !n;
+      btn.disabled = !n;
+    }
+    var lista = el('div', { classe: 'sci2-desig-lista' }, pessoas.map(function (q) {
+      var cb = el('input', { type: 'checkbox', checked: true, id: 'desig-' + q.id });
+      marcas[q.id] = cb;
+      cb.addEventListener('change', atualizar);
+      return el('label', { classe: 'linha-opcao sci2-desig-pessoa', for: 'desig-' + q.id }, [cb, ' ' + q.nome + (q.papel === 'responsavel' ? ' (responsável)' : '')]);
+    }));
+    var tarefa = el('input', { classe: 'campo', id: 'desig-tarefa', maxlength: '40', autocomplete: 'off', placeholder: 'Ex.: Margem do rio, Apoio ao canil, Varredura setor 3' });
+    var campoNome = el('div', { hidden: true }, [el('p', { classe: 'muted sci2-desig-nota', texto: 'Os marcados formam a subequipe "' + g.nome + ' · <tarefa>" (mesma cor). Os outros continuam na ' + g.nome + ', disponíveis.' })]);
+    var btnTodos = botao('Todos', function () { pessoas.forEach(function (q) { marcas[q.id].checked = true; }); atualizar(); });
+    var btnNenhum = botao('Nenhum', function () { pessoas.forEach(function (q) { marcas[q.id].checked = false; }); atualizar(); });
+    var erro = el('p', { classe: 'erro-form', role: 'alert', hidden: true });
+    var btn = el('button', { classe: 'btn btn-escuro', type: 'submit', id: 'desig-enviar', texto: 'Escolher o destino e enviar' });
+    var form = el('form', { classe: 'form-padrao', novalidate: true }, [
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Designar · ' + g.nome }, [UI.dica('Marque quem vai. A equipe inteira, ou só parte dela: os marcados vão como uma subequipe com o destino deles, e o resto fica disponível para outra tarefa. Depois de escolher, você escolhe o destino (setor, ponto ou local no mapa).')]),
+      UI.campo('Para quê (tarefa)', tarefa, { para: 'desig-tarefa', ajuda: 'Aparece no cartão: "→ tarefa · destino".' }),
+      el('div', { classe: 'sci2-desig-topo' }, [el('strong', { texto: 'Quem vai' }), el('span', { classe: 'sci2-desig-botoes' }, [btnTodos, btnNenhum])]),
+      pessoas.length ? lista : el('p', { classe: 'muted', texto: 'Esta equipe não tem pessoas. Adicione em Equipes (grupos).' }),
+      contagem, campoNome, erro,
+      UI.rodape([el('button', { classe: 'btn', type: 'button', texto: 'Cancelar', onclick: function () { fechar(); } }), btn]),
+    ]);
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      erro.hidden = true;
+      var vao = marcados();
+      if (!vao.length) return;
+      var t = tarefa.value.replace(/\s+/g, ' ').trim();
+      btn.disabled = true;
+      try {
+        var alvo = g;
+        if (vao.length < pessoas.length) {
+          alvo = await Pn().dividirEquipe(g.id, vao.map(function (q) { return q.id; }), g.nome + ' · ' + (t || 'parte ' + (vao.length)));
+          UI.aviso('Subequipe "' + alvo.nome + '" criada com ' + vao.length + (vao.length > 1 ? ' pessoas.' : ' pessoa.') + ' Agora escolha o destino.', 'ok', 7000);
+        }
+        if (t) { try { await C.rpc('salvar_recursos_grupo', { p_grupo: alvo.id, p_dados: { disponibilidade_obs: t } }); } catch (e1) { /* a tarefa vai no nome da subequipe */ } }
+        fechar();
+        if (Pn().recarregarGrupos) await Pn().recarregarGrupos();
+        Pn().escolherDestino([], alvo.id);
+        render(true);
+      } catch (e) { erro.textContent = e.message; erro.hidden = false; btn.disabled = false; }
+    });
+    var fechar = UI.abrirModal(form);
+    atualizar();
+  }
+  async function juntarSubequipe(c, g) {
+    var origem = Pn().origemDaSubequipe && Pn().origemDaSubequipe(g.id);
+    var og = origem ? c.grupos.filter(function (k) { return k.id === origem; })[0] : null;
+    if (!og) return;
+    var ok = await UI.confirmar({ titulo: 'Juntar "' + g.nome + '" de volta à ' + og.nome + '?', texto: 'As pessoas voltam para a equipe ' + og.nome + '. O histórico da subequipe (deslocamentos) fica guardado.', ok: 'Juntar' });
+    if (!ok) return;
+    try {
+      var n = await Pn().juntarEquipe(g.id);
+      UI.aviso(n + (n === 1 ? ' pessoa voltou' : ' pessoas voltaram') + ' para a ' + og.nome + '.', 'ok');
+      if (Pn().recarregarGrupos) await Pn().recarregarGrupos();
+      render(true);
+    } catch (e) { UI.aviso(e.message, 'erro', 8000); }
   }
 
   // --- recursos avulsos ---
@@ -964,9 +1038,12 @@
   function cartaoEquipe(c, g, col, quadro) {
     var RE = window.RecursosEquipe, editavel = pode();
     var x = c.equipes.missao.filter(function (m) { return m.grupo.id === g.id; })[0];
-    var membros = Pn().membros(g.id).length;
+    var pessoasEq = nomesDaEquipe(g.id);
+    var membros = pessoasEq.length;
+    var origemSub = Pn().origemDaSubequipe ? Pn().origemDaSubequipe(g.id) : null;
+    var nomeOrigem = origemSub ? ((c.grupos.filter(function (k) { return k.id === origemSub; })[0] || {}).nome || '') : '';
     var rs = RE && RE.recursosDe ? RE.recursosDe(g.id) : [];
-    var mover = editavel ? seletorMover('Mover a equipe ' + g.nome + ' para', [['disponivel', 'Disponíveis'], ['designado', 'Designados (enviar destino)'], ['indisponivel:em_descanso', 'Fora de serviço · em descanso'], ['indisponivel:indisponivel', 'Fora de serviço · indisponível']]
+    var mover = editavel ? seletorMover('Mover a equipe ' + g.nome + ' para', [['disponivel', 'Disponíveis'], ['designado', 'Designados (quem vai e para onde)'], ['indisponivel:em_descanso', 'Fora de serviço · em descanso'], ['indisponivel:indisponivel', 'Fora de serviço · indisponível']]
       .filter(function (o) { return o[0].split(':')[0] !== col.id || col.id === 'indisponivel'; }), function (v) { var p = v.split(':'); moverEquipe(c, g, p[0], p[1]); }) : null;
     var cartaoEl = el('article', { classe: 'sci2-kb-cartao sci2-kb-equipe', role: 'listitem', 'data-grupo': g.id }, [
       el('div', { classe: 'sci2-kb-cab' }, [editavel ? alca('a equipe ' + g.nome) : null, el('i', { classe: 'sci2-cor', style: 'background:' + (g.cor || '#888') }), el('strong', { texto: g.nome }), el('span', { classe: 'sci2-kb-tipo', texto: 'equipe' })]),
@@ -976,13 +1053,19 @@
         x ? el('span', { texto: haQuanto(c, x.missao.enviada_em) }) : null,
         !x && col.id === 'indisponivel' ? el('span', { texto: g.disponibilidade === 'em_descanso' ? 'em descanso' : 'indisponível' }) : null,
       ]),
-      x ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + (x.missao.setor_nome || x.missao.nome || 'destino') }) : null,
+      x ? el('div', { classe: 'sci2-kb-tarefa', texto: '→ ' + [g.disponibilidade_obs, x.missao.setor_nome || x.missao.nome || 'destino'].filter(Boolean).join(' · ') }) : null,
+      membros ? el('div', { classe: 'sci2-kb-pessoas', title: pessoasEq.map(function (q) { return q.nome; }).join(', ') },
+        [pessoasEq.slice(0, 4).map(function (q) { return q.nome.split(' ').slice(0, 2).join(' '); }).join(', ') + (membros > 4 ? ' +' + (membros - 4) : '')]) : null,
+      origemSub ? el('div', { classe: 'sci2-kb-sub muted', texto: '↳ saiu da ' + nomeOrigem }) : null,
       !x && g.disponibilidade_obs && col.id !== 'disponivel' ? el('div', { classe: 'sci2-kb-tarefa', texto: g.disponibilidade_obs }) : null,
       rs.length ? el('div', { classe: 'sci2-kb-rec' }, rs.slice(0, 4).map(function (r) {
         var T = RE.TIPOS[r.tipo] || { icone: '•', rotulo: r.tipo };
         return el('span', { classe: 'sci2-kb-chip', title: T.rotulo, texto: T.icone + ' ' + (r.identificacao || T.rotulo) + (r.quantidade > 1 ? ' ×' + r.quantidade : '') });
       })) : null,
-      el('div', { classe: 'sci2-kb-acoes' }, [mover, botao('Abrir', function () { Pn().abrirGrupos(g.id); }), RE ? botao('Recursos', function () { RE.abrir(g.id); }) : null]),
+      el('div', { classe: 'sci2-kb-acoes' }, [mover,
+        editavel && membros > 0 ? botao(x ? 'Designar parte…' : 'Designar…', function () { designarEquipe(c, g); }, x ? null : 'btn-escuro') : null,
+        editavel && origemSub && !x ? botao('Juntar à ' + nomeOrigem, function () { juntarSubequipe(c, g); }) : null,
+        botao('Abrir', function () { Pn().abrirGrupos(g.id); }), RE ? botao('Recursos', function () { RE.abrir(g.id); }) : null]),
     ]);
     if (editavel && quadro) ligarArrasto(cartaoEl, quadro, function (destino) { moverEquipe(c, g, destino); });
     return cartaoEl;
@@ -1014,7 +1097,7 @@
     var editavel = pode();
     var quadro = el('div', { classe: 'sci2-kb', role: 'list', 'aria-label': 'Recursos por situação' });
     COLUNAS_RECURSOS.forEach(function (col) {
-      var equipes = c.grupos.filter(function (g) { return colunaDaEquipe(c, g) === col.id; }).sort(function (x, y) { return x.nome.localeCompare(y.nome, 'pt-BR'); });
+      var equipes = c.grupos.filter(function (g) { return colunaDaEquipe(c, g) === col.id && !(Pn().origemDaSubequipe && Pn().origemDaSubequipe(g.id) && !Pn().membros(g.id).length && col.id !== 'designado'); }).sort(function (x, y) { return x.nome.localeCompare(y.nome, 'pt-BR'); });
       var avulsos = c.recursos.filter(function (x) { return x.situacao === col.id; }).sort(function (x, y) { return x.nome.localeCompare(y.nome, 'pt-BR'); });
       var lista = el('div', { classe: 'sci2-kb-lista' }, equipes.map(function (g) { return cartaoEquipe(c, g, col, quadro); }).concat(avulsos.map(function (x) { return cartaoRecurso(c, x, col, quadro); })));
       if (!equipes.length && !avulsos.length) lista.appendChild(el('p', { classe: 'sci2-kb-vazio muted', texto: editavel ? 'Solte um recurso aqui' : 'Nenhum recurso' }));

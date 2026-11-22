@@ -14300,6 +14300,48 @@
     cadastroRapido: function () { if (window.Cadastro && est.op) window.Cadastro.abrirRapido(est.op, { aoSalvar: function () { carregarFichas(); } }); },
     abrirGrupos: function (gid) { if (gid) abrirMembrosGrupo(gid); else abrirGrupos(); },
     abrirMissoes: function () { abrirMissoes(); },
+    // Designar parte de uma equipe (SCI › Recursos): os escolhidos saem do grupo e formam uma subequipe (novo grupo, mesma cor),
+    // que recebe o destino; a de origem fica com o resto. Nada é apagado; "juntar" devolve as pessoas ao grupo de origem.
+    escolherDestino: function (participantes, grupoId) { escolherDestino(participantes || [], grupoId || null); },
+    dividirEquipe: async function (gid, pids, nome) {
+      var g = est.grupos.get(gid);
+      if (!g || !pids || !pids.length) throw new Error('Escolha quem vai.');
+      var dados = { nome: String(nome || '').replace(/\s+/g, ' ').trim().slice(0, 60) || (g.nome + ' 2'), cor: g.cor || '#2563eb', permite_militar: Boolean(g.permite_militar) };
+      if (g.icone) dados.icone = g.icone;
+      var novo = await C.rpc('salvar_grupo', { p_operacao: est.op.id, p_id: null, p_dados: dados });
+      est.grupos.set(novo.id, novo);
+      var origem = est.membros.get(gid) || new Map();
+      for (var i = 0; i < pids.length; i++) {
+        var antes = origem.get(pids[i]);
+        var m = await C.rpc('definir_membro', { p_grupo: novo.id, p_participante: pids[i], p_papel: antes && antes.papel === 'responsavel' ? 'responsavel' : 'membro' });
+        if (!est.membros.has(novo.id)) est.membros.set(novo.id, new Map());
+        est.membros.get(novo.id).set(pids[i], m);
+        await C.rpc('remover_membro', { p_grupo: gid, p_participante: pids[i] });
+        origem.delete(pids[i]);
+      }
+      var subs = C.local.ler('gbs-subequipes-' + est.op.id, {}) || {};
+      subs[novo.id] = gid;
+      C.local.gravar('gbs-subequipes-' + est.op.id, subs);
+      aplicarMudancaGrupos();
+      return novo;
+    },
+    origemDaSubequipe: function (gid) { var subs = est.op ? (C.local.ler('gbs-subequipes-' + est.op.id, {}) || {}) : {}; return subs[gid] && est.grupos.has(subs[gid]) ? subs[gid] : null; },
+    juntarEquipe: async function (subId) {
+      var subs = C.local.ler('gbs-subequipes-' + est.op.id, {}) || {};
+      var destino = subs[subId];
+      if (!destino || !est.grupos.has(destino)) throw new Error('Não sei de qual equipe esta saiu.');
+      var mapa = est.membros.get(subId) || new Map();
+      var pids = Array.from(mapa.keys());
+      for (var i = 0; i < pids.length; i++) {
+        var m = await C.rpc('definir_membro', { p_grupo: destino, p_participante: pids[i], p_papel: 'membro' });
+        if (!est.membros.has(destino)) est.membros.set(destino, new Map());
+        est.membros.get(destino).set(pids[i], m);
+        await C.rpc('remover_membro', { p_grupo: subId, p_participante: pids[i] });
+        mapa.delete(pids[i]);
+      }
+      aplicarMudancaGrupos();
+      return pids.length;
+    },
     abrirEquipe: function () { abrirEquipe(); },
     abrirConvite: function (aba) { abrirConvite(aba); },
     abrirDadosOperacao: function () { abrirDadosOperacao(); },

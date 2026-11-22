@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.15.0';
+  var NUMERO = '1.16.0';
   var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.16.0', data: '2026-11-22', itens: [
+      'SCI › Recursos: "Designar…" no cartão da equipe pergunta QUEM vai e PARA QUÊ. Marcando só parte das pessoas (ex.: 5 de 10), elas viram uma subequipe com o nome da tarefa (ex.: "Equipe Alfa · Margem do rio"), com o destino próprio, e o resto fica disponível na equipe de origem para outra tarefa.',
+      'O cartão da equipe mostra quem está nela e, quando designada, "→ tarefa · destino". A subequipe mostra de qual equipe saiu e tem "Juntar à …" para devolver as pessoas. Arrastar para "Designados" também abre essa escolha.',
+    ] },
     { versao: '1.15.0', data: '2026-11-22', itens: [
       'Personalizar o IPO (geral e diário): em Relatórios › Opções › "✎ Personalizar…" abre uma tela com tudo o que pode entrar no relatório (informe, mapas, participantes, trilhas, mapa de cada trilha e de cada setor, tabela dos setores, pontos, linha do tempo, fotos e observações). Já vem marcado o formato de sempre; é só marcar ou desmarcar.',
       'Ao lado, a prévia do PDF vai mostrando como o relatório fica, folha por folha, e dá para rolar. Os mapas e as fotos aparecem como caixas na prévia e são desenhados de verdade ao gerar.',

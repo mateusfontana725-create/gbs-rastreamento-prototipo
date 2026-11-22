@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.18.0';
+  var NUMERO = '1.18.1';
   var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.18.1', data: '2026-11-22', itens: [
+      'SCI: "Mapa operacional e setores" agora abre a tela COMPLETA da operação, com todas as ferramentas (Marcar ponto, Foto, Setor, Trilha, Régua, POA/POD, Dashboard, Mensagens, Convidar, menu Ferramentas e a lista de participantes). O SCI continua ligado; a faixa "SCI · Voltar ao SCI" no rodapé volta para a página em que você estava.',
+    ] },
     { versao: '1.18.0', data: '2026-11-22', itens: [
       'IA mais resistente: quando o Gemini está sobrecarregado (503) ou no limite de uso (429), o servidor tenta de novo sozinho, com espera crescente, e depois usa um modelo reserva. Enquanto isso, a tela mostra "tentando de novo". Se não der, a mensagem diz claramente se foi sobrecarga ou limite.',
       'Nova operação por voz: no formulário de Nova operação, "🎤 Preencher por voz" (no Chrome, Edge e no Android). Fale o que aconteceu; o texto aparece e dá para corrigir; a IA preenche os campos (endereço, natureza, solicitante, observação, vítimas) e marca em amarelo para você conferir. A operação só é criada quando você clicar em "Criar operação".',

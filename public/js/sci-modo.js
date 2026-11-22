@@ -191,7 +191,7 @@
   };
   // focoProtegido: alguém digitando na página → o redesenho periódico espera
   function render(forcar) {
-    if (!est.ativo || !est.raiz) return;
+    if (!est.ativo || !est.raiz || est.noMapa) return;
     var c = contexto();
     renderTopo(c);
     renderMenu(c);
@@ -217,6 +217,7 @@
   function ir(pagina) {
     if (pagina === 'estabelecer' && !pode()) pagina = 'resumo';
     if (est.pagina !== 'mapa') est.voltarPara = est.pagina;
+    if (pagina === 'mapa') { abrirMapaCompleto(); return; }
     est.pagina = pagina;
     if (pagina === 'estabelecer' && !est.wizard) iniciarWizard();
     render(true);
@@ -235,6 +236,7 @@
     }
     var u = Pn().usuario && Pn().usuario();
     est.usuario = u ? u.id : null;
+    if (est.noMapa) fecharMapaCompleto(false);
     est.ativo = true;
     est.raiz.hidden = false;
     document.body.classList.add('modo-sci');
@@ -258,6 +260,7 @@
     sincronizarSeletor();
   }
   function sair() {
+    fecharMapaCompleto(false);
     if (!est.ativo) { sincronizarSeletor(); return; }
     est.ativo = false;
     devolverMapa();
@@ -282,7 +285,43 @@
     if (b) { b.classList.toggle('ativo', est.ativo); b.setAttribute('aria-pressed', String(est.ativo)); }
   }
 
-  /* ---------- Mapa operacional dentro do Modo SCI ---------- */
+  /* ---------- Mapa operacional dentro do Modo SCI ----------
+   * O SCI é um MÉTODO de conduzir a operação: nada do modo Operação pode se perder. Por isso "Mapa operacional e
+   * setores" abre a tela COMPLETA da operação (barra de ferramentas, menu Ferramentas, lista de participantes, desenho
+   * de setores e trilhas, régua, POA/POD…) com o SCI ainda ativo; a faixa "Voltar ao SCI" volta à página de antes. */
+  function abrirMapaCompleto() {
+    if (!est.ativo) return;
+    est.noMapa = true;
+    devolverMapa();
+    if (est.raiz) est.raiz.hidden = true;
+    document.body.classList.remove('modo-sci');
+    document.body.classList.add('sci-no-mapa');
+    var f = $('sci2-faixa-mapa');
+    if (!f) {
+      f = el('div', { classe: 'sci2-faixa-mapa', id: 'sci2-faixa-mapa', role: 'region', 'aria-label': 'Modo SCI' }, [
+        el('span', { classe: 'sci2-faixa-marca', texto: 'SCI' }),
+        el('span', { classe: 'sci2-faixa-txt', texto: 'Mapa operacional e setores · todas as ferramentas da operação' }),
+        el('button', { type: 'button', classe: 'btn btn-pequeno btn-escuro', id: 'sci2-voltar-sci', texto: '← Voltar ao SCI', onclick: function () { fecharMapaCompleto(true); } }),
+      ]);
+      document.body.appendChild(f);
+    }
+    f.hidden = false;
+    ajustarMapa(60);
+  }
+  function fecharMapaCompleto(voltar) {
+    if (!est.noMapa) return;
+    est.noMapa = false;
+    var f = $('sci2-faixa-mapa');
+    if (f) f.hidden = true;
+    document.body.classList.remove('sci-no-mapa');
+    if (voltar && est.ativo) {
+      if (est.raiz) est.raiz.hidden = false;
+      document.body.classList.add('modo-sci');
+      if (Pn().fecharMenu) Pn().fecharMenu();
+      est.pagina = est.voltarPara && est.voltarPara !== 'mapa' ? est.voltarPara : 'resumo';
+      render(true);
+    }
+  }
   function paginaMapa() {
     var host = el('div', { classe: 'sci2-host-mapa', id: 'sci2-host-mapa' });
     var topo = el('div', { classe: 'sci2-mapa-topo' }, [
@@ -1315,7 +1354,7 @@
       c.setores.length ? el('ul', { classe: 'sci2-lista' }, c.setores.map(function (s) {
         return el('li', { classe: 'sci2-linha' }, [el('i', { classe: 'sci2-cor', style: 'background:' + (s.cor || '#66b2ff') }), el('strong', { texto: s.nome }), el('span', { classe: 'muted', texto: s.equipe || '' }), tag(({ concluido: 'concluído', andamento: 'em trabalho' })[s.status] || 'aberto', 'azul')]);
       })) : el('p', { classe: 'sci2-pend', texto: 'Nenhum setor ainda.' }),
-      el('div', { classe: 'sci2-acoes-pagina' }, [botao('Ver no mapa', function () { guardarPasso(); ir('mapa'); }), botao('Desenhar no modo Operação', function () { guardarPasso(); sair(); })])];
+      el('div', { classe: 'sci2-acoes-pagina' }, [botao('Ver no mapa', function () { guardarPasso(); ir('mapa'); }), botao('Abrir o mapa com as ferramentas', function () { guardarPasso(); ir('mapa'); })])];
   }
   function cpasso3(c, w) {
     var obj = el('textarea', { classe: 'campo', id: 'sci2-w-obj', rows: '5', placeholder: 'Um objetivo por linha. Ex.:\nVarrer os setores 1 e 2 até 18h\nLeitura do nível do rio a cada 30 min' });

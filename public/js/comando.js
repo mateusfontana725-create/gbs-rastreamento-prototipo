@@ -1070,14 +1070,29 @@
       ]),
       campos.elemento,
     ]);
+    // Preencher por voz (só aparece se o navegador tem reconhecimento de voz): a IA preenche, a pessoa confere e cria.
+    var voz = window.VozOperacao && window.VozOperacao.suportado() ? window.VozOperacao.montar({
+      naturezas: window.Ipo ? window.Ipo.NATUREZAS : [],
+      aoPreencher: function (cp) {
+        var n = 0;
+        if (cp.codigo) { codigo.value = String(cp.codigo).slice(0, 80); codigo.classList.add('campo-preenchido-ia'); n++; }
+        n += campos.preencher ? campos.preencher(cp) : 0;
+        (cp.vitimas || []).forEach(function (v) { vitimas.adicionarCom(v); n++; });
+        return n;
+      },
+    }) : null;
     var form = UI.el('form', { classe: 'form-nova-op form-padrao', id: 'form-nova', novalidate: true }, [
       UI.el('h2', { id: 'modal-titulo', texto: 'Nova operação' }),
+      voz,
       vitimas.elemento,
       dadosOp,
       status,
       erro,
       UI.rodape([cancelar, btn]),
     ]);
+    // mexeu no campo preenchido pela voz: tira a marca amarela
+    form.addEventListener('input', function (ev) { if (ev.target && ev.target.classList) ev.target.classList.remove('campo-preenchido-ia'); });
+    form.addEventListener('change', function (ev) { if (ev.target && ev.target.classList && ev.isTrusted) ev.target.classList.remove('campo-preenchido-ia'); });
     // ctx.op: a operação já criada (a partir daí o formulário só tenta salvar as vítimas que faltam)
     var ctx = { op: null, foi: false };
     function irParaOperacao() {
@@ -1091,7 +1106,7 @@
         fechar: function () { fechar(true); }, irParaOperacao: irParaOperacao });
     });
     // Fechar depois de criada (Esc, "Seguir sem elas"…) sempre leva à operação: nada se perde.
-    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () { irParaOperacao(); } });
+    var fechar = UI.abrirModal(form, { fecharNoFundo: false, aoFechar: function () { if (voz && voz.pararDeOuvir) voz.pararDeOuvir(); irParaOperacao(); } });
     setTimeout(function () { codigo.focus(); }, 40);
   }
 
@@ -1144,6 +1159,8 @@
     add.addEventListener('click', adicionar);
     return {
       elemento: caixa,
+      // "Preencher por voz": uma ficha nova já preenchida com o que foi dito (para conferir)
+      adicionarCom: function (d) { adicionar(); var it = itens[itens.length - 1]; if (it && it.campos.preencher) it.campos.preencher(d); },
       itens: function () { return itens.slice(); },
       pendentes: function () { return itens.filter(function (it) { return !it.salva; }); },
       // null = todas certas; senão o texto do erro (o foco vai para o campo)

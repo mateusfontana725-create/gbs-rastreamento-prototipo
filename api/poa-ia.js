@@ -5,9 +5,12 @@
 //
 // A chave da API de IA fica SÓ no servidor; o navegador nunca a vê. Dois provedores:
 //   - Anthropic: ANTHROPIC_API_KEY (modelo padrão claude-haiku-5-5);
-//   - Google Gemini: GEMINI_API_KEY (modelo padrão gemini-3.8-flash).
+//   - Google Gemini: GEMINI_API_KEY (modelo principal e reservas em api/_gemini.js; IA_MODELO / IA_MODELOS_RESERVA trocam).
 // POA_IA_PROVEDOR ("anthropic" ou "gemini") escolhe o provedor; sem ela, usa o que tiver chave (Anthropic primeiro).
-// POA_IA_MODELO troca o modelo. Sem chave, responde 503 e a tela segue manual.
+// POA_IA_MODELO (ou IA_MODELO) troca o modelo principal. Sem chave, responde 503 e a tela segue manual.
+// Sobrecarga (503) e cota (429): até 3 novas tentativas com espera exponencial e depois o modelo reserva (api/_gemini.js);
+// esgotado, responde 503 { erro: 'ia_sobrecarregada' | 'ia_cota', mensagem, tentar_de_novo: true }. Outros erros: o status e a
+// mensagem real do provedor (502).
 //
 // Corpo JSON:
 //   { "modo": "poa" | "pod", "operacao_id": "<uuid>", "contexto": { … } }
@@ -24,9 +27,10 @@
 // desta operação (função dono_operacao). O contexto é limpo e truncado aqui; nome, CPF e telefone não são
 // enviados à IA (a tela também não os manda). Limite de pedidos por usuário por minuto.
 
+const G = require('./_gemini');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIMITE_POR_MIN = 6;
-const TEMPO_LIMITE_MS = 20000;   // por tentativa (a função tem até 60 s, com até 3 tentativas)
+const TEMPO_LIMITE_MS = 20000;   // por tentativa (a função tem até 60 s; o prazo total das tentativas fica em api/_gemini.js)
 const TAMANHO_MAX_CORPO = 40000;
 const contagem = new Map();
 
@@ -185,29 +189,10 @@ function normalizarPod(bruto) {
 
 // Chama o provedor escolhido e devolve { ok, status, texto } com o texto da resposta.
 async function perguntar(prov, chave, modelo, p) {
+  if (prov === 'gemini') return G.chamarGemini(chave, modelo, { system: p.system, user: p.user, json: true });
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TEMPO_LIMITE_MS);
   try {
-    if (prov === 'gemini') {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': chave },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: p.system }] },
-          contents: [{ role: 'user', parts: [{ text: p.user }] }],
-          generationConfig: Object.assign({ responseMimeType: 'application/json', maxOutputTokens: 4096, temperature: 0 },
-            // o Gemini 2.5 flash gasta o limite de saída "pensando" e podem devolver texto vazio: desliga o raciocínio
-            /gemini-2\.5-flash/i.test(modelo) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-        }),
-        signal: ctrl.signal,
-      });
-      const corpo = await r.json().catch(() => null);
-      const partes = corpo && corpo.candidates && corpo.candidates[0] && corpo.candidates[0].content && corpo.candidates[0].content.parts;
-      // chave inválida no Gemini volta como 400 ("API key not valid")
-      const chaveRuim = r.status === 400 && /api key/i.test(JSON.stringify(corpo && corpo.error || ''));
-      const motivo = (corpo && corpo.error && corpo.error.message) || (corpo && corpo.promptFeedback && corpo.promptFeedback.blockReason) || (corpo && corpo.candidates && corpo.candidates[0] && corpo.candidates[0].finishReason !== 'STOP' ? corpo.candidates[0].finishReason : '') || '';
-      return { ok: r.ok, status: chaveRuim ? 401 : r.status, texto: Array.isArray(partes) ? partes.map((c) => c.text || '').join('') : '', motivo: String(motivo).slice(0, 160) };
-    }
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': chave, 'anthropic-version': '2023-06-01' },
@@ -227,8 +212,8 @@ function configurarIa() {
   let prov = (env.POA_IA_PROVEDOR || '').trim().toLowerCase();
   if (prov !== 'anthropic' && prov !== 'gemini') prov = chaveAnthropic ? 'anthropic' : chaveGemini ? 'gemini' : 'anthropic';
   const chave = prov === 'gemini' ? chaveGemini : chaveAnthropic;
-  const modelo = (env.POA_IA_MODELO || (prov === 'gemini' ? 'gemini-3.8-flash' : 'claude-haiku-5-5')).trim();
-  return { prov, chave, modelo, variavel: prov === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY' };
+  const modelos = prov === 'gemini' ? G.modelosGemini(env) : [(env.POA_IA_MODELO || env.IA_MODELO || 'claude-haiku-5-5').trim()];
+  return { prov, chave, modelo: modelos[0], modelos, variavel: prov === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY' };
 }
 
 module.exports = async (req, res) => {
@@ -237,7 +222,7 @@ module.exports = async (req, res) => {
 
   const url = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
   const chavePublica = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  const { prov, chave: chaveIa, modelo, variavel } = configurarIa();
+  const { prov, chave: chaveIa, modelos, variavel } = configurarIa();
   if (!url || !chavePublica) return res.status(500).json({ erro: 'variaveis_de_ambiente_ausentes' });
 
   const auth = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');
@@ -269,14 +254,15 @@ module.exports = async (req, res) => {
       prompt = promptPod(ctx);
     }
 
-    // Sobrecarga momentânea do provedor (500, 502, 503, 504): tenta de novo, com espera crescente, dentro do prazo da função
-    const espera = Number(process.env.POA_IA_ESPERA_MS || 1500), inicio = Date.now();
-    let r = await perguntar(prov, chaveIa, modelo, prompt);
-    for (let n = 1; n <= 2 && [500, 502, 503, 504].includes(r.status) && Date.now() - inicio < 25000; n++) {
-      await new Promise((ok) => setTimeout(ok, espera * n));
-      r = await perguntar(prov, chaveIa, modelo, prompt);
+    // Sobrecarga (503) e cota (429): novas tentativas com espera exponencial e depois o modelo reserva (api/_gemini.js).
+    // A Anthropic também devolve 529 quando está sobrecarregada.
+    const r = await G.comNovasTentativas((m) => perguntar(prov, chaveIa, m, prompt), modelos,
+      { rotulo: 'poa-ia', transitorio: prov === 'gemini' ? G.STATUS_TRANSITORIO : G.STATUS_TRANSITORIO.concat([529]) });
+    const modelo = r.modelo || modelos[0];
+    if (r.esgotou) {
+      return res.status(503).json({ erro: r.status === 429 ? 'ia_cota' : 'ia_sobrecarregada', tentar_de_novo: true, tentativas: r.chamadas,
+        mensagem: G.mensagemEsgotada(r) + ' Enquanto isso, preencha manualmente.' });
     }
-    if (r.status === 429) return res.status(503).json({ erro: 'ia_cota', mensagem: `A IA (${prov}) atingiu o limite de uso agora. Tente em alguns minutos ou preencha manualmente.` });
     if (r.status === 401 || r.status === 403) return res.status(503).json({ erro: 'ia_nao_configurada', mensagem: `A chave da IA (${variavel}) foi recusada pelo provedor ${prov}. Confira a chave. O preenchimento manual continua funcionando.` });
     if (!r.ok) return res.status(502).json({ erro: 'ia_indisponivel', mensagem: `A IA (${prov}, ${modelo}) respondeu com erro ${r.status}${r.motivo ? ': ' + r.motivo : ''}. Preencha manualmente ou tente de novo.` });
 

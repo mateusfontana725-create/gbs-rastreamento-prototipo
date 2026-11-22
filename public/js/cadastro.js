@@ -462,7 +462,28 @@
       });
     }
 
-    return { elemento: raiz, ler: ler, limpar: limpar };
+    // Preenche com valores vindos de fora (ex.: "Preencher por voz"): só os campos informados; os outros ficam como estão.
+    // Cada campo preenchido ganha a marca .campo-preenchido-ia (para a pessoa conferir antes de criar). Devolve quantos preencheu.
+    function preencher(d) {
+      d = d || {};
+      var n = 0;
+      function marca(e) { e.classList.add('campo-preenchido-ia'); n++; }
+      if (d.endereco) { endereco.value = String(d.endereco).slice(0, 300); marca(endereco); }
+      if (d.coordenada && window.Coords && window.Coords.interpretar(d.coordenada)) {
+        coordTxt.value = String(d.coordenada); coordTxt.dispatchEvent(new Event('input')); marca(coordTxt);
+      }
+      if (d.natureza && window.Ipo.NATUREZAS.indexOf(d.natureza) !== -1) {
+        naturezaSel.value = d.natureza; naturezaSel.dispatchEvent(new Event('change')); marca(naturezaSel);
+      } else if (d.natureza_outra) {
+        naturezaSel.value = window.Ipo.OUTRA_NATUREZA; naturezaSel.dispatchEvent(new Event('change'));
+        naturezaOutra.value = String(d.natureza_outra).slice(0, 300); naturezaOutra.dispatchEvent(new Event('input')); marca(naturezaSel); marca(naturezaOutra);
+      }
+      if (d.solicitante_nome) { solicNome.value = String(d.solicitante_nome).slice(0, 120); marca(solicNome); }
+      if (d.descricao) { desc.value = String(d.descricao).slice(0, 2000); marca(desc); }
+      return n;
+    }
+
+    return { elemento: raiz, ler: ler, limpar: limpar, preencher: preencher };
   }
 
   // Campo numérico com a opção "Não apurado": marcada, o número fica desligado e vazio (o IPO sai "Não apurado").
@@ -1032,7 +1053,19 @@
       docNum.disabled = Boolean(sim) || !docTipo.value;
       [btnUlvMapa, btnUlvEu, btnUlvTirar, ulvTxt, ulvDesc].forEach(function (c) { c.disabled = Boolean(sim); });
     }
-    return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome,
+    // Preenche com valores vindos de fora ("Preencher por voz"): só o que veio; marca para conferir. A idade dita é "informada".
+    function preencher(d) {
+      d = d || {};
+      function marca(e) { e.classList.add('campo-preenchido-ia'); }
+      if (d.nome) { nome.value = String(d.nome).slice(0, 80); marca(nome); }
+      if (d.idade != null && d.idade >= 0 && d.idade <= 130) { idade.value = String(d.idade); marca(idade); }
+      if (d.sexo === 'M' || d.sexo === 'F') { sexo.value = d.sexo; marca(sexo); }
+      if (d.origem) { origem.value = String(d.origem).slice(0, 120); marca(origem); }
+      if (d.caracteristicas) { carac.value = String(d.caracteristicas).slice(0, 1000); marca(carac); }
+      if (d.roupas) { roupas.value = String(d.roupas).slice(0, 1000); marca(roupas); }
+      if (d.observacoes) { obs.value = String(d.observacoes).slice(0, 2000); marca(obs); }
+    }
+    return { elementos: elementos, ler: ler, validar: validar, bloquear: bloquear, nome: nome, preencher: preencher,
       arquivo: function () { return foto.files && foto.files[0] ? foto.files[0] : null; },
       tirarFoto: function () { return Boolean(tirarFoto.checked); } };
   }

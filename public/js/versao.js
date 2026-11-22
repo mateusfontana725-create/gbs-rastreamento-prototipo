@@ -9,10 +9,14 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.17.0';
+  var NUMERO = '1.18.0';
   var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.18.0', data: '2026-11-22', itens: [
+      'IA mais resistente: quando o Gemini está sobrecarregado (503) ou no limite de uso (429), o servidor tenta de novo sozinho, com espera crescente, e depois usa um modelo reserva. Enquanto isso, a tela mostra "tentando de novo". Se não der, a mensagem diz claramente se foi sobrecarga ou limite.',
+      'Nova operação por voz: no formulário de Nova operação, "🎤 Preencher por voz" (no Chrome, Edge e no Android). Fale o que aconteceu; o texto aparece e dá para corrigir; a IA preenche os campos (endereço, natureza, solicitante, observação, vítimas) e marca em amarelo para você conferir. A operação só é criada quando você clicar em "Criar operação".',
+    ] },
     { versao: '1.17.0', data: '2026-11-22', itens: [
       'SCI para qualquer operação (não só busca): no "Designar…" da equipe há "Designar só para a tarefa", sem escolher destino no mapa. Escreva para quê (ex.: "Corte de árvores") e, se quiser, onde (ex.: "Rua das Flores"). A equipe vai para "Designados" com "→ tarefa · local". Precisa da migração 086 no Supabase.',
       'Equipe designada para uma tarefa aparece como "Designada" também no briefing e nos recursos da equipe; tirar de "Designados" encerra a tarefa.',

@@ -228,7 +228,18 @@
 
   /* ---------- IA opcional (sugestões; o responsável decide) -------------- */
   // Chama /api/poa-ia (a chave da IA fica só no servidor). Devolve { ok, dados } ou { ok: false, mensagem }.
-  async function pedirIa(modo, contexto) {
+  // aviso(texto): mostra o andamento. O servidor tenta de novo sozinho quando a IA está sobrecarregada (503) ou no limite
+  // (429), com espera crescente e um modelo reserva: depois de alguns segundos sem resposta, a tela avisa que está tentando de novo.
+  async function pedirIa(modo, contexto, aviso) {
+    var timers = [];
+    if (aviso) {
+      timers.push(setTimeout(function () { aviso('A IA está ocupada agora: tentando de novo…'); }, 4000));
+      timers.push(setTimeout(function () { aviso('Ainda tentando de novo (alta demanda na IA)…'); }, 12000));
+      timers.push(setTimeout(function () { aviso('Tentando com um modelo reserva da IA…'); }, 22000));
+    }
+    try { return await pedirIaAgora(modo, contexto); } finally { timers.forEach(clearTimeout); }
+  }
+  async function pedirIaAgora(modo, contexto) {
     var sessao = null;
     try { sessao = (await C.cliente.auth.getSession()).data.session; } catch (e) { /* sem sessão */ }
     if (!sessao) return { ok: false, mensagem: 'Entre de novo na sua conta para usar a IA.' };
@@ -538,7 +549,7 @@
       onclick: async function () {
         btnIa.disabled = true; msgIa.hidden = false; msgIa.textContent = 'A IA está analisando…'; msgIa.classList.remove('poa-ia-erro');
         var ev = evCampos.filter(function (x) { return x.marcar.checked && (x.e.livre ? x.texto.value.trim() : true); }).map(function (x) { return { descricao: x.e.livre ? x.texto.value.trim() : x.e.texto, confirmada: x.conf.checked }; });
-        var r = await pedirIa('poa', contextoPoaIa(vitimaId, setores, { pontoId: selPonto.value || null, evidencias: ev, hipoteses: hip.value.trim(), limitacoes: lim.value.trim(), horario: hr.value ? new Date(hr.value).toISOString() : '' }));
+        var r = await pedirIa('poa', contextoPoaIa(vitimaId, setores, { pontoId: selPonto.value || null, evidencias: ev, hipoteses: hip.value.trim(), limitacoes: lim.value.trim(), horario: hr.value ? new Date(hr.value).toISOString() : '' }), function (t) { msgIa.textContent = t; });
         btnIa.disabled = false;
         if (!r.ok) { msgIa.textContent = r.mensagem; msgIa.classList.add('poa-ia-erro'); return; }
         var puladas = 0, aplicadas = 0, insuf = 0;
@@ -801,7 +812,7 @@
         btnIa.disabled = true; msgIa.hidden = false; msgIa.classList.remove('poa-ia-erro'); msgIa.textContent = 'A IA está analisando…';
         var op = P.op() || {};
         var r = await pedirIa('pod', { operacao: { tipo: op.tipo || '', descricao: op.descricao || '' }, setor: { nome: st.nome, area_km2: Math.round(P.areaSetorM2(st) / 1e4) / 100, observacoes: st.observacoes || '' },
-          equipe: equipe.value.trim(), metodo: metodo.value, area_fracao: ar == null || isNaN(ar) ? 1 : ar, area_texto: areaTxt.value.trim() });
+          equipe: equipe.value.trim(), metodo: metodo.value, area_fracao: ar == null || isNaN(ar) ? 1 : ar, area_texto: areaTxt.value.trim() }, function (t) { msgIa.textContent = t; });
         btnIa.disabled = false;
         if (!r.ok) { msgIa.classList.add('poa-ia-erro'); msgIa.textContent = r.mensagem; return; }
         if (r.dados.insuficiente || r.dados.pod == null) { msgIa.textContent = 'A IA respondeu: informação insuficiente para estimar o POD. Preencha manualmente.'; return; }

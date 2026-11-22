@@ -14,7 +14,7 @@ function resposta() {
 const json = (obj, status) => ({ ok: (status || 200) < 300, status: status || 200, json: async () => obj, text: async () => JSON.stringify(obj) });
 const OP = '11111111-1111-4111-8111-111111111111';
 const ENV = { SUPABASE_URL: 'https://proj.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'pub', ANTHROPIC_API_KEY: 'chave-secreta-de-teste' };
-function ambiente(extra) { process.env.POA_IA_ESPERA_MS = '0'; delete process.env.POA_IA_MODELO; delete process.env.POA_IA_PROVEDOR; delete process.env.GEMINI_API_KEY; delete process.env.GOOGLE_API_KEY; Object.assign(process.env, ENV, extra || {}); }
+function ambiente(extra) { process.env.POA_IA_ESPERA_MS = '0'; delete process.env.IA_MODELOS_RESERVA; delete process.env.IA_MODELO; delete process.env.POA_IA_MODELO; delete process.env.POA_IA_PROVEDOR; delete process.env.GEMINI_API_KEY; delete process.env.GOOGLE_API_KEY; Object.assign(process.env, ENV, extra || {}); }
 const req = (corpo, token) => ({ method: 'POST', body: corpo, headers: token === null ? {} : { authorization: 'Bearer ' + (token || 'tok-' + Math.random()) } });
 const SETORES = [{ id: 's1', nome: 'Norte', area_km2: 0.4 }, { id: 's2', nome: 'Sul', area_km2: 0.3 }];
 const CTX = { operacao: { tipo: 'terrestre', descricao: 'Idoso saiu para caminhar' }, vitima: { idade: 78, sexo: 'M', perfil: ['idoso'], nome: 'Seu Antônio', cpf: '52998224725', telefone: '21998765432', caracteristicas: 'usa bengala' },
@@ -172,15 +172,31 @@ async function chamar(corpo, rotas, token) {
     const r = await chamar({ modo: 'pod', operacao_id: OP, contexto: { setor: { nome: 'Norte' }, metodo: 'Drone' } }, { 'generativelanguage.googleapis.com': () => (++n < 2 ? json({ error: { message: 'high demand' } }, 503) : gem('{"pod":0.5,"justificativa":"ok"}')()) });
     assert.strictEqual(r.code, 200); assert.strictEqual(r.body.pod, 0.5); assert.strictEqual(n, 2);
   });
-  await teste('sobrecarga que não passa: 3 tentativas e depois mensagem com o motivo', async () => {
-    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' }); let n = 0;
-    const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => { n++; return json({ error: { message: 'high demand' } }, 503); } });
-    assert.strictEqual(r.code, 502); assert.strictEqual(n, 3); assert.ok(/503/.test(r.body.mensagem) && /high demand/.test(r.body.mensagem));
+  await teste('sobrecarga que não passa (503): 1 + 3 novas tentativas no principal, o mesmo no reserva, e 503 com mensagem clara', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' }); const modelos = [];
+    const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': (url) => { modelos.push(decodeURIComponent(url.split('/models/')[1].split(':')[0])); return json({ error: { message: 'high demand' } }, 503); } });
+    assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_sobrecarregada'); assert.strictEqual(r.body.tentar_de_novo, true);
+    assert.deepStrictEqual(modelos, ['gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash']);
+    assert.ok(/sobrecarregada/.test(r.body.mensagem) && /manualmente/.test(r.body.mensagem), r.body.mensagem);
   });
-  await teste('cota (429) e chave inválida não repetem', async () => {
+  await teste('cota (429): também tenta de novo e passa ao reserva; esgotado, 503 "ia_cota"', async () => {
     ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' }); let n = 0;
-    await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => { n++; return json({}, 429); } });
-    assert.strictEqual(n, 1);
+    const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => { n++; return json({ error: { message: 'quota' } }, 429); } });
+    assert.strictEqual(n, 8); assert.strictEqual(r.code, 503); assert.strictEqual(r.body.erro, 'ia_cota'); assert.ok(/limite de uso/.test(r.body.mensagem));
+  });
+  await teste('principal sobrecarregado, reserva responde: 200 com o modelo reserva', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g' });
+    const r = await chamar({ modo: 'pod', operacao_id: OP, contexto: { setor: { nome: 'Norte' }, metodo: 'Drone' } }, { 'generativelanguage.googleapis.com': (url) => (/gemini-2\.5-flash/.test(url) ? gem('{"pod":0.4,"justificativa":"ok"}')() : json({}, 503)) });
+    assert.strictEqual(r.code, 200); assert.strictEqual(r.body.pod, 0.4); assert.strictEqual(r.body.modelo, 'gemini-2.5-flash');
+  });
+  await teste('lista de reserva configurável (IA_MODELOS_RESERVA) e outros erros sem novas tentativas', async () => {
+    ambiente({ ANTHROPIC_API_KEY: '', GEMINI_API_KEY: 'g', IA_MODELOS_RESERVA: 'reserva-a, reserva-b' }); const modelos = [];
+    await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': (url) => { modelos.push(url.split('/models/')[1].split(':')[0]); return json({}, 503); } });
+    assert.strictEqual(modelos.filter((m) => m === 'reserva-a').length, 4); assert.strictEqual(modelos.filter((m) => m === 'reserva-b').length, 4);
+    delete process.env.IA_MODELOS_RESERVA;
+    let n = 0;
+    const r = await chamar({ modo: 'poa', operacao_id: OP, contexto: CTX }, { 'generativelanguage.googleapis.com': () => { n++; return json({ error: { message: 'Invalid JSON payload' } }, 400); } });
+    assert.strictEqual(n, 1); assert.strictEqual(r.code, 502); assert.ok(/400/.test(r.body.mensagem) && /Invalid JSON payload/.test(r.body.mensagem), r.body.mensagem);
   });
 
   console.log('Limite de uso');

@@ -9,6 +9,8 @@
   ],
   "functions": {
     "api/poa-ia.js": { "maxDuration": 60 },
+    "api/parse-operacao.js": { "maxDuration": 60 },
+    "api/assistente.js": { "maxDuration": 60 },
     "api/meteo.js": { "maxDuration": 30 },
     "api/arquivar.js": { "maxDuration": 60 }
   },

@@ -3486,3 +3486,4 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .sci2-desig-nota { margin: 6px 0 0; font-size: .82rem; }
 .sci2-kb-pessoas { font-size: .78rem; color: var(--texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sci2-kb-sub { font-size: .76rem; }
+.pz-nota-det { margin: -4px 0 0; font-size: .78rem; }

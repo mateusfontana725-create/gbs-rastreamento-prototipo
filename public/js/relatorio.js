@@ -1017,6 +1017,9 @@
       passo('Buscando as trilhas de cada dia…');
       base = { dados: dados0, tr: await trilhasDosDias(op, ini, fim), logo: await carregarLogo() };
     }
+    if (opcoes.busca && !Object.prototype.hasOwnProperty.call(base.dados, 'busca')) {
+      try { base.dados.busca = window.BuscaCenario ? await window.BuscaCenario.dadosRelatorio() : null; } catch (e) { base.dados.busca = null; }
+    }
     var dados = JSON.parse(JSON.stringify(base.dados));
     var tr = { lista: JSON.parse(JSON.stringify(base.tr.lista || [])), aviso: base.tr.aviso };
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
@@ -1168,6 +1171,29 @@
   // IPO GERAL da operação (curto): o IPO inteiro, sem separar por dia (cabeçalho, local, vítima, procedimentos, recursos, efetivo,
   // desdobramentos, órgãos), o mapa da operação, militares, trilhas e pontos de interesse. Do acionamento até agora (ou o encerramento).
   // mapas.trilhas: um mapa de cada trilha (a operação toda); mapas.pontos: o mapa dos pontos de interesse. Só baixa.
+  // Partes do Final detalhado no IPO (Personalizar): fotos das fichas das vítimas e, para "Setores um a um", o mapa de cada setor
+  async function recursosDetalhados(c, S, passo) {
+    if (!S) return;
+    if (S.fichasVitimas) {
+      c.recursos.fotosVitimas = c.recursos.fotosVitimas || {};
+      var vs = c.dados.vitimas || [];
+      for (var v = 0; v < vs.length; v++) {
+        if (!vs[v].foto_caminho || c.recursos.fotosVitimas[vs[v].id]) continue;
+        passo('Baixando a foto de ' + vs[v].nome + '…');
+        var fv = await fotoReduzida('vitimas', vs[v].foto_caminho, 700);
+        if (fv) c.recursos.fotosVitimas[vs[v].id] = fv;
+      }
+    }
+    if (S.setoresDetalhe && !c.recursos.mapasSetorGeral && (c.dados.setores || []).length) {
+      c.recursos.mapasSetorGeral = {};
+      var baseS = elementosMapa(c.dados, { fundo: true }).base;
+      var lisS = c.dados.setores.slice(0, 30);
+      for (var m = 0; m < lisS.length; m++) {
+        passo('Desenhando o mapa do setor ' + lisS[m].nome + ' (' + (m + 1) + '/' + lisS.length + ')…');
+        c.recursos.mapasSetorGeral[lisS[m].id] = await desenharMapa(Object.assign({ largura: 900, altura: 520, enquadrar: pontosSetor(lisS[m]), destaque: lisS[m].id }, baseS));
+      }
+    }
+  }
   // extra (Personalizar): { secoes, edicoes, observacoes, base, previa } — com secoes, os mapas e as fotos seguem as seções;
   // previa = só monta o documento (mapas e fotos como caixas) e devolve { doc, base }, sem PDF.
   async function gerarIpoGeral(op, ini, fim, passo, mapas, extra) {
@@ -1176,7 +1202,7 @@
     mapas = mapas || {};
     var S = extra.secoes || null;
     if (S) mapas = { trilhas: S.mapasTrilha, pontos: S.mapaPontos, setores: S.mapasSetor };
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { semMapas: true, base: extra.base });
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { semMapas: true, base: extra.base, busca: Boolean(S && S.probabilidades) });
     var RP = window.RelatorioPDF;
     var recursos = c.recursos;
     var RAIO_M = 5000;
@@ -1268,6 +1294,7 @@
       var urlF = await fotoReduzida('fotos', listaFotos[fi].caminho, 600);
       if (urlF) recursos.fotos[listaFotos[fi].id] = urlF;
     }
+    await recursosDetalhados(c, S, passo);
     passo('Montando o documento…');
     var doc = RP.montarIpoGeral(c.dados, recursos, {
       dias: c.dias, subtitulo: 'Do acionamento (' + brDia(ini) + ') até ' + brDia(fim),
@@ -1290,7 +1317,8 @@
     extra = extra || {};
     var S = extra.secoes || null;
     if (S) mapas = { trilhas: Boolean(S.mapasTrilha), pontos: Boolean(S.mapaPontos), setores: Boolean(S.mapasSetor) };
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: !S || S.fotos !== false, semMapaDia: Boolean(S && S.mapaGeral === false), base: extra.base });
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: !S || S.fotos !== false, semMapaDia: Boolean(S && S.mapaGeral === false), base: extra.base, busca: Boolean(S && S.probabilidades) });
+    await recursosDetalhados(c, S, passo);
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (modo === 'dia' ? ' · acumulado até o dia' : ''), acumulado: modo === 'dia',
@@ -1334,12 +1362,14 @@
     var base = null, ocupado = false, deNovo = false;
 
     var caixas = {};
-    var listaSec = UI.el('div', { classe: 'pz-secoes' }, RP.SECOES_IPO.map(function (x) {
+    function caixaSecao(x) {
       var cb = UI.el('input', { type: 'checkbox', id: 'pz-' + x.id, checked: secoes[x.id] ? true : null });
       caixas[x.id] = cb;
       cb.addEventListener('change', function () { secoes[x.id] = cb.checked; caixaObs.hidden = !secoes.observacoes; guardar(); agendar(); });
       return UI.el('label', { classe: 'pz-secao' + (x.mapa ? ' pz-secao-mapa' : ''), for: 'pz-' + x.id }, [cb, UI.el('span', { texto: x.rotulo })]);
-    }));
+    }
+    var listaSec = UI.el('div', { classe: 'pz-secoes' }, RP.SECOES_IPO.filter(function (x) { return !x.grupo; }).map(caixaSecao));
+    var listaDet = UI.el('div', { classe: 'pz-secoes' }, RP.SECOES_IPO.filter(function (x) { return x.grupo === 'detalhado'; }).map(caixaSecao));
     var obs = UI.el('textarea', { classe: 'campo', id: 'pz-observacoes-texto', rows: '4', maxlength: '4000', placeholder: 'Escreva aqui o que deve sair no fim do relatório…' });
     obs.value = observacoes;
     var timerObs = null;
@@ -1416,6 +1446,9 @@
           UI.el('p', { classe: 'pz-periodo muted', texto: periodo }),
           UI.el('h3', { classe: 'pz-titulo', texto: 'O que entra no relatório' }),
           listaSec, caixaObs,
+          UI.el('h3', { classe: 'pz-titulo', texto: 'Do relatório Final detalhado' }),
+          UI.el('p', { classe: 'muted pz-nota-det', texto: geral ? 'Partes da operação inteira, em página própria.' : 'Partes da operação inteira; saem depois dos dias.' }),
+          listaDet,
           UI.el('div', { classe: 'pz-acoes-lado' }, [btnPadrao, btnDesfazer]),
           infoEd,
         ]),

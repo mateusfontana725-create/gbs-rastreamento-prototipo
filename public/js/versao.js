@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.16.0';
+  var NUMERO = '1.16.1';
   var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.16.1', data: '2026-11-22', itens: [
+      'Personalizar o IPO: novo bloco "Do relatório Final detalhado", com as partes do Final detalhado para incluir se quiser: resumo em números, situação e desfecho, fichas das vítimas com foto, responsáveis/grupos/pessoas em detalhe, setores um a um com mapa, encontros e relatos de campo, diário consolidado completo e probabilidades de busca (POA, POD, POS).',
+    ] },
     { versao: '1.16.0', data: '2026-11-22', itens: [
       'SCI › Recursos: "Designar…" no cartão da equipe pergunta QUEM vai e PARA QUÊ. Marcando só parte das pessoas (ex.: 5 de 10), elas viram uma subequipe com o nome da tarefa (ex.: "Equipe Alfa · Margem do rio"), com o destino próprio, e o resto fica disponível na equipe de origem para outra tarefa.',
       'O cartão da equipe mostra quem está nela e, quando designada, "→ tarefa · destino". A subequipe mostra de qual equipe saiu e tem "Juntar à …" para devolver as pessoas. Arrastar para "Designados" também abre essa escolha.',

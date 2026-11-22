@@ -1311,6 +1311,15 @@
     { id: 'linhaDoTempo', rotulo: 'Linha do tempo (registros do diário)', padrao: false },
     { id: 'fotos', rotulo: 'Fotos (página própria)', padrao: true },
     { id: 'observacoes', rotulo: 'Observações (texto livre no fim)', padrao: false },
+    // do relatório Final detalhado (a operação inteira; no IPO diário saem depois dos dias)
+    { id: 'numeros', rotulo: 'Resumo em números', padrao: false, grupo: 'detalhado' },
+    { id: 'resultado', rotulo: 'Situação e desfecho', padrao: false, grupo: 'detalhado' },
+    { id: 'fichasVitimas', rotulo: 'Fichas das vítimas (com foto)', padrao: false, grupo: 'detalhado' },
+    { id: 'pessoasGrupos', rotulo: 'Responsáveis, grupos e pessoas (detalhado)', padrao: false, grupo: 'detalhado' },
+    { id: 'setoresDetalhe', rotulo: 'Setores um a um (com mapa)', padrao: false, grupo: 'detalhado', mapa: true },
+    { id: 'encontros', rotulo: 'Encontros, relatos de campo e todos os pontos', padrao: false, grupo: 'detalhado' },
+    { id: 'diarioCompleto', rotulo: 'Diário consolidado (completo)', padrao: false, grupo: 'detalhado' },
+    { id: 'probabilidades', rotulo: 'Probabilidades de busca (POA, POD, POS)', padrao: false, grupo: 'detalhado' },
   ];
   function secoesIpo(p) {
     var s = {};
@@ -1318,6 +1327,61 @@
     // sem p.secoes (geração de sempre), os mapas extras saem quando foram desenhados
     if (!p.secoes) { s.mapasTrilha = s.mapasSetor = s.mapaPontos = true; return s; }
     return Object.assign(s, p.secoes);
+  }
+  // Partes do relatório Final detalhado, escolhidas no Personalizar. Cada seção numerada do detalhado ("2. Setores…") entra
+  // com título simples, em página nova.
+  function semNumero(lista) {
+    if (lista && lista[0] && lista[0].style === 'h1') lista[0] = subtitulo(String(lista[0].text).replace(/^\d+\.\s*/, ''), { pageBreak: 'before' });
+    return lista || [];
+  }
+  function blocosDetalhados(d, recursos, S, kmTotal) {
+    var out = [];
+    var op = d.operacao;
+    if (S.numeros) {
+      var concl = (d.setores || []).filter(function (s) { return s.status === 'concluido'; });
+      var area = concl.reduce(function (a, s) { return a + (areaSetor(s) || 0); }, 0);
+      var ini = data(op.acionado_em || op.criada_em), fim = op.encerrada_em ? data(op.encerrada_em) : new Date();
+      var horas = ini && fim ? Math.max(0, (fim - ini) / 3600000) : null;
+      out.push(subtitulo('Resumo em números'));
+      out.push(ficha([
+        ['Pessoas na operação', String((d.participantes || []).length)],
+        ['Setores concluídos', concl.length + ' de ' + (d.setores || []).length],
+        ['Área varrida (setores concluídos)', area ? textoArea(area) : '—'],
+        ['Terreno percorrido', kmTotal ? kmTexto(kmTotal) : '—'],
+        ['Pontos de interesse', String((d.pontos || []).length)],
+        ['Fotos', String((d.fotos || []).length)],
+        ['Duração', horas != null ? (horas < 48 ? Math.round(horas) + ' h' : Math.round(horas / 24) + ' dias') + (op.encerrada_em ? '' : ' (em andamento)') : '—'],
+      ]));
+    }
+    if (S.resultado) { out.push(subtitulo('Situação e desfecho')); out.push(caixaResultado(op)); }
+    if (S.fichasVitimas) {
+      var sexo = { M: 'Masculino', F: 'Feminino' }, fotos = recursos.fotosVitimas || {};
+      out.push(subtitulo('Ficha da(s) vítima(s)'));
+      if (!(d.vitimas || []).length) out.push(nota('Nenhuma ficha de vítima.'));
+      (d.vitimas || []).forEach(function (v) {
+        var dados = ficha([
+          ['VÍTIMA', txt(v.nome) + (v.nascimento ? ' (nascim: ' + v.nascimento + ')' : '')],
+          ['Sexo / idade', txt(sexo[v.sexo]) + ' / ' + (v.idade != null ? v.idade + ' anos' : '—')],
+          ['Origem da vítima', txt(v.origem)],
+          vazio(v.caracteristicas) ? null : ['Características físicas', v.caracteristicas],
+          vazio(v.roupas) ? null : ['Roupas', v.roupas],
+          vazio(v.observacoes) ? null : ['Observações', v.observacoes],
+        ]);
+        out.push(fotos[v.id] ? { columns: [{ image: fotos[v.id], fit: [110, 140], width: 120 }, Object.assign({ width: '*' }, dados)], columnGap: 10, margin: [0, 0, 0, 10], unbreakable: true } : dados);
+      });
+    }
+    if (S.pessoasGrupos) out = out.concat(semNumero(secaoPessoas(d)));
+    if (S.setoresDetalhe) {
+      var distrib = distribuirFotos(d.setores || [], (d.fotos || []).filter(function (f) { return recursos.fotos && recursos.fotos[f.id]; }), 6);
+      out = out.concat(semNumero(secaoSetores(d, { mapasSetor: recursos.mapasSetorGeral || {}, fotos: recursos.fotos || {}, fotosPorSetor: distrib.porSetor, fotosOmitidas: distrib.omitidas, fotosForaSetor: [] })));
+    }
+    if (S.encontros) out = out.concat(semNumero(secaoPontos(d)));
+    if (S.diarioCompleto) out = out.concat(semNumero(secaoDiario(d)));
+    if (S.probabilidades) {
+      var pb = secaoBusca(d, 1);
+      out = out.concat(pb.length ? semNumero(pb) : [subtitulo('Probabilidades de busca (POA, POD, POS)', { pageBreak: 'before' }), nota('Sem cenário de probabilidades aprovado nesta operação.')]);
+    }
+    return out;
   }
   function blocoObservacoes(texto) {
     var t = String(texto || '').trim();
@@ -1433,6 +1497,8 @@
         if (fotosDia.total > fotosDia.imagens.length) conteudo.push(nota((fotosDia.total - fotosDia.imagens.length) + ' foto(s) não puderam ser incluídas (no relatório Final detalhado).'));
       }
     });
+    var kmPeriodo = kmTerreno([].concat.apply([], dias.map(function (x) { return [].concat.apply([], x.pessoas.map(function (q) { return q.segmentos || []; })); })));
+    conteudo = conteudo.concat(blocosDetalhados(d, recursos, S, kmPeriodo));
     if (S.observacoes) conteudo = conteudo.concat(blocoObservacoes(p.observacoes));
     return documento(d, recursos, conteudo, { titulo: p.titulo, assunto: 'Informe Padrão de Ocorrência (IPO)', marca: p.marca });
   }
@@ -1528,6 +1594,7 @@
       conteudo.push(subtitulo('Linha do tempo'));
       conteudo = regs.length ? conteudo.concat(tabelaLinhaDoTempo(regs, true)) : conteudo.concat([nota('Nenhum registro no diário.')]);
     }
+    conteudo = conteudo.concat(blocosDetalhados(d, recursos, S, kmTerreno([].concat.apply([], ordem.map(function (q) { return q.segmentos; })))));
     // todas as fotos da operação numa página própria, 3 por linha (como no relatório final), sem separar por dia
     var fotosOp = S.fotos ? (d.fotos || []).filter(function (f) { return recursos.fotos && recursos.fotos[f.id]; }) : [];
     if (fotosOp.length) {

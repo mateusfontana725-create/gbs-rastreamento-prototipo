@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.18.2';
+  var NUMERO = '1.18.3';
   var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.18.3', data: '2026-11-22', itens: [
+      'Detalhes da trilha ("Trilha de …") reorganizados: no topo os números principais em destaque (distância, duração, em movimento e parado) e uma barra com a proporção do tempo em movimento × parado; depois blocos separados de Ritmo e velocidade, Altitude (com o perfil) e Registro do GPS.',
+    ] },
     { versao: '1.18.2', data: '2026-11-22', itens: [
       'SCI: "Mapa operacional e setores" agora abre dentro do próprio SCI, no quadro de conteúdo, com o topo e o menu do SCI no lugar. No quadro fica a tela completa da operação: mapa, lista de participantes e todas as ferramentas (Marcar ponto, Foto, Setor, Trilha, Régua, POA/POD, Dashboard, Mensagens, Convidar e o menu Ferramentas). Para sair do mapa, é só escolher outra seção no menu do SCI.',
     ] },

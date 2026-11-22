@@ -935,39 +935,67 @@
     var p = P.participante(pid);
     if (!p) return;
     var s = estatisticas(p);
-    var dl = UI.el('dl', { classe: 'dados' });
-    function linha(r, v) { dl.appendChild(UI.el('dt', { texto: r })); dl.appendChild(UI.el('dd', { texto: v })); }
+    var el = UI.el;
     var grupo = P.grupoNome ? P.grupoNome(p) : null;
-    linha('Pessoa', P.nome(p) + (grupo ? ' · ' + grupo : ''));
-    linha('Distância percorrida', fmtDist(s.distancia));
-    linha('Data e hora do início', s.inicio ? dataCompleta(s.inicio) : '—');
-    linha('Data e hora do fim', s.fim ? dataCompleta(s.fim) : '—');
-    linha('Duração total', s.inicio ? fmtDur(s.fim - s.inicio) : '—');
-    linha('Tempo em movimento', fmtDur(s.emMovimento));
-    linha('Tempo parado', s.inicio ? fmtDur(Math.max(0, s.fim - s.inicio - s.emMovimento)) : '—');
-    linha('Ritmo em movimento', s.distMovimento > 0 && s.emMovimento ? fmtDur(s.emMovimento / (s.distMovimento / 1000)) + ' por km' : '—');
-    linha('Velocidade média em movimento', s.velMedia ? kmh(s.velMedia) : '—');
-    linha('Velocidade máxima (aprox.)', s.velMax ? kmh(s.velMax) : '—');
-    linha('Pontos registrados', String(s.pontos) + (s.lacunas ? ' · ' + s.lacunas + ' lacuna(s) sem registro' : ''));
+    var total = s.inicio ? Math.max(0, s.fim - s.inicio) : 0;
+    var parado = s.inicio ? Math.max(0, total - s.emMovimento) : 0;
+    var pctMov = total ? Math.round(s.emMovimento / total * 100) : 0;
+    function horaCurta(ms) { return new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    function mesmoDia(a, b) { return new Date(a).toDateString() === new Date(b).toDateString(); }
+    var periodo = !s.inicio ? 'Sem pontos registrados'
+      : horaCurta(s.inicio) + ' → ' + (mesmoDia(s.inicio, s.fim) ? new Date(s.fim).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : horaCurta(s.fim));
+    // números principais: grandes, lado a lado
+    function kpi(valor, rotulo, classe) { return el('div', { classe: 'te-kpi' + (classe ? ' ' + classe : '') }, [el('strong', { texto: valor }), el('span', { texto: rotulo })]); }
+    var kpis = el('div', { classe: 'te-kpis' }, [
+      kpi(fmtDist(s.distancia), 'distância percorrida', 'te-kpi-destaque'),
+      kpi(s.inicio ? fmtDur(total) : '—', 'duração total'),
+      kpi(fmtDur(s.emMovimento), 'em movimento', 'te-kpi-mov'),
+      kpi(s.inicio ? fmtDur(parado) : '—', 'parado', 'te-kpi-parado'),
+    ]);
+    // proporção do tempo: em movimento × parado
+    var barra = total ? el('div', { classe: 'te-barra', role: 'img', 'aria-label': pctMov + '% do tempo em movimento' }, [
+      el('div', { classe: 'te-barra-faixa' }, [el('span', { classe: 'te-barra-mov', style: 'width:' + pctMov + '%' }), el('span', { classe: 'te-barra-parado', style: 'width:' + (100 - pctMov) + '%' })]),
+      el('div', { classe: 'te-barra-legenda' }, [el('span', null, [el('i', { classe: 'te-ponto te-ponto-mov' }), pctMov + '% em movimento']), el('span', null, [el('i', { classe: 'te-ponto te-ponto-parado' }), (100 - pctMov) + '% parado']),
+        el('span', { classe: 'muted', texto: 'Início ' + (s.inicio ? dataCompleta(s.inicio) : '—') + ' · Fim ' + (s.fim ? dataCompleta(s.fim) : '—') })]),
+    ]) : null;
+    // blocos com título: linhas rótulo | valor
+    function bloco(titulo, linhas, extra) {
+      return el('section', { classe: 'te-bloco' }, [el('h3', { texto: titulo }),
+        el('dl', { classe: 'te-linhas' }, linhas.filter(Boolean).map(function (l) { return el('div', { classe: 'te-linha' }, [el('dt', { texto: l[0] }), el('dd', null, [l[1]])]); }))].concat(extra || []));
+    }
+    var ritmo = s.distMovimento > 0 && s.emMovimento ? fmtDur(s.emMovimento / (s.distMovimento / 1000)) + ' por km' : '—';
+    var subida = el('span', { texto: 'calculando…' }), descida = el('span', { texto: 'calculando…' }), extremos = el('span', { texto: 'calculando…' });
+    var grafico = el('div', { classe: 'perfil-altitude', id: 'perfil-altitude' }, [el('p', { classe: 'muted', texto: s.distancia ? 'Montando o perfil de altitude…' : 'Sem trilha para o perfil.' })]);
+    var tabela = el('details', { classe: 'perfil-tabela' }, [el('summary', { texto: 'Ver perfil em tabela' })]);
     var apagados = P.trechosApagados ? P.trechosApagados(p) : 0;
-    if (apagados) linha('Trechos apagados do mapa', apagados + ' (as posições continuam guardadas; a distância já desconta)');
-    var subida = UI.el('dd', { texto: 'calculando…' }), descida = UI.el('dd', { texto: 'calculando…' }), extremos = UI.el('dd', { texto: 'calculando…' });
-    dl.appendChild(UI.el('dt', { texto: 'Subida acumulada' })); dl.appendChild(subida);
-    dl.appendChild(UI.el('dt', { texto: 'Descida acumulada' })); dl.appendChild(descida);
-    dl.appendChild(UI.el('dt', { texto: 'Altitude mínima / máxima' })); dl.appendChild(extremos);
-    var grafico = UI.el('div', { classe: 'perfil-altitude', id: 'perfil-altitude' }, [UI.el('p', { classe: 'muted', texto: s.distancia ? 'Montando o perfil de altitude…' : 'Sem trilha para o perfil.' })]);
-    var tabela = UI.el('details', { classe: 'perfil-tabela' }, [UI.el('summary', { texto: 'Ver perfil em tabela' })]);
-    var fechar = UI.abrirModal(UI.el('div', { classe: 'modal-estatisticas' }, [
-      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Trilha de ' + P.nome(p) }, [UI.dica('Altitude do modelo de terreno (≈ 20–30 m de resolução), não a do GPS. Velocidade máxima: percentil 95, para não contar erro de GPS.')]),
-      dl,
-      UI.el('h3', { texto: 'Perfil de altitude' }),
-      grafico,
-      tabela,
-      UI.rodape([
-        UI.el('button', { classe: 'btn', type: 'button', id: 'estat-ficha', texto: 'Ficha de ' + P.nome(p), onclick: function () { fechar(); P.abrirPessoa(p.id); } }),
-        UI.el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+    var conteudo = el('div', { classe: 'modal-estatisticas te' }, [
+      el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Trilha de ' + P.nome(p) }, [UI.dica('Altitude do modelo de terreno (≈ 20–30 m de resolução), não a do GPS. Velocidade máxima: percentil 95, para não contar erro de GPS. "Em movimento": trechos andando a pelo menos ~1 km/h.')]),
+      el('div', { classe: 'te-cab' }, [
+        grupo ? el('span', { classe: 'te-chip', texto: grupo }) : null,
+        el('span', { classe: 'te-periodo', texto: periodo }),
       ]),
-    ]), { aoFechar: function () { if (atual.marcaPerfil) { atual.marcaPerfil.remove(); atual.marcaPerfil = null; } } });
+      kpis,
+      barra,
+      el('div', { classe: 'te-blocos' }, [
+        bloco('Ritmo e velocidade', [
+          ['Ritmo em movimento', ritmo],
+          ['Velocidade média em movimento', s.velMedia ? kmh(s.velMedia) : '—'],
+          ['Velocidade máxima (aprox.)', s.velMax ? kmh(s.velMax) : '—'],
+        ]),
+        bloco('Altitude', [['Subida acumulada', subida], ['Descida acumulada', descida], ['Mínima / máxima', extremos]]),
+      ]),
+      el('section', { classe: 'te-bloco te-bloco-perfil' }, [el('h3', { texto: 'Perfil de altitude' }), grafico, tabela]),
+      bloco('Registro do GPS', [
+        ['Pontos registrados', s.pontos.toLocaleString('pt-BR')],
+        s.lacunas ? ['Lacunas sem registro', String(s.lacunas)] : null,
+        apagados ? ['Trechos apagados do mapa', apagados + ' (as posições continuam guardadas; a distância já desconta)'] : null,
+      ]),
+      UI.rodape([
+        el('button', { classe: 'btn', type: 'button', id: 'estat-ficha', texto: 'Abrir a ficha', title: 'Ficha de ' + P.nome(p), onclick: function () { fechar(); P.abrirPessoa(p.id); } }),
+        el('button', { classe: 'btn btn-escuro', type: 'button', texto: 'Fechar', onclick: function () { fechar(); } }),
+      ]),
+    ]);
+    var fechar = UI.abrirModal(conteudo, { tamanho: 'largo', aoFechar: function () { if (atual.marcaPerfil) { atual.marcaPerfil.remove(); atual.marcaPerfil = null; } } });
     if (!s.distancia) { subida.textContent = descida.textContent = extremos.textContent = '—'; return; }
     perfil(s.trilha).then(function (r) {
       if (!r.amostras.length) { grafico.innerHTML = '<p class="muted">Modelo de terreno indisponível agora (sem conexão).</p>'; subida.textContent = descida.textContent = extremos.textContent = '—'; return; }

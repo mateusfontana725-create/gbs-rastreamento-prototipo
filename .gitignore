@@ -1,3 +1,9 @@
 
 # Dependências instaladas localmente (testes do banco)
 node_modules/
+
+# variáveis locais (chaves): nunca no repositório
+.env
+.env.*
+!.env.example
+.vercel

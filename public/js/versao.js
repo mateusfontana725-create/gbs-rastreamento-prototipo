@@ -9,10 +9,15 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.14.5';
-  var DATA = '2026-11-21';
+  var NUMERO = '1.15.0';
+  var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.15.0', data: '2026-11-22', itens: [
+      'Personalizar o IPO (geral e diário): em Relatórios › Opções › "✎ Personalizar…" abre uma tela com tudo o que pode entrar no relatório (informe, mapas, participantes, trilhas, mapa de cada trilha e de cada setor, tabela dos setores, pontos, linha do tempo, fotos e observações). Já vem marcado o formato de sempre; é só marcar ou desmarcar.',
+      'Ao lado, a prévia do PDF vai mostrando como o relatório fica, folha por folha, e dá para rolar. Os mapas e as fotos aparecem como caixas na prévia e são desenhados de verdade ao gerar.',
+      'Dá para editar o texto direto na prévia: toque num texto, escreva e confirme. As edições e a escolha ficam guardadas neste aparelho para a operação, e "Gerar PDF" sai exatamente com elas.',
+    ] },
     { versao: '1.14.5', data: '2026-11-21', itens: [
       'O selo ✎ das trilhas desenhadas acompanha o zoom: diminui ao afastar o mapa e some de longe, para não poluir. De perto, aparece no tamanho normal.',
     ] },

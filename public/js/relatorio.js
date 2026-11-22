@@ -409,10 +409,18 @@
   }
 
   // o: { largura, altura, enquadrar: [[lat,lng]…], setores, destaque, trilhas, pontos, achados, local, fundo }
+  // Prévia do "Personalizar" (IPO): no lugar de desenhar cada mapa e baixar cada foto, devolve só um rótulo
+  // ('PREVIA:…'), que a prévia mostra como uma caixa. PREVIA.ultimo = o último passo ("Desenhando o mapa do dia…").
+  var PREVIA = null;
+  function rotuloPrevia() {
+    var t = String((PREVIA && PREVIA.ultimo) || 'mapa').replace(/^Desenhando (o |a |os )?/, '').replace(/\s*\(\d+\/\d+\)/, '').replace(/…$/, '').trim();
+    return 'PREVIA:' + (/^mapa/i.test(t) ? t.charAt(0).toUpperCase() + t.slice(1) : 'Mapa: ' + t);
+  }
   async function desenharMapa(o) {
     var W = o.largura || 1100, H = o.altura || 680;
     var enq = (o.enquadrar || []).filter(function (p) { return p && isFinite(p[0]) && isFinite(p[1]); });
     if (!enq.length) return null;
+    if (PREVIA) return rotuloPrevia();
     var minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
     enq.forEach(function (p) { minLat = Math.min(minLat, p[0]); maxLat = Math.max(maxLat, p[0]); minLng = Math.min(minLng, p[1]); maxLng = Math.max(maxLng, p[1]); });
     var z = 18;
@@ -582,6 +590,7 @@
   /* FOTOS (Storage privado → JPEG reduzido)                              */
   /* ================================================================== */
   async function fotoReduzida(bucket, caminho, maximo) {
+    if (PREVIA) return 'PREVIA:Foto';
     try {
       var s = await C.cliente.storage.from(bucket).createSignedUrl(caminho, 600);
       if (s.error || !s.data) return null;
@@ -999,13 +1008,19 @@
   async function carregarDiasDoPeriodo(op, ini, fim, passo, opcoes) {
     opcoes = opcoes || {};
     var RP = window.RelatorioPDF;
-    passo('Buscando os dados da operação…');
-    var dados = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
-    dados.trilhasManuais = await trilhasDesenhadas(op.id);
-    passo('Buscando as trilhas de cada dia…');
-    var tr = await trilhasDosDias(op, ini, fim);
+    // opcoes.base: dados já buscados (o "Personalizar" busca uma vez e refaz a prévia a cada mudança sem ir ao servidor)
+    var base = opcoes.base;
+    if (!base) {
+      passo('Buscando os dados da operação…');
+      var dados0 = await C.rpc('relatorio_operacao', { p_operacao: op.id }, 60000);
+      dados0.trilhasManuais = await trilhasDesenhadas(op.id);
+      passo('Buscando as trilhas de cada dia…');
+      base = { dados: dados0, tr: await trilhasDosDias(op, ini, fim), logo: await carregarLogo() };
+    }
+    var dados = JSON.parse(JSON.stringify(base.dados));
+    var tr = { lista: JSON.parse(JSON.stringify(base.tr.lista || [])), aviso: base.tr.aviso };
     var dias = RP.separarDias(dados, tr.lista, RP.diasEntre(ini, fim));
-    var recursos = { logo: await carregarLogo(), mapasDia: {} };
+    var recursos = { logo: base.logo, mapasDia: {} };
     // Mapas (satélite). O MAPA DO DIA é padrão em todo relatório: o que foi FEITO naquele dia — as trilhas (em trechos: a
     // linha não liga os lados de uma falha de GPS) e os pontos do dia —, com o zoom nelas, como o filtro do dia no painel.
     // Setores não entram (podem ter sido criados em outro dia; o que foi feito está nas trilhas). Só o que está a até 5 km do
@@ -1051,7 +1066,7 @@
         x.trilhas.forEach(function (q) { trechosPerto(q.segmentos || [q.pontos], ref).forEach(function (sg) { trilhasDia.push({ participante_id: q.id, tipo: q.tipo, pontos: sg }); }); });
         var pontosDia = x.pontos.filter(function (p) { return !ref || distanciaM(ref, [p.lat, p.lng]) <= RAIO_DIA_M; });
         var copia = Object.assign({}, dados, { setores: [], trilhas: trilhasDia, pontos: pontosDia, fotos: [], diario: x.diario, trilhasManuais: [] });
-        if (trilhasDia.length || pontosDia.length) {
+        if (!opcoes.semMapaDia && (trilhasDia.length || pontosDia.length)) {
           passo('Desenhando o mapa do dia ' + rotuloDia + ' (' + (++feitos) + '/' + totalMapas + ')…');
           var g = elementosMapa(copia, { fundo: true, longeM: RAIO_DIA_M });
           var enq = [];
@@ -1121,7 +1136,7 @@
         if (imgs.length) recursos.fotosDia[dias[f].dia] = { imagens: imgs, total: dias[f].fotos.length };
       }
     }
-    return { dados: dados, dias: dias, recursos: recursos, aviso: tr.aviso };
+    return { dados: dados, dias: dias, recursos: recursos, aviso: tr.aviso, base: base };
   }
   function brDia(k) { return k.split('-').reverse().join('/'); }
   function textoPeriodo(ini, fim, modo, dias) {
@@ -1153,10 +1168,15 @@
   // IPO GERAL da operação (curto): o IPO inteiro, sem separar por dia (cabeçalho, local, vítima, procedimentos, recursos, efetivo,
   // desdobramentos, órgãos), o mapa da operação, militares, trilhas e pontos de interesse. Do acionamento até agora (ou o encerramento).
   // mapas.trilhas: um mapa de cada trilha (a operação toda); mapas.pontos: o mapa dos pontos de interesse. Só baixa.
-  async function gerarIpoGeral(op, ini, fim, passo, mapas) {
+  // extra (Personalizar): { secoes, edicoes, observacoes, base, previa } — com secoes, os mapas e as fotos seguem as seções;
+  // previa = só monta o documento (mapas e fotos como caixas) e devolve { doc, base }, sem PDF.
+  async function gerarIpoGeral(op, ini, fim, passo, mapas, extra) {
     passo = passo || function () {};
+    extra = extra || {};
     mapas = mapas || {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { semMapas: true });
+    var S = extra.secoes || null;
+    if (S) mapas = { trilhas: S.mapasTrilha, pontos: S.mapaPontos, setores: S.mapasSetor };
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { semMapas: true, base: extra.base });
     var RP = window.RelatorioPDF;
     var recursos = c.recursos;
     var RAIO_M = 5000;
@@ -1190,8 +1210,8 @@
     var pontosPerto = pontos.filter(function (p) { return p.lat != null && p.lng != null && (!ref || distanciaM(ref, [p.lat, p.lng]) <= RAIO_M); });
     var trilhasTodas = [];
     ordem.forEach(function (q) { perto(q.segs).forEach(function (sg) { trilhasTodas.push({ participante_id: q.id, tipo: q.tipo, pontos: sg }); }); });
-    // mapa da operação (sempre): as trilhas e os pontos, com o zoom no que foi feito
-    if (trilhasTodas.length || pontosPerto.length) {
+    // mapa da operação (sempre, salvo se desligado no Personalizar): as trilhas e os pontos, com o zoom no que foi feito
+    if ((!S || S.mapaGeral !== false) && (trilhasTodas.length || pontosPerto.length)) {
       passo('Desenhando o mapa da operação…');
       var copia = Object.assign({}, c.dados, { setores: [], trilhas: trilhasTodas, pontos: pontosPerto, fotos: [], trilhasManuais: [] });
       var g = elementosMapa(copia, { fundo: true, longeM: RAIO_M });
@@ -1243,7 +1263,7 @@
     var listaFotos = (c.dados.fotos || []).filter(function (f) { return f.caminho; })
       .sort(function (a, b) { return String(a.capturada_em || '').localeCompare(String(b.capturada_em || '')); });
     c.dados.fotos = listaFotos;
-    for (var fi = 0; fi < listaFotos.length; fi++) {
+    for (var fi = 0; fi < (S && S.fotos === false ? 0 : listaFotos.length); fi++) {
       passo('Baixando as fotos (' + (fi + 1) + '/' + listaFotos.length + ')…');
       var urlF = await fotoReduzida('fotos', listaFotos[fi].caminho, 600);
       if (urlF) recursos.fotos[listaFotos[fi].id] = urlF;
@@ -1251,8 +1271,10 @@
     passo('Montando o documento…');
     var doc = RP.montarIpoGeral(c.dados, recursos, {
       dias: c.dias, subtitulo: 'Do acionamento (' + brDia(ini) + ') até ' + brDia(fim),
-      titulo: 'IPO geral — ' + op.codigo, marca: 'IPO GERAL',
+      titulo: 'IPO geral — ' + op.codigo, marca: 'IPO GERAL', secoes: S, observacoes: extra.observacoes,
     });
+    if (window.RelatorioPrevia) window.RelatorioPrevia.aplicarEdicoes(doc.content, extra.edicoes || {});
+    if (extra.previa) return { doc: doc, base: c.base };
     passo('Gerando o PDF…');
     var r = await gerarBlob(await carregarPdfMake(), doc);
     baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO-geral', fim.replace(/-/g, '')));
@@ -1262,20 +1284,147 @@
 
   // Relatório IPO (curto): o IPO de cada dia no modelo do CBMPR + militares (graduação e QRA), setores varridos, trilhas e
   // pontos do dia. Só baixa (o IPO se preenche e se corrige ao longo do dia; o texto do WhatsApp sai do IPO (Diário)).
-  async function gerarIpoRelatorio(op, ini, fim, modo, passo, mapas) {
+  // extra: como no IPO geral ({ secoes, edicoes, observacoes, base, previa })
+  async function gerarIpoRelatorio(op, ini, fim, modo, passo, mapas, extra) {
     passo = passo || function () {};
-    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: true });
+    extra = extra || {};
+    var S = extra.secoes || null;
+    if (S) mapas = { trilhas: Boolean(S.mapasTrilha), pontos: Boolean(S.mapaPontos), setores: Boolean(S.mapasSetor) };
+    var c = await carregarDiasDoPeriodo(op, ini, fim, passo, { mapaAltura: 620, maxMapas: 10, mapas: mapas, fotos: !S || S.fotos !== false, semMapaDia: Boolean(S && S.mapaGeral === false), base: extra.base });
     passo('Montando o documento…');
     var doc = window.RelatorioPDF.montarIpo(c.dados, c.recursos, {
       dias: c.dias, subtitulo: textoPeriodo(ini, fim, modo, c.dias) + (modo === 'dia' ? ' · acumulado até o dia' : ''), acumulado: modo === 'dia',
       titulo: 'IPO diário ' + (ini === fim ? brDia(ini) : brDia(ini) + ' a ' + brDia(fim)) + ' — ' + op.codigo,
       marca: 'IPO DIÁRIO ' + (ini === fim ? brDia(ini).slice(0, 5) : brDia(ini).slice(0, 5) + ' A ' + brDia(fim).slice(0, 5)),
+      secoes: S, observacoes: extra.observacoes,
     });
+    if (window.RelatorioPrevia) window.RelatorioPrevia.aplicarEdicoes(doc.content, extra.edicoes || {});
+    if (extra.previa) return { doc: doc, base: c.base };
     passo('Gerando o PDF…');
     var r = await gerarBlob(await carregarPdfMake(), doc);
     baixarBlob(r.blob, nomeArquivoTipo(op, 'IPO-diario', ini === fim ? ini.replace(/-/g, '') : ini.replace(/-/g, '') + '-a-' + fim.replace(/-/g, '')));
     if (c.aviso) UI.aviso(c.aviso, 'erro', 9000);
     return r;
+  }
+
+  // ---------- Personalizar o IPO (diário ou geral): escolher o que entra e ver a prévia ao lado ----------
+  // conf: { ini, fim, modo, mapas } (o que está escolhido no cartão). A escolha fica guardada no aparelho por operação:
+  // seções e observações por tipo; as edições do texto, por tipo e período (o texto muda de um período para outro).
+  function abrirPersonalizarIpo(op, tipo, conf) {
+    var RP = window.RelatorioPDF, PV = window.RelatorioPrevia;
+    if (!RP || !RP.SECOES_IPO || !PV) { UI.aviso('A prévia não está disponível nesta versão.', 'erro'); return; }
+    var geral = tipo === 'ipogeral';
+    var chaveConf = 'gbs-rel-perso-' + op.id + '-' + tipo;
+    var chaveEd = chaveConf + '-' + conf.ini + '-' + conf.fim;
+    function padrao() {
+      var s = {};
+      RP.SECOES_IPO.forEach(function (x) { s[x.id] = x.padrao; });
+      var m = conf.mapas || {};
+      s.mapasTrilha = Boolean(m.trilhas); s.mapaPontos = Boolean(m.pontos); s.mapasSetor = Boolean(m.setores);
+      return s;
+    }
+    var guardado = C.local.ler(chaveConf, null) || {};
+    var secoes = Object.assign(padrao(), guardado.secoes || {});
+    var observacoes = guardado.observacoes || '';
+    var edicoes = C.local.ler(chaveEd, null) || {};
+    function guardar() {
+      C.local.gravar(chaveConf, { secoes: secoes, observacoes: observacoes });
+      C.local.gravar(chaveEd, edicoes);
+    }
+    var base = null, ocupado = false, deNovo = false;
+
+    var caixas = {};
+    var listaSec = UI.el('div', { classe: 'pz-secoes' }, RP.SECOES_IPO.map(function (x) {
+      var cb = UI.el('input', { type: 'checkbox', id: 'pz-' + x.id, checked: secoes[x.id] ? true : null });
+      caixas[x.id] = cb;
+      cb.addEventListener('change', function () { secoes[x.id] = cb.checked; caixaObs.hidden = !secoes.observacoes; guardar(); agendar(); });
+      return UI.el('label', { classe: 'pz-secao' + (x.mapa ? ' pz-secao-mapa' : ''), for: 'pz-' + x.id }, [cb, UI.el('span', { texto: x.rotulo })]);
+    }));
+    var obs = UI.el('textarea', { classe: 'campo', id: 'pz-observacoes-texto', rows: '4', maxlength: '4000', placeholder: 'Escreva aqui o que deve sair no fim do relatório…' });
+    obs.value = observacoes;
+    var timerObs = null;
+    obs.addEventListener('input', function () { observacoes = obs.value; guardar(); clearTimeout(timerObs); timerObs = setTimeout(agendar, 500); });
+    var caixaObs = UI.el('div', { classe: 'pz-obs', hidden: !secoes.observacoes }, [UI.el('label', { classe: 'rotulo', for: 'pz-observacoes-texto', texto: 'Texto das observações' }), obs]);
+    var infoEd = UI.el('p', { classe: 'pz-info-ed muted' });
+    var btnDesfazer = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Desfazer as edições do texto', onclick: function () { edicoes = {}; guardar(); agendar(); } });
+    function atualizarInfoEd() {
+      var n = Object.keys(edicoes).length;
+      infoEd.textContent = n ? n + (n > 1 ? ' textos editados na prévia.' : ' texto editado na prévia.') : 'Toque num texto da prévia para mudar o que está escrito.';
+      btnDesfazer.hidden = !n;
+    }
+    var btnPadrao = UI.el('button', { classe: 'btn btn-pequeno', type: 'button', texto: 'Voltar ao padrão', onclick: function () {
+      secoes = padrao();
+      Object.keys(caixas).forEach(function (k) { caixas[k].checked = Boolean(secoes[k]); });
+      caixaObs.hidden = !secoes.observacoes;
+      guardar(); agendar();
+    } });
+
+    var estado = UI.el('p', { classe: 'pz-estado', role: 'status', texto: 'Carregando os dados da operação…' });
+    var previa = UI.el('div', { classe: 'pz-previa-folhas' });
+    var areaPrevia = UI.el('div', { classe: 'pz-previa' }, [estado, previa]);
+    var btnGerar = UI.el('button', { classe: 'btn btn-primario', type: 'button', id: 'pz-gerar', texto: 'Gerar PDF' });
+    var periodo = geral ? 'Do acionamento (' + brDia(conf.ini) + ') até ' + brDia(conf.fim) : textoPeriodo(conf.ini, conf.fim, conf.modo, [{}]).replace(/^\s*·\s*/, '');
+
+    function gerador(extra, passo) {
+      return geral ? gerarIpoGeral(op, conf.ini, conf.fim, passo, null, extra) : gerarIpoRelatorio(op, conf.ini, conf.fim, conf.modo, passo, null, extra);
+    }
+    async function montar() {
+      if (ocupado) { deNovo = true; return; }
+      ocupado = true;
+      var rolagem = areaPrevia.scrollTop;
+      PREVIA = { ultimo: '' };
+      try {
+        var r = await gerador({ secoes: secoes, edicoes: edicoes, observacoes: observacoes, base: base, previa: true }, function (t) { if (PREVIA) PREVIA.ultimo = t; if (!base) estado.textContent = t; });
+        base = r.base;
+        PREVIA = null;
+        var info = PV.renderizar(previa, r.doc, { aoEditar: function (chave, texto) { edicoes[chave] = texto; guardar(); agendar(); } });
+        estado.textContent = 'Prévia · ' + info.paginas + (info.paginas > 1 ? ' páginas' : ' página') + ' (aproximado) · mapas e fotos aparecem como caixas e são desenhados ao gerar.';
+        areaPrevia.scrollTop = rolagem;
+        atualizarInfoEd();
+      } catch (e) {
+        estado.textContent = 'Não foi possível montar a prévia: ' + (e.message || e);
+      } finally {
+        PREVIA = null;
+        ocupado = false;
+        if (deNovo) { deNovo = false; montar(); }
+      }
+    }
+    var timer = null;
+    function agendar() { clearTimeout(timer); timer = setTimeout(montar, 150); }
+    btnGerar.addEventListener('click', async function () {
+      if (ocupado) { UI.aviso('Espere a prévia terminar.', 'erro', 4000); return; }
+      btnGerar.disabled = true;
+      btnGerar.textContent = 'Gerando…';
+      try {
+        await gerador({ secoes: secoes, edicoes: edicoes, observacoes: observacoes, base: base }, function (t) { estado.textContent = t; });
+        estado.textContent = 'PDF gerado.';
+        UI.aviso((geral ? 'IPO geral' : 'IPO diário') + ' personalizado gerado.', 'ok');
+      } catch (e) {
+        estado.textContent = 'Não foi possível gerar: ' + (e.message || e);
+        UI.aviso('Não foi possível gerar: ' + (e.message || e), 'erro', 8000);
+      } finally {
+        btnGerar.disabled = false;
+        btnGerar.textContent = 'Gerar PDF';
+      }
+    });
+
+    UI.abrirModal(UI.el('div', { classe: 'pz' }, [
+      UI.el('h2', { id: 'modal-titulo', classe: 'titulo-com-dica', texto: 'Personalizar · ' + (geral ? 'IPO geral' : 'IPO diário') },
+        [UI.dica('Marque o que entra no relatório e acompanhe na prévia ao lado. Toque num texto da prévia para escrever outra coisa. A escolha fica guardada neste aparelho para esta operação.')]),
+      UI.el('div', { classe: 'pz-corpo' }, [
+        UI.el('aside', { classe: 'pz-lado' }, [
+          UI.el('p', { classe: 'pz-periodo muted', texto: periodo }),
+          UI.el('h3', { classe: 'pz-titulo', texto: 'O que entra no relatório' }),
+          listaSec, caixaObs,
+          UI.el('div', { classe: 'pz-acoes-lado' }, [btnPadrao, btnDesfazer]),
+          infoEd,
+        ]),
+        areaPrevia,
+      ]),
+      UI.rodape([btnGerar]),
+    ]), { tamanho: 'largo', empilhar: true });
+    atualizarInfoEd();
+    montar();
   }
 
   // Relatório diário de um dia ('AAAA-MM-DD'): o diário detalhado daquele dia (o mesmo formato do relatório por período).
@@ -1628,7 +1777,14 @@
           }).then(function () { progresso.hidden = true; });
         });
         ajustarModo();
-        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), caixasMapas, caixaSetores, progresso]), [botao]);
+        // IPO diário: "Personalizar" escolhe item a item o que entra, com a prévia ao lado
+        var btnPerso = tipo === 'ipo' ? UI.el('button', { classe: 'btn btn-pequeno rel-perso', type: 'button', id: 'rel-ipo-personalizar', texto: '✎ Personalizar…', onclick: function () {
+          var ini = modo.value === 'tudo' ? minDia : dataCampo.value;
+          var fim = modo.value === 'tudo' ? fimOp : modo.value === 'periodo' ? dataAte.value : dataCampo.value;
+          if (!ini || !fim || ini < minDia || fim > fimOp || ini > fim) { UI.aviso('Escolha dias entre o acionamento e ' + (fimOp === hoje ? 'hoje' : diaBr(fimOp)) + ' (o início antes do fim).', 'erro', 6000); return; }
+          abrirPersonalizarIpo(op, 'ipo', { ini: ini, fim: fim, modo: modo.value, mapas: mapasEscolhidos() });
+        } }) : null;
+        return cartao(tipo, contagem, UI.el('div', { classe: 'rel-card-extra' }, [UI.el('div', { classe: 'rel-opcoes' }, [UI.campo('Gerar', modo, { para: 'rel-' + tipo + '-modo' }), campoDe, campoAte]), caixasMapas, caixaSetores, btnPerso, progresso]), [botao]);
       }
       // IPO geral: a operação inteira (do acionamento até agora ou o encerramento), sem separar por dia. Mapas opcionais.
       var caixaGT = UI.el('input', { type: 'checkbox', id: 'rel-ipogeral-mapa-trilhas' });
@@ -1646,6 +1802,9 @@
         opcaoGeral(caixaGT, 'Também um mapa de cada trilha', 'Um mapa para cada pessoa, com a trilha da operação toda'),
         opcaoGeral(caixaGP, 'Também um mapa dos pontos de interesse', 'Um mapa só com os pontos de interesse, numerados como na tabela'),
         opcaoGeral(caixaGS, 'Também um mapa de cada setor', 'Um mapa para cada setor, com ele em destaque'),
+        UI.el('button', { classe: 'btn btn-pequeno rel-perso', type: 'button', id: 'rel-ipogeral-personalizar', texto: '✎ Personalizar…', onclick: function () {
+          abrirPersonalizarIpo(op, 'ipogeral', { ini: minDia, fim: fimOp, modo: 'tudo', mapas: { trilhas: caixaGT.checked, pontos: caixaGP.checked, setores: caixaGS.checked } });
+        } }),
         progressoGeral]), [botaoGeral]));
       out.push(cartaoPorDia('ipo', 'só baixa', function (ini, fim, modo, passo, mapas) { return gerarIpoRelatorio(op, ini, fim, modo, passo, mapas); }));
       out.push(cartaoPorDia('diario', contar(dados.diarios.length, 'dia', 'dias'), async function (ini, fim, modo, passo, mapas) {

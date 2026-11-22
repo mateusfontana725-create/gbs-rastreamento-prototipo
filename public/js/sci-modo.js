@@ -191,10 +191,15 @@
   };
   // focoProtegido: alguém digitando na página → o redesenho periódico espera
   function render(forcar) {
-    if (!est.ativo || !est.raiz || est.noMapa) return;
+    if (!est.ativo || !est.raiz) return;
     var c = contexto();
     renderTopo(c);
     renderMenu(c);
+    if (est.noMapa) {   // a área de conteúdo mostra a tela da operação (encaixada por baixo): fica vazia aqui
+      if (est.corpo.childNodes.length) est.corpo.innerHTML = '';
+      est.corpo.setAttribute('data-pagina', 'mapa');
+      return;
+    }
     est.raiz.classList.toggle('sci2-assistente', est.pagina === 'estabelecer');
     if (!forcar && est.pagina === 'mapa' && est.corpo.querySelector('#sci2-host-mapa')) return;   // o mapa não é redesenhado
     if (!forcar && est.arrastando) return;   // equipe sendo arrastada no quadro de recursos: o redesenho periódico espera
@@ -218,6 +223,7 @@
     if (pagina === 'estabelecer' && !pode()) pagina = 'resumo';
     if (est.pagina !== 'mapa') est.voltarPara = est.pagina;
     if (pagina === 'mapa') { abrirMapaCompleto(); return; }
+    if (est.noMapa) fecharMapaCompleto();
     est.pagina = pagina;
     if (pagina === 'estabelecer' && !est.wizard) iniciarWizard();
     render(true);
@@ -236,7 +242,7 @@
     }
     var u = Pn().usuario && Pn().usuario();
     est.usuario = u ? u.id : null;
-    if (est.noMapa) fecharMapaCompleto(false);
+    if (est.noMapa) fecharMapaCompleto();
     est.ativo = true;
     est.raiz.hidden = false;
     document.body.classList.add('modo-sci');
@@ -260,7 +266,7 @@
     sincronizarSeletor();
   }
   function sair() {
-    fecharMapaCompleto(false);
+    fecharMapaCompleto();
     if (!est.ativo) { sincronizarSeletor(); return; }
     est.ativo = false;
     devolverMapa();
@@ -286,41 +292,40 @@
   }
 
   /* ---------- Mapa operacional dentro do Modo SCI ----------
-   * O SCI é um MÉTODO de conduzir a operação: nada do modo Operação pode se perder. Por isso "Mapa operacional e
-   * setores" abre a tela COMPLETA da operação (barra de ferramentas, menu Ferramentas, lista de participantes, desenho
-   * de setores e trilhas, régua, POA/POD…) com o SCI ainda ativo; a faixa "Voltar ao SCI" volta à página de antes. */
-  function abrirMapaCompleto() {
-    if (!est.ativo) return;
-    est.noMapa = true;
-    devolverMapa();
-    if (est.raiz) est.raiz.hidden = true;
-    document.body.classList.remove('modo-sci');
-    document.body.classList.add('sci-no-mapa');
-    var f = $('sci2-faixa-mapa');
-    if (!f) {
-      f = el('div', { classe: 'sci2-faixa-mapa', id: 'sci2-faixa-mapa', role: 'region', 'aria-label': 'Modo SCI' }, [
-        el('span', { classe: 'sci2-faixa-marca', texto: 'SCI' }),
-        el('span', { classe: 'sci2-faixa-txt', texto: 'Mapa operacional e setores · todas as ferramentas da operação' }),
-        el('button', { type: 'button', classe: 'btn btn-pequeno btn-escuro', id: 'sci2-voltar-sci', texto: '← Voltar ao SCI', onclick: function () { fecharMapaCompleto(true); } }),
-      ]);
-      document.body.appendChild(f);
-    }
-    f.hidden = false;
-    ajustarMapa(60);
+   * O SCI é um MÉTODO de conduzir a operação: nada do modo Operação pode se perder. "Mapa operacional e setores"
+   * encaixa a tela COMPLETA da operação (barra de ferramentas, menu Ferramentas, lista de participantes, desenho de
+   * setores e trilhas, régua, POA/POD…) na área de conteúdo do SCI, com o topo e o menu do SCI no lugar. A tela da
+   * operação não é copiada nem movida por dentro: ela só é posicionada no quadro (#tela-painel com a posição e o
+   * tamanho da área de conteúdo; transform faz os menus fixos dela ficarem dentro do quadro). */
+  function posicionarPainel() {
+    if (!est.noMapa) return;
+    var tp = $('tela-painel');
+    if (!tp || !est.corpo) return;
+    var r = est.corpo.getBoundingClientRect();
+    tp.style.top = r.top + 'px'; tp.style.left = r.left + 'px'; tp.style.width = r.width + 'px'; tp.style.height = r.height + 'px';
+    tp.style.right = 'auto'; tp.style.bottom = 'auto';
+    ajustarMapa(40);
   }
-  function fecharMapaCompleto(voltar) {
+  function abrirMapaCompleto() {
+    if (!est.ativo || !est.raiz) return;
+    est.noMapa = true;
+    est.pagina = 'mapa';
+    devolverMapa();
+    document.body.appendChild(est.raiz);   // o SCI fica por cima de tudo; a operação vai para o quadro de conteúdo
+    document.body.classList.add('sci-mapa');
+    render(true);
+    posicionarPainel();
+    requestAnimationFrame(posicionarPainel);
+    window.addEventListener('resize', posicionarPainel);
+  }
+  function fecharMapaCompleto() {
     if (!est.noMapa) return;
     est.noMapa = false;
-    var f = $('sci2-faixa-mapa');
-    if (f) f.hidden = true;
-    document.body.classList.remove('sci-no-mapa');
-    if (voltar && est.ativo) {
-      if (est.raiz) est.raiz.hidden = false;
-      document.body.classList.add('modo-sci');
-      if (Pn().fecharMenu) Pn().fecharMenu();
-      est.pagina = est.voltarPara && est.voltarPara !== 'mapa' ? est.voltarPara : 'resumo';
-      render(true);
-    }
+    window.removeEventListener('resize', posicionarPainel);
+    var tp = $('tela-painel');
+    if (tp) { ['top', 'left', 'width', 'height', 'right', 'bottom'].forEach(function (k) { tp.style[k] = ''; }); tp.appendChild(est.raiz); }
+    document.body.classList.remove('sci-mapa');
+    ajustarMapa(60);
   }
   function paginaMapa() {
     var host = el('div', { classe: 'sci2-host-mapa', id: 'sci2-host-mapa' });

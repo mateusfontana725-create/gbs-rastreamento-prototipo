@@ -9,10 +9,13 @@
 (function (raiz) {
   'use strict';
 
-  var NUMERO = '1.18.1';
+  var NUMERO = '1.18.2';
   var DATA = '2026-11-22';
   // Mais recente primeiro. Textos curtos, para quem usa (não para quem programa).
   var NOVIDADES = [
+    { versao: '1.18.2', data: '2026-11-22', itens: [
+      'SCI: "Mapa operacional e setores" agora abre dentro do próprio SCI, no quadro de conteúdo, com o topo e o menu do SCI no lugar. No quadro fica a tela completa da operação: mapa, lista de participantes e todas as ferramentas (Marcar ponto, Foto, Setor, Trilha, Régua, POA/POD, Dashboard, Mensagens, Convidar e o menu Ferramentas). Para sair do mapa, é só escolher outra seção no menu do SCI.',
+    ] },
     { versao: '1.18.1', data: '2026-11-22', itens: [
       'SCI: "Mapa operacional e setores" agora abre a tela COMPLETA da operação, com todas as ferramentas (Marcar ponto, Foto, Setor, Trilha, Régua, POA/POD, Dashboard, Mensagens, Convidar, menu Ferramentas e a lista de participantes). O SCI continua ligado; a faixa "SCI · Voltar ao SCI" no rodapé volta para a página em que você estava.',
     ] },

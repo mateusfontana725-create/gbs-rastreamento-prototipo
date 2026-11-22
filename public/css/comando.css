@@ -3500,13 +3500,11 @@ button.dash-det-item:hover, button.dash-det-item:focus-visible { background: var
 .voz-estado { margin: 0; font-size: .85rem; }
 .campo-preenchido-ia { outline: 2px solid #facc15 !important; outline-offset: 1px; background-color: rgba(250, 204, 21, .08) !important; }
 
-/* SCI › Mapa operacional: a tela completa da operação, com uma faixa para voltar ao SCI */
-.sci2-faixa-mapa {
-  position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 1900;
-  display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 6px; max-width: calc(100vw - 24px);
-  background: rgba(15, 23, 42, .94); border: 1px solid var(--sci-laranja); border-radius: 999px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
-}
-.sci2-faixa-mapa[hidden] { display: none; }
-.sci2-faixa-marca { display: inline-grid; place-items: center; min-width: 34px; height: 26px; padding: 0 6px; border-radius: 999px; background: var(--sci-laranja); color: #160a05; font: 800 .75rem/1 var(--mono); }
-.sci2-faixa-txt { font-size: .8rem; color: #e5e7eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 640px) { .sci2-faixa-txt { display: none; } }
+/* SCI › Mapa operacional e setores: a tela completa da operação encaixada na área de conteúdo do SCI (topo e menu
+   do SCI ficam; a posição do quadro vem de posicionarPainel em sci-modo.js) */
+body.sci-mapa .sci2 { position: fixed; inset: 0; background: transparent; pointer-events: none; }
+body.sci-mapa .sci2-topo, body.sci-mapa .sci2-menu { pointer-events: auto; }
+body.sci-mapa .sci2-pagina { background: transparent; overflow: hidden; padding: 0; }
+body.sci-mapa #tela-painel { transform: translateZ(0); overflow: hidden; border-left: 1px solid var(--borda); }
+body.modo-sci.sci-mapa #tela-painel > .barra-topo { visibility: visible; }
+body.sci-mapa #tela-painel #btn-voltar, body.sci-mapa #tela-painel .titulo-op, body.sci-mapa #tela-painel #modo-seletor { display: none; }
